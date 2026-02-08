@@ -54,8 +54,16 @@ export const dealVerifyPaymentExecutor: ToolExecutor<DealVerifyPaymentParams> = 
     // Check expiry
     const now = Math.floor(Date.now() / 1000);
     if (now > deal.expires_at) {
-      // Mark as expired
-      context.db.prepare(`UPDATE deals SET status = 'expired' WHERE id = ?`).run(params.dealId);
+      // Mark as expired (atomic: only if still accepted)
+      const expireResult = context.db
+        .prepare(`UPDATE deals SET status = 'expired' WHERE id = ? AND status = 'accepted'`)
+        .run(params.dealId);
+      if (expireResult.changes !== 1) {
+        return {
+          success: false,
+          error: `Deal #${params.dealId} already transitioned by another process`,
+        };
+      }
       return {
         success: false,
         error: `Deal #${params.dealId} has expired (2 minutes elapsed)`,
@@ -99,17 +107,24 @@ export const dealVerifyPaymentExecutor: ToolExecutor<DealVerifyPaymentParams> = 
         };
       }
 
-      // Update deal: store TX hash, player wallet, mark as verified
-      context.db
+      // Update deal: store TX hash, player wallet, mark as verified (atomic: only if still accepted)
+      const verifyResult = context.db
         .prepare(
           `UPDATE deals SET
             status = 'verified',
             user_payment_tx_hash = ?,
             user_payment_wallet = ?,
             user_payment_verified_at = unixepoch()
-          WHERE id = ?`
+          WHERE id = ? AND status = 'accepted'`
         )
         .run(verification.txHash, verification.playerWallet, params.dealId);
+
+      if (verifyResult.changes !== 1) {
+        return {
+          success: false,
+          error: `Deal #${params.dealId} already transitioned by another process (expected 'accepted')`,
+        };
+      }
 
       console.log(
         `✅ [Deal] Payment verified for #${params.dealId} - TX: ${verification.txHash?.slice(0, 8)}...`
@@ -174,16 +189,23 @@ export const dealVerifyPaymentExecutor: ToolExecutor<DealVerifyPaymentParams> = 
         };
       }
 
-      // Update deal: store gift msgId, mark as verified
-      context.db
+      // Update deal: store gift msgId, mark as verified (atomic: only if still accepted)
+      const giftVerifyResult = context.db
         .prepare(
           `UPDATE deals SET
             status = 'verified',
             user_payment_gift_msgid = ?,
             user_payment_verified_at = unixepoch()
-          WHERE id = ?`
+          WHERE id = ? AND status = 'accepted'`
         )
         .run(matchingGift.msgId, params.dealId);
+
+      if (giftVerifyResult.changes !== 1) {
+        return {
+          success: false,
+          error: `Deal #${params.dealId} already transitioned by another process (expected 'accepted')`,
+        };
+      }
 
       console.log(`✅ [Deal] Gift verified for #${params.dealId} - msgId: ${matchingGift.msgId}`);
 
