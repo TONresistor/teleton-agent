@@ -5,8 +5,7 @@ import { mnemonicToPrivateKey } from "@ton/crypto";
 import { WalletContractV5R1, TonClient, toNano, internal } from "@ton/ton";
 import { Address, SendMode } from "@ton/core";
 import { getHttpEndpoint } from "@orbs-network/ton-access";
-import { fetchWithTimeout } from "../../../utils/fetch.js";
-import { TONAPI_BASE_URL, tonapiHeaders } from "../../../constants/api-endpoints.js";
+import { tonapiFetch } from "../../../constants/api-endpoints.js";
 
 /**
  * Parameters for dns_bid tool
@@ -49,9 +48,7 @@ export const dnsBidExecutor: ToolExecutor<DnsBidParams> = async (
     const fullDomain = `${domain}.ton`;
 
     // Get domain info to find NFT address
-    const dnsResponse = await fetchWithTimeout(`${TONAPI_BASE_URL}/dns/${fullDomain}`, {
-      headers: tonapiHeaders(),
-    });
+    const dnsResponse = await tonapiFetch(`/dns/${fullDomain}`);
 
     if (dnsResponse.status === 404) {
       return {
@@ -86,9 +83,7 @@ export const dnsBidExecutor: ToolExecutor<DnsBidParams> = async (
     }
 
     // Get auction details to validate bid amount
-    const auctionsResponse = await fetchWithTimeout(`${TONAPI_BASE_URL}/dns/auctions?tld=ton`, {
-      headers: tonapiHeaders(),
-    });
+    const auctionsResponse = await tonapiFetch(`/dns/auctions?tld=ton`);
 
     if (auctionsResponse.ok) {
       const auctions = await auctionsResponse.json();

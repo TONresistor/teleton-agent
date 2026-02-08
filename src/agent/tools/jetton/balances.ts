@@ -1,8 +1,7 @@
 import { Type } from "@sinclair/typebox";
 import type { Tool, ToolExecutor, ToolResult } from "../types.js";
 import { loadWallet } from "../../../ton/wallet-service.js";
-import { fetchWithTimeout } from "../../../utils/fetch.js";
-import { TONAPI_BASE_URL, tonapiHeaders } from "../../../constants/api-endpoints.js";
+import { tonapiFetch } from "../../../constants/api-endpoints.js";
 
 /**
  * Parameters for jetton_balances tool
@@ -56,12 +55,7 @@ export const jettonBalancesExecutor: ToolExecutor<JettonBalancesParams> = async 
     }
 
     // Fetch jetton balances from TonAPI
-    const response = await fetchWithTimeout(
-      `${TONAPI_BASE_URL}/accounts/${walletData.address}/jettons`,
-      {
-        headers: tonapiHeaders(),
-      }
-    );
+    const response = await tonapiFetch(`/accounts/${walletData.address}/jettons`);
 
     if (!response.ok) {
       return {

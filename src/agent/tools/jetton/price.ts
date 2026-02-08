@@ -1,7 +1,6 @@
 import { Type } from "@sinclair/typebox";
 import type { Tool, ToolExecutor, ToolResult } from "../types.js";
-import { fetchWithTimeout } from "../../../utils/fetch.js";
-import { TONAPI_BASE_URL, tonapiHeaders } from "../../../constants/api-endpoints.js";
+import { tonapiFetch } from "../../../constants/api-endpoints.js";
 
 /**
  * Parameters for jetton_price tool
@@ -35,11 +34,8 @@ export const jettonPriceExecutor: ToolExecutor<JettonPriceParams> = async (
     const { jetton_address } = params;
 
     // Fetch price from TonAPI rates endpoint
-    const response = await fetchWithTimeout(
-      `${TONAPI_BASE_URL}/rates?tokens=${encodeURIComponent(jetton_address)}&currencies=usd,ton`,
-      {
-        headers: tonapiHeaders(),
-      }
+    const response = await tonapiFetch(
+      `/rates?tokens=${encodeURIComponent(jetton_address)}&currencies=usd,ton`
     );
 
     if (!response.ok) {
@@ -54,9 +50,7 @@ export const jettonPriceExecutor: ToolExecutor<JettonPriceParams> = async (
 
     if (!rateData) {
       // Try to get jetton info for better error message
-      const infoResponse = await fetchWithTimeout(`${TONAPI_BASE_URL}/jettons/${jetton_address}`, {
-        headers: tonapiHeaders(),
-      });
+      const infoResponse = await tonapiFetch(`/jettons/${jetton_address}`);
 
       if (infoResponse.status === 404) {
         return {
@@ -80,9 +74,7 @@ export const jettonPriceExecutor: ToolExecutor<JettonPriceParams> = async (
     let symbol = "TOKEN";
     let name = "Unknown Token";
     try {
-      const infoResponse = await fetchWithTimeout(`${TONAPI_BASE_URL}/jettons/${jetton_address}`, {
-        headers: tonapiHeaders(),
-      });
+      const infoResponse = await tonapiFetch(`/jettons/${jetton_address}`);
       if (infoResponse.ok) {
         const infoData = await infoResponse.json();
         symbol = infoData.metadata?.symbol || symbol;

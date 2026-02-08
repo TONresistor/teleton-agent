@@ -5,7 +5,7 @@ import { join, dirname } from "path";
 import { getHttpEndpoint } from "@orbs-network/ton-access";
 import { fetchWithTimeout } from "../utils/fetch.js";
 import { TELETON_ROOT } from "../workspace/paths.js";
-import { TONAPI_BASE_URL, tonapiHeaders, COINGECKO_API_URL } from "../constants/api-endpoints.js";
+import { tonapiFetch, COINGECKO_API_URL } from "../constants/api-endpoints.js";
 
 const WALLET_FILE = join(TELETON_ROOT, "wallet.json");
 
@@ -159,9 +159,7 @@ export async function getTonPrice(): Promise<{
 } | null> {
   // Primary: TonAPI /v2/rates (uses configured API key if available)
   try {
-    const response = await fetchWithTimeout(`${TONAPI_BASE_URL}/rates?tokens=ton&currencies=usd`, {
-      headers: tonapiHeaders(),
-    });
+    const response = await tonapiFetch(`/rates?tokens=ton&currencies=usd`);
 
     if (response.ok) {
       const data = await response.json();

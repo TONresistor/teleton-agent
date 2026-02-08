@@ -1,7 +1,6 @@
 import { Type } from "@sinclair/typebox";
 import type { Tool, ToolExecutor, ToolResult } from "../types.js";
-import { fetchWithTimeout } from "../../../utils/fetch.js";
-import { TONAPI_BASE_URL, tonapiHeaders } from "../../../constants/api-endpoints.js";
+import { tonapiFetch } from "../../../constants/api-endpoints.js";
 
 /**
  * Parameters for dns_resolve tool
@@ -39,9 +38,7 @@ export const dnsResolveExecutor: ToolExecutor<DnsResolveParams> = async (
     const fullDomain = `${domain}.ton`;
 
     // Get domain info from TonAPI
-    const response = await fetchWithTimeout(`${TONAPI_BASE_URL}/dns/${fullDomain}`, {
-      headers: tonapiHeaders(),
-    });
+    const response = await tonapiFetch(`/dns/${fullDomain}`);
 
     if (response.status === 404) {
       return {

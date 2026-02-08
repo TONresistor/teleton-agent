@@ -1,7 +1,6 @@
 import { Type } from "@sinclair/typebox";
 import type { Tool, ToolExecutor, ToolResult } from "../types.js";
-import { fetchWithTimeout } from "../../../utils/fetch.js";
-import { TONAPI_BASE_URL, tonapiHeaders } from "../../../constants/api-endpoints.js";
+import { tonapiFetch } from "../../../constants/api-endpoints.js";
 
 /**
  * Parameters for jetton_info tool
@@ -35,9 +34,7 @@ export const jettonInfoExecutor: ToolExecutor<JettonInfoParams> = async (
     const { jetton_address } = params;
 
     // Fetch jetton info from TonAPI
-    const response = await fetchWithTimeout(`${TONAPI_BASE_URL}/jettons/${jetton_address}`, {
-      headers: tonapiHeaders(),
-    });
+    const response = await tonapiFetch(`/jettons/${jetton_address}`);
 
     if (response.status === 404) {
       return {

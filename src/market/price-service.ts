@@ -2,6 +2,7 @@ import { getDb, getCollections, getModels, getStats } from "./db.js";
 import { MarketScraperService } from "./scraper-service.js";
 import type Database from "better-sqlite3";
 import type { MarketConfig } from "../config/schema.js";
+import { verbose } from "../utils/logger.js";
 
 export interface ModelFloor {
   collection: string;
@@ -170,7 +171,7 @@ export class MarketPriceService {
 
     // Check if data is stale
     if (cacheAge > this.cacheTtlMs) {
-      console.log(
+      verbose(
         `   ⏰ Cache stale for ${collectionName} (${Math.round(cacheAge / 1000 / 60)} min old)`
       );
       // Note: Single-collection refresh not yet implemented

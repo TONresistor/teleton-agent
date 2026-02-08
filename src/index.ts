@@ -19,6 +19,7 @@ import { getProviderMetadata, type SupportedProvider } from "./config/providers.
 import { DealBot, VerificationPoller } from "./bot/index.js";
 import { initCasinoConfig } from "./casino/config.js";
 import { initDealsConfig, DEALS_CONFIG } from "./deals/config.js";
+import { verbose } from "./utils/logger.js";
 
 /**
  * Main Tonnet application
@@ -246,7 +247,7 @@ ${blue}  ┌──────────────────────�
             `UPDATE deals SET status = 'expired' WHERE status IN ('proposed', 'accepted') AND expires_at < ?`
           )
           .run(now);
-        if (r.changes > 0) console.log(`⏰ Expired ${r.changes} stale deal(s)`);
+        if (r.changes > 0) verbose(`⏰ Expired ${r.changes} stale deal(s)`);
       }, DEALS_CONFIG.expiryCheckIntervalMs);
     }
 

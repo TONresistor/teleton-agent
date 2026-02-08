@@ -1,11 +1,7 @@
 import { Type } from "@sinclair/typebox";
 import type { Tool, ToolExecutor, ToolResult } from "../types.js";
 import { fetchWithTimeout } from "../../../utils/fetch.js";
-import {
-  TONAPI_BASE_URL,
-  GECKOTERMINAL_API_URL,
-  tonapiHeaders,
-} from "../../../constants/api-endpoints.js";
+import { GECKOTERMINAL_API_URL, tonapiFetch } from "../../../constants/api-endpoints.js";
 
 /**
  * Parameters for jetton_history tool
@@ -41,9 +37,8 @@ export const jettonHistoryExecutor: ToolExecutor<JettonHistoryParams> = async (
     // Fetch from multiple sources for comprehensive data
 
     // 1. TonAPI rates for price changes
-    const ratesResponse = await fetchWithTimeout(
-      `${TONAPI_BASE_URL}/rates?tokens=${encodeURIComponent(jetton_address)}&currencies=usd,ton`,
-      { headers: tonapiHeaders() }
+    const ratesResponse = await tonapiFetch(
+      `/rates?tokens=${encodeURIComponent(jetton_address)}&currencies=usd,ton`
     );
 
     // 2. GeckoTerminal for volume and market data
@@ -53,9 +48,7 @@ export const jettonHistoryExecutor: ToolExecutor<JettonHistoryParams> = async (
     );
 
     // 3. TonAPI for jetton metadata
-    const infoResponse = await fetchWithTimeout(`${TONAPI_BASE_URL}/jettons/${jetton_address}`, {
-      headers: tonapiHeaders(),
-    });
+    const infoResponse = await tonapiFetch(`/jettons/${jetton_address}`);
 
     let symbol = "TOKEN";
     let name = "Unknown Token";

@@ -1,5 +1,6 @@
 import type { TelegramMessage } from "./bridge.js";
 import { DEBOUNCE_MAX_MULTIPLIER, DEBOUNCE_MAX_BUFFER_SIZE } from "../constants/limits.js";
+import { verbose } from "../utils/logger.js";
 
 /**
  * Buffer for accumulating messages during debounce window
@@ -49,7 +50,7 @@ export class MessageDebouncer {
     const isGroup = message.isGroup ? "group" : "dm";
     const shouldDebounce = this.config.debounceMs > 0 && this.shouldDebounce(message);
 
-    console.log(
+    verbose(
       `📩 [Debouncer] Received ${isGroup} message from ${message.senderId} in ${message.chatId} (debounce: ${shouldDebounce})`
     );
 
@@ -58,13 +59,11 @@ export class MessageDebouncer {
       // Flush any pending messages for this chat first
       const key = message.chatId;
       if (this.buffers.has(key)) {
-        console.log(
-          `📤 [Debouncer] Flushing pending buffer for ${key} before immediate processing`
-        );
+        verbose(`📤 [Debouncer] Flushing pending buffer for ${key} before immediate processing`);
         await this.flushKey(key);
       }
       // Process immediately
-      console.log(`⚡ [Debouncer] Processing immediately (no debounce)`);
+      verbose(`⚡ [Debouncer] Processing immediately (no debounce)`);
       await this.processMessages([message]);
       return;
     }
@@ -75,7 +74,7 @@ export class MessageDebouncer {
     if (existing) {
       // Add to existing buffer and reset timer
       existing.messages.push(message);
-      console.log(
+      verbose(
         `📥 [Debouncer] Added to buffer for ${key} (${existing.messages.length} messages waiting)`
       );
       this.resetTimer(key, existing);
@@ -115,7 +114,7 @@ export class MessageDebouncer {
   private async flushKey(key: string): Promise<void> {
     const buffer = this.buffers.get(key);
     if (!buffer) {
-      console.log(`📭 [Debouncer] No buffer to flush for ${key}`);
+      verbose(`📭 [Debouncer] No buffer to flush for ${key}`);
       return;
     }
 
@@ -127,11 +126,11 @@ export class MessageDebouncer {
     }
 
     if (buffer.messages.length === 0) {
-      console.log(`📭 [Debouncer] Empty buffer for ${key}, nothing to flush`);
+      verbose(`📭 [Debouncer] Empty buffer for ${key}, nothing to flush`);
       return;
     }
 
-    console.log(`📤 [Debouncer] Flushing ${buffer.messages.length} message(s) for ${key}`);
+    verbose(`📤 [Debouncer] Flushing ${buffer.messages.length} message(s) for ${key}`);
     await this.processMessages(buffer.messages);
   }
 
@@ -142,7 +141,7 @@ export class MessageDebouncer {
     // Sort by timestamp to preserve message order
     const sorted = messages.sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
 
-    console.log(`🔄 [Debouncer] Processing ${sorted.length} message(s)`);
+    verbose(`🔄 [Debouncer] Processing ${sorted.length} message(s)`);
 
     try {
       await this.onFlush(sorted);

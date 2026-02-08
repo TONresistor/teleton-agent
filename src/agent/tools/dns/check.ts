@@ -1,7 +1,6 @@
 import { Type } from "@sinclair/typebox";
 import type { Tool, ToolExecutor, ToolResult } from "../types.js";
-import { fetchWithTimeout } from "../../../utils/fetch.js";
-import { TONAPI_BASE_URL, tonapiHeaders } from "../../../constants/api-endpoints.js";
+import { tonapiFetch } from "../../../constants/api-endpoints.js";
 
 /**
  * Parameters for dns_check tool
@@ -65,9 +64,7 @@ export const dnsCheckExecutor: ToolExecutor<DnsCheckParams> = async (
     const fullDomain = `${domain}.ton`;
 
     // Check if domain exists via TonAPI
-    const dnsInfoResponse = await fetchWithTimeout(`${TONAPI_BASE_URL}/dns/${fullDomain}`, {
-      headers: tonapiHeaders(),
-    });
+    const dnsInfoResponse = await tonapiFetch(`/dns/${fullDomain}`);
 
     // Case 1: Domain doesn't exist (404) - AVAILABLE
     if (dnsInfoResponse.status === 404) {
@@ -114,9 +111,7 @@ export const dnsCheckExecutor: ToolExecutor<DnsCheckParams> = async (
 
     // Case 3: Domain exists but no owner - IN AUCTION
     // Check auctions list to get bid details
-    const auctionsResponse = await fetchWithTimeout(`${TONAPI_BASE_URL}/dns/auctions?tld=ton`, {
-      headers: tonapiHeaders(),
-    });
+    const auctionsResponse = await tonapiFetch(`/dns/auctions?tld=ton`);
 
     if (auctionsResponse.ok) {
       const auctions = await auctionsResponse.json();

@@ -5,8 +5,7 @@ import { mnemonicToPrivateKey } from "@ton/crypto";
 import { WalletContractV5R1, TonClient, toNano, internal, beginCell } from "@ton/ton";
 import { Address, SendMode } from "@ton/core";
 import { getHttpEndpoint } from "@orbs-network/ton-access";
-import { fetchWithTimeout } from "../../../utils/fetch.js";
-import { TONAPI_BASE_URL, tonapiHeaders } from "../../../constants/api-endpoints.js";
+import { tonapiFetch } from "../../../constants/api-endpoints.js";
 
 // Op code for change_dns_record
 const DNS_CHANGE_RECORD_OP = 0x4eb1f0f9;
@@ -61,9 +60,7 @@ export const dnsUnlinkExecutor: ToolExecutor<DnsUnlinkParams> = async (
     }
 
     // Get domain info from TonAPI
-    const dnsResponse = await fetchWithTimeout(`${TONAPI_BASE_URL}/dns/${fullDomain}`, {
-      headers: tonapiHeaders(),
-    });
+    const dnsResponse = await tonapiFetch(`/dns/${fullDomain}`);
 
     if (dnsResponse.status === 404) {
       return {

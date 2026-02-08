@@ -5,6 +5,7 @@ import { getWalletAddress, getWalletBalance } from "../ton/wallet-service.js";
 import { getProviderMetadata, type SupportedProvider } from "../config/providers.js";
 import { DEALS_CONFIG } from "../deals/config.js";
 import { loadTemplate } from "../workspace/manager.js";
+import { isVerbose, setVerbose } from "../utils/logger.js";
 
 export interface AdminCommand {
   command: string;
@@ -100,6 +101,8 @@ export class AdminHandler {
         return this.handleStrategyCommand(command);
       case "stop":
         return await this.handleStopCommand();
+      case "verbose":
+        return this.handleVerboseCommand();
       case "help":
         return this.handleHelpCommand();
       case "ping":
@@ -316,6 +319,15 @@ export class AdminHandler {
   }
 
   /**
+   * /verbose - Toggle verbose logging at runtime
+   */
+  private handleVerboseCommand(): string {
+    const next = !isVerbose();
+    setVerbose(next);
+    return next ? "🔊 Verbose logging **ON**" : "🔇 Verbose logging **OFF**";
+  }
+
+  /**
    * /help - Show available commands
    */
   private handleHelpCommand(): string {
@@ -338,6 +350,9 @@ View or change trading thresholds
 
 **/wallet**
 Check TON wallet balance
+
+**/verbose**
+Toggle verbose debug logging
 
 **/pause** / **/resume**
 Pause or resume the agent

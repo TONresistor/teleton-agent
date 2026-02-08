@@ -5,8 +5,7 @@ import { mnemonicToPrivateKey } from "@ton/crypto";
 import { WalletContractV5R1, TonClient, toNano, internal } from "@ton/ton";
 import { Address, SendMode, beginCell } from "@ton/core";
 import { getHttpEndpoint } from "@orbs-network/ton-access";
-import { fetchWithTimeout } from "../../../utils/fetch.js";
-import { TONAPI_BASE_URL, tonapiHeaders } from "../../../constants/api-endpoints.js";
+import { tonapiFetch } from "../../../constants/api-endpoints.js";
 
 // Jetton transfer op code (TEP-74)
 const JETTON_TRANSFER_OP = 0xf8a7ea5;
@@ -77,12 +76,7 @@ export const jettonSendExecutor: ToolExecutor<JettonSendParams> = async (
     }
 
     // Get sender's jetton wallet address from TonAPI
-    const jettonsResponse = await fetchWithTimeout(
-      `${TONAPI_BASE_URL}/accounts/${walletData.address}/jettons`,
-      {
-        headers: tonapiHeaders(),
-      }
-    );
+    const jettonsResponse = await tonapiFetch(`/accounts/${walletData.address}/jettons`);
 
     if (!jettonsResponse.ok) {
       return {

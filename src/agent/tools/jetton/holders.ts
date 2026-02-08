@@ -1,7 +1,6 @@
 import { Type } from "@sinclair/typebox";
 import type { Tool, ToolExecutor, ToolResult } from "../types.js";
-import { fetchWithTimeout } from "../../../utils/fetch.js";
-import { TONAPI_BASE_URL, tonapiHeaders } from "../../../constants/api-endpoints.js";
+import { tonapiFetch } from "../../../constants/api-endpoints.js";
 
 /**
  * Parameters for jetton_holders tool
@@ -43,11 +42,8 @@ export const jettonHoldersExecutor: ToolExecutor<JettonHoldersParams> = async (
     const { jetton_address, limit = 10 } = params;
 
     // Fetch holders from TonAPI
-    const response = await fetchWithTimeout(
-      `${TONAPI_BASE_URL}/jettons/${jetton_address}/holders?limit=${Math.min(limit, 100)}`,
-      {
-        headers: tonapiHeaders(),
-      }
+    const response = await tonapiFetch(
+      `/jettons/${jetton_address}/holders?limit=${Math.min(limit, 100)}`
     );
 
     if (response.status === 404) {
@@ -71,9 +67,7 @@ export const jettonHoldersExecutor: ToolExecutor<JettonHoldersParams> = async (
     let decimals = 9;
     let symbol = "TOKEN";
     try {
-      const infoResponse = await fetchWithTimeout(`${TONAPI_BASE_URL}/jettons/${jetton_address}`, {
-        headers: tonapiHeaders(),
-      });
+      const infoResponse = await tonapiFetch(`/jettons/${jetton_address}`);
       if (infoResponse.ok) {
         const infoData = await infoResponse.json();
         decimals = parseInt(infoData.metadata?.decimals || "9");

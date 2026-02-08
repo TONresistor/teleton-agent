@@ -1,7 +1,6 @@
 import { Type } from "@sinclair/typebox";
 import type { Tool, ToolExecutor, ToolResult } from "../types.js";
-import { fetchWithTimeout } from "../../../utils/fetch.js";
-import { TONAPI_BASE_URL, tonapiHeaders } from "../../../constants/api-endpoints.js";
+import { tonapiFetch } from "../../../constants/api-endpoints.js";
 
 /**
  * Parameters for dns_auctions tool
@@ -39,9 +38,7 @@ export const dnsAuctionsExecutor: ToolExecutor<DnsAuctionsParams> = async (
     const { limit = 20 } = params;
 
     // Fetch all auctions from TonAPI
-    const response = await fetchWithTimeout(`${TONAPI_BASE_URL}/dns/auctions?tld=ton`, {
-      headers: tonapiHeaders(),
-    });
+    const response = await tonapiFetch(`/dns/auctions?tld=ton`);
 
     if (!response.ok) {
       return {

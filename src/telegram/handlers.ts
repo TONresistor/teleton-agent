@@ -15,6 +15,7 @@ import {
 } from "../agent/tools/telegram/index.js";
 import type { ToolContext } from "../agent/tools/types.js";
 import { MESSAGE_HANDLER_LOCK_TIMEOUT_MS } from "../constants/timeouts.js";
+import { verbose } from "../utils/logger.js";
 
 export interface MessageContext {
   message: TelegramMessage;
@@ -293,7 +294,7 @@ export class MessageHandler {
    */
   async handleMessage(message: TelegramMessage): Promise<void> {
     const msgType = message.isGroup ? "group" : message.isChannel ? "channel" : "dm";
-    console.log(
+    verbose(
       `📨 [Handler] Received ${msgType} message ${message.id} from ${message.senderId} (mentions: ${message.mentionsMe})`
     );
 
@@ -309,18 +310,26 @@ export class MessageHandler {
     }
 
     if (!context.shouldRespond) {
-      console.log(`Skipping message ${message.id} from ${message.senderId}: ${context.reason}`);
+      if (message.isGroup && context.reason === "Not mentioned") {
+        const chatShort =
+          message.chatId.length > 10
+            ? message.chatId.slice(0, 7) + ".." + message.chatId.slice(-2)
+            : message.chatId;
+        console.log(`⏭️  Group ${chatShort} msg:${message.id} (not mentioned)`);
+      } else {
+        verbose(`Skipping message ${message.id} from ${message.senderId}: ${context.reason}`);
+      }
       return;
     }
 
     // 3. Check rate limits
     if (!this.rateLimiter.canSendMessage()) {
-      console.log("Rate limit reached, skipping message");
+      verbose("Rate limit reached, skipping message");
       return;
     }
 
     if (message.isGroup && !this.rateLimiter.canSendToGroup(message.chatId)) {
-      console.log(`Group rate limit reached for ${message.chatId}`);
+      verbose(`Group rate limit reached for ${message.chatId}`);
       return;
     }
 
@@ -428,7 +437,7 @@ export class MessageHandler {
       // Mark as processed AFTER successful handling (prevents message loss on crash)
       writeOffset(message.id, message.chatId);
 
-      console.log(`Processed message ${message.id} in chat ${message.chatId}`);
+      verbose(`Processed message ${message.id} in chat ${message.chatId}`);
     } catch (error) {
       console.error("Error handling message:", error);
     } finally {

@@ -53,6 +53,7 @@ import type { ToolRegistry } from "./tools/registry.js";
 import type { ToolContext } from "./tools/types.js";
 import { appendToDailyLog, writeSessionEndSummary } from "../memory/daily-logs.js";
 import { saveSessionMemory } from "../session/memory-hook.js";
+import { verbose } from "../utils/logger.js";
 
 /**
  * Check if an error message indicates context overflow
@@ -254,10 +255,16 @@ export class AgentRuntime {
       // Prepend pending context if available (group messages since last reply)
       if (pendingContext) {
         formattedMessage = `${pendingContext}\n\n${formattedMessage}`;
-        console.log(`📋 Including ${pendingContext.split("\n").length - 1} pending messages`);
+        verbose(`📋 Including ${pendingContext.split("\n").length - 1} pending messages`);
       }
 
-      console.log(`📨 Formatted message: ${formattedMessage.substring(0, 100)}...`);
+      verbose(`📨 Formatted message: ${formattedMessage.substring(0, 100)}...`);
+
+      // Log clean input line
+      const preview = formattedMessage.slice(0, 50).replace(/\n/g, " ");
+      const who = senderUsername ? `@${senderUsername}` : userName;
+      const msgType = isGroup ? `Group ${chatId} ${who}` : `DM ${who}`;
+      console.log(`\n📨 ${msgType}: "${preview}${formattedMessage.length > 50 ? "..." : ""}"`);
 
       // Fetch relevant context from database (RAG)
       let relevantContext = "";
@@ -290,7 +297,7 @@ export class AgentRuntime {
 
           if (contextParts.length > 0) {
             relevantContext = contextParts.join("\n\n");
-            console.log(
+            verbose(
               `🔍 Found ${dbContext.relevantKnowledge.length} knowledge chunks, ${dbContext.relevantFeed.length} feed messages`
             );
           }
@@ -374,7 +381,7 @@ export class AgentRuntime {
 
       while (iteration < maxIterations) {
         iteration++;
-        console.log(`\n🔄 Agentic iteration ${iteration}/${maxIterations}`);
+        verbose(`\n🔄 Agentic iteration ${iteration}/${maxIterations}`);
 
         // Apply observation masking to reduce context size before API call
         // This replaces old tool results with compact summaries (~90% reduction)
@@ -469,7 +476,7 @@ export class AgentRuntime {
 
         // If no tool calls, we're done - LLM returned final text
         if (toolCalls.length === 0) {
-          console.log(`✅ Agent finished (no more tool calls)`);
+          console.log(`  🔄 ${iteration}/${maxIterations} → done`);
           finalResponse = response;
           break;
         }
@@ -480,10 +487,12 @@ export class AgentRuntime {
           break;
         }
 
-        console.log(`🔧 Executing ${toolCalls.length} tool call(s)`);
+        verbose(`🔧 Executing ${toolCalls.length} tool call(s)`);
 
         // Add assistant message BEFORE tool results (correct order for pi-ai)
         context.messages.push(response.message);
+
+        const iterationToolNames: string[] = [];
 
         for (const block of toolCalls) {
           if (block.type !== "toolCall") continue;
@@ -497,7 +506,8 @@ export class AgentRuntime {
           // Execute the tool
           const result = await this.toolRegistry.execute(block, fullContext);
 
-          console.log(`  ${block.name}: ${result.success ? "✓" : "✗"} ${result.error || ""}`);
+          verbose(`  ${block.name}: ${result.success ? "✓" : "✗"} ${result.error || ""}`);
+          iterationToolNames.push(`${block.name} ${result.success ? "✓" : "✗"}`);
 
           // Track tool calls for return value
           totalToolCalls.push({
@@ -551,9 +561,12 @@ export class AgentRuntime {
           appendToTranscript(session.sessionId, toolResultMsg);
         }
 
+        // Log iteration summary with tool names
+        console.log(`  🔄 ${iteration}/${maxIterations} → ${iterationToolNames.join(", ")}`);
+
         // If this was the last iteration, use this response
         if (iteration === maxIterations) {
-          console.log(`⚠️ Max iterations reached (${maxIterations})`);
+          console.log(`  ⚠️ Max iterations reached (${maxIterations})`);
           finalResponse = response;
         }
       }
@@ -592,9 +605,8 @@ export class AgentRuntime {
       // Log usage if available
       const usage = response.message.usage;
       if (usage) {
-        console.log(
-          `💰 Usage: ${usage.input} in, ${usage.output} out, ${usage.cacheRead} cache read | Cost: $${usage.cost.total.toFixed(4)}`
-        );
+        const inK = (usage.input / 1000).toFixed(1);
+        console.log(`  💰 ${inK}K in, ${usage.output} out | $${usage.cost.total.toFixed(3)}`);
       }
 
       // Handle empty response - prefer accumulated text from all iterations
