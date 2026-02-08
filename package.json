@@ -1,6 +1,6 @@
 {
   "name": "teleton",
-  "version": "0.1.13",
+  "version": "0.1.14",
   "description": "Personal AI Agent for Telegram",
   "author": "ZKProof (https://t.me/zkproof)",
   "license": "MIT",
@@ -45,7 +45,6 @@
     "format:check": "prettier --check \"src/**/*.ts\"",
     "typecheck": "tsc --noEmit",
     "prepublishOnly": "npm run build",
-    "postinstall": "node scripts/postinstall.mjs",
     "prepare": "husky"
   },
   "dependencies": {
