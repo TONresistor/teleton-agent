@@ -6,7 +6,7 @@ set -euo pipefail
 # Usage: curl -fsSL https://raw.githubusercontent.com/TONresistor/teleton-agent/main/install.sh | bash
 # ──────────────────────────────────────────────
 
-REPO="TONresistor/teleton-agent"
+REPO="tonresistor/teleton-agent"
 DOCKER_IMAGE="ghcr.io/${REPO}:latest"
 NPM_PACKAGE="teleton"
 MIN_NODE_VERSION=20
