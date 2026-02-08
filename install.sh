@@ -147,13 +147,15 @@ main() {
 
   # Offer choices based on what's available
   if $has_docker && $has_node; then
-    echo -e "${BOLD}Choose installation method:${NC}"
-    echo "  1) npm install -g (recommended)"
-    echo "  2) Docker"
-    echo "  3) Git clone (development)"
-    echo ""
-    read -rp "Choice [1]: " choice
-    choice="${choice:-1}"
+    {
+      echo -e "${BOLD}Choose installation method:${NC}"
+      echo "  1) npm install -g (recommended)"
+      echo "  2) Docker"
+      echo "  3) Git clone (development)"
+      echo ""
+      read -rp "Choice [1]: " choice
+      choice="${choice:-1}"
+    } < /dev/tty
     case "$choice" in
       1) install_npm ;;
       2) install_docker ;;
@@ -162,12 +164,14 @@ main() {
     esac
 
   elif $has_node; then
-    echo -e "${BOLD}Choose installation method:${NC}"
-    echo "  1) npm install -g (recommended)"
-    echo "  2) Git clone (development)"
-    echo ""
-    read -rp "Choice [1]: " choice
-    choice="${choice:-1}"
+    {
+      echo -e "${BOLD}Choose installation method:${NC}"
+      echo "  1) npm install -g (recommended)"
+      echo "  2) Git clone (development)"
+      echo ""
+      read -rp "Choice [1]: " choice
+      choice="${choice:-1}"
+    } < /dev/tty
     case "$choice" in
       1) install_npm ;;
       2) install_git ;;
