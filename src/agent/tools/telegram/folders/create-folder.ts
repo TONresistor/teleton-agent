@@ -83,10 +83,10 @@ export const telegramCreateFolderExecutor: ToolExecutor<CreateFolderParams> = as
     const gramJsClient = context.bridge.getClient().getClient();
 
     // Get existing filters to determine next ID
-    const existingFilters = await gramJsClient.invoke(new Api.messages.GetDialogFilters());
-    const maxId = Array.isArray(existingFilters)
-      ? Math.max(0, ...existingFilters.map((f: any) => f.id || 0))
-      : 0;
+    // GetDialogFilters returns messages.DialogFilters { filters: [] } (not a plain array)
+    const result = await gramJsClient.invoke(new Api.messages.GetDialogFilters());
+    const filters: any[] = Array.isArray(result) ? result : ((result as any).filters ?? []);
+    const maxId = Math.max(0, ...filters.map((f: any) => f.id || 0));
     const newId = maxId + 1;
 
     // Create new folder (using any to bypass strict type checking)

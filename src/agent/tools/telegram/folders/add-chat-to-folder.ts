@@ -42,17 +42,14 @@ export const telegramAddChatToFolderExecutor: ToolExecutor<AddChatToFolderParams
     const gramJsClient = context.bridge.getClient().getClient();
 
     // Get existing filters
-    const filters = await gramJsClient.invoke(new Api.messages.GetDialogFilters());
-
-    if (!Array.isArray(filters)) {
-      return {
-        success: false,
-        error: "Failed to get existing folders",
-      };
-    }
+    // GetDialogFilters returns messages.DialogFilters { filters: [] } (not a plain array)
+    const filtersResult = await gramJsClient.invoke(new Api.messages.GetDialogFilters());
+    const filterList: any[] = Array.isArray(filtersResult)
+      ? filtersResult
+      : ((filtersResult as any).filters ?? []);
 
     // Find the target folder
-    const folder = filters.find((f: any) => f.id === folderId);
+    const folder = filterList.find((f: any) => f.id === folderId);
 
     if (!folder || folder.className !== "DialogFilter") {
       return {

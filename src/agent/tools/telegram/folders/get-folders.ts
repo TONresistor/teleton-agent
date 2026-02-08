@@ -24,16 +24,11 @@ export const telegramGetFoldersExecutor: ToolExecutor<{}> = async (
     const gramJsClient = context.bridge.getClient().getClient();
 
     // Get dialog filters (folders)
+    // GetDialogFilters returns messages.DialogFilters { filters: [] } (not a plain array)
     const result = await gramJsClient.invoke(new Api.messages.GetDialogFilters());
+    const filterList: any[] = Array.isArray(result) ? result : ((result as any).filters ?? []);
 
-    if (!Array.isArray(result)) {
-      return {
-        success: false,
-        error: "Unexpected result type from dialog filters",
-      };
-    }
-
-    const folders = result
+    const folders = filterList
       .filter((filter: any) => filter.className === "DialogFilter")
       .map((filter: any) => ({
         id: filter.id,
