@@ -85,7 +85,7 @@ export const telegramAddChatToFolderExecutor: ToolExecutor<AddChatToFolderParams
       success: true,
       data: {
         folderId,
-        folderTitle: folder.title,
+        folderTitle: folder.title?.text ?? folder.title,
         chatId,
         totalChatsInFolder: updatedIncludePeers.length,
       },

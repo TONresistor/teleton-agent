@@ -92,7 +92,7 @@ export const telegramCreateFolderExecutor: ToolExecutor<CreateFolderParams> = as
     // Create new folder (using any to bypass strict type checking)
     const filterData: any = {
       id: newId,
-      title,
+      title: new Api.TextWithEntities({ text: title, entities: [] }),
       pinnedPeers: [],
       includePeers: [],
       excludePeers: [],

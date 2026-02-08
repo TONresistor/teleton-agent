@@ -37,7 +37,7 @@ export const telegramGetFoldersExecutor: ToolExecutor<{}> = async (
       .filter((filter: any) => filter.className === "DialogFilter")
       .map((filter: any) => ({
         id: filter.id,
-        title: filter.title,
+        title: filter.title?.text ?? filter.title,
         emoji: filter.emoticon || null,
         pinnedPeersCount: filter.pinnedPeers?.length || 0,
         includedPeersCount: filter.includePeers?.length || 0,
