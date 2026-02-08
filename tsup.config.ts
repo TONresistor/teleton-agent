@@ -15,6 +15,7 @@ export default defineConfig({
   outDir: "dist",
   // All deps stay in node_modules (not bundled)
   // Critical for native modules (better-sqlite3, sqlite-vec, playwright)
-  noExternal: [],
+  // Exception: @ston-fi/api is bundled because it enforces pnpm-only install
+  noExternal: ["@ston-fi/api"],
   skipNodeModulesBundle: true,
 });
