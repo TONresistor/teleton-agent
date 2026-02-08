@@ -49,7 +49,6 @@ export class TonnetApp {
     // Set TonAPI key if configured
     if (this.config.tonapi_key) {
       setTonapiKey(this.config.tonapi_key);
-      console.log("🔑 TonAPI key configured");
     }
 
     // Load soul/personality
@@ -266,6 +265,9 @@ ${blue}  ┌──────────────────────�
     }
     console.log(`✅ Telegram: @${username} connected`);
     console.log(`✅ TON Blockchain: connected`);
+    if (this.config.tonapi_key) {
+      console.log(`🔑 TonAPI key configured`);
+    }
     console.log(`✅ DEXs: STON.fi, DeDust connected`);
     console.log(`✅ Wallet: ${walletAddress || "not configured"}`);
     console.log(`✅ Model: ${provider}/${this.config.agent.model}`);
