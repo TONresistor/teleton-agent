@@ -35,7 +35,10 @@ RUN apt-get update && apt-get install -y \
 
 # Copy package files and install production deps only
 COPY package.json package-lock.json ./
-RUN npm ci --omit=dev && npm cache clean --force
+COPY scripts/ scripts/
+RUN npm ci --omit=dev --ignore-scripts \
+    && bash scripts/patch-gramjs.sh || true \
+    && npm cache clean --force
 
 # Install playwright chromium (for market scraper)
 RUN npx playwright install --with-deps chromium
