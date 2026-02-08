@@ -1,4 +1,13 @@
 import { defineConfig } from "tsup";
+import pkg from "./package.json" with { type: "json" };
+
+// Bundle everything EXCEPT production dependencies and Node builtins.
+// This ensures @ston-fi/* (devDeps with pnpm-only install blocker)
+// and all their transitive deps are inlined into dist/.
+const external = [
+  ...Object.keys(pkg.dependencies ?? {}),
+  ...Object.keys(pkg.optionalDependencies ?? {}),
+];
 
 export default defineConfig({
   entry: {
@@ -13,9 +22,5 @@ export default defineConfig({
   dts: false,
   sourcemap: false,
   outDir: "dist",
-  // All deps stay in node_modules (not bundled)
-  // Critical for native modules (better-sqlite3, sqlite-vec, playwright)
-  // Exception: @ston-fi/api is bundled because it enforces pnpm-only install
-  noExternal: [],
-  skipNodeModulesBundle: true,
+  external,
 });
