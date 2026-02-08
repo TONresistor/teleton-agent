@@ -1,0 +1,48 @@
+# Teleton Agent Configuration
+# Copy this file to ~/.teleton/config.yaml and fill in your values.
+# Or run: teleton setup
+
+agent:
+  provider: "anthropic"              # anthropic | openai | google | xai | groq | openrouter
+  api_key: "YOUR_API_KEY"
+  model: "claude-opus-4-5-20251101"  # Model ID (varies by provider)
+  # utility_model: "claude-3-5-haiku-20241022"  # Optional: cheap model for summarization
+  max_tokens: 4096
+  temperature: 0.7
+  max_agentic_iterations: 5
+  session_reset_policy:
+    daily_reset_enabled: true
+    daily_reset_hour: 4              # 0-23, hour of day to reset sessions
+    idle_expiry_enabled: true
+    idle_expiry_minutes: 1440        # 24 hours
+
+telegram:
+  api_id: 0                          # From https://my.telegram.org/apps
+  api_hash: "YOUR_API_HASH"
+  phone: "+1234567890"               # Phone number linked to Telegram account
+  dm_policy: "pairing"               # pairing | allowlist | open | disabled
+  group_policy: "open"               # open | allowlist | disabled
+  require_mention: true              # In groups, only respond when mentioned
+  admin_ids: [123456789]             # Your Telegram user ID (from @userinfobot)
+  owner_name: "Your Name"
+  owner_username: "your_username"
+  debounce_ms: 1500                  # Group message batching delay
+
+  # Optional: inline bot for deals system
+  # bot_token: "123456:ABC-DEF..."   # From @BotFather
+  # bot_username: "your_deals_bot"
+
+# Optional: TonAPI key for higher rate limits
+# tonapi_key: "YOUR_TONAPI_KEY"      # From @tonapi_bot
+
+# Optional sections (defaults are fine for most users)
+# casino:
+#   enabled: true
+#   min_bet: 0.1
+#   cooldown_seconds: 30
+
+# deals:
+#   enabled: true
+#   expiry_seconds: 120
+#   buy_max_floor_percent: 80
+#   sell_min_floor_percent: 115

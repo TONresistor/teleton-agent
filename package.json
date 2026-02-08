@@ -1,0 +1,97 @@
+{
+  "name": "teleton",
+  "version": "0.1.5",
+  "description": "Personal AI Agent for Telegram",
+  "author": "ZKProof (https://t.me/zkproof)",
+  "license": "MIT",
+  "keywords": [
+    "telegram",
+    "ai",
+    "agent",
+    "ton",
+    "blockchain",
+    "userbot",
+    "llm"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/TONresistor/teleton-agent.git"
+  },
+  "bugs": {
+    "url": "https://github.com/TONresistor/teleton-agent/issues"
+  },
+  "homepage": "https://github.com/TONresistor/teleton-agent#readme",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": {
+    "teleton": "./bin/teleton.js"
+  },
+  "files": [
+    "dist/",
+    "bin/",
+    "scripts/",
+    "src/templates/"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "start": "node dist/cli/index.js start",
+    "dev": "tsx watch src/index.ts",
+    "dev:cli": "tsx src/cli/index.ts",
+    "setup": "node dist/cli/index.js setup",
+    "doctor": "node dist/cli/index.js doctor",
+    "lint": "eslint src --ext .ts",
+    "lint:fix": "eslint src --ext .ts --fix",
+    "format": "prettier --write \"src/**/*.ts\"",
+    "format:check": "prettier --check \"src/**/*.ts\"",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "npm run build",
+    "postinstall": "node scripts/postinstall.mjs",
+    "prepare": "husky"
+  },
+  "dependencies": {
+    "@clack/prompts": "^0.7.0",
+    "@dedust/sdk": "^0.8.7",
+    "@mariozechner/pi-ai": "^0.50.9",
+    "@orbs-network/ton-access": "^2.3.3",
+    "@sinclair/typebox": "^0.34.48",
+    "@ston-fi/sdk": "^2.7.0",
+    "@ton/core": "^0.63.0",
+    "@ton/crypto": "^3.3.0",
+    "@ton/ton": "^16.1.0",
+    "better-sqlite3": "^11.7.0",
+    "commander": "^12.0.0",
+    "grammy": "^1.39.3",
+    "js-tiktoken": "^1.0.21",
+    "playwright": "^1.58.1",
+    "sqlite-vec": "^0.1.7-alpha.2",
+    "telegram": "^2.26.22",
+    "yaml": "^2.7.0",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.11",
+    "@types/node": "^22.0.0",
+    "@typescript-eslint/eslint-plugin": "^8.54.0",
+    "@typescript-eslint/parser": "^8.54.0",
+    "eslint": "^9.39.2",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.2.7",
+    "prettier": "^3.8.1",
+    "tsup": "^8.5.1",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0"
+  },
+  "optionalDependencies": {
+    "@ston-fi/api": "^0.30.0",
+    "edge-tts": "^1.0.1"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "lint-staged": {
+    "src/**/*.ts": [
+      "eslint --fix",
+      "prettier --write"
+    ]
+  }
+}
