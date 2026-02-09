@@ -661,8 +661,15 @@ export class AgentRuntime {
   clearHistory(chatId: string): void {
     const db = getDatabase().getDb();
 
-    // Delete messages from main table
-    db.prepare(`DELETE FROM tg_messages WHERE chat_id = ?`).run(chatId);
+    // Delete from FTS first (while source rows still exist for subquery)
+    db.prepare(
+      `
+      DELETE FROM tg_messages_fts
+      WHERE rowid IN (
+        SELECT rowid FROM tg_messages WHERE chat_id = ?
+      )
+    `
+    ).run(chatId);
 
     // Delete from vector table
     db.prepare(
@@ -674,15 +681,8 @@ export class AgentRuntime {
     `
     ).run(chatId);
 
-    // Delete from FTS
-    db.prepare(
-      `
-      DELETE FROM tg_messages_fts
-      WHERE rowid IN (
-        SELECT rowid FROM tg_messages WHERE chat_id = ?
-      )
-    `
-    ).run(chatId);
+    // Delete messages from main table last
+    db.prepare(`DELETE FROM tg_messages WHERE chat_id = ?`).run(chatId);
 
     // Reset session (creates new sessionId, deletes old transcript)
     resetSession(chatId);

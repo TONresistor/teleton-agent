@@ -144,6 +144,7 @@ export function ensureSchema(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
     CREATE INDEX IF NOT EXISTS idx_tasks_priority ON tasks(priority DESC, created_at ASC);
     CREATE INDEX IF NOT EXISTS idx_tasks_scheduled ON tasks(scheduled_for) WHERE scheduled_for IS NOT NULL;
+    CREATE INDEX IF NOT EXISTS idx_tasks_created_by ON tasks(created_by) WHERE created_by IS NOT NULL;
 
     -- Task Dependencies (for chained tasks)
     CREATE TABLE IF NOT EXISTS task_dependencies (

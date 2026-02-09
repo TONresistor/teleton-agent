@@ -7,7 +7,7 @@ import { loadWallet } from "../ton/wallet-service.js";
 import { mnemonicToPrivateKey } from "@ton/crypto";
 import { WalletContractV5R1, TonClient, toNano, internal } from "@ton/ton";
 import { Address, SendMode } from "@ton/core";
-import { getHttpEndpoint } from "@orbs-network/ton-access";
+import { getCachedHttpEndpoint } from "../ton/endpoint.js";
 import { withBlockchainRetry } from "./retry.js";
 
 export interface PayoutResult {
@@ -58,7 +58,7 @@ export async function sendPayout(
     });
 
     // Get endpoint and client
-    const endpoint = await getHttpEndpoint({ network: "mainnet" });
+    const endpoint = await getCachedHttpEndpoint();
     const client = new TonClient({ endpoint });
     const contract = client.open(wallet);
 

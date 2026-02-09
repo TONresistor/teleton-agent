@@ -7,7 +7,7 @@
 import type Database from "better-sqlite3";
 import { TonClient, fromNano } from "@ton/ton";
 import { Address } from "@ton/core";
-import { getHttpEndpoint } from "@orbs-network/ton-access";
+import { getCachedHttpEndpoint } from "../ton/endpoint.js";
 import { withBlockchainRetry } from "./retry.js";
 import { CASINO_CONFIG } from "./config.js";
 import { PAYMENT_TOLERANCE_RATIO } from "../constants/limits.js";
@@ -85,7 +85,7 @@ export async function verifyPayment(
     const { botWalletAddress, betAmount, requestTime, gameType, userId } = params;
 
     // Get decentralized endpoint
-    const endpoint = await getHttpEndpoint({ network: "mainnet" });
+    const endpoint = await getCachedHttpEndpoint();
     const client = new TonClient({ endpoint });
 
     // Parse bot address
