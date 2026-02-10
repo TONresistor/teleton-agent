@@ -12,6 +12,7 @@ import {
 import type { AgentConfig } from "../config/schema.js";
 import { appendToTranscript, readTranscript } from "../session/transcript.js";
 import { getProviderMetadata, type SupportedProvider } from "../config/providers.js";
+import { sanitizeToolsForGemini } from "./schema-sanitizer.js";
 
 /**
  * Determines if an API key is an OAuth/setup token (Anthropic only)
@@ -95,11 +96,14 @@ export async function chatWithContext(
   const provider = (config.provider || "anthropic") as SupportedProvider;
   const model = getProviderModel(provider, config.model);
 
-  // Use the provided context directly
+  // Gemini requires clean OpenAPI 3.0 schemas — sanitize TypeBox anyOf/const patterns
+  const tools =
+    provider === "google" && options.tools ? sanitizeToolsForGemini(options.tools) : options.tools;
+
   const context: Context = {
     ...options.context,
     systemPrompt: options.systemPrompt || options.context.systemPrompt,
-    tools: options.tools, // Pass tools to context
+    tools,
   };
 
   // Get response from LLM

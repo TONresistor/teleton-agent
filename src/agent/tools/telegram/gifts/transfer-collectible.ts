@@ -1,7 +1,7 @@
 import { Type } from "@sinclair/typebox";
 import { Api } from "telegram";
 import type { Tool, ToolExecutor, ToolResult } from "../../types.js";
-import { DEAL_VERIFICATION_WINDOW_SECONDS } from "../../../../constants/limits.js";
+import { hasVerifiedDeal } from "../../../../deals/module.js";
 
 /**
  * Parameters for transferring a collectible
@@ -46,20 +46,7 @@ export const telegramTransferCollectibleExecutor: ToolExecutor<TransferCollectib
 
     // SECURITY: Check if there's a verified deal authorizing this transfer
     // This prevents social engineering attacks where users trick the agent into sending collectibles
-    const verifiedDeal = context.db
-      .prepare(
-        `SELECT id FROM deals
-         WHERE status = 'verified'
-           AND agent_gives_type = 'gift'
-           AND agent_gives_gift_id = ?
-           AND user_telegram_id = ?
-           AND user_payment_verified_at >= unixepoch() - ${DEAL_VERIFICATION_WINDOW_SECONDS}
-           AND agent_sent_at IS NULL
-         LIMIT 1`
-      )
-      .get(msgId.toString(), toUserId);
-
-    if (!verifiedDeal) {
+    if (!hasVerifiedDeal(msgId.toString(), toUserId)) {
       return {
         success: false,
         error: `Security restriction: Cannot transfer collectibles without a verified deal. This tool is only available during authorized trades. If you want to trade, propose a deal first using deal_propose.`,

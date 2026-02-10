@@ -145,15 +145,6 @@ import {
   telegramEditChannelInfoExecutor,
   telegramInviteToChannelTool,
   telegramInviteToChannelExecutor,
-  // Market (gift floor prices)
-  marketGetFloorTool,
-  marketGetFloorExecutor,
-  marketSearchTool,
-  marketSearchExecutor,
-  marketCheapestTool,
-  marketCheapestExecutor,
-  marketPriceHistoryTool,
-  marketPriceHistoryExecutor,
 } from "./telegram/index.js";
 
 // TON blockchain tools
@@ -255,24 +246,9 @@ import {
   workspaceRenameExecutor,
 } from "./workspace/index.js";
 
-// Deals tools
-import {
-  dealProposeTool,
-  dealProposeExecutor,
-  dealVerifyPaymentTool,
-  dealVerifyPaymentExecutor,
-  dealStatusTool,
-  dealStatusExecutor,
-  dealListTool,
-  dealListExecutor,
-  dealCancelTool,
-  dealCancelExecutor,
-} from "./deals/index.js";
-
 /**
  * Register all tools with the given registry.
- * Conditionally registers deals tools based on config.
- * Casino tools are loaded via module-loader.ts.
+ * Casino, market, and deals tools are loaded via module-loader.ts.
  */
 export function registerAllTools(registry: ToolRegistry, config: Config): void {
   // Basic messaging
@@ -389,14 +365,6 @@ export function registerAllTools(registry: ToolRegistry, config: Config): void {
   registry.register(telegramEditChannelInfoTool, telegramEditChannelInfoExecutor, "dm-only");
   registry.register(telegramInviteToChannelTool, telegramInviteToChannelExecutor, "dm-only");
 
-  // Market (gift floor prices) — also required when deals are enabled
-  if (config.market.enabled || config.deals.enabled) {
-    registry.register(marketGetFloorTool, marketGetFloorExecutor);
-    registry.register(marketSearchTool, marketSearchExecutor);
-    registry.register(marketCheapestTool, marketCheapestExecutor);
-    registry.register(marketPriceHistoryTool, marketPriceHistoryExecutor);
-  }
-
   // TON blockchain (send dm-only)
   registry.register(tonGetAddressTool, tonGetAddressExecutor);
   registry.register(tonGetBalanceTool, tonGetBalanceExecutor);
@@ -448,13 +416,4 @@ export function registerAllTools(registry: ToolRegistry, config: Config): void {
   registry.register(workspaceDeleteTool, workspaceDeleteExecutor, "dm-only");
   registry.register(workspaceInfoTool, workspaceInfoExecutor);
   registry.register(workspaceRenameTool, workspaceRenameExecutor, "dm-only");
-
-  // Deals System (secure gift/TON trading with STRATEGY.md enforcement; mutations dm-only)
-  if (config.deals.enabled) {
-    registry.register(dealProposeTool, dealProposeExecutor, "dm-only");
-    registry.register(dealVerifyPaymentTool, dealVerifyPaymentExecutor, "dm-only");
-    registry.register(dealStatusTool, dealStatusExecutor);
-    registry.register(dealListTool, dealListExecutor);
-    registry.register(dealCancelTool, dealCancelExecutor, "dm-only");
-  }
 }

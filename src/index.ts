@@ -6,7 +6,6 @@ import { MessageHandler } from "./telegram/handlers.js";
 import { AdminHandler } from "./telegram/admin.js";
 import { MessageDebouncer } from "./telegram/debounce.js";
 import { getDatabase, initializeMemory } from "./memory/index.js";
-import { MarketPriceService } from "./market/price-service.js";
 import { getWalletAddress } from "./ton/wallet-service.js";
 import { setTonapiKey } from "./constants/api-endpoints.js";
 import { TELETON_ROOT } from "./workspace/paths.js";
@@ -16,11 +15,9 @@ import { ToolRegistry } from "./agent/tools/registry.js";
 import { registerAllTools } from "./agent/tools/register-all.js";
 import { loadPlugins } from "./agent/tools/plugin-loader.js";
 import { getProviderMetadata, type SupportedProvider } from "./config/providers.js";
-import { DealBot, VerificationPoller } from "./bot/index.js";
-import { initDealsConfig, DEALS_CONFIG } from "./deals/config.js";
 import { loadModules } from "./agent/tools/module-loader.js";
 import type { PluginModule, PluginContext } from "./agent/tools/types.js";
-import { verbose } from "./utils/logger.js";
+import { getMarketService } from "./market/module.js";
 
 /**
  * Main Tonnet application
@@ -31,22 +28,15 @@ export class TonnetApp {
   private bridge: TelegramBridge;
   private messageHandler: MessageHandler;
   private adminHandler: AdminHandler;
-  private marketService: MarketPriceService | null = null;
   private debouncer: MessageDebouncer | null = null;
   private toolCount: number = 0;
   private toolRegistry: ToolRegistry;
   private dependencyResolver: any; // TaskDependencyResolver, imported lazily
   private modules: PluginModule[] = [];
-  private dealBot: DealBot | null = null;
-  private verificationPoller: VerificationPoller | null = null;
-  private expiryInterval: ReturnType<typeof setInterval> | null = null;
 
   constructor(configPath?: string) {
     // Load configuration
     this.config = loadConfig(configPath);
-
-    // Initialize subsystem configs from YAML
-    initDealsConfig(this.config.deals);
 
     // Set TonAPI key if configured
     if (this.config.tonapi_key) {
@@ -96,12 +86,8 @@ export class TonnetApp {
     this.modules = loadModules(this.toolRegistry, this.config, db);
     this.toolCount = this.toolRegistry.count;
 
-    // Initialize market price service (if enabled, or required by deals)
-    if (this.config.market.enabled || this.config.deals.enabled) {
-      this.marketService = new MarketPriceService(this.config.market);
-    }
-
     // Initialize handlers with memory stores
+    // Market service is created by market module's configure() during loadModules above
     this.messageHandler = new MessageHandler(
       this.bridge,
       this.config.telegram,
@@ -111,7 +97,7 @@ export class TonnetApp {
       db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='knowledge_vec'").get()
         ? true
         : false,
-      this.marketService,
+      getMarketService(),
       this.config // Pass full config for vision tool API key access
     );
 
@@ -136,6 +122,14 @@ ${blue}  ┌──────────────────────�
   │                                                                                       │
   └────────────────────────────────────────────────────────────────── DEV: ZKPROOF.T.ME ──┘${reset}
 `);
+
+    // Log loaded modules
+    for (const mod of this.modules) {
+      const toolCount = mod.tools(this.config).length;
+      if (toolCount > 0) {
+        console.log(`🔌 Module "${mod.name}" v${mod.version}: ${toolCount} tools`);
+      }
+    }
 
     // Load plugins from ~/.teleton/plugins/
     const pluginCount = await loadPlugins(this.toolRegistry);
@@ -193,22 +187,6 @@ ${blue}  ┌──────────────────────�
       : false;
     this.agent.initializeContextBuilder(memory.embedder, vectorEnabled);
 
-    // Start module background jobs
-    const moduleDb = getDatabase().getDb();
-    const pluginContext: PluginContext = {
-      bridge: this.bridge,
-      db: moduleDb,
-      config: this.config,
-    };
-    for (const mod of this.modules) {
-      await mod.start?.(pluginContext);
-    }
-
-    // Start market price service
-    if (this.marketService) {
-      await this.marketService.start();
-    }
-
     // Connect to Telegram
     await this.bridge.connect();
 
@@ -226,48 +204,15 @@ ${blue}  ┌──────────────────────�
     const username = await this.bridge.getUsername();
     const walletAddress = getWalletAddress();
 
-    // Start Deal Bot (inline buttons for deal confirmations)
-    if (this.config.deals.enabled) {
-      const botToken = this.config.telegram.bot_token;
-      const botUsername = this.config.telegram.bot_username;
-      if (botToken && botToken !== "YOUR_BOT_TOKEN_FROM_BOTFATHER") {
-        try {
-          this.dealBot = new DealBot(
-            {
-              token: botToken,
-              username: botUsername || "deals_bot",
-              apiId: this.config.telegram.api_id,
-              apiHash: this.config.telegram.api_hash,
-            },
-            db.getDb()
-          );
-          await this.dealBot.start();
-
-          // Start verification poller
-          this.verificationPoller = new VerificationPoller(db.getDb(), this.bridge, this.dealBot, {
-            pollIntervalMs: DEALS_CONFIG.verification.pollIntervalMs,
-          });
-          this.verificationPoller.start();
-
-          console.log(`✅ Deal Bot: @${botUsername} connected`);
-        } catch (botError) {
-          console.warn(`⚠️ Deal Bot failed to start: ${botError}`);
-        }
-      } else {
-        console.log(`⚠️ Deal Bot: not configured (set bot_token in config)`);
-      }
-
-      // Expire stale deals
-      this.expiryInterval = setInterval(() => {
-        const now = Math.floor(Date.now() / 1000);
-        const r = db
-          .getDb()
-          .prepare(
-            `UPDATE deals SET status = 'expired' WHERE status IN ('proposed', 'accepted') AND expires_at < ?`
-          )
-          .run(now);
-        if (r.changes > 0) verbose(`⏰ Expired ${r.changes} stale deal(s)`);
-      }, DEALS_CONFIG.expiryCheckIntervalMs);
+    // Start module background jobs (after bridge connect — deals needs bridge)
+    const moduleDb = getDatabase().getDb();
+    const pluginContext: PluginContext = {
+      bridge: this.bridge,
+      db: moduleDb,
+      config: this.config,
+    };
+    for (const mod of this.modules) {
+      await mod.start?.(pluginContext);
     }
 
     // Display startup summary
@@ -275,14 +220,6 @@ ${blue}  ┌──────────────────────�
     console.log(
       `✅ Knowledge: ${indexResult.indexed} files, ${ftsResult.knowledge} chunks indexed`
     );
-    if (this.marketService) {
-      const marketStats = this.marketService.getStats();
-      console.log(
-        `✅ Gifts Market: ${marketStats.collections} collections, ${marketStats.models} models`
-      );
-    } else {
-      console.log(`⏭️  Gifts Market: disabled`);
-    }
     console.log(`✅ Telegram: @${username} connected`);
     console.log(`✅ TON Blockchain: connected`);
     if (this.config.tonapi_key) {
@@ -458,7 +395,7 @@ ${blue}  ┌──────────────────────�
         chatId: message.chatId,
         isGroup: message.isGroup,
         senderId: message.senderId,
-        marketService: this.marketService ?? undefined,
+        marketService: getMarketService() ?? undefined,
         config: this.config,
       };
 
@@ -551,29 +488,9 @@ ${blue}  ┌──────────────────────�
       await this.debouncer.flushAll();
     }
 
-    // Stop verification poller
-    if (this.verificationPoller) {
-      this.verificationPoller.stop();
-    }
-
-    // Stop deal bot
-    if (this.dealBot) {
-      await this.dealBot.stop();
-    }
-
-    // Stop deal expiry interval
-    if (this.expiryInterval) {
-      clearInterval(this.expiryInterval);
-    }
-
-    // Stop module background jobs
+    // Stop module background jobs (deals bot/poller/expiry, market service, casino, etc.)
     for (const mod of this.modules) {
       await mod.stop?.();
-    }
-
-    // Stop market price service
-    if (this.marketService) {
-      this.marketService.stop();
     }
 
     await this.bridge.disconnect();

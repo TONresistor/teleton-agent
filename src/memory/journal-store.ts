@@ -5,6 +5,7 @@
 
 import { SECONDS_PER_DAY } from "../constants/limits.js";
 import type Database from "better-sqlite3";
+import { JOURNAL_SCHEMA } from "../utils/module-db.js";
 
 export type JournalType = "trade" | "gift" | "middleman" | "kol";
 export type JournalOutcome = "pending" | "profit" | "loss" | "neutral" | "cancelled";
@@ -78,37 +79,7 @@ export class JournalStore {
    * Ensure journal table exists
    */
   private ensureTable(): void {
-    this.db.exec(`
-      CREATE TABLE IF NOT EXISTS journal (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        timestamp INTEGER NOT NULL DEFAULT (unixepoch()),
-        type TEXT NOT NULL CHECK(type IN ('trade', 'gift', 'middleman', 'kol')),
-        action TEXT NOT NULL,
-        asset_from TEXT,
-        asset_to TEXT,
-        amount_from REAL,
-        amount_to REAL,
-        price_ton REAL,
-        counterparty TEXT,
-        platform TEXT,
-        reasoning TEXT,
-        outcome TEXT CHECK(outcome IN ('pending', 'profit', 'loss', 'neutral', 'cancelled')),
-        pnl_ton REAL,
-        pnl_pct REAL,
-        tx_hash TEXT,
-        tool_used TEXT,
-        chat_id TEXT,
-        user_id INTEGER,
-        closed_at INTEGER,
-        created_at INTEGER NOT NULL DEFAULT (unixepoch())
-      );
-
-      CREATE INDEX IF NOT EXISTS idx_journal_type ON journal(type);
-      CREATE INDEX IF NOT EXISTS idx_journal_timestamp ON journal(timestamp DESC);
-      CREATE INDEX IF NOT EXISTS idx_journal_asset_from ON journal(asset_from);
-      CREATE INDEX IF NOT EXISTS idx_journal_outcome ON journal(outcome);
-      CREATE INDEX IF NOT EXISTS idx_journal_type_timestamp ON journal(type, timestamp DESC);
-    `);
+    this.db.exec(JOURNAL_SCHEMA);
   }
 
   /**

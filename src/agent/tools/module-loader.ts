@@ -9,8 +9,10 @@ import type { ToolRegistry } from "./registry.js";
 import type { Config } from "../../config/schema.js";
 import type Database from "better-sqlite3";
 import casinoModule from "../../casino/module.js";
+import marketModule from "../../market/module.js";
+import dealsModule from "../../deals/module.js";
 
-const BUILTIN_MODULES: PluginModule[] = [casinoModule];
+const BUILTIN_MODULES: PluginModule[] = [casinoModule, marketModule, dealsModule];
 
 export function loadModules(
   registry: ToolRegistry,
@@ -31,10 +33,6 @@ export function loadModules(
       const tools = mod.tools(config);
       for (const { tool, executor, scope } of tools) {
         registry.register(tool, executor, scope);
-      }
-
-      if (tools.length > 0) {
-        console.log(`🔌 Module "${mod.name}" v${mod.version}: ${tools.length} tools`);
       }
 
       loaded.push(mod);
