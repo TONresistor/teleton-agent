@@ -6,6 +6,6 @@ export { dexQuoteTool, dexQuoteExecutor };
 export { dexSwapTool, dexSwapExecutor };
 
 export const tools: ToolEntry[] = [
-  { tool: dexSwapTool, executor: dexSwapExecutor, scope: "dm-only" },
+  { tool: dexSwapTool, executor: dexSwapExecutor },
   { tool: dexQuoteTool, executor: dexQuoteExecutor },
 ];

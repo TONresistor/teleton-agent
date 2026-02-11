@@ -24,7 +24,7 @@ export { jettonTrendingTool, jettonTrendingExecutor };
 export { jettonPoolsTool, jettonPoolsExecutor };
 
 export const tools: ToolEntry[] = [
-  { tool: jettonSwapTool, executor: jettonSwapExecutor, scope: "dm-only" },
+  { tool: jettonSwapTool, executor: jettonSwapExecutor },
   { tool: jettonSendTool, executor: jettonSendExecutor, scope: "dm-only" },
   { tool: jettonBalancesTool, executor: jettonBalancesExecutor },
   { tool: jettonInfoTool, executor: jettonInfoExecutor },

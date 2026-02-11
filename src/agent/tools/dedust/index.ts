@@ -8,7 +8,7 @@ export { dedustSwapTool, dedustSwapExecutor };
 export { dedustPoolsTool, dedustPoolsExecutor };
 
 export const tools: ToolEntry[] = [
-  { tool: dedustSwapTool, executor: dedustSwapExecutor, scope: "dm-only" },
+  { tool: dedustSwapTool, executor: dedustSwapExecutor },
   { tool: dedustQuoteTool, executor: dedustQuoteExecutor },
   { tool: dedustPoolsTool, executor: dedustPoolsExecutor },
 ];

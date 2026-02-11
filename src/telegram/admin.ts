@@ -370,7 +370,7 @@ export class AdminHandler {
       case "set":
         return this.setModuleLevel(chatId, command.args[1], command.args[2], command.senderId);
       case "info":
-        return this.showModuleInfo(command.args[1]);
+        return this.showModuleInfo(command.args[1], chatId);
       case "reset":
         return this.resetModules(chatId, command.args[1]);
       default:
@@ -450,7 +450,7 @@ export class AdminHandler {
     return `${icons[level]} **${module}**: ${oldLevel} → ${level}`;
   }
 
-  private showModuleInfo(module: string | undefined): string {
+  private showModuleInfo(module: string | undefined, chatId: string): string {
     if (!module) {
       return "❌ Usage: /modules info <module>";
     }
@@ -465,8 +465,13 @@ export class AdminHandler {
     const tools = this.registry!.getModuleTools(module);
     const count = tools.length;
     const toolWord = count === 1 ? "tool" : "tools";
+    const level = this.permissions!.getLevel(chatId, module);
+    const isProtected = this.permissions!.isProtected(module);
+    const protectedMark = isProtected ? " 🔒" : "";
 
-    const lines: string[] = [`📦 Module "**${module}**" (${count} ${toolWord})\n`];
+    const lines: string[] = [
+      `📦 Module "**${module}**" — ${level}${protectedMark} (${count} ${toolWord})\n`,
+    ];
 
     for (const t of tools) {
       lines.push(` ${t.name}   ${t.scope}`);
