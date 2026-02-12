@@ -4,7 +4,7 @@ import { loadWallet } from "../../../ton/wallet-service.js";
 import { mnemonicToPrivateKey } from "@ton/crypto";
 import { WalletContractV5R1, TonClient, toNano, internal, beginCell } from "@ton/ton";
 import { Address, SendMode } from "@ton/core";
-import { getHttpEndpoint } from "@orbs-network/ton-access";
+import { getCachedHttpEndpoint } from "../../../ton/endpoint.js";
 
 const DNS_COLLECTION = "EQC3dNlesgVD8YbAazcauIrXBPfiVhMMr5YYk2in0Mtsz0Bz";
 
@@ -81,7 +81,7 @@ export const dnsStartAuctionExecutor: ToolExecutor<DnsStartAuctionParams> = asyn
     });
 
     // Get decentralized endpoint
-    const endpoint = await getHttpEndpoint({ network: "mainnet" });
+    const endpoint = await getCachedHttpEndpoint();
     const client = new TonClient({ endpoint });
     const contract = client.open(wallet);
 

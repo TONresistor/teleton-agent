@@ -3,6 +3,7 @@
 import { Type } from "@sinclair/typebox";
 import { writeFileSync, appendFileSync, mkdirSync, existsSync } from "fs";
 import { dirname } from "path";
+import { MAX_WRITE_SIZE } from "../../../constants/limits.js";
 import type { Tool, ToolExecutor, ToolResult } from "../types.js";
 import { validateWritePath, WorkspaceSecurityError } from "../../../workspace/index.js";
 
@@ -81,7 +82,6 @@ export const workspaceWriteExecutor: ToolExecutor<WorkspaceWriteParams> = async 
 
     // SECURITY: Enforce file size limits to prevent DoS attacks
     const contentSize = Buffer.byteLength(writeContent);
-    const MAX_WRITE_SIZE = 50 * 1024 * 1024; // 50 MB max per file
     if (contentSize > MAX_WRITE_SIZE) {
       return {
         success: false,

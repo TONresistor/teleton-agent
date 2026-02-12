@@ -1,13 +1,7 @@
 import type { TaskStore } from "../memory/agent/tasks.js";
 import type { TelegramBridge } from "./bridge.js";
 import { BATCH_TRIGGER_DELAY_MS } from "../constants/timeouts.js";
-
-/**
- * Maximum number of dependent tasks allowed per parent task.
- * Prevents DoS via mass dependencies that would trigger
- * excessive Telegram messages simultaneously.
- */
-const MAX_DEPENDENTS_PER_TASK = 10;
+import { MAX_DEPENDENTS_PER_TASK } from "../constants/limits.js";
 
 /**
  * Resolves task dependencies and triggers dependent tasks when parents complete

@@ -59,6 +59,7 @@ export function openDealsDb(): Database.Database {
     CREATE INDEX IF NOT EXISTS idx_deals_chat ON deals(chat_id);
     CREATE INDEX IF NOT EXISTS idx_deals_inline_msg ON deals(inline_message_id) WHERE inline_message_id IS NOT NULL;
     CREATE INDEX IF NOT EXISTS idx_deals_payment_claimed ON deals(payment_claimed_at) WHERE payment_claimed_at IS NOT NULL;
+    CREATE INDEX IF NOT EXISTS idx_deals_expires ON deals(expires_at) WHERE status IN ('proposed', 'accepted');
 
     CREATE TABLE IF NOT EXISTS user_trade_stats (
       telegram_id INTEGER PRIMARY KEY,

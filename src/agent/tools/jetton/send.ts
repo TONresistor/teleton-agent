@@ -4,7 +4,7 @@ import { loadWallet } from "../../../ton/wallet-service.js";
 import { mnemonicToPrivateKey } from "@ton/crypto";
 import { WalletContractV5R1, TonClient, toNano, internal } from "@ton/ton";
 import { Address, SendMode, beginCell } from "@ton/core";
-import { getHttpEndpoint } from "@orbs-network/ton-access";
+import { getCachedHttpEndpoint } from "../../../ton/endpoint.js";
 import { tonapiFetch } from "../../../constants/api-endpoints.js";
 
 // Jetton transfer op code (TEP-74)
@@ -147,7 +147,7 @@ export const jettonSendExecutor: ToolExecutor<JettonSendParams> = async (
       publicKey: keyPair.publicKey,
     });
 
-    const endpoint = await getHttpEndpoint({ network: "mainnet" });
+    const endpoint = await getCachedHttpEndpoint();
     const client = new TonClient({ endpoint });
     const walletContract = client.open(wallet);
 

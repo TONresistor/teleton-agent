@@ -4,7 +4,7 @@ import { loadWallet } from "../../../ton/wallet-service.js";
 import { mnemonicToPrivateKey } from "@ton/crypto";
 import { WalletContractV5R1, TonClient, toNano, internal } from "@ton/ton";
 import { SendMode } from "@ton/core";
-import { getHttpEndpoint } from "@orbs-network/ton-access";
+import { getCachedHttpEndpoint } from "../../../ton/endpoint.js";
 import { DEX, pTON } from "@ston-fi/sdk";
 import { StonApiClient } from "@ston-fi/api";
 
@@ -89,7 +89,7 @@ export const jettonSwapExecutor: ToolExecutor<JettonSwapParams> = async (
     }
 
     // Initialize STON.fi clients
-    const endpoint = await getHttpEndpoint({ network: "mainnet" });
+    const endpoint = await getCachedHttpEndpoint();
     const tonClient = new TonClient({ endpoint });
     const stonApiClient = new StonApiClient();
 

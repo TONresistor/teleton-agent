@@ -2,7 +2,7 @@ import { mnemonicNew, mnemonicToPrivateKey, mnemonicValidate } from "@ton/crypto
 import { WalletContractV5R1, TonClient, fromNano } from "@ton/ton";
 import { readFileSync, writeFileSync, existsSync, mkdirSync, chmodSync } from "fs";
 import { join, dirname } from "path";
-import { getHttpEndpoint } from "@orbs-network/ton-access";
+import { getCachedHttpEndpoint } from "./endpoint.js";
 import { fetchWithTimeout } from "../utils/fetch.js";
 import { TELETON_ROOT } from "../workspace/paths.js";
 import { tonapiFetch, COINGECKO_API_URL } from "../constants/api-endpoints.js";
@@ -127,7 +127,7 @@ export async function getWalletBalance(address: string): Promise<{
 } | null> {
   try {
     // Get decentralized endpoint from orbs network (no rate limits)
-    const endpoint = await getHttpEndpoint({ network: "mainnet" });
+    const endpoint = await getCachedHttpEndpoint();
 
     const client = new TonClient({ endpoint });
 

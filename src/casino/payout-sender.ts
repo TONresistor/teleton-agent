@@ -1,6 +1,6 @@
 /**
  * Payout sender - Sends TON winnings to casino players
- * Used by both casino_spin (auto-payout) and casino_payout (manual)
+ * Used by casino_spin and casino_dice (auto-payout on win)
  */
 
 import { loadWallet } from "../ton/wallet-service.js";
@@ -62,32 +62,26 @@ export async function sendPayout(
     const client = new TonClient({ endpoint });
     const contract = client.open(wallet);
 
-    // Get current seqno with retry
-    const seqno = await withBlockchainRetry(() => contract.getSeqno(), "getSeqno");
-
-    // Send payout with retry
-    await withBlockchainRetry(
-      () =>
-        contract.sendTransfer({
-          seqno,
-          secretKey: keyPair.secretKey,
-          sendMode: SendMode.PAY_GAS_SEPARATELY,
-          messages: [
-            internal({
-              to: Address.parse(playerAddress),
-              value: toNano(amount),
-              body: message,
-              bounce: false,
-            }),
-          ],
-        }),
-      "sendTransfer"
-    );
+    // Get seqno + send transfer atomically (fresh seqno on each retry)
+    const seqno = await withBlockchainRetry(async () => {
+      const seq = await contract.getSeqno();
+      await contract.sendTransfer({
+        seqno: seq,
+        secretKey: keyPair.secretKey,
+        sendMode: SendMode.PAY_GAS_SEPARATELY,
+        messages: [
+          internal({
+            to: Address.parse(playerAddress),
+            value: toNano(amount),
+            body: message,
+            bounce: false,
+          }),
+        ],
+      });
+      return seq;
+    }, "payout");
 
     // Generate traceable TX reference
-    // Format: payout_{timestamp}_{seqno}_{walletShort}
-    // Real TX hash requires waiting for blockchain confirmation (~5-10s)
-    // This format allows manual verification on tonviewer.com
     const walletAddr = wallet.address.toString({ bounceable: false });
     const walletShort = walletAddr.slice(-8);
     const timestamp = Date.now();

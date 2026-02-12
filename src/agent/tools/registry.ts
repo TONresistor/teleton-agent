@@ -9,6 +9,7 @@ import type {
   ToolScope,
 } from "./types.js";
 import type { ModulePermissions } from "./module-permissions.js";
+import { TOOL_EXECUTION_TIMEOUT_MS } from "../../constants/timeouts.js";
 
 /**
  * Registry for managing and executing agent tools
@@ -138,8 +139,22 @@ export class ToolRegistry {
       // Validate arguments against the tool's schema
       const validatedArgs = validateToolCall(this.getAll(), toolCall);
 
-      // Execute the tool
-      const result = await registered.executor(validatedArgs, context);
+      // Execute the tool with timeout protection
+      let timeoutHandle: ReturnType<typeof setTimeout>;
+      const result = await Promise.race([
+        registered.executor(validatedArgs, context),
+        new Promise<never>((_, reject) => {
+          timeoutHandle = setTimeout(
+            () =>
+              reject(
+                new Error(
+                  `Tool "${toolCall.name}" timed out after ${TOOL_EXECUTION_TIMEOUT_MS / 1000}s`
+                )
+              ),
+            TOOL_EXECUTION_TIMEOUT_MS
+          );
+        }),
+      ]).finally(() => clearTimeout(timeoutHandle));
 
       return result;
     } catch (error) {

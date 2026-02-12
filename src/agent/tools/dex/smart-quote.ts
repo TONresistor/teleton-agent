@@ -2,7 +2,7 @@ import { Type } from "@sinclair/typebox";
 import type { Tool, ToolExecutor, ToolResult } from "../types.js";
 import { TonClient, toNano, fromNano } from "@ton/ton";
 import { Address } from "@ton/core";
-import { getHttpEndpoint } from "@orbs-network/ton-access";
+import { getCachedHttpEndpoint } from "../../../ton/endpoint.js";
 import { StonApiClient } from "@ston-fi/api";
 import { Factory, Asset, PoolType, ReadinessStatus } from "@dedust/sdk";
 import { DEDUST_FACTORY_MAINNET, NATIVE_TON_ADDRESS } from "../dedust/constants.js";
@@ -225,7 +225,7 @@ export const dexQuoteExecutor: ToolExecutor<DexQuoteParams> = async (
     const { from_asset, to_asset, amount, slippage = 0.01 } = params;
 
     // Initialize TON client for DeDust
-    const endpoint = await getHttpEndpoint({ network: "mainnet" });
+    const endpoint = await getCachedHttpEndpoint();
     const tonClient = new TonClient({ endpoint });
 
     // Fetch quotes in parallel

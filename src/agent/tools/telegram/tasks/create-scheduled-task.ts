@@ -1,6 +1,7 @@
 import { Type } from "@sinclair/typebox";
 import type { Tool, ToolExecutor, ToolResult } from "../../types.js";
 import { Api } from "telegram";
+import { MAX_DEPENDENTS_PER_TASK } from "../../../../constants/limits.js";
 
 /**
  * Parameters for telegram_create_scheduled_task tool
@@ -207,7 +208,6 @@ export const telegramCreateScheduledTaskExecutor: ToolExecutor<CreateScheduledTa
     const taskStore = getTaskStore(context.db);
 
     // Security: Validate that adding this task won't exceed dependent limit for any parent
-    const MAX_DEPENDENTS_PER_TASK = 10;
     if (dependsOn && dependsOn.length > 0) {
       for (const parentId of dependsOn) {
         const existingDependents = taskStore.getDependents(parentId);

@@ -87,3 +87,9 @@ export const RETRY_BLOCKCHAIN_TIMEOUT_MS = 30_000;
 
 /** GramJS MTProto reconnect delay (ms) */
 export const GRAMJS_RETRY_DELAY_MS = 1_000;
+
+/** Tool execution timeout — kills any tool that runs longer than this (90s) */
+export const TOOL_EXECUTION_TIMEOUT_MS = 90_000;
+
+/** Graceful shutdown timeout — force exit if stop() hangs (10s) */
+export const SHUTDOWN_TIMEOUT_MS = 10_000;

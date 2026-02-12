@@ -4,7 +4,7 @@ import { loadWallet } from "../../../ton/wallet-service.js";
 import { mnemonicToPrivateKey } from "@ton/crypto";
 import { WalletContractV5R1, TonClient, toNano, fromNano } from "@ton/ton";
 import { Address, SendMode, internal } from "@ton/core";
-import { getHttpEndpoint } from "@orbs-network/ton-access";
+import { getCachedHttpEndpoint } from "../../../ton/endpoint.js";
 import { StonApiClient } from "@ston-fi/api";
 import { DEX, pTON } from "@ston-fi/sdk";
 import { Factory, Asset, PoolType, ReadinessStatus, JettonRoot, VaultJetton } from "@dedust/sdk";
@@ -352,7 +352,7 @@ export const dexSwapExecutor: ToolExecutor<DexSwapParams> = async (
     }
 
     // Initialize TON client
-    const endpoint = await getHttpEndpoint({ network: "mainnet" });
+    const endpoint = await getCachedHttpEndpoint();
     const tonClient = new TonClient({ endpoint });
 
     // Get quotes based on preference (parallel fetch in auto mode)

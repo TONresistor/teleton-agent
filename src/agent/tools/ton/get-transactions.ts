@@ -2,7 +2,7 @@ import { Type } from "@sinclair/typebox";
 import type { Tool, ToolExecutor, ToolResult } from "../types.js";
 import { TonClient, fromNano } from "@ton/ton";
 import { Address } from "@ton/core";
-import { getHttpEndpoint } from "@orbs-network/ton-access";
+import { getCachedHttpEndpoint } from "../../../ton/endpoint.js";
 
 // Known op codes
 const OP_CODES = {
@@ -122,7 +122,7 @@ export const tonGetTransactionsExecutor: ToolExecutor<GetTransactionsParams> = a
     }
 
     // Get decentralized endpoint
-    const endpoint = await getHttpEndpoint({ network: "mainnet" });
+    const endpoint = await getCachedHttpEndpoint();
     const client = new TonClient({ endpoint });
 
     // Get transactions

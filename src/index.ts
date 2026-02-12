@@ -528,16 +528,21 @@ export async function main(configPath?: string): Promise<void> {
     process.exit(1);
   });
 
-  // Handle graceful shutdown
-  process.on("SIGINT", async () => {
+  // Handle graceful shutdown with timeout safety net
+  const gracefulShutdown = async () => {
+    const { SHUTDOWN_TIMEOUT_MS } = await import("./constants/timeouts.js");
+    const forceExit = setTimeout(() => {
+      console.error("⚠️ Shutdown timed out, forcing exit");
+      process.exit(1);
+    }, SHUTDOWN_TIMEOUT_MS);
+    forceExit.unref();
     await app.stop();
+    clearTimeout(forceExit);
     process.exit(0);
-  });
+  };
 
-  process.on("SIGTERM", async () => {
-    await app.stop();
-    process.exit(0);
-  });
+  process.on("SIGINT", gracefulShutdown);
+  process.on("SIGTERM", gracefulShutdown);
 
   await app.start();
 }

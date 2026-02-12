@@ -109,3 +109,11 @@ export const TELEGRAM_CONNECTION_RETRIES = 5;
 
 /** Telegram flood sleep threshold (seconds) */
 export const TELEGRAM_FLOOD_SLEEP_THRESHOLD = 60;
+
+// ── Tasks ──
+
+/** Maximum dependent tasks per parent task (DoS protection) */
+export const MAX_DEPENDENTS_PER_TASK = 10;
+
+/** Maximum file write size in bytes (50 MB) */
+export const MAX_WRITE_SIZE = 50 * 1024 * 1024;

@@ -5,7 +5,7 @@
 import { mnemonicToPrivateKey } from "@ton/crypto";
 import { WalletContractV5R1, TonClient, toNano, internal } from "@ton/ton";
 import { Address, SendMode } from "@ton/core";
-import { getHttpEndpoint } from "@orbs-network/ton-access";
+import { getCachedHttpEndpoint } from "./endpoint.js";
 import { loadWallet } from "./wallet-service.js";
 
 export interface SendTonParams {
@@ -49,7 +49,7 @@ export async function sendTon(params: SendTonParams): Promise<string | null> {
     });
 
     // Get endpoint and client
-    const endpoint = await getHttpEndpoint({ network: "mainnet" });
+    const endpoint = await getCachedHttpEndpoint();
     const client = new TonClient({ endpoint });
     const contract = client.open(wallet);
 
@@ -111,7 +111,7 @@ export async function sendTonBatch(transfers: SendTonParams[]): Promise<string |
     });
 
     // Get endpoint and client
-    const endpoint = await getHttpEndpoint({ network: "mainnet" });
+    const endpoint = await getCachedHttpEndpoint();
     const client = new TonClient({ endpoint });
     const contract = client.open(wallet);
 
