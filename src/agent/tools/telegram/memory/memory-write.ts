@@ -7,6 +7,17 @@ import { WORKSPACE_PATHS } from "../../../../workspace/index.js";
 const MEMORY_DIR = WORKSPACE_PATHS.MEMORY_DIR;
 const MEMORY_FILE = WORKSPACE_PATHS.MEMORY;
 
+/** Soft warning threshold for MEMORY.md line count */
+const MEMORY_SOFT_LIMIT = 80;
+
+/**
+ * Count lines in MEMORY.md (returns 0 if file doesn't exist)
+ */
+function getMemoryLineCount(): number {
+  if (!existsSync(MEMORY_FILE)) return 0;
+  return readFileSync(MEMORY_FILE, "utf-8").split("\n").length;
+}
+
 /**
  * Parameters for memory_write tool
  */
@@ -115,6 +126,13 @@ export const memoryWriteExecutor: ToolExecutor<MemoryWriteParams> = async (
 
       console.log(`📝 Memory written to MEMORY.md${section ? ` (section: ${section})` : ""}`);
 
+      // Check memory size and warn if approaching limit
+      const lineCount = getMemoryLineCount();
+      const sizeWarning =
+        lineCount > MEMORY_SOFT_LIMIT
+          ? ` ⚠️ MEMORY.md is now ${lineCount} lines (recommended max: ~100). Consider consolidating old entries, removing outdated info, or archiving less relevant content to keep your memory efficient and fast to load.`
+          : undefined;
+
       return {
         success: true,
         data: {
@@ -122,6 +140,8 @@ export const memoryWriteExecutor: ToolExecutor<MemoryWriteParams> = async (
           file: MEMORY_FILE,
           section: section || null,
           timestamp: now.toISOString(),
+          lineCount,
+          ...(sizeWarning && { warning: sizeWarning }),
         },
       };
     } else {

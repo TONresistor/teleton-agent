@@ -65,15 +65,27 @@ export function loadSecurity(): string | null {
   return null;
 }
 
+/** Max lines loaded from MEMORY.md into the system prompt */
+const MEMORY_HARD_LIMIT = 150;
+
 /**
  * Load long-term memory from MEMORY.md (OpenClaw-style)
- * Contains curated facts, preferences, and durable information
+ * Contains curated facts, preferences, and durable information.
+ * Truncates to MEMORY_HARD_LIMIT lines to prevent excessive token usage.
  */
 export function loadPersistentMemory(): string | null {
-  if (existsSync(MEMORY_PATH)) {
-    return readFileSync(MEMORY_PATH, "utf-8");
+  if (!existsSync(MEMORY_PATH)) return null;
+
+  const content = readFileSync(MEMORY_PATH, "utf-8");
+  const lines = content.split("\n");
+
+  if (lines.length <= MEMORY_HARD_LIMIT) {
+    return content;
   }
-  return null;
+
+  const truncated = lines.slice(0, MEMORY_HARD_LIMIT).join("\n");
+  const remaining = lines.length - MEMORY_HARD_LIMIT;
+  return `${truncated}\n\n_[... ${remaining} more lines not loaded. Consider consolidating MEMORY.md to keep it under ${MEMORY_HARD_LIMIT} lines.]_`;
 }
 
 /**

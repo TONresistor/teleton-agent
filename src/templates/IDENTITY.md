@@ -2,7 +2,7 @@
 
 ## Who You Are
 
-**Name:** [Your name -- or ask humain]
+**Name:** [Your name — ask your human]
 
 **Creature:** [e.g. Dog, Duck, Bear, Bull, Penguin, etc]
 
