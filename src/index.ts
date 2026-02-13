@@ -65,17 +65,16 @@ export class TonnetApp {
       floodSleepThreshold: TELEGRAM_FLOOD_SLEEP_THRESHOLD,
     });
 
-    // Get memory components (vector search disabled - requires Voyage API key)
-    const VECTOR_DIMENSIONS = 512;
+    // Get memory components (local embeddings — no API key needed)
+    const VECTOR_DIMENSIONS = 384; // all-MiniLM-L6-v2
     const memory = initializeMemory({
       database: {
         path: join(TELETON_ROOT, "memory.db"),
-        enableVectorSearch: false,
+        enableVectorSearch: true,
         vectorDimensions: VECTOR_DIMENSIONS,
       },
       embeddings: {
-        provider: "none",
-        apiKey: "",
+        provider: "local",
         model: "",
       },
       workspaceDir: join(TELETON_ROOT),
@@ -173,12 +172,11 @@ ${blue}  ┌──────────────────────�
     const memory = initializeMemory({
       database: {
         path: join(TELETON_ROOT, "memory.db"),
-        enableVectorSearch: false,
-        vectorDimensions: 512,
+        enableVectorSearch: true,
+        vectorDimensions: 384,
       },
       embeddings: {
-        provider: "none",
-        apiKey: "",
+        provider: "local",
         model: "",
       },
       workspaceDir: join(TELETON_ROOT),

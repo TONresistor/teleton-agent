@@ -3,12 +3,7 @@ import { readFileSync, existsSync, readdirSync, statSync } from "fs";
 import { join } from "path";
 import { KNOWLEDGE_CHUNK_SIZE, KNOWLEDGE_CHUNK_OVERLAP } from "../../constants/limits.js";
 import type { EmbeddingProvider } from "../embeddings/provider.js";
-import {
-  hashText,
-  serializeEmbedding,
-  deserializeEmbedding,
-  embeddingToBlob,
-} from "../embeddings/index.js";
+import { hashText, serializeEmbedding, deserializeEmbedding } from "../embeddings/index.js";
 
 export interface KnowledgeChunk {
   id: string;
@@ -72,7 +67,16 @@ export class KnowledgeIndexer {
       return false; // Already up to date
     }
 
-    // Delete old chunks
+    // Delete old chunks (and their vectors)
+    if (this.vectorEnabled) {
+      this.db
+        .prepare(
+          `DELETE FROM knowledge_vec WHERE id IN (
+            SELECT id FROM knowledge WHERE path = ? AND source = 'memory'
+          )`
+        )
+        .run(relPath);
+    }
     this.db.prepare(`DELETE FROM knowledge WHERE path = ? AND source = 'memory'`).run(relPath);
 
     // Chunk the content
@@ -107,7 +111,7 @@ export class KnowledgeIndexer {
       );
 
       if (insertVec && embedding.length > 0) {
-        insertVec.run(chunk.id, embeddingToBlob(embedding));
+        insertVec.run(chunk.id, serializeEmbedding(embedding));
       }
     }
 

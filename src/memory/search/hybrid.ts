@@ -1,4 +1,5 @@
 import type Database from "better-sqlite3";
+import { serializeEmbedding } from "../embeddings/index.js";
 
 export interface HybridSearchResult {
   id: string;
@@ -91,18 +92,18 @@ export class HybridSearch {
     if (!this.vectorEnabled || embedding.length === 0) return [];
 
     try {
-      // Serialize embedding to Buffer
-      const embeddingBuffer = this.serializeEmbedding(embedding);
+      const embeddingBuffer = serializeEmbedding(embedding);
 
       const rows = this.db
         .prepare(
           `
         SELECT kv.id, k.text, k.source, kv.distance
-        FROM knowledge_vec kv
+        FROM (
+          SELECT id, distance
+          FROM knowledge_vec
+          WHERE embedding MATCH ? AND k = ?
+        ) kv
         JOIN knowledge k ON k.id = kv.id
-        WHERE kv.embedding MATCH ?
-        ORDER BY kv.distance
-        LIMIT ?
       `
         )
         .all(embeddingBuffer, limit) as Array<{
@@ -116,7 +117,7 @@ export class HybridSearch {
         id: row.id,
         text: row.text,
         source: row.source,
-        score: 1 - row.distance, // Convert distance to similarity
+        score: 1 - row.distance,
         vectorScore: 1 - row.distance,
       }));
     } catch (error) {
@@ -166,29 +167,32 @@ export class HybridSearch {
     if (!this.vectorEnabled || embedding.length === 0) return [];
 
     try {
-      // Serialize embedding to Buffer
-      const embeddingBuffer = this.serializeEmbedding(embedding);
+      const embeddingBuffer = serializeEmbedding(embedding);
 
+      // KNN search with k = ? in subquery, then JOIN + optional chatId filter
       const sql = chatId
         ? `
         SELECT mv.id, m.text, m.chat_id as source, mv.distance
-        FROM tg_messages_vec mv
+        FROM (
+          SELECT id, distance
+          FROM tg_messages_vec
+          WHERE embedding MATCH ? AND k = ?
+        ) mv
         JOIN tg_messages m ON m.id = mv.id
-        WHERE mv.embedding MATCH ? AND m.chat_id = ?
-        ORDER BY mv.distance
-        LIMIT ?
+        WHERE m.chat_id = ?
       `
         : `
         SELECT mv.id, m.text, m.chat_id as source, mv.distance
-        FROM tg_messages_vec mv
+        FROM (
+          SELECT id, distance
+          FROM tg_messages_vec
+          WHERE embedding MATCH ? AND k = ?
+        ) mv
         JOIN tg_messages m ON m.id = mv.id
-        WHERE mv.embedding MATCH ?
-        ORDER BY mv.distance
-        LIMIT ?
       `;
 
       const rows = chatId
-        ? (this.db.prepare(sql).all(embeddingBuffer, chatId, limit) as Array<{
+        ? (this.db.prepare(sql).all(embeddingBuffer, limit, chatId) as Array<{
             id: string;
             text: string;
             source: string;
@@ -298,13 +302,5 @@ export class HybridSearch {
   private bm25ToScore(rank: number): number {
     // Convert BM25 rank to 0-1 score
     return 1 / (1 + Math.abs(rank));
-  }
-
-  /**
-   * Serialize embedding (number[]) to Buffer for sqlite-vec
-   */
-  private serializeEmbedding(embedding: number[]): Buffer {
-    const float32 = new Float32Array(embedding);
-    return Buffer.from(float32.buffer);
   }
 }

@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type { EmbeddingProvider, EmbeddingProviderConfig } from "./provider.js";
 import { NoopEmbeddingProvider } from "./provider.js";
 import { AnthropicEmbeddingProvider } from "./anthropic.js";
@@ -6,6 +7,7 @@ import { LocalEmbeddingProvider } from "./local.js";
 export * from "./provider.js";
 export * from "./anthropic.js";
 export * from "./local.js";
+export * from "./cached.js";
 
 /**
  * Create an embedding provider based on configuration
@@ -35,39 +37,31 @@ export function createEmbeddingProvider(config: EmbeddingProviderConfig): Embedd
 }
 
 /**
- * Compute hash for text (for caching)
+ * Compute SHA-256 hash for text (for caching and content dedup)
  */
 export function hashText(text: string): string {
-  let hash = 0;
-  for (let i = 0; i < text.length; i++) {
-    const char = text.charCodeAt(i);
-    hash = (hash << 5) - hash + char;
-    hash = hash & hash; // Convert to 32bit integer
-  }
-  return Math.abs(hash).toString(36);
+  return createHash("sha256").update(text).digest("hex");
 }
 
 /**
- * Serialize embedding to string for storage
+ * Serialize embedding to binary blob for storage
  */
-export function serializeEmbedding(embedding: number[]): string {
-  return JSON.stringify(embedding);
+export function serializeEmbedding(embedding: number[]): Buffer {
+  return Buffer.from(new Float32Array(embedding).buffer);
 }
 
 /**
- * Deserialize embedding from string
+ * Deserialize embedding from storage (handles both BLOB and legacy JSON TEXT)
  */
-export function deserializeEmbedding(data: string): number[] {
+export function deserializeEmbedding(data: Buffer | string): number[] {
   try {
+    if (Buffer.isBuffer(data)) {
+      const floats = new Float32Array(data.buffer, data.byteOffset, data.byteLength / 4);
+      return Array.from(floats);
+    }
+    // Legacy: JSON string format
     return JSON.parse(data) as number[];
   } catch {
     return [];
   }
-}
-
-/**
- * Convert embedding to binary blob for sqlite-vec
- */
-export function embeddingToBlob(embedding: number[]): Buffer {
-  return Buffer.from(new Float32Array(embedding).buffer);
 }

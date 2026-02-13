@@ -1,5 +1,6 @@
 import type Database from "better-sqlite3";
 import type { EmbeddingProvider } from "../embeddings/provider.js";
+import { hashText, serializeEmbedding } from "../embeddings/index.js";
 import { randomUUID } from "crypto";
 
 export interface Session {
@@ -169,7 +170,7 @@ export class SessionStore {
       const text = `Session from ${session.startedAt.toISOString()}:\n${session.summary}`;
 
       // Compute hash
-      const hash = this.hashText(text);
+      const hash = hashText(text);
 
       // Compute embedding if vector search enabled
       let embedding: number[] | null = null;
@@ -193,7 +194,7 @@ export class SessionStore {
 
       // Store embedding if available
       if (embedding && this.vectorEnabled) {
-        const embeddingBuffer = this.serializeEmbedding(embedding);
+        const embeddingBuffer = serializeEmbedding(embedding);
         const rowid = this.db
           .prepare(`SELECT rowid FROM knowledge WHERE id = ?`)
           .get(knowledgeId) as { rowid: number };
@@ -219,23 +220,11 @@ export class SessionStore {
    * Delete a session
    */
   deleteSession(sessionId: string): void {
-    this.db.prepare(`DELETE FROM sessions WHERE id = ?`).run(sessionId);
-    this.db.prepare(`DELETE FROM knowledge WHERE id = ?`).run(`session:${sessionId}`);
-  }
-
-  private hashText(text: string): string {
-    // Simple hash for change detection
-    let hash = 0;
-    for (let i = 0; i < text.length; i++) {
-      const char = text.charCodeAt(i);
-      hash = (hash << 5) - hash + char;
-      hash = hash & hash;
+    const knowledgeId = `session:${sessionId}`;
+    if (this.vectorEnabled) {
+      this.db.prepare(`DELETE FROM knowledge_vec WHERE id = ?`).run(knowledgeId);
     }
-    return hash.toString(36);
-  }
-
-  private serializeEmbedding(embedding: number[]): Buffer {
-    const float32 = new Float32Array(embedding);
-    return Buffer.from(float32.buffer);
+    this.db.prepare(`DELETE FROM sessions WHERE id = ?`).run(sessionId);
+    this.db.prepare(`DELETE FROM knowledge WHERE id = ?`).run(knowledgeId);
   }
 }

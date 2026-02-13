@@ -1,6 +1,6 @@
 import type Database from "better-sqlite3";
 import type { EmbeddingProvider } from "../embeddings/provider.js";
-import { hashText, serializeEmbedding, embeddingToBlob } from "../embeddings/index.js";
+import { serializeEmbedding } from "../embeddings/index.js";
 
 export interface TelegramMessage {
   id: string;
@@ -84,7 +84,7 @@ export class MessageStore {
     if (this.vectorEnabled && embedding.length > 0 && message.text) {
       this.db
         .prepare(`INSERT OR REPLACE INTO tg_messages_vec (id, embedding) VALUES (?, ?)`)
-        .run(message.id, embeddingToBlob(embedding));
+        .run(message.id, serializeEmbedding(embedding));
     }
 
     // Update chat last_message_at

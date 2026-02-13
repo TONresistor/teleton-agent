@@ -668,6 +668,13 @@ export class AgentRuntime {
   clearHistory(chatId: string): void {
     const db = getDatabase().getDb();
 
+    // Delete message vectors (no cascade from virtual table)
+    db.prepare(
+      `DELETE FROM tg_messages_vec WHERE id IN (
+        SELECT id FROM tg_messages WHERE chat_id = ?
+      )`
+    ).run(chatId);
+
     // Delete messages (FTS cleanup handled automatically by tg_messages_fts_delete trigger)
     db.prepare(`DELETE FROM tg_messages WHERE chat_id = ?`).run(chatId);
 

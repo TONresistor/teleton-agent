@@ -257,16 +257,16 @@ export function ensureSchema(db: Database.Database): void {
     -- ============================================
 
     CREATE TABLE IF NOT EXISTS embedding_cache (
-      hash TEXT PRIMARY KEY,
-      embedding TEXT NOT NULL,
+      hash TEXT NOT NULL,
       model TEXT NOT NULL,
       provider TEXT NOT NULL,
-      dims INTEGER,
+      embedding BLOB NOT NULL,
+      dims INTEGER NOT NULL,
       created_at INTEGER NOT NULL DEFAULT (unixepoch()),
-      accessed_at INTEGER NOT NULL DEFAULT (unixepoch())
+      accessed_at INTEGER NOT NULL DEFAULT (unixepoch()),
+      PRIMARY KEY (hash, model, provider)
     );
 
-    CREATE INDEX IF NOT EXISTS idx_embedding_cache_model ON embedding_cache(provider, model);
     CREATE INDEX IF NOT EXISTS idx_embedding_cache_accessed ON embedding_cache(accessed_at);
 
     -- =====================================================
@@ -333,7 +333,7 @@ export function setSchemaVersion(db: Database.Database, version: string): void {
   ).run(version);
 }
 
-export const CURRENT_SCHEMA_VERSION = "1.8.0";
+export const CURRENT_SCHEMA_VERSION = "1.9.0";
 
 /**
  * Run migrations to upgrade existing database schema
@@ -453,6 +453,31 @@ export function runMigrations(db: Database.Database): void {
   }
 
   // Migrations 1.5.0-1.8.0 (deals, casino) removed — these modules now manage their own DBs.
+
+  // Migration 1.9.0: Upgrade embedding_cache to BLOB storage
+  if (!currentVersion || versionLessThan(currentVersion, "1.9.0")) {
+    console.log("🔄 Running migration 1.9.0: Upgrade embedding_cache to BLOB storage");
+    try {
+      db.exec(`DROP TABLE IF EXISTS embedding_cache`);
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS embedding_cache (
+          hash TEXT NOT NULL,
+          model TEXT NOT NULL,
+          provider TEXT NOT NULL,
+          embedding BLOB NOT NULL,
+          dims INTEGER NOT NULL,
+          created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+          accessed_at INTEGER NOT NULL DEFAULT (unixepoch()),
+          PRIMARY KEY (hash, model, provider)
+        );
+        CREATE INDEX IF NOT EXISTS idx_embedding_cache_accessed ON embedding_cache(accessed_at);
+      `);
+      console.log("✅ Migration 1.9.0 complete: embedding_cache upgraded to BLOB storage");
+    } catch (error) {
+      console.error("❌ Migration 1.9.0 failed:", error);
+      throw error;
+    }
+  }
 
   // Update schema version
   setSchemaVersion(db, CURRENT_SCHEMA_VERSION);

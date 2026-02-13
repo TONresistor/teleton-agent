@@ -115,5 +115,16 @@ export const TELEGRAM_FLOOD_SLEEP_THRESHOLD = 60;
 /** Maximum dependent tasks per parent task (DoS protection) */
 export const MAX_DEPENDENTS_PER_TASK = 10;
 
+// ── Embedding Cache ──
+
+/** Maximum entries in embedding cache before LRU eviction */
+export const EMBEDDING_CACHE_MAX_ENTRIES = 50_000;
+
+/** TTL for embedding cache entries (days) */
+export const EMBEDDING_CACHE_TTL_DAYS = 60;
+
+/** Check for eviction every N cache operations */
+export const EMBEDDING_CACHE_EVICTION_INTERVAL = 1000;
+
 /** Maximum file write size in bytes (50 MB) */
 export const MAX_WRITE_SIZE = 50 * 1024 * 1024;

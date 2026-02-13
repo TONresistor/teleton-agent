@@ -8,7 +8,11 @@ export * from "./search/context.js";
 
 import type Database from "better-sqlite3";
 import { getDatabase, type DatabaseConfig } from "./database.js";
-import { createEmbeddingProvider, type EmbeddingProviderConfig } from "./embeddings/index.js";
+import {
+  createEmbeddingProvider,
+  CachedEmbeddingProvider,
+  type EmbeddingProviderConfig,
+} from "./embeddings/index.js";
 import { KnowledgeIndexer } from "./agent/knowledge.js";
 import { MessageStore } from "./feed/messages.js";
 import { ContextBuilder } from "./search/context.js";
@@ -30,10 +34,13 @@ export function initializeMemory(config: {
   workspaceDir: string;
 }): MemorySystem {
   const db = getDatabase(config.database);
-  const embedder = createEmbeddingProvider(config.embeddings);
-
+  const rawEmbedder = createEmbeddingProvider(config.embeddings);
   const vectorEnabled = db.isVectorSearchReady();
   const database: Database.Database = db.getDb();
+
+  // Wrap with cache unless embeddings are disabled (noop)
+  const embedder =
+    rawEmbedder.id === "noop" ? rawEmbedder : new CachedEmbeddingProvider(rawEmbedder, database);
 
   return {
     db: database,
