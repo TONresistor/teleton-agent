@@ -199,14 +199,10 @@ export class SessionStore {
           .prepare(`SELECT rowid FROM knowledge WHERE id = ?`)
           .get(knowledgeId) as { rowid: number };
 
+        // vec0 virtual tables don't support ON CONFLICT — delete first
+        this.db.prepare(`DELETE FROM knowledge_vec WHERE rowid = ?`).run(rowid.rowid);
         this.db
-          .prepare(
-            `
-          INSERT INTO knowledge_vec (rowid, embedding)
-          VALUES (?, ?)
-          ON CONFLICT(rowid) DO UPDATE SET embedding = excluded.embedding
-        `
-          )
+          .prepare(`INSERT INTO knowledge_vec (rowid, embedding) VALUES (?, ?)`)
           .run(rowid.rowid, embeddingBuffer);
       }
 

@@ -83,8 +83,10 @@ export class MessageStore {
       );
 
     if (this.vectorEnabled && embedding.length > 0 && message.text) {
+      // vec0 virtual tables don't support INSERT OR REPLACE — delete first
+      this.db.prepare(`DELETE FROM tg_messages_vec WHERE id = ?`).run(message.id);
       this.db
-        .prepare(`INSERT OR REPLACE INTO tg_messages_vec (id, embedding) VALUES (?, ?)`)
+        .prepare(`INSERT INTO tg_messages_vec (id, embedding) VALUES (?, ?)`)
         .run(message.id, embeddingBuffer);
     }
 
