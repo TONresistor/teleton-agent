@@ -332,6 +332,28 @@ ${blue}  ┌──────────────────────�
             });
             return;
           }
+        } else if (adminCmd.command === "task") {
+          // /task passes through to the agent with task creation context
+          const taskDescription = adminCmd.args.join(" ");
+          if (!taskDescription) {
+            await this.bridge.sendMessage({
+              chatId: message.chatId,
+              text: "❌ Usage: /task <description>",
+              replyToId: message.id,
+            });
+            return;
+          }
+          message.text =
+            `[ADMIN TASK]\n` +
+            `Create a scheduled task using the telegram_create_scheduled_task tool.\n\n` +
+            `Guidelines:\n` +
+            `- If the description mentions a specific time or delay, use it as scheduleDate\n` +
+            `- Otherwise, schedule 1 minute from now for immediate execution\n` +
+            `- For simple operations (check a price, send a message), use a tool_call payload\n` +
+            `- For complex multi-step tasks, use an agent_task payload with detailed instructions\n` +
+            `- Always include a reason explaining why this task is being created\n\n` +
+            `Task: "${taskDescription}"`;
+          // Fall through to handleMessage below
         } else {
           const response = await this.adminHandler.handleCommand(
             adminCmd,

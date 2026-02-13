@@ -97,8 +97,6 @@ export class AdminHandler {
     command.senderId = senderId;
 
     switch (command.command) {
-      case "task":
-        return await this.handleTaskCommand(command);
       case "status":
         return await this.handleStatusCommand(command);
       case "clear":
@@ -130,21 +128,6 @@ export class AdminHandler {
       default:
         return `❓ Unknown command: /${command.command}\n\nUse /help for available commands.`;
     }
-  }
-
-  /**
-   * /task <description> - Give a task to the agent
-   */
-  private async handleTaskCommand(command: AdminCommand): Promise<string> {
-    if (command.args.length === 0) {
-      return "❌ Usage: /task <description>";
-    }
-
-    const taskDescription = command.args.join(" ");
-
-    // This would integrate with a task queue system
-    // For now, just acknowledge
-    return `✅ Task received:\n\n"${taskDescription}"\n\n🤖 I'll work on this and update you.`;
   }
 
   /**
