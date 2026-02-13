@@ -122,6 +122,7 @@ export function buildSystemPrompt(options: {
   strategy?: string;
   userName?: string;
   senderUsername?: string;
+  senderId?: number;
   ownerName?: string;
   ownerUsername?: string;
   context?: string;
@@ -204,12 +205,20 @@ You have a personal workspace at \`~/.teleton/workspace/\` where you can store a
     );
   }
 
-  if (options.userName) {
-    const safeName = sanitizeForPrompt(options.userName);
+  if (options.userName || options.senderId) {
+    const safeName = options.userName ? sanitizeForPrompt(options.userName) : undefined;
     const safeUsername = options.senderUsername
-      ? sanitizeForPrompt(options.senderUsername)
+      ? `@${sanitizeForPrompt(options.senderUsername)}`
       : undefined;
-    const userLabel = safeUsername ? `${safeName} (@${safeUsername})` : safeName;
+    const idTag = options.senderId ? `id:${options.senderId}` : undefined;
+
+    const primary = safeName || safeUsername;
+    const meta = [safeUsername, idTag].filter((v) => v && v !== primary);
+    const userLabel = primary
+      ? meta.length > 0
+        ? `${primary} (${meta.join(", ")})`
+        : primary
+      : idTag || "unknown";
     parts.push(`\n## Current User\nYou are chatting with: ${userLabel}`);
   }
 

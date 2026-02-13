@@ -241,7 +241,7 @@ export class AgentRuntime {
       // Format user message with envelope
       let formattedMessage = formatMessageEnvelope({
         channel: "Telegram",
-        senderId: chatId,
+        senderId: toolContext?.senderId ? String(toolContext.senderId) : chatId,
         senderName: userName,
         senderUsername: senderUsername,
         timestamp: now,
@@ -327,6 +327,7 @@ export class AgentRuntime {
         soul: this.soul,
         userName,
         senderUsername,
+        senderId: toolContext?.senderId,
         ownerName: this.config.telegram.owner_name,
         ownerUsername: this.config.telegram.owner_username,
         context: additionalContext,

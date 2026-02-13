@@ -74,27 +74,22 @@ function formatTimestamp(timestamp: number): string {
  * In groups, show "Name (@username)" if both available
  */
 function buildSenderLabel(params: EnvelopeParams): string {
-  const parts: string[] = [];
+  const name = params.senderName ? sanitizeForPrompt(params.senderName) : undefined;
+  const username = params.senderUsername
+    ? `@${sanitizeForPrompt(params.senderUsername)}`
+    : undefined;
+  const idTag = params.senderId ? `id:${params.senderId}` : undefined;
 
-  if (params.senderName) {
-    parts.push(sanitizeForPrompt(params.senderName));
+  // Always include senderId for unambiguous identification
+  // Format: "Name (@user, id:123)" | "Name (id:123)" | "@user (id:123)" | "id:123" | "unknown"
+  const primary = name || username;
+  const meta = [username, idTag].filter((v) => v && v !== primary);
+
+  if (primary) {
+    return meta.length > 0 ? `${primary} (${meta.join(", ")})` : primary;
   }
 
-  if (params.senderUsername) {
-    parts.push(`@${sanitizeForPrompt(params.senderUsername)}`);
-  }
-
-  if (parts.length > 0) {
-    // If we have both name and username, show "Name (@username)"
-    // If just one, show that
-    return parts.length === 2 ? `${parts[0]} (${parts[1]})` : parts[0];
-  }
-
-  if (params.senderId) {
-    return `user:${params.senderId}`;
-  }
-
-  return "unknown";
+  return idTag || "unknown";
 }
 
 /**
