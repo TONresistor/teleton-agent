@@ -58,6 +58,7 @@ export class MessageStore {
     }
 
     const embedding = message.text ? await this.embedder.embedQuery(message.text) : [];
+    const embeddingBuffer = serializeEmbedding(embedding);
 
     this.db
       .prepare(
@@ -73,7 +74,7 @@ export class MessageStore {
         message.chatId,
         message.senderId,
         message.text,
-        serializeEmbedding(embedding),
+        embeddingBuffer,
         message.replyToId,
         message.isFromAgent ? 1 : 0,
         message.hasMedia ? 1 : 0,
@@ -84,7 +85,7 @@ export class MessageStore {
     if (this.vectorEnabled && embedding.length > 0 && message.text) {
       this.db
         .prepare(`INSERT OR REPLACE INTO tg_messages_vec (id, embedding) VALUES (?, ?)`)
-        .run(message.id, serializeEmbedding(embedding));
+        .run(message.id, embeddingBuffer);
     }
 
     // Update chat last_message_at

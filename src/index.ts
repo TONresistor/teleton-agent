@@ -5,7 +5,7 @@ import { TelegramBridge, type TelegramMessage } from "./telegram/bridge.js";
 import { MessageHandler } from "./telegram/handlers.js";
 import { AdminHandler } from "./telegram/admin.js";
 import { MessageDebouncer } from "./telegram/debounce.js";
-import { getDatabase, closeDatabase, initializeMemory } from "./memory/index.js";
+import { getDatabase, closeDatabase, initializeMemory, type MemorySystem } from "./memory/index.js";
 import { getWalletAddress } from "./ton/wallet-service.js";
 import { setTonapiKey } from "./constants/api-endpoints.js";
 import { TELETON_ROOT } from "./workspace/paths.js";
@@ -34,6 +34,7 @@ export class TonnetApp {
   private toolRegistry: ToolRegistry;
   private dependencyResolver: any; // TaskDependencyResolver, imported lazily
   private modules: PluginModule[] = [];
+  private memory: MemorySystem;
 
   constructor(configPath?: string) {
     // Load configuration
@@ -66,12 +67,11 @@ export class TonnetApp {
     });
 
     // Get memory components (local embeddings — no API key needed)
-    const VECTOR_DIMENSIONS = 384; // all-MiniLM-L6-v2
-    const memory = initializeMemory({
+    this.memory = initializeMemory({
       database: {
         path: join(TELETON_ROOT, "memory.db"),
         enableVectorSearch: true,
-        vectorDimensions: VECTOR_DIMENSIONS,
+        vectorDimensions: 384, // all-MiniLM-L6-v2
       },
       embeddings: {
         provider: "local",
@@ -98,10 +98,8 @@ export class TonnetApp {
       this.config.telegram,
       this.agent,
       db,
-      memory.embedder,
-      db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='knowledge_vec'").get()
-        ? true
-        : false,
+      this.memory.embedder,
+      getDatabase().isVectorSearchReady(),
       getMarketService(),
       this.config // Pass full config for vision tool API key access
     );
@@ -169,33 +167,14 @@ ${blue}  ┌──────────────────────�
     cleanupOldTranscripts(30);
 
     // Index knowledge base (MEMORY.md, memory/*.md)
-    const memory = initializeMemory({
-      database: {
-        path: join(TELETON_ROOT, "memory.db"),
-        enableVectorSearch: true,
-        vectorDimensions: 384,
-      },
-      embeddings: {
-        provider: "local",
-        model: "",
-      },
-      workspaceDir: join(TELETON_ROOT),
-    });
-
-    const indexResult = await memory.knowledge.indexAll();
+    const indexResult = await this.memory.knowledge.indexAll();
 
     // Rebuild FTS indexes to ensure search works
     const db = getDatabase();
     const ftsResult = db.rebuildFtsIndexes();
 
     // Initialize context builder for RAG search in agent
-    const vectorEnabled = db
-      .getDb()
-      .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='knowledge_vec'")
-      .get()
-      ? true
-      : false;
-    this.agent.initializeContextBuilder(memory.embedder, vectorEnabled);
+    this.agent.initializeContextBuilder(this.memory.embedder, db.isVectorSearchReady());
 
     // Connect to Telegram
     await this.bridge.connect();
