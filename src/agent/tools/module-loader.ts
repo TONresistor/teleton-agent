@@ -1,18 +1,17 @@
 /**
  * Built-in module loader — discovers and registers plugin modules.
  * Unlike plugin-loader.ts (external ~/.teleton/plugins/), this handles
- * first-party modules that ship with the codebase (casino, deals, etc.)
+ * first-party modules that ship with the codebase (deals, market, etc.)
  */
 
 import type { PluginModule } from "./types.js";
 import type { ToolRegistry } from "./registry.js";
 import type { Config } from "../../config/schema.js";
 import type Database from "better-sqlite3";
-import casinoModule from "../../casino/module.js";
 import marketModule from "../../market/module.js";
 import dealsModule from "../../deals/module.js";
 
-const BUILTIN_MODULES: PluginModule[] = [casinoModule, marketModule, dealsModule];
+const BUILTIN_MODULES: PluginModule[] = [marketModule, dealsModule];
 
 export function loadModules(
   registry: ToolRegistry,

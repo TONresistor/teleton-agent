@@ -100,7 +100,7 @@ You should see:
 ✅ Gifts Market: 107 collections, 6000+ models
 ✅ Telegram: @your_agent connected
 ✅ TON Blockchain: connected
-✅ Agent is ready! (121 tools)
+✅ Agent is ready! (116 tools)
 ```
 
 **Verify:** Send `/ping` to your agent on Telegram.
@@ -116,7 +116,7 @@ Configuration is in `~/.teleton/config.yaml`. The setup wizard generates everyth
 ```yaml
 agent:
   provider: "anthropic"              # anthropic | openai | google | xai | groq | openrouter
-  model: "claude-sonnet-4-5-20250929"
+  model: "claude-opus-4-5-20251101"
   max_tokens: 4096
   temperature: 0.7
 
@@ -178,21 +178,19 @@ Admin commands are only available to users listed in `admin_ids`. All commands w
 
 ## Tool Categories
 
-Teleton has **121 tools** across these categories:
+Teleton has **116 tools** across these categories:
 
 | Category | Count | Highlights |
 |----------|-------|------------|
-| **Telegram** | 59 | Messaging, media, groups, polls, stickers, gifts, stories, contacts, profile |
-| **TON Blockchain** | 17 | W5R1 wallet, send/receive TON, transactions, price |
-| **Jettons** | 11 | Balances, swap (STON.fi), prices, holders, trending |
-| **DeFi** | 5 | STON.fi + DeDust DEX, smart routing for best rates |
-| **Deals** | 5 | Secure gift/TON trading with inline bot confirmations |
+| **Telegram** | 66 | Messaging, media, chats, groups, polls, stickers, gifts, stars, stories, contacts, folders, profile, memory, tasks |
+| **TON & Jettons** | 15 | W5R1 wallet, send/receive TON & jettons, balances, prices, holders, history, charts, NFTs, DEX quotes |
+| **STON.fi DEX** | 5 | Swap, quote, search, trending tokens, liquidity pools |
+| **DeDust DEX** | 5 | Swap, quote, pools, prices, token info |
 | **TON DNS** | 7 | Domain check, auctions, bidding, resolution |
-| **Gift Market** | 4 | Floor prices, search, cheapest, price history |
+| **Deals** | 5 | Secure gift/TON trading with strategy enforcement and inline bot confirmations |
+| **Market** | 4 | Gift floor prices, search, cheapest listings, price history |
 | **Journal** | 3 | Log trades/operations with reasoning and P&L |
-| **Memory** | 2 | Read/write persistent memory (RAG-indexed) |
 | **Workspace** | 6 | Sandboxed file operations |
-| **Casino** | 6 | Slot machine, dice, leaderboard |
 
 ---
 
@@ -357,21 +355,25 @@ For contributors, create a TypeScript tool in `src/agent/tools/` and register it
 
 ```
 src/
-├── agent/          # LLM runtime, tool registry, tool implementations
+├── index.ts        # Main application entry point (TonnetApp)
+├── agent/          # LLM runtime, tool registry, 116 tool implementations
+│   └── tools/      # telegram/, ton/, stonfi/, dedust/, dns/, journal/, workspace/
 ├── telegram/       # GramJS bridge, message handlers, admin commands, debouncing
-├── memory/         # SQLite database, RAG search, knowledge indexing
-├── ton/            # Wallet operations, TON blockchain
-├── market/         # Gift price scraper (Playwright) and cache service
+├── memory/         # SQLite database, RAG search (FTS5 + vector), compaction
+├── ton/            # Wallet operations, payment verification, TON blockchain
 ├── deals/          # Deal proposals, strategy checker, config
-├── casino/         # Payment verification, slot machine, dice
-├── bot/            # GramJS MTProto bot for styled inline buttons
-├── session/        # Session management, transcripts, compaction
+├── market/         # Gift price scraper (Playwright) and cache service
+├── bot/            # Grammy + GramJS bot for styled inline deal buttons
+├── sdk/            # Plugin SDK (v1.0.0) — TON, Telegram services for plugins
+├── session/        # Session persistence, transcripts
+├── soul/           # System prompt assembly (SOUL + STRATEGY + SECURITY)
 ├── config/         # Zod schema, YAML loader, provider registry
-├── workspace/      # Sandboxed file system with security validation
-├── cli/            # Setup wizard, doctor, start command
 ├── constants/      # Centralized limits, timeouts, API endpoints
-├── templates/      # Workspace template files (SOUL.md, etc.)
-└── index.ts        # Main application entry point
+├── services/       # Shared services (TTS voice synthesis)
+├── utils/          # Logger, sanitization, retry, fetch
+├── workspace/      # Sandboxed file system with security validation
+├── templates/      # Workspace template files (SOUL.md, IDENTITY.md, etc.)
+└── cli/            # Setup wizard, doctor command
 ```
 
 ---

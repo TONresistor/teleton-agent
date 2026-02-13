@@ -97,7 +97,7 @@ export const KNOWLEDGE_CHUNK_SIZE = 500;
 /** Overlap (characters) between consecutive knowledge chunks */
 export const KNOWLEDGE_CHUNK_OVERLAP = 50;
 
-// ── Casino ──
+// ── Payment Verification ──
 
 /** Payment tolerance ratio (accept 99% of expected amount to account for fees) */
 export const PAYMENT_TOLERANCE_RATIO = 0.99;

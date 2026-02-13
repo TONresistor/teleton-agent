@@ -1,7 +1,7 @@
 import { Type } from "@sinclair/typebox";
 import type { Tool, ToolExecutor, ToolResult } from "../types.js";
 import type { Deal } from "../../../deals/types.js";
-import { verifyPayment } from "../../../casino/payment-verifier.js";
+import { verifyPayment } from "../../../ton/payment-verifier.js";
 import { GiftDetector } from "../../../deals/gift-detector.js";
 import { getWalletAddress } from "../../../ton/wallet-service.js";
 import { autoExecuteAfterVerification } from "../../../deals/executor.js";

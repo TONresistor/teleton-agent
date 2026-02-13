@@ -100,7 +100,6 @@ export function sanitizeConfigForPlugins(config: Config): Record<string, unknown
       model: config.agent.model,
       max_tokens: config.agent.max_tokens,
     },
-    casino: { enabled: config.casino.enabled },
     deals: { enabled: config.deals.enabled },
     market: { enabled: config.market.enabled },
   };

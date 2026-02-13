@@ -13,7 +13,7 @@ import {
   buildCompletedMessage,
   buildFailedMessage,
 } from "./message-builder.js";
-import { verifyPayment } from "../../casino/payment-verifier.js";
+import { verifyPayment } from "../../ton/payment-verifier.js";
 import { getWalletAddress } from "../../ton/wallet-service.js";
 import { executeDeal } from "../../deals/executor.js";
 import { DEALS_CONFIG } from "../../deals/config.js";

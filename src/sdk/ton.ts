@@ -2,19 +2,26 @@
  * TonSDK implementation — wraps internal TON services for plugin access.
  */
 
+import type Database from "better-sqlite3";
 import type {
   TonSDK,
   TonBalance,
   TonPrice,
   TonSendResult,
   TonTransaction,
+  SDKVerifyPaymentParams,
+  SDKPaymentVerification,
   PluginLogger,
 } from "./types.js";
 import { PluginSDKError } from "./errors.js";
 import { getWalletAddress, getWalletBalance, getTonPrice } from "../ton/wallet-service.js";
 import { sendTon } from "../ton/transfer.js";
+import { PAYMENT_TOLERANCE_RATIO } from "../constants/limits.js";
 
-export function createTonSDK(log: PluginLogger): TonSDK {
+/** Default max payment age in minutes */
+const DEFAULT_MAX_AGE_MINUTES = 10;
+
+export function createTonSDK(log: PluginLogger, db: Database.Database | null): TonSDK {
   return {
     getAddress(): string | null {
       try {
@@ -108,6 +115,78 @@ export function createTonSDK(log: PluginLogger): TonSDK {
       } catch (err) {
         log.error("ton.getTransactions() failed:", err);
         return [];
+      }
+    },
+
+    async verifyPayment(params: SDKVerifyPaymentParams): Promise<SDKPaymentVerification> {
+      if (!db) {
+        throw new PluginSDKError(
+          "No database available — verifyPayment requires migrate() with used_transactions table",
+          "OPERATION_FAILED"
+        );
+      }
+
+      const address = getWalletAddress();
+      if (!address) {
+        throw new PluginSDKError("Wallet not initialized", "WALLET_NOT_INITIALIZED");
+      }
+
+      const maxAgeMinutes = params.maxAgeMinutes ?? DEFAULT_MAX_AGE_MINUTES;
+
+      try {
+        const txs = await this.getTransactions(address, 20);
+
+        for (const tx of txs) {
+          if (tx.type !== "ton_received") continue;
+          if (!tx.amount || !tx.from) continue;
+
+          // Parse amount: "1.5 TON" → 1.5
+          const tonAmount = parseFloat(tx.amount.replace(/ TON$/, ""));
+          if (isNaN(tonAmount)) continue;
+
+          // Amount match (1% tolerance)
+          if (tonAmount < params.amount * PAYMENT_TOLERANCE_RATIO) continue;
+
+          // Time window
+          if (tx.secondsAgo > maxAgeMinutes * 60) continue;
+
+          // Memo match (case-insensitive, strip @)
+          const memo = (tx.comment ?? "").trim().toLowerCase().replace(/^@/, "");
+          const expected = params.memo.toLowerCase().replace(/^@/, "");
+          if (memo !== expected) continue;
+
+          // Replay protection: composite key
+          const compositeKey = `${tx.from}:${tx.amount}:${tx.date}`;
+          const result = db
+            .prepare(
+              `INSERT OR IGNORE INTO used_transactions (tx_hash, user_id, amount, game_type, used_at)
+               VALUES (?, ?, ?, ?, unixepoch())`
+            )
+            .run(compositeKey, params.memo, tonAmount, params.gameType);
+
+          if (result.changes === 0) continue; // Already used
+
+          return {
+            verified: true,
+            compositeKey,
+            amount: tonAmount,
+            playerWallet: tx.from,
+            date: tx.date,
+            secondsAgo: tx.secondsAgo,
+          };
+        }
+
+        return {
+          verified: false,
+          error: `Payment not found. Send ${params.amount} TON to ${address} with memo: ${params.memo}`,
+        };
+      } catch (err) {
+        if (err instanceof PluginSDKError) throw err;
+        log.error("ton.verifyPayment() failed:", err);
+        return {
+          verified: false,
+          error: `Verification failed: ${err instanceof Error ? err.message : String(err)}`,
+        };
       }
     },
   };

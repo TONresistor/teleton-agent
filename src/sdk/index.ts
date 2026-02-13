@@ -24,6 +24,8 @@ export type {
   TonPrice,
   TonSendResult,
   TonTransaction,
+  SDKVerifyPaymentParams,
+  SDKPaymentVerification,
   DiceResult,
   TelegramUser,
   SimpleMessage,
@@ -61,7 +63,7 @@ export function createPluginSDK(deps: SDKDependencies, opts: CreatePluginSDKOpti
   const log = createLogger(opts.pluginName);
 
   // Deep freeze: freeze all nested objects to prevent mutation
-  const ton = Object.freeze(createTonSDK(log));
+  const ton = Object.freeze(createTonSDK(log, opts.db));
   const telegram = Object.freeze(createTelegramSDK(deps.bridge, log));
   const frozenLog = Object.freeze(log);
   const frozenConfig = Object.freeze(opts.sanitizedConfig);

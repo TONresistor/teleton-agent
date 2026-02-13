@@ -87,7 +87,7 @@ export class TonnetApp {
     // SDK dependencies (shared by built-in plugins and external plugins)
     this.sdkDeps = { bridge: this.bridge };
 
-    // Load built-in plugin modules (casino, deals, market)
+    // Load built-in plugin modules (deals, market)
     this.modules = loadModules(this.toolRegistry, this.config, db);
 
     // Initialize per-group module permissions

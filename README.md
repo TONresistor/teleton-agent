@@ -17,9 +17,9 @@
 
 - **Full Telegram access**: Operates as a real user with the full API, not a limited bot
 - **Multi-Provider LLM**: Anthropic, OpenAI, Google Gemini, xAI Grok, Groq, OpenRouter
-- **TON Blockchain**: Built-in wallet, send/receive TON, swap jettons on STON.fi and DeDust, NFT auctions
+- **TON Blockchain**: Built-in wallet, send/receive TON & jettons, swap on STON.fi and DeDust, NFTs
 - **Persistent memory**: Remembers context across restarts with automatic context management
-- **106 built-in tools**: Messaging, media, blockchain, DEX swaps, DNS, journaling, and more
+- **116 built-in tools**: Messaging, media, blockchain, DEX trading, deals, market, DNS, journaling, and more
 - **Plugin SDK**: Extend the agent with custom tools — full access to TON and Telegram APIs via namespaced SDK
 - **Secure by design**: Sandboxed workspace, immutable config, prompt injection defense
 
@@ -32,10 +32,12 @@
 | Category | Tools | Description |
 |----------|-------|-------------|
 | Telegram | 66 | Messaging, media, chats, groups, polls, stickers, gifts, stars, stories, contacts, folders, profile, memory, tasks |
-| TON Blockchain | 8 | W5R1 wallet, send/receive TON, transaction history, price tracking, charts, NFT listing |
-| Jettons (Tokens) | 11 | Swap, send, balances, prices, holders, trending tokens, liquidity pools |
-| DeFi | 5 | STON.fi and DeDust DEX integration with smart routing for best swap rates |
+| TON & Jettons | 15 | W5R1 wallet, send/receive TON & jettons, balances, prices, holders, history, charts, NFTs, DEX quotes |
+| STON.fi DEX | 5 | Swap, quote, search, trending tokens, liquidity pools |
+| DeDust DEX | 5 | Swap, quote, pools, prices, token info |
 | TON DNS | 7 | Domain auctions, bidding, linking, resolution, availability checks |
+| Deals | 5 | Secure gift/TON trading with strategy enforcement and inline bot confirmations |
+| Market | 4 | Gift floor prices, search, cheapest listings, price history |
 | Journal | 3 | Trade/operation logging with natural language queries |
 | Workspace | 6 | Sandboxed file operations with path traversal protection |
 
@@ -228,44 +230,72 @@ The agent's personality and rules are configured via markdown files in `~/.telet
 
 ```
 src/
-├── index.ts               # Entry point, tool registry, lifecycle
-├── agent/                 # Core agent runtime
-│   ├── runtime.ts         # Agentic loop orchestration
-│   ├── client.ts          # Multi-provider LLM client
-│   └── tools/             # 106 built-in tools
-│       ├── telegram/      # Telegram operations (66 tools)
-│       ├── ton/           # TON blockchain (8 tools)
-│       ├── jetton/        # Token operations (11 tools)
-│       ├── dns/           # TON DNS (7 tools)
-│       ├── dedust/        # DeDust DEX (3 tools)
-│       ├── dex/           # Smart router (2 tools)
-│       ├── journal/       # Business journal (3 tools)
-│       └── workspace/     # File operations (6 tools)
-├── telegram/              # Telegram integration layer
-│   ├── bridge.ts          # GramJS wrapper (MTProto)
-│   ├── client.ts          # User client with message sending
-│   ├── handlers.ts        # Message routing and processing
-│   ├── admin.ts           # Admin commands (/status, /clear, /modules)
-│   ├── formatting.ts      # Markdown → Telegram HTML
-│   └── callbacks/         # Inline button routing
-├── memory/                # Storage and knowledge
-│   ├── schema.ts          # Database schema + migrations
-│   ├── database.ts        # SQLite + WAL + vec0
-│   ├── search/            # RAG system (FTS5 + vector)
-│   └── compaction.ts      # Context auto-compaction
-├── ton/                   # TON blockchain
-│   ├── wallet-service.ts  # W5R1 wallet + KeyPair cache
-│   └── transfer.ts        # TON send operations
-├── sdk/                   # Plugin SDK
-│   ├── index.ts           # SDK factory
-│   ├── ton.ts             # TON service for plugins
-│   ├── telegram.ts        # Telegram service for plugins
-│   └── types.ts           # Public SDK types
-├── soul/                  # System prompt assembly
-│   └── loader.ts          # SOUL + STRATEGY + SECURITY + MEMORY
-├── config/                # Configuration (Zod schemas, provider registry)
-├── workspace/             # Sandboxed file system
-└── cli/                   # CLI commands (setup, doctor)
+├── index.ts                # Entry point, lifecycle, module loading
+├── agent/                  # Core agent runtime
+│   ├── runtime.ts          # Agentic loop orchestration
+│   ├── client.ts           # Multi-provider LLM client
+│   └── tools/              # 116 built-in tools
+│       ├── register-all.ts # Central tool registration
+│       ├── registry.ts     # Tool registry + scope filtering
+│       ├── module-loader.ts    # Built-in module loading (deals, market)
+│       ├── plugin-loader.ts    # External plugin discovery
+│       ├── telegram/       # Telegram operations (66 tools)
+│       ├── ton/            # TON blockchain + jettons + DEX quote (15 tools)
+│       ├── stonfi/         # STON.fi DEX (5 tools)
+│       ├── dedust/         # DeDust DEX (5 tools)
+│       ├── dns/            # TON DNS (7 tools)
+│       ├── journal/        # Business journal (3 tools)
+│       └── workspace/      # File operations (6 tools)
+├── deals/                  # Deals module (5 tools, loaded via module-loader)
+│   ├── module.ts           # Module definition + lifecycle
+│   ├── executor.ts         # Deal execution logic
+│   └── strategy-checker.ts # Trading strategy enforcement
+├── market/                 # Market module (4 tools, loaded via module-loader)
+│   ├── module.ts           # Module definition + lifecycle
+│   ├── price-service.ts    # Gift floor-price tracking
+│   └── scraper.ts          # Market data scraping (Playwright)
+├── bot/                    # Deals inline bot (Grammy + GramJS)
+│   ├── index.ts            # DealBot (Grammy Bot API)
+│   ├── gramjs-bot.ts       # GramJS MTProto for styled buttons
+│   └── services/           # Message builder, styled keyboard, verification
+├── telegram/               # Telegram integration layer
+│   ├── bridge.ts           # GramJS wrapper (MTProto)
+│   ├── handlers.ts         # Message routing and processing
+│   ├── admin.ts            # Admin commands (/status, /clear, /modules)
+│   ├── debounce.ts         # Message batching for groups
+│   ├── formatting.ts       # Markdown → Telegram HTML
+│   └── callbacks/          # Inline button routing
+├── memory/                 # Storage and knowledge
+│   ├── schema.ts           # Database schema + migrations
+│   ├── database.ts         # SQLite + WAL + vec0
+│   ├── search/             # RAG system (FTS5 + vector)
+│   ├── embeddings/         # Local + Anthropic embedding providers
+│   ├── compaction.ts       # Context auto-compaction
+│   ├── observation-masking.ts  # Tool result compression (~90% savings)
+│   └── daily-logs.ts       # Automatic session summaries
+├── ton/                    # TON blockchain
+│   ├── wallet-service.ts   # W5R1 wallet + KeyPair cache
+│   ├── transfer.ts         # TON send operations
+│   └── payment-verifier.ts # On-chain payment verification
+├── sdk/                    # Plugin SDK (v1.0.0)
+│   ├── index.ts            # SDK factory (createPluginSDK)
+│   ├── ton.ts              # TON service for plugins
+│   ├── telegram.ts         # Telegram service for plugins
+│   └── types.ts            # Public SDK types
+├── session/                # Session management
+│   ├── store.ts            # Session persistence (SQLite)
+│   └── transcript.ts       # Conversation transcripts
+├── soul/                   # System prompt assembly
+│   └── loader.ts           # SOUL + STRATEGY + SECURITY + MEMORY
+├── config/                 # Configuration
+│   ├── schema.ts           # Zod schemas + validation
+│   └── providers.ts        # Multi-provider LLM registry
+├── constants/              # Centralized limits, timeouts, API endpoints
+├── services/               # Shared services (TTS)
+├── utils/                  # Logger, sanitize, retry, fetch
+├── workspace/              # Sandboxed file system
+├── templates/              # Workspace template files (SOUL.md, etc.)
+└── cli/                    # CLI commands (setup, doctor)
 ```
 
 ---
@@ -398,7 +428,7 @@ Backward compatible: plugins can export `tools` as a static array without the SD
 At startup:
 ```
 🔌 Plugin "weather": 1 tool registered
-✅ 107 tools loaded (1 from plugins)
+✅ 117 tools loaded (1 from plugins)
 ```
 
 ---

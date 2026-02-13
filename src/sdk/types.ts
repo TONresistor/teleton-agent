@@ -68,6 +68,38 @@ export interface TonTransaction {
   transfers?: TonTransaction[];
 }
 
+// ─── Payment Verification Types ─────────────────────────────────
+
+/** Parameters for verifying a TON payment */
+export interface SDKVerifyPaymentParams {
+  /** Expected payment amount in TON */
+  amount: number;
+  /** Expected memo/comment in the transaction (e.g. username, dealId) */
+  memo: string;
+  /** Game/operation type for replay protection grouping */
+  gameType: string;
+  /** Maximum age of valid payments in minutes (default: 10) */
+  maxAgeMinutes?: number;
+}
+
+/** Result of payment verification */
+export interface SDKPaymentVerification {
+  /** Whether a valid payment was found */
+  verified: boolean;
+  /** Composite key used for replay protection */
+  compositeKey?: string;
+  /** Verified amount in TON */
+  amount?: number;
+  /** Sender's wallet address (for auto-payout) */
+  playerWallet?: string;
+  /** ISO 8601 date string of the transaction */
+  date?: string;
+  /** Seconds since the transaction */
+  secondsAgo?: number;
+  /** Error message if verification failed */
+  error?: string;
+}
+
 // ─── Telegram Types ──────────────────────────────────────────────
 
 /** Options for sending a message */
@@ -171,6 +203,23 @@ export interface TonSDK {
    * @returns Array of formatted transactions, or empty array on error.
    */
   getTransactions(address: string, limit?: number): Promise<TonTransaction[]>;
+
+  /**
+   * Verify a TON payment was received with memo matching and replay protection.
+   *
+   * Checks recent transactions for a matching payment:
+   * - Amount >= expected (1% tolerance for fees)
+   * - Memo matches expected identifier (case-insensitive)
+   * - Within time window (default 10 minutes)
+   * - Not already used (INSERT OR IGNORE into used_transactions)
+   *
+   * Requires the plugin to export a migrate() that creates the used_transactions table.
+   *
+   * @param params — Payment verification parameters
+   * @returns Verification result with sender wallet for auto-payout
+   * @throws {PluginSDKError} WALLET_NOT_INITIALIZED, OPERATION_FAILED
+   */
+  verifyPayment(params: SDKVerifyPaymentParams): Promise<SDKPaymentVerification>;
 }
 
 /**

@@ -2,7 +2,7 @@
  * Central tool registration for the Tonnet agent.
  *
  * Each category exports a `tools: ToolEntry[]` array with scope info co-located.
- * Casino, market, and deals tools are loaded separately via module-loader.ts.
+ * Market and deals tools are loaded separately via module-loader.ts.
  */
 
 import type { ToolRegistry } from "./registry.js";

@@ -85,22 +85,6 @@ export const MetaConfigSchema = z.object({
   onboard_command: z.string().default("teleton setup"),
 });
 
-export const CasinoConfigSchema = z
-  .object({
-    enabled: z.boolean().default(true),
-    min_bet: z.number().default(0.1),
-    max_bet_percent: z.number().default(5),
-    min_bankroll: z.number().default(10),
-    cooldown_seconds: z.number().default(30),
-    payment_window_minutes: z.number().default(5),
-    max_payment_age_minutes: z.number().default(10),
-    tx_retention_days: z.number().default(30),
-    rate_limit_max_attempts: z.number().default(5),
-    rate_limit_window_seconds: z.number().default(60),
-    rate_limit_block_seconds: z.number().default(300),
-  })
-  .default({});
-
 export const DealsConfigSchema = z
   .object({
     enabled: z.boolean().default(true),
@@ -126,7 +110,6 @@ export const ConfigSchema = z.object({
   agent: AgentConfigSchema,
   telegram: TelegramConfigSchema,
   storage: StorageConfigSchema.default({}),
-  casino: CasinoConfigSchema,
   deals: DealsConfigSchema,
   market: MarketConfigSchema,
   plugins: z
@@ -144,6 +127,5 @@ export type AgentConfig = z.infer<typeof AgentConfigSchema>;
 export type TelegramConfig = z.infer<typeof TelegramConfigSchema>;
 export type StorageConfig = z.infer<typeof StorageConfigSchema>;
 export type SessionResetPolicy = z.infer<typeof SessionResetPolicySchema>;
-export type CasinoConfig = z.infer<typeof CasinoConfigSchema>;
 export type DealsConfig = z.infer<typeof DealsConfigSchema>;
 export type MarketConfig = z.infer<typeof MarketConfigSchema>;

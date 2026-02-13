@@ -10,12 +10,7 @@ import { join } from "path";
 import { TELETON_ROOT } from "../../workspace/paths.js";
 import { TelegramUserClient } from "../../telegram/client.js";
 import YAML from "yaml";
-import {
-  type Config,
-  CasinoConfigSchema,
-  DealsConfigSchema,
-  MarketConfigSchema,
-} from "../../config/schema.js";
+import { type Config, DealsConfigSchema, MarketConfigSchema } from "../../config/schema.js";
 import {
   generateWallet,
   importWallet,
@@ -162,7 +157,6 @@ ${blue}  ┌──────────────────────�
   const enabledModules: string[] = await prompter.multiselect({
     message: "Enable optional modules (Space to toggle, Enter to confirm)",
     options: [
-      { value: "casino", label: "Casino", hint: "Slot machine & dice games with TON bets" },
       {
         value: "deals",
         label: "Gifts (Deals & Market Data)",
@@ -172,7 +166,6 @@ ${blue}  ┌──────────────────────�
     required: false,
   });
 
-  const casinoEnabled = enabledModules.includes("casino");
   const dealsEnabled = enabledModules.includes("deals");
   const marketEnabled = dealsEnabled; // Market data is required for deals
 
@@ -195,7 +188,7 @@ ${blue}  ┌──────────────────────�
   if (providerMeta.toolLimit !== null) {
     prompter.note(
       `${providerMeta.displayName} supports max ${providerMeta.toolLimit} tools.\n` +
-        "Tonnet currently has ~121 tools. If more tools are added,\n" +
+        "Tonnet currently has ~116 tools. If more tools are added,\n" +
         "some may be truncated.",
       "Tool Limit"
     );
@@ -568,7 +561,6 @@ ${blue}  ┌──────────────────────�
       memory_file: `${workspace.root}/memory.json`,
       history_limit: 100,
     },
-    casino: CasinoConfigSchema.parse({ enabled: casinoEnabled }),
     deals: DealsConfigSchema.parse({
       enabled: dealsEnabled,
       buy_max_floor_percent: buyMaxFloorPercent,
@@ -799,7 +791,6 @@ async function runNonInteractiveOnboarding(
       memory_file: `${workspace.root}/memory.json`,
       history_limit: 100,
     },
-    casino: CasinoConfigSchema.parse({}),
     deals: DealsConfigSchema.parse({}),
     market: MarketConfigSchema.parse({}),
     plugins: {},
