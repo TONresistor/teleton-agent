@@ -192,20 +192,20 @@ export function createTonSDK(log: PluginLogger, db: Database.Database | null): T
           const expected = params.memo.toLowerCase().replace(/^@/, "");
           if (memo !== expected) continue;
 
-          // Replay protection: composite key
-          const compositeKey = `${tx.from}:${tx.amount}:${tx.date}`;
+          // Replay protection: use actual blockchain transaction hash
+          const txHash = tx.hash;
           const result = db
             .prepare(
               `INSERT OR IGNORE INTO used_transactions (tx_hash, user_id, amount, game_type, used_at)
                VALUES (?, ?, ?, ?, unixepoch())`
             )
-            .run(compositeKey, params.memo, tonAmount, params.gameType);
+            .run(txHash, params.memo, tonAmount, params.gameType);
 
           if (result.changes === 0) continue; // Already used
 
           return {
             verified: true,
-            compositeKey,
+            txHash,
             amount: tonAmount,
             playerWallet: tx.from,
             date: tx.date,

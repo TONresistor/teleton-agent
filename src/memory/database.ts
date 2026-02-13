@@ -1,5 +1,5 @@
 import Database from "better-sqlite3";
-import { existsSync, mkdirSync } from "fs";
+import { existsSync, mkdirSync, chmodSync } from "fs";
 import { dirname } from "path";
 import * as sqliteVec from "sqlite-vec";
 import {
@@ -37,6 +37,9 @@ export class MemoryDatabase {
     this.db = new Database(config.path, {
       verbose: process.env.DEBUG_SQL ? console.log : undefined,
     });
+    try {
+      chmodSync(config.path, 0o600);
+    } catch {}
 
     // Configure SQLite for performance
     this.db.pragma("journal_mode = WAL");

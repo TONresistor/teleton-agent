@@ -2,7 +2,7 @@ import { Type } from "@sinclair/typebox";
 import type { Tool, ToolExecutor, ToolResult } from "../types.js";
 import { loadWallet } from "../../../ton/wallet-service.js";
 import { mnemonicToPrivateKey } from "@ton/crypto";
-import { WalletContractV5R1, TonClient, toNano, internal } from "@ton/ton";
+import { WalletContractV5R1, TonClient, toNano, fromNano, internal } from "@ton/ton";
 import { SendMode } from "@ton/core";
 import { getCachedHttpEndpoint } from "../../../ton/endpoint.js";
 import { DEX, pTON } from "@ston-fi/sdk";
@@ -126,6 +126,16 @@ export const stonfiSwapExecutor: ToolExecutor<JettonSwapParams> = async (
     let txParams;
 
     if (isTonInput) {
+      // Check balance for TON swaps
+      const balance = await tonClient.getBalance(wallet.address);
+      const requiredAmount = BigInt(simulationResult.offerUnits) + toNano("0.3"); // 0.3 TON for gas
+      if (balance < requiredAmount) {
+        return {
+          success: false,
+          error: `Insufficient balance. Have ${fromNano(balance)} TON, need ~${fromNano(requiredAmount)} TON (including gas).`,
+        };
+      }
+
       // TON → Jetton swap
       const proxyTon = new pTON.v1(routerInfo.ptonMasterAddress);
 

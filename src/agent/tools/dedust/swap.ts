@@ -2,7 +2,7 @@ import { Type } from "@sinclair/typebox";
 import type { Tool, ToolExecutor, ToolResult } from "../types.js";
 import { loadWallet } from "../../../ton/wallet-service.js";
 import { mnemonicToPrivateKey } from "@ton/crypto";
-import { WalletContractV5R1, TonClient, toNano } from "@ton/ton";
+import { WalletContractV5R1, TonClient, toNano, fromNano } from "@ton/ton";
 import { Address } from "@ton/core";
 import { getCachedHttpEndpoint } from "../../../ton/endpoint.js";
 import { Factory, Asset, PoolType, ReadinessStatus, JettonRoot, VaultJetton } from "@dedust/sdk";
@@ -158,6 +158,16 @@ export const dedustSwapExecutor: ToolExecutor<DedustSwapParams> = async (
     const sender = walletContract.sender(keyPair.secretKey);
 
     if (isTonInput) {
+      // Check balance for TON swaps
+      const balance = await tonClient.getBalance(Address.parse(walletData.address));
+      const requiredAmount = amountIn + toNano(DEDUST_GAS.SWAP_TON_TO_JETTON);
+      if (balance < requiredAmount) {
+        return {
+          success: false,
+          error: `Insufficient balance. Have ${fromNano(balance)} TON, need ~${fromNano(requiredAmount)} TON (including gas).`,
+        };
+      }
+
       // TON -> Jetton swap using SDK's sendSwap method
       const tonVault = tonClient.open(await factory.getNativeVault());
 

@@ -35,6 +35,15 @@ export const telegramKickUserExecutor: ToolExecutor<KickUserParams> = async (
   try {
     const { chat_id, user_id } = params;
 
+    // Only bot admins can use moderation tools
+    const adminIds = context.config?.telegram?.admin_ids ?? [];
+    if (!adminIds.includes(Number(context.senderId))) {
+      return {
+        success: false,
+        error: "⛔ Only bot admins can use moderation tools.",
+      };
+    }
+
     const client = context.bridge.getClient().getClient();
 
     // Kick = ban then immediately unban
@@ -127,6 +136,15 @@ export const telegramBanUserExecutor: ToolExecutor<BanUserParams> = async (
   try {
     const { chat_id, user_id, delete_messages = false, duration_hours } = params;
 
+    // Only bot admins can use moderation tools
+    const adminIds = context.config?.telegram?.admin_ids ?? [];
+    if (!adminIds.includes(Number(context.senderId))) {
+      return {
+        success: false,
+        error: "⛔ Only bot admins can use moderation tools.",
+      };
+    }
+
     const client = context.bridge.getClient().getClient();
 
     // Calculate until_date (0 = permanent)
@@ -215,6 +233,15 @@ export const telegramUnbanUserExecutor: ToolExecutor<UnbanUserParams> = async (
 ): Promise<ToolResult> => {
   try {
     const { chat_id, user_id } = params;
+
+    // Only bot admins can use moderation tools
+    const adminIds = context.config?.telegram?.admin_ids ?? [];
+    if (!adminIds.includes(Number(context.senderId))) {
+      return {
+        success: false,
+        error: "⛔ Only bot admins can use moderation tools.",
+      };
+    }
 
     const client = context.bridge.getClient().getClient();
 

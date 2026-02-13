@@ -97,7 +97,14 @@ export function parseHtml(html: string): ParsedMessage {
         let emojiId: string | undefined;
         if (tagName === "a") {
           const hrefMatch = attrs.match(/href="([^"]+)"/);
-          if (hrefMatch) url = unescapeHtml(hrefMatch[1]);
+          if (hrefMatch) {
+            const rawUrl = unescapeHtml(hrefMatch[1]);
+            if (/^(javascript|data|vbscript|file):/i.test(rawUrl.trim())) {
+              url = "#";
+            } else {
+              url = rawUrl;
+            }
+          }
         } else if (tagName === "tg-emoji") {
           const eidMatch = attrs.match(/emoji-id="([^"]+)"/);
           if (eidMatch) emojiId = eidMatch[1];

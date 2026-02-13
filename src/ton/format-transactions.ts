@@ -89,6 +89,8 @@ export function parseMessageBody(
 /** Formatted transaction object */
 export interface FormattedTransaction {
   type: TransactionType;
+  /** Blockchain transaction hash (hex) */
+  hash: string;
   amount?: string;
   from?: string;
   to?: string;
@@ -123,13 +125,22 @@ export function formatTransactions(transactions: Transaction[]): FormattedTransa
 
       // Gas refund (excesses)
       if (parsed?.op === OP_CODES.EXCESSES) {
-        return { type: "gas_refund", amount: `${tonAmount} TON`, from, date, secondsAgo, explorer };
+        return {
+          type: "gas_refund",
+          hash,
+          amount: `${tonAmount} TON`,
+          from,
+          date,
+          secondsAgo,
+          explorer,
+        };
       }
 
       // Jetton received
       if (parsed?.op === OP_CODES.JETTON_TRANSFER_NOTIFICATION) {
         return {
           type: "jetton_received",
+          hash,
           jettonAmount: parsed.jettonAmount,
           jettonWallet: from,
           date,
@@ -140,17 +151,26 @@ export function formatTransactions(transactions: Transaction[]): FormattedTransa
 
       // NFT received
       if (parsed?.op === OP_CODES.NFT_OWNERSHIP_ASSIGNED) {
-        return { type: "nft_received", nftAddress: from, date, secondsAgo, explorer };
+        return { type: "nft_received", hash, nftAddress: from, date, secondsAgo, explorer };
       }
 
       // Bounced message
       if (inMsg.info.bounced || parsed?.op === OP_CODES.BOUNCE) {
-        return { type: "bounce", amount: `${tonAmount} TON`, from, date, secondsAgo, explorer };
+        return {
+          type: "bounce",
+          hash,
+          amount: `${tonAmount} TON`,
+          from,
+          date,
+          secondsAgo,
+          explorer,
+        };
       }
 
       // Regular TON received
       return {
         type: "ton_received",
+        hash,
         amount: `${tonAmount} TON`,
         from,
         comment: parsed?.comment || null,
@@ -176,6 +196,7 @@ export function formatTransactions(transactions: Transaction[]): FormattedTransa
         if (parsed?.op === OP_CODES.JETTON_TRANSFER) {
           results.push({
             type: "jetton_sent",
+            hash,
             jettonAmount: parsed.jettonAmount,
             jettonWallet: to,
             date,
@@ -187,13 +208,14 @@ export function formatTransactions(transactions: Transaction[]): FormattedTransa
 
         // NFT transfer
         if (parsed?.op === OP_CODES.NFT_TRANSFER) {
-          results.push({ type: "nft_sent", nftAddress: to, date, secondsAgo, explorer });
+          results.push({ type: "nft_sent", hash, nftAddress: to, date, secondsAgo, explorer });
           continue;
         }
 
         // Regular TON sent
         results.push({
           type: "ton_sent",
+          hash,
           amount: `${tonAmount} TON`,
           to,
           comment: parsed?.comment || null,
@@ -205,11 +227,11 @@ export function formatTransactions(transactions: Transaction[]): FormattedTransa
 
       if (results.length === 1) return results[0];
       if (results.length > 1) {
-        return { type: "multi_send", transfers: results, date, secondsAgo, explorer };
+        return { type: "multi_send", hash, transfers: results, date, secondsAgo, explorer };
       }
     }
 
     // Unknown/other
-    return { type: "contract_call", date, secondsAgo, explorer };
+    return { type: "contract_call", hash, date, secondsAgo, explorer };
   });
 }

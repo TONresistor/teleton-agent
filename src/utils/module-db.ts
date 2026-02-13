@@ -4,7 +4,7 @@
  */
 
 import Database from "better-sqlite3";
-import { existsSync, mkdirSync } from "fs";
+import { existsSync, mkdirSync, chmodSync } from "fs";
 import { dirname, join } from "path";
 import type { ToolExecutor } from "../agent/tools/types.js";
 import { TELETON_ROOT } from "../workspace/paths.js";
@@ -70,6 +70,9 @@ export function openModuleDb(path: string): Database.Database {
     mkdirSync(dir, { recursive: true });
   }
   const db = new Database(path);
+  try {
+    chmodSync(path, 0o600);
+  } catch {}
   db.pragma("journal_mode = WAL");
   return db;
 }

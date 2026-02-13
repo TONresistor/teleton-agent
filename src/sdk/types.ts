@@ -44,6 +44,8 @@ export interface TonSendResult {
 export interface TonTransaction {
   /** Transaction type */
   type: TransactionType;
+  /** Blockchain transaction hash (hex) */
+  hash: string;
   /** Amount string (e.g. "1.5 TON") */
   amount?: string;
   /** Sender address */
@@ -86,8 +88,8 @@ export interface SDKVerifyPaymentParams {
 export interface SDKPaymentVerification {
   /** Whether a valid payment was found */
   verified: boolean;
-  /** Composite key used for replay protection */
-  compositeKey?: string;
+  /** Blockchain transaction hash used for replay protection */
+  txHash?: string;
   /** Verified amount in TON */
   amount?: number;
   /** Sender's wallet address (for auto-payout) */

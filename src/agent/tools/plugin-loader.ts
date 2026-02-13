@@ -187,22 +187,31 @@ function adaptPlugin(
         const validDefs = validateToolDefs(toolDefs, pluginName);
 
         // Adapt to ToolEntry format
-        return validDefs.map((def) => ({
-          tool: {
-            name: def.name,
-            description: def.description,
-            parameters: def.parameters || {
-              type: "object" as const,
-              properties: {},
-            },
-            ...(def.category ? { category: def.category } : {}),
-          } as Tool,
-          executor:
-            hasMigrate && pluginDb
-              ? withPluginDb(def.execute as ToolExecutor)
-              : (def.execute as ToolExecutor),
-          scope: def.scope as ToolScope | undefined,
-        }));
+        return validDefs.map((def) => {
+          // Wrap plugin executor to sanitize config before passing context
+          const rawExecutor = def.execute as ToolExecutor;
+          const sandboxedExecutor: ToolExecutor = (params, context) => {
+            const sanitizedContext = {
+              ...context,
+              config: context.config ? sanitizeConfigForPlugins(context.config) : undefined,
+            } as typeof context;
+            return rawExecutor(params, sanitizedContext);
+          };
+
+          return {
+            tool: {
+              name: def.name,
+              description: def.description,
+              parameters: def.parameters || {
+                type: "object" as const,
+                properties: {},
+              },
+              ...(def.category ? { category: def.category } : {}),
+            } as Tool,
+            executor: hasMigrate && pluginDb ? withPluginDb(sandboxedExecutor) : sandboxedExecutor,
+            scope: def.scope as ToolScope | undefined,
+          };
+        });
       } catch (err) {
         console.error(
           `❌ [${pluginName}] tools() failed:`,

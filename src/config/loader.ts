@@ -1,4 +1,4 @@
-import { readFileSync, existsSync, writeFileSync, mkdirSync } from "fs";
+import { readFileSync, existsSync, writeFileSync, mkdirSync, chmodSync } from "fs";
 import { parse, stringify } from "yaml";
 import { homedir } from "os";
 import { dirname, join } from "path";
@@ -75,11 +75,12 @@ export function saveConfig(config: Config, configPath: string = DEFAULT_CONFIG_P
   const dir = dirname(fullPath);
 
   if (!existsSync(dir)) {
-    mkdirSync(dir, { recursive: true });
+    mkdirSync(dir, { recursive: true, mode: 0o700 });
   }
 
   config.meta.last_modified_at = new Date().toISOString();
   writeFileSync(fullPath, stringify(config), "utf-8");
+  chmodSync(fullPath, 0o600);
 }
 
 export function configExists(configPath: string = DEFAULT_CONFIG_PATH): boolean {

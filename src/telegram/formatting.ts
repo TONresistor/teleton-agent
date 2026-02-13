@@ -11,6 +11,15 @@ function escapeHtml(text: string): string {
 }
 
 /**
+ * Sanitize URL to prevent javascript:/data:/vbscript:/file: injection
+ */
+function sanitizeUrl(url: string): string {
+  const trimmed = url.trim().toLowerCase();
+  if (/^(javascript|data|vbscript|file):/i.test(trimmed)) return "#";
+  return url;
+}
+
+/**
  * Convert standard Markdown to Telegram HTML format
  *
  * Supports:
@@ -70,7 +79,10 @@ export function markdownToTelegramHtml(markdown: string): string {
       .replace(/~~([^~]+)~~/g, "<s>$1</s>")
       .replace(/(?<!\*)\*([^*]+)\*(?!\*)/g, "<i>$1</i>")
       .replace(/(?<!_)_([^_]+)_(?!_)/g, "<i>$1</i>")
-      .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>');
+      .replace(
+        /\[([^\]]+)\]\(([^)]+)\)/g,
+        (_, text, url) => `<a href="${sanitizeUrl(url)}">${text}</a>`
+      );
 
     const tag = lineCount >= 15 ? "<blockquote expandable>" : "<blockquote>";
     blockquotes.push(`${tag}${content}</blockquote>`);
@@ -99,7 +111,10 @@ export function markdownToTelegramHtml(markdown: string): string {
       .replace(/~~([^~]+)~~/g, "<s>$1</s>")
       .replace(/(?<!\*)\*([^*]+)\*(?!\*)/g, "<i>$1</i>")
       .replace(/(?<!_)_([^_]+)_(?!_)/g, "<i>$1</i>")
-      .replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>');
+      .replace(
+        /\[([^\]]+)\]\(([^)]+)\)/g,
+        (_, text, url) => `<a href="${sanitizeUrl(url)}">${text}</a>`
+      );
 
     const tag = lineCount >= 15 ? "<blockquote expandable>" : "<blockquote>";
     blockquotes.push(`${tag}${content}</blockquote>`);
@@ -125,7 +140,10 @@ export function markdownToTelegramHtml(markdown: string): string {
   html = html.replace(/(?<!_)_([^_]+)_(?!_)/g, "<i>$1</i>");
 
   // Links: [text](url) → <a href="url">text</a>
-  html = html.replace(/\[([^\]]+)\]\(([^)]+)\)/g, '<a href="$2">$1</a>');
+  html = html.replace(
+    /\[([^\]]+)\]\(([^)]+)\)/g,
+    (_, text, url) => `<a href="${sanitizeUrl(url)}">${text}</a>`
+  );
 
   // Restore blockquotes
   blockquotes.forEach((quote, index) => {
