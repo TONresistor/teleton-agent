@@ -94,13 +94,13 @@ export const dealVerifyPaymentExecutor: ToolExecutor<DealVerifyPaymentParams> = 
       if (!botWallet) {
         return {
           success: false,
-          error: "Casino wallet not initialized. Please run wallet setup first.",
+          error: "Wallet not initialized. Please run wallet setup first.",
         };
       }
 
       console.log(`💰 [Deal] Verifying TON payment for deal #${params.dealId}...`);
 
-      // Reuse casino payment verifier with dealId as memo
+      // Verify TON payment with dealId as memo
       const verification = await verifyPayment(context.db, {
         botWalletAddress: botWallet,
         betAmount: deal.user_gives_ton_amount,

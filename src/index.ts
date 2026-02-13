@@ -510,7 +510,7 @@ ${blue}  ┌──────────────────────�
       await this.debouncer.flushAll();
     }
 
-    // Stop module background jobs (deals bot/poller/expiry, market service, casino, etc.)
+    // Stop module background jobs (deals bot/poller/expiry, market service, etc.)
     for (const mod of this.modules) {
       await mod.stop?.();
     }

@@ -91,7 +91,7 @@ export interface ToolEntry {
 
 /**
  * Built-in plugin module interface.
- * Modules are self-contained feature packs (casino, deals, etc.)
+ * Modules are self-contained feature packs (deals, market, etc.)
  * that register their own tools, config, and migrations.
  */
 export interface PluginModule {

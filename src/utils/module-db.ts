@@ -1,6 +1,6 @@
 /**
  * Shared utilities for module-scoped SQLite databases.
- * Eliminates schema duplication between casino/db.ts, deals/db.ts, etc.
+ * Eliminates schema duplication between module database files (deals/db.ts, etc.)
  */
 
 import Database from "better-sqlite3";
