@@ -89,13 +89,9 @@ export class MemoryDatabase {
     try {
       // Load sqlite-vec using the npm package
       sqliteVec.load(this.db);
-      console.log("✅ sqlite-vec loaded successfully");
 
       // Verify it's working
-      const { vec_version } = this.db.prepare("SELECT vec_version() as vec_version").get() as {
-        vec_version: string;
-      };
-      console.log(`   Version: ${vec_version}`);
+      this.db.prepare("SELECT vec_version() as vec_version").get();
 
       // Create vector tables
       const dims = this.config.vectorDimensions ?? 512; // voyage-3-lite default
