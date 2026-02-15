@@ -8,24 +8,23 @@ import { Plugins } from './pages/Plugins';
 import { Soul } from './pages/Soul';
 import { Memory } from './pages/Memory';
 import { Logs } from './pages/Logs';
-import { getAuthToken, setAuthToken } from './lib/api';
+import { Workspace } from './pages/Workspace';
+import { Tasks } from './pages/Tasks';
+import { checkAuth, login } from './lib/api';
 import { logStore } from './lib/log-store';
 
 function App() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [loading, setLoading] = useState(true);
   const [tokenInput, setTokenInput] = useState('');
+  const [loginError, setLoginError] = useState('');
 
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search);
-    const urlToken = params.get('token');
-
-    if (urlToken) {
-      setAuthToken(urlToken);
-      setIsAuthenticated(true);
-      window.history.replaceState({}, '', window.location.pathname);
-    } else if (getAuthToken()) {
-      setIsAuthenticated(true);
-    }
+    // Check if we already have a valid session cookie
+    checkAuth().then((valid) => {
+      setIsAuthenticated(valid);
+      setLoading(false);
+    });
   }, []);
 
   useEffect(() => {
@@ -34,12 +33,28 @@ function App() {
     }
   }, [isAuthenticated]);
 
-  const handleLogin = () => {
-    if (tokenInput.trim()) {
-      setAuthToken(tokenInput.trim());
+  const handleLogin = async () => {
+    const token = tokenInput.trim();
+    if (!token) return;
+
+    setLoginError('');
+    const success = await login(token);
+    if (success) {
       setIsAuthenticated(true);
+    } else {
+      setLoginError('Invalid token');
     }
   };
+
+  if (loading) {
+    return (
+      <div className="login-container">
+        <div className="login-card">
+          <p>Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   if (!isAuthenticated) {
     return (
@@ -54,10 +69,15 @@ function App() {
               value={tokenInput}
               onChange={(e) => setTokenInput(e.target.value)}
               onKeyDown={(e) => e.key === 'Enter' && handleLogin()}
-              placeholder="Paste token from server logs..."
+              placeholder="Paste token from config..."
               style={{ width: '100%' }}
             />
           </div>
+          {loginError && (
+            <div className="alert error" style={{ marginBottom: '1rem' }}>
+              {loginError}
+            </div>
+          )}
           <button onClick={handleLogin} style={{ width: '100%' }}>
             Sign In
           </button>
@@ -77,6 +97,8 @@ function App() {
             <Route path="soul" element={<Soul />} />
             <Route path="memory" element={<Memory />} />
             <Route path="logs" element={<Logs />} />
+            <Route path="workspace" element={<Workspace />} />
+            <Route path="tasks" element={<Tasks />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
         </Routes>

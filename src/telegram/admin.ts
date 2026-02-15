@@ -8,6 +8,7 @@ import { loadTemplate } from "../workspace/manager.js";
 import { isVerbose, setVerbose } from "../utils/logger.js";
 import type { ModulePermissions, ModuleLevel } from "../agent/tools/module-permissions.js";
 import type { ToolRegistry } from "../agent/tools/registry.js";
+import { writePluginSecret, deletePluginSecret, listPluginSecretKeys } from "../sdk/secrets.js";
 
 export interface AdminCommand {
   command: string;
@@ -106,6 +107,8 @@ export class AdminHandler {
         return this.handleVerboseCommand();
       case "modules":
         return this.handleModulesCommand(command, isGroup ?? false);
+      case "plugin":
+        return this.handlePluginCommand(command);
       case "help":
         return this.handleHelpCommand();
       case "ping":
@@ -423,6 +426,60 @@ export class AdminHandler {
     return "✅ All modules reset to **open**";
   }
 
+  private handlePluginCommand(command: AdminCommand): string {
+    const sub = command.args[0]?.toLowerCase();
+
+    if (!sub) {
+      return (
+        "🔌 **Plugin Secrets**\n\n" +
+        "**/plugin set** <name> <key> <value>\n" +
+        "Set a secret for a plugin\n\n" +
+        "**/plugin unset** <name> <key>\n" +
+        "Remove a secret\n\n" +
+        "**/plugin keys** <name>\n" +
+        "List configured secret keys"
+      );
+    }
+
+    switch (sub) {
+      case "set": {
+        const [, pluginName, key, ...valueParts] = command.args;
+        if (!pluginName || !key || valueParts.length === 0) {
+          return "❌ Usage: /plugin set <name> <key> <value>";
+        }
+        const value = valueParts.join(" ");
+        writePluginSecret(pluginName, key, value);
+        return `✅ Secret **${key}** saved for **${pluginName}**\n\n⚠️ Restart agent or reload plugin for changes to take effect.`;
+      }
+
+      case "unset": {
+        const [, pluginName, key] = command.args;
+        if (!pluginName || !key) {
+          return "❌ Usage: /plugin unset <name> <key>";
+        }
+        const deleted = deletePluginSecret(pluginName, key);
+        return deleted
+          ? `✅ Secret **${key}** removed from **${pluginName}**`
+          : `⚠️ Secret **${key}** not found for **${pluginName}**`;
+      }
+
+      case "keys": {
+        const [, pluginName] = command.args;
+        if (!pluginName) {
+          return "❌ Usage: /plugin keys <name>";
+        }
+        const keys = listPluginSecretKeys(pluginName);
+        if (keys.length === 0) {
+          return `🔌 **${pluginName}** — no secrets configured`;
+        }
+        return `🔌 **${pluginName}** secrets:\n${keys.map((k) => `  • ${k}`).join("\n")}`;
+      }
+
+      default:
+        return `❌ Unknown subcommand: "${sub}"\n\nUsage: /plugin set|unset|keys <name> ...`;
+    }
+  }
+
   private handleHelpCommand(): string {
     return `🤖 **Teleton Admin Commands**
 
@@ -443,6 +500,9 @@ View or change trading thresholds
 
 **/modules** [set|info|reset]
 Manage per-group module permissions
+
+**/plugin** set|unset|keys <name> ...
+Manage plugin secrets (API keys, tokens)
 
 **/wallet**
 Check TON wallet balance

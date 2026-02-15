@@ -10,6 +10,8 @@ import type {
   PluginLogger,
 } from "@teleton-agent/sdk";
 import { PluginSDKError } from "@teleton-agent/sdk";
+import { createTelegramMessagesSDK } from "./telegram-messages.js";
+import { createTelegramSocialSDK } from "./telegram-social.js";
 
 export function createTelegramSDK(bridge: TelegramBridge, log: PluginLogger): TelegramSDK {
   function requireBridge(): void {
@@ -147,9 +149,9 @@ export function createTelegramSDK(bridge: TelegramBridge, log: PluginLogger): Te
         if (!me) return null;
         return {
           id: Number(me.id),
-          username: (me as any).username,
-          firstName: (me as any).firstName,
-          isBot: (me as any).bot ?? false,
+          username: me.username,
+          firstName: me.firstName,
+          isBot: me.isBot,
         };
       } catch {
         return null;
@@ -159,5 +161,18 @@ export function createTelegramSDK(bridge: TelegramBridge, log: PluginLogger): Te
     isAvailable(): boolean {
       return bridge.isAvailable();
     },
+
+    getRawClient(): unknown | null {
+      if (!bridge.isAvailable()) return null;
+      try {
+        return bridge.getClient().getClient();
+      } catch {
+        return null;
+      }
+    },
+
+    // Spread extended methods from sub-modules
+    ...createTelegramMessagesSDK(bridge, log),
+    ...createTelegramSocialSDK(bridge, log),
   };
 }

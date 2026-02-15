@@ -48,7 +48,7 @@
 | **RAG + Hybrid Search** | Local embeddings with FTS5 keyword + sqlite-vec semantic search |
 | **Auto-Compaction** | AI-summarized context management prevents overflow, preserves key information |
 | **Observation Masking** | Compresses old tool results to save ~90% context window |
-| **Plugin SDK** | Namespaced SDK (`sdk.ton`, `sdk.telegram`) with isolated databases and lifecycle hooks |
+| **Plugin SDK** | Namespaced SDK (`sdk.ton`, `sdk.telegram`, `sdk.secrets`, `sdk.storage`) with 53 methods, isolated databases and lifecycle hooks |
 | **Vision Analysis** | Image understanding via multimodal LLM |
 | **Voice Synthesis** | Text-to-speech for voice messages |
 | **Scheduled Tasks** | Time-based task execution with dependency resolution |
@@ -473,12 +473,23 @@ When `tools` is a function, the SDK provides namespaced access to core services:
 
 | Namespace | Methods |
 |-----------|---------|
-| `sdk.ton` | `getAddress()`, `getBalance()`, `getPrice()`, `sendTON(to, amount, comment?)`, `getTransactions()` |
-| `sdk.telegram` | `sendMessage()`, `editMessage()`, `sendDice()`, `sendReaction()`, `getMessages()`, `getMe()` |
-| `sdk.db` | SQLite database (available if `migrate()` is exported) |
+| `sdk.ton` | **Wallet**: `getAddress()`, `getBalance()`, `getPrice()`, `sendTON()`, `getTransactions()`, `verifyPayment()` |
+| | **Jettons**: `getJettonBalances()`, `getJettonInfo()`, `sendJetton()`, `getJettonWalletAddress()` |
+| | **NFT**: `getNftItems()`, `getNftInfo()` |
+| | **Utils**: `toNano()`, `fromNano()`, `validateAddress()` |
+| `sdk.telegram` | **Messages**: `sendMessage()`, `editMessage()`, `deleteMessage()`, `forwardMessage()`, `pinMessage()`, `searchMessages()`, `scheduleMessage()`, `getReplies()` |
+| | **Media**: `sendPhoto()`, `sendVideo()`, `sendVoice()`, `sendFile()`, `sendGif()`, `sendSticker()`, `downloadMedia()` |
+| | **Chat & Users**: `getChatInfo()`, `getUserInfo()`, `resolveUsername()`, `getParticipants()` |
+| | **Interactive**: `sendDice()`, `sendReaction()`, `createPoll()`, `createQuiz()` |
+| | **Moderation**: `banUser()`, `unbanUser()`, `muteUser()` |
+| | **Stars & Gifts**: `getStarsBalance()`, `sendGift()`, `getAvailableGifts()`, `getMyGifts()`, `getResaleGifts()`, `buyResaleGift()` |
+| | **Advanced**: `getMe()`, `isAvailable()`, `getRawClient()`, `setTyping()`, `sendStory()` |
+| `sdk.secrets` | `get()`, `require()`, `has()` — Multi-source secret resolution (env -> store -> config) |
+| `sdk.storage` | `get()`, `set()`, `delete()`, `has()`, `clear()` — KV store with TTL support |
+| `sdk.db` | Raw `better-sqlite3` database for custom SQL |
 | `sdk.config` | Sanitized app config (no API keys exposed) |
 | `sdk.pluginConfig` | Plugin-specific config from `config.yaml` `plugins:` section |
-| `sdk.log` | Prefixed logger (`info`, `warn`, `error`, `debug`) |
+| `sdk.log` | `info()`, `warn()`, `error()`, `debug()` — Prefixed logger |
 
 Plugin config in `config.yaml`:
 ```yaml

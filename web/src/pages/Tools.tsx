@@ -1,19 +1,6 @@
 import { useEffect, useState } from 'react';
-import { api } from '../lib/api';
-
-interface Tool {
-  name: string;
-  description: string;
-  scope: 'always' | 'dm-only' | 'group-only' | 'admin-only';
-  enabled: boolean;
-}
-
-interface Module {
-  name: string;
-  toolCount: number;
-  tools: Tool[];
-  isPlugin: boolean;
-}
+import { api, ToolInfo, ModuleInfo } from '../lib/api';
+import { ToolRow } from '../components/ToolRow';
 
 function ModuleCard({
   module,
@@ -21,10 +8,10 @@ function ModuleCard({
   onToggle,
   onScope,
 }: {
-  module: Module;
+  module: ModuleInfo;
   updating: string | null;
   onToggle: (name: string, enabled: boolean) => void;
-  onScope: (name: string, scope: Tool['scope']) => void;
+  onScope: (name: string, scope: ToolInfo['scope']) => void;
 }) {
   return (
     <div className="card">
@@ -34,48 +21,7 @@ function ModuleCard({
       </div>
       <div style={{ display: 'grid', gap: '6px' }}>
         {module.tools.map((tool) => (
-          <div
-            key={tool.name}
-            className="tool-row"
-            style={{
-              opacity: tool.enabled ? 1 : 0.5,
-              display: 'grid',
-              gridTemplateColumns: '1fr auto auto',
-              gap: '10px',
-              alignItems: 'center',
-            }}
-          >
-            <div style={{ minWidth: 0 }}>
-              <div className="tool-name">{tool.name}</div>
-              <div className="tool-desc">{tool.description}</div>
-            </div>
-
-            {/* Scope segmented control */}
-            <div className={`scope-seg${!tool.enabled || updating === tool.name ? ' disabled' : ''}`}>
-              {(['always', 'dm-only', 'group-only', 'admin-only'] as const).map((s) => (
-                <button
-                  key={s}
-                  className={tool.scope === s ? 'active' : ''}
-                  disabled={!tool.enabled || updating === tool.name}
-                  onClick={() => onScope(tool.name, s)}
-                >
-                  {s === 'always' ? 'All' : s === 'dm-only' ? 'DM' : s === 'group-only' ? 'Group' : 'Admin'}
-                </button>
-              ))}
-            </div>
-
-            {/* Enable/Disable toggle */}
-            <label className="toggle">
-              <input
-                type="checkbox"
-                checked={tool.enabled}
-                onChange={() => onToggle(tool.name, tool.enabled)}
-                disabled={updating === tool.name}
-              />
-              <span className="toggle-track" />
-              <span className="toggle-thumb" />
-            </label>
-          </div>
+          <ToolRow key={tool.name} tool={tool} updating={updating} onToggle={onToggle} onScope={onScope} />
         ))}
       </div>
     </div>
@@ -83,7 +29,7 @@ function ModuleCard({
 }
 
 export function Tools() {
-  const [modules, setModules] = useState<Module[]>([]);
+  const [modules, setModules] = useState<ModuleInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [updating, setUpdating] = useState<string | null>(null);
@@ -118,7 +64,7 @@ export function Tools() {
     }
   };
 
-  const updateScope = async (toolName: string, newScope: Tool['scope']) => {
+  const updateScope = async (toolName: string, newScope: ToolInfo['scope']) => {
     setUpdating(toolName);
     try {
       await api.updateToolConfig(toolName, { scope: newScope });
@@ -131,7 +77,6 @@ export function Tools() {
   };
 
   if (loading) return <div className="loading">Loading...</div>;
-  if (error) return <div className="alert error">{error}</div>;
 
   const builtIn = modules.filter((m) => !m.isPlugin);
   const builtInCount = builtIn.reduce((sum, m) => sum + m.toolCount, 0);
@@ -142,6 +87,18 @@ export function Tools() {
         <h1>Tools</h1>
         <p>Configure built-in tool availability and policies ({builtInCount} tools)</p>
       </div>
+
+      {error && (
+        <div className="alert error" style={{ marginBottom: '14px' }}>
+          {error}
+          <button onClick={() => setError(null)} style={{ marginLeft: '10px', padding: '2px 8px', fontSize: '12px' }}>
+            Dismiss
+          </button>
+          <button onClick={() => { setError(null); loadTools(); }} style={{ marginLeft: '6px', padding: '2px 8px', fontSize: '12px' }}>
+            Retry
+          </button>
+        </div>
+      )}
 
       {builtIn.map((module) => (
         <ModuleCard

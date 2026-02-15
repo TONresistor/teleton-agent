@@ -41,6 +41,10 @@ export type {
   TonSendResult,
   TonTransaction,
   TransactionType,
+  JettonBalance,
+  JettonInfo,
+  JettonSendResult,
+  NftItem,
   // Payment
   SDKVerifyPaymentParams,
   SDKPaymentVerification,
@@ -51,8 +55,21 @@ export type {
   DiceResult,
   TelegramUser,
   SimpleMessage,
+  ChatInfo,
+  UserInfo,
+  ResolvedPeer,
+  MediaSendOptions,
+  PollOptions,
+  StarGift,
+  ReceivedGift,
+  StartContext,
   // Logger
   PluginLogger,
+  // Secrets
+  SecretsSDK,
+  SecretDeclaration,
+  // Storage
+  StorageSDK,
   // Plugin definitions
   SimpleToolDef,
   PluginManifest,

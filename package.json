@@ -51,6 +51,9 @@
     "lint:fix": "eslint src --ext .ts --fix",
     "format": "prettier --write \"src/**/*.ts\"",
     "format:check": "prettier --check \"src/**/*.ts\"",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
     "typecheck": "tsc --noEmit",
     "prepublishOnly": "npm run build",
     "prepare": "husky"
@@ -87,13 +90,15 @@
     "@types/node": "^22.0.0",
     "@typescript-eslint/eslint-plugin": "^8.54.0",
     "@typescript-eslint/parser": "^8.54.0",
+    "@vitest/coverage-v8": "^4.0.18",
     "eslint": "^9.39.2",
     "husky": "^9.1.7",
     "lint-staged": "^16.2.7",
     "prettier": "^3.8.1",
     "tsup": "^8.5.1",
     "tsx": "^4.19.0",
-    "typescript": "^5.7.0"
+    "typescript": "^5.7.0",
+    "vitest": "^4.0.18"
   },
   "optionalDependencies": {
     "edge-tts": "^1.0.1"
@@ -103,6 +108,10 @@
   },
   "lint-staged": {
     "src/**/*.ts": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "packages/sdk/src/**/*.ts": [
       "eslint --fix",
       "prettier --write"
     ]

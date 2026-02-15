@@ -346,6 +346,34 @@ a:hover {
   border: 1px solid rgba(255, 69, 58, 0.2);
 }
 
+/* ---- File rows (table rows in Workspace, Tasks) ---- */
+
+.file-row {
+  transition: background-color 0.15s ease;
+}
+
+.file-row:hover {
+  background-color: rgba(255, 255, 255, 0.03);
+}
+
+/* ---- Icon buttons (action buttons in tables) ---- */
+
+.icon-button {
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 4px 6px;
+  font-size: 15px;
+  opacity: 0.5;
+  filter: grayscale(1);
+  transition: opacity 0.15s, filter 0.15s;
+}
+
+.icon-button:hover {
+  opacity: 1;
+  filter: none;
+}
+
 /* ---- Log entries ---- */
 
 .log-entry {

@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
-import { api } from '../lib/api';
+import { api, StatusData, MemoryStats } from '../lib/api';
 
 export function Dashboard() {
-  const [status, setStatus] = useState<any>(null);
-  const [stats, setStats] = useState<any>(null);
+  const [status, setStatus] = useState<StatusData | null>(null);
+  const [stats, setStats] = useState<MemoryStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -22,6 +22,7 @@ export function Dashboard() {
 
   if (loading) return <div className="loading">Loading...</div>;
   if (error) return <div className="alert error">{error}</div>;
+  if (!status || !stats) return <div className="alert error">Failed to load dashboard data</div>;
 
   return (
     <div>

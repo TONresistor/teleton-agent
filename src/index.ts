@@ -123,18 +123,16 @@ ${blue}  ┌──────────────────────�
   └────────────────────────────────────────────────────────────────── DEV: ZKPROOF.T.ME ──┘${reset}
 `);
 
-    // Log loaded modules
-    for (const mod of this.modules) {
-      const toolCount = mod.tools(this.config).length;
-      if (toolCount > 0) {
-        console.log(`🔌 Module "${mod.name}" v${mod.version}: ${toolCount} tools`);
-      }
-    }
+    // Load modules
+    const moduleNames = this.modules
+      .filter((m) => m.tools(this.config).length > 0)
+      .map((m) => m.name);
 
     // Load enhanced plugins from ~/.teleton/plugins/
     const builtinNames = this.modules.map((m) => m.name);
     const externalModules = await loadEnhancedPlugins(this.config, builtinNames, this.sdkDeps);
     let pluginToolCount = 0;
+    const pluginNames: string[] = [];
     for (const mod of externalModules) {
       try {
         mod.configure?.(this.config);
@@ -142,14 +140,9 @@ ${blue}  ┌──────────────────────�
         const tools = mod.tools(this.config);
         if (tools.length > 0) {
           pluginToolCount += this.toolRegistry.registerPluginTools(mod.name, tools);
+          pluginNames.push(mod.name);
         }
         this.modules.push(mod);
-        const toolCount = tools.length;
-        if (toolCount > 0) {
-          console.log(
-            `🔌 Plugin "${mod.name}" v${mod.version}: ${toolCount} tool${toolCount > 1 ? "s" : ""}`
-          );
-        }
       } catch (error) {
         console.error(
           `❌ Plugin "${mod.name}" failed to load:`,
@@ -167,8 +160,9 @@ ${blue}  ┌──────────────────────�
     // Provider info and tool limit check
     const provider = (this.config.agent.provider || "anthropic") as SupportedProvider;
     const providerMeta = getProviderMetadata(provider);
+    const allNames = [...moduleNames, ...pluginNames];
     console.log(
-      `✅ ${this.toolCount} tools loaded${pluginToolCount > 0 ? ` (${pluginToolCount} from plugins)` : ""}`
+      `🔌 ${this.toolCount} tools loaded (${allNames.join(", ")})${pluginToolCount > 0 ? ` — ${pluginToolCount} from plugins` : ""}`
     );
     if (providerMeta.toolLimit !== null && this.toolCount > providerMeta.toolLimit) {
       console.warn(
@@ -218,8 +212,22 @@ ${blue}  ┌──────────────────────�
       db: moduleDb,
       config: this.config,
     };
-    for (const mod of this.modules) {
-      await mod.start?.(pluginContext);
+    const startedModules: typeof this.modules = [];
+    try {
+      for (const mod of this.modules) {
+        await mod.start?.(pluginContext);
+        startedModules.push(mod);
+      }
+    } catch (error) {
+      console.error("❌ Module start failed, cleaning up started modules:", error);
+      for (const mod of startedModules.reverse()) {
+        try {
+          await mod.stop?.();
+        } catch (e) {
+          console.error(`⚠️ Module "${mod.name}" cleanup failed:`, e);
+        }
+      }
+      throw error;
     }
 
     // Start plugin hot-reload watcher (dev mode)
@@ -264,7 +272,9 @@ ${blue}  ┌──────────────────────�
           bridge: this.bridge,
           memory: this.memory,
           toolRegistry: this.toolRegistry,
-          plugins: this.modules.map((m) => ({ name: m.name, version: m.version ?? "0.0.0" })),
+          plugins: this.modules
+            .filter((m) => this.toolRegistry.isPluginModule(m.name))
+            .map((m) => ({ name: m.name, version: m.version ?? "0.0.0" })),
           config: this.config.webui,
         });
         await this.webuiServer.start();
@@ -432,6 +442,12 @@ ${blue}  ┌──────────────────────�
           text: `⚠️ Task ${taskId} not found. It may have been deleted.`,
           replyToId: message.id,
         });
+        return;
+      }
+
+      // Skip cancelled tasks (e.g. cancelled via WebUI or admin)
+      if (task.status === "cancelled" || task.status === "done" || task.status === "failed") {
+        console.log(`⏭️ Task ${taskId} already ${task.status}, skipping`);
         return;
       }
 

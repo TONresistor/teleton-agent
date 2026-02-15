@@ -1,11 +1,12 @@
 import { useState } from 'react';
-import { api } from '../lib/api';
+import { api, SearchResult } from '../lib/api';
 
 export function Memory() {
   const [query, setQuery] = useState('');
-  const [results, setResults] = useState<any[]>([]);
+  const [results, setResults] = useState<SearchResult[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [hasSearched, setHasSearched] = useState(false);
 
   const search = async () => {
     if (!query.trim()) return;
@@ -15,6 +16,7 @@ export function Memory() {
     try {
       const res = await api.searchKnowledge(query);
       setResults(res.data);
+      setHasSearched(true);
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -49,13 +51,17 @@ export function Memory() {
 
         {error && <div className="alert error">{error}</div>}
 
+        {hasSearched && results.length === 0 && !error && (
+          <div style={{ marginTop: '16px', color: 'var(--text-secondary)', textAlign: 'center' }}>No results found</div>
+        )}
+
         {results.length > 0 && (
           <div style={{ marginTop: '16px' }}>
             <div className="section-title">Results ({results.length})</div>
             {results.map((result, i) => (
               <div key={result.id || i} className="result-item">
                 <div className="result-meta">
-                  {result.source} &middot; Score: {result.score.toFixed(3)}
+                  {result.source} &middot; Score: {result.score?.toFixed(3) ?? '—'}
                 </div>
                 <div className="result-text">{result.text}</div>
               </div>

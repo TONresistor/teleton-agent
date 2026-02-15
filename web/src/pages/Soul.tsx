@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { api } from '../lib/api';
 
 const SOUL_FILES = ['SOUL.md', 'SECURITY.md', 'STRATEGY.md', 'MEMORY.md'] as const;
@@ -6,28 +6,33 @@ const SOUL_FILES = ['SOUL.md', 'SECURITY.md', 'STRATEGY.md', 'MEMORY.md'] as con
 export function Soul() {
   const [activeTab, setActiveTab] = useState<string>(SOUL_FILES[0]);
   const [content, setContent] = useState('');
+  const [savedContent, setSavedContent] = useState('');
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
-  const loadFile = async (filename: string) => {
+  const dirty = content !== savedContent;
+
+  const loadFile = useCallback(async (filename: string) => {
     setLoading(true);
     setMessage(null);
     try {
       const res = await api.getSoulFile(filename);
       setContent(res.data.content);
+      setSavedContent(res.data.content);
     } catch (err: any) {
       setMessage({ type: 'error', text: err.message });
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   const saveFile = async () => {
     setSaving(true);
     setMessage(null);
     try {
       const res = await api.updateSoulFile(activeTab, content);
+      setSavedContent(content);
       setMessage({ type: 'success', text: res.data.message });
     } catch (err: any) {
       setMessage({ type: 'error', text: err.message });
@@ -36,9 +41,25 @@ export function Soul() {
     }
   };
 
+  // Warn before leaving with unsaved changes
+  useEffect(() => {
+    const handler = (e: BeforeUnloadEvent) => {
+      if (dirty) e.preventDefault();
+    };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [dirty]);
+
+  // Confirm before switching tabs with unsaved changes
+  const handleTabSwitch = (file: string) => {
+    if (file === activeTab) return;
+    if (dirty && !window.confirm('You have unsaved changes. Discard them?')) return;
+    setActiveTab(file);
+  };
+
   useEffect(() => {
     loadFile(activeTab);
-  }, [activeTab]);
+  }, [activeTab, loadFile]);
 
   return (
     <div>
@@ -57,9 +78,9 @@ export function Soul() {
             <button
               key={file}
               className={`tab ${activeTab === file ? 'active' : ''}`}
-              onClick={() => setActiveTab(file)}
+              onClick={() => handleTabSwitch(file)}
             >
-              {file}
+              {file}{activeTab === file && dirty ? ' *' : ''}
             </button>
           ))}
         </div>
@@ -73,10 +94,11 @@ export function Soul() {
               onChange={(e) => setContent(e.target.value)}
               placeholder={`Edit ${activeTab}...`}
             />
-            <div style={{ marginTop: '14px' }}>
-              <button onClick={saveFile} disabled={saving}>
+            <div style={{ marginTop: '14px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <button onClick={saveFile} disabled={saving || !dirty}>
                 {saving ? 'Saving...' : 'Save'}
               </button>
+              {dirty && <span style={{ color: 'var(--orange)', fontSize: '13px' }}>Unsaved changes</span>}
             </div>
           </>
         )}

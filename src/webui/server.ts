@@ -2,11 +2,18 @@ import { Hono } from "hono";
 import { serve } from "@hono/node-server";
 import { cors } from "hono/cors";
 import { bodyLimit } from "hono/body-limit";
+import { setCookie, getCookie, deleteCookie } from "hono/cookie";
 import { existsSync, readFileSync } from "node:fs";
 import { join, dirname, resolve, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { WebUIServerDeps } from "./types.js";
-import { generateToken } from "./middleware/auth.js";
+import {
+  generateToken,
+  maskToken,
+  safeCompare,
+  COOKIE_NAME,
+  COOKIE_MAX_AGE,
+} from "./middleware/auth.js";
 import { logInterceptor } from "./log-interceptor.js";
 import { createStatusRoutes } from "./routes/status.js";
 import { createToolsRoutes } from "./routes/tools.js";
@@ -14,6 +21,8 @@ import { createLogsRoutes } from "./routes/logs.js";
 import { createMemoryRoutes } from "./routes/memory.js";
 import { createSoulRoutes } from "./routes/soul.js";
 import { createPluginsRoutes } from "./routes/plugins.js";
+import { createWorkspaceRoutes } from "./routes/workspace.js";
+import { createTasksRoutes } from "./routes/tasks.js";
 
 function findWebDist(): string | null {
   // Try common locations relative to CWD (where teleton is launched from)
@@ -51,6 +60,17 @@ export class WebUIServer {
 
     this.setupMiddleware();
     this.setupRoutes();
+  }
+
+  /** Set an HttpOnly session cookie */
+  private setSessionCookie(c: any): void {
+    setCookie(c, COOKIE_NAME, this.authToken, {
+      path: "/",
+      httpOnly: true,
+      sameSite: "Strict",
+      secure: false, // localhost is HTTP
+      maxAge: COOKIE_MAX_AGE,
+    });
   }
 
   private setupMiddleware() {
@@ -94,21 +114,27 @@ export class WebUIServer {
     });
 
     // Auth for all /api/* routes
-    // Accepts Bearer header OR ?token= query param (needed for EventSource)
+    // Accepts: HttpOnly cookie > Bearer header > ?token= query param (fallback)
     this.app.use("/api/*", async (c, next) => {
-      // Check query param first (for SSE/EventSource)
-      const queryToken = c.req.query("token");
-      if (queryToken === this.authToken) {
+      // 1. Check HttpOnly session cookie (primary — browser)
+      const cookieToken = getCookie(c, COOKIE_NAME);
+      if (cookieToken && safeCompare(cookieToken, this.authToken)) {
         return next();
       }
 
-      // Check Authorization header
+      // 2. Check Authorization header (secondary — API/curl)
       const authHeader = c.req.header("Authorization");
       if (authHeader) {
         const match = authHeader.match(/^Bearer\s+(.+)$/i);
-        if (match && match[1] === this.authToken) {
+        if (match && safeCompare(match[1], this.authToken)) {
           return next();
         }
+      }
+
+      // 3. Check ?token= query param (fallback — backward compat)
+      const queryToken = c.req.query("token");
+      if (queryToken && safeCompare(queryToken, this.authToken)) {
+        return next();
       }
 
       return c.json({ success: false, error: "Unauthorized" }, 401);
@@ -119,13 +145,56 @@ export class WebUIServer {
     // Health check (no auth)
     this.app.get("/health", (c) => c.json({ status: "ok" }));
 
-    // API routes (all require auth)
+    // === Auth routes (no auth required) ===
+
+    // Token exchange: browser opens with ?token=, gets HttpOnly cookie, redirects to /
+    this.app.get("/auth/exchange", (c) => {
+      const token = c.req.query("token");
+      if (!token || !safeCompare(token, this.authToken)) {
+        return c.json({ success: false, error: "Invalid token" }, 401);
+      }
+
+      this.setSessionCookie(c);
+      return c.redirect("/");
+    });
+
+    // Manual login: POST with token, get cookie
+    this.app.post("/auth/login", async (c) => {
+      try {
+        const body = await c.req.json<{ token: string }>();
+        if (!body.token || !safeCompare(body.token, this.authToken)) {
+          return c.json({ success: false, error: "Invalid token" }, 401);
+        }
+
+        this.setSessionCookie(c);
+        return c.json({ success: true });
+      } catch {
+        return c.json({ success: false, error: "Invalid request body" }, 400);
+      }
+    });
+
+    // Logout: clear cookie
+    this.app.post("/auth/logout", (c) => {
+      deleteCookie(c, COOKIE_NAME, { path: "/" });
+      return c.json({ success: true });
+    });
+
+    // Check auth status (no auth required — returns whether cookie is valid)
+    this.app.get("/auth/check", (c) => {
+      const cookieToken = getCookie(c, COOKIE_NAME);
+      const authenticated = !!(cookieToken && safeCompare(cookieToken, this.authToken));
+      return c.json({ success: true, data: { authenticated } });
+    });
+
+    // API routes (all require auth via middleware above)
     this.app.route("/api/status", createStatusRoutes(this.deps));
     this.app.route("/api/tools", createToolsRoutes(this.deps));
     this.app.route("/api/logs", createLogsRoutes(this.deps));
     this.app.route("/api/memory", createMemoryRoutes(this.deps));
     this.app.route("/api/soul", createSoulRoutes(this.deps));
     this.app.route("/api/plugins", createPluginsRoutes(this.deps));
+    this.app.route("/api/workspace", createWorkspaceRoutes(this.deps));
+    this.app.route("/api/tasks", createTasksRoutes(this.deps));
 
     // Serve static files in production (if built)
     const webDist = findWebDist();
@@ -178,7 +247,7 @@ export class WebUIServer {
 
     // Error handler
     this.app.onError((err, c) => {
-      console.error("❌ WebUI error:", err);
+      console.error("WebUI error:", err);
       return c.json(
         {
           success: false,
@@ -204,9 +273,12 @@ export class WebUIServer {
           },
           (info) => {
             const url = `http://${info.address}:${info.port}`;
+
             console.log(`\n🌐 WebUI server running`);
-            console.log(`   URL: ${url}?token=${this.authToken}`);
-            console.log(`   🔑 Token: ${this.authToken}\n`);
+            console.log(`   URL: ${url}/auth/exchange?token=${this.authToken}`);
+            console.log(
+              `   Token: ${maskToken(this.authToken)} (use Bearer header for API access)\n`
+            );
             resolve();
           }
         );

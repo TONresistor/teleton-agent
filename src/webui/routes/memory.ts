@@ -18,8 +18,9 @@ export function createMemoryRoutes(deps: WebUIServerDeps) {
         return c.json(response, 400);
       }
 
-      // Perform keyword search (FTS5) - we don't have direct access to hybrid search here
-      // but we can query the FTS table directly
+      // Sanitize FTS5 query: wrap in double-quotes to treat as phrase literal
+      const sanitizedQuery = '"' + query.replace(/"/g, '""') + '"';
+
       const results = deps.memory.db
         .prepare(
           `
@@ -36,7 +37,7 @@ export function createMemoryRoutes(deps: WebUIServerDeps) {
           LIMIT ?
         `
         )
-        .all(query, limit) as Array<{
+        .all(sanitizedQuery, limit) as Array<{
         id: string;
         text: string;
         source: string;
@@ -75,28 +76,28 @@ export function createMemoryRoutes(deps: WebUIServerDeps) {
           `
           SELECT
             chat_id,
-            session_id,
+            id,
             message_count,
             context_tokens,
-            last_activity
+            updated_at
           FROM sessions
-          ORDER BY last_activity DESC
+          ORDER BY updated_at DESC
         `
         )
         .all() as Array<{
         chat_id: string;
-        session_id: string;
+        id: string;
         message_count: number;
         context_tokens: number;
-        last_activity: number;
+        updated_at: number;
       }>;
 
       const sessions: SessionInfo[] = rows.map((row) => ({
         chatId: row.chat_id,
-        sessionId: row.session_id,
+        sessionId: row.id,
         messageCount: row.message_count,
         contextTokens: row.context_tokens,
-        lastActivity: row.last_activity,
+        lastActivity: row.updated_at,
       }));
 
       const response: APIResponse<SessionInfo[]> = {

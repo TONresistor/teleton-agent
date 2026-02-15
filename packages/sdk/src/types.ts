@@ -82,6 +82,80 @@ export interface TonTransaction {
   transfers?: TonTransaction[];
 }
 
+/** Jetton (token) balance for a specific jetton */
+export interface JettonBalance {
+  /** Jetton master contract address */
+  jettonAddress: string;
+  /** Owner's jetton wallet address */
+  walletAddress: string;
+  /** Balance in raw units (string to avoid precision loss) */
+  balance: string;
+  /** Human-readable balance (e.g. "100.50") */
+  balanceFormatted: string;
+  /** Token ticker symbol (e.g. "USDT") */
+  symbol: string;
+  /** Token name (e.g. "Tether USD") */
+  name: string;
+  /** Token decimals (e.g. 6 for USDT, 9 for TON) */
+  decimals: number;
+  /** Whether the token is verified on TonAPI */
+  verified: boolean;
+  /** USD price per token (if available) */
+  usdPrice?: number;
+}
+
+/** Jetton metadata information */
+export interface JettonInfo {
+  /** Jetton master contract address */
+  address: string;
+  /** Token name */
+  name: string;
+  /** Token ticker symbol */
+  symbol: string;
+  /** Token decimals */
+  decimals: number;
+  /** Total supply in raw units */
+  totalSupply: string;
+  /** Number of unique holders */
+  holdersCount: number;
+  /** Whether verified on TonAPI */
+  verified: boolean;
+  /** Token description (if available) */
+  description?: string;
+  /** Token image URL (if available) */
+  image?: string;
+}
+
+/** Result of a jetton transfer */
+export interface JettonSendResult {
+  /** Whether the transaction was successfully sent */
+  success: boolean;
+  /** Wallet sequence number used */
+  seqno: number;
+}
+
+/** NFT item information */
+export interface NftItem {
+  /** NFT item contract address */
+  address: string;
+  /** Index within collection */
+  index: number;
+  /** Current owner address */
+  ownerAddress?: string;
+  /** Collection contract address */
+  collectionAddress?: string;
+  /** Collection name */
+  collectionName?: string;
+  /** NFT name */
+  name?: string;
+  /** NFT description */
+  description?: string;
+  /** NFT image URL */
+  image?: string;
+  /** Whether the NFT/collection is verified */
+  verified: boolean;
+}
+
 // ─── Payment Verification Types ─────────────────────────────────
 
 /** Parameters for verifying a TON payment */
@@ -164,6 +238,110 @@ export interface SimpleMessage {
   timestamp: Date;
 }
 
+// ─── Telegram Extended Types ────────────────────────────────────
+
+/** Chat/group information returned by getChatInfo */
+export interface ChatInfo {
+  /** Chat ID as string */
+  id: string;
+  /** Chat title (or user's first name for private chats) */
+  title: string;
+  /** Chat type */
+  type: "private" | "group" | "supergroup" | "channel";
+  /** Number of members (groups/channels only) */
+  membersCount?: number;
+  /** Chat username without @ (if public) */
+  username?: string;
+  /** Chat/channel description/bio */
+  description?: string;
+}
+
+/** Detailed user information returned by getUserInfo */
+export interface UserInfo {
+  /** Telegram user ID */
+  id: number;
+  /** First name */
+  firstName: string;
+  /** Last name */
+  lastName?: string;
+  /** Username without @ */
+  username?: string;
+  /** Whether the user is a bot */
+  isBot: boolean;
+}
+
+/** Resolved peer from username lookup */
+export interface ResolvedPeer {
+  /** Entity ID */
+  id: number;
+  /** Entity type */
+  type: "user" | "chat" | "channel";
+  /** Username if available */
+  username?: string;
+  /** Title (for groups/channels) or first name (for users) */
+  title?: string;
+}
+
+/** Options for sending media (photo, video, file, etc.) */
+export interface MediaSendOptions {
+  /** Media caption text */
+  caption?: string;
+  /** Message ID to reply to */
+  replyToId?: number;
+  /** Inline keyboard buttons */
+  inlineKeyboard?: Array<Array<{ text: string; callback_data: string }>>;
+}
+
+/** Options for creating a poll */
+export interface PollOptions {
+  /** Whether voters are anonymous (default: true) */
+  isAnonymous?: boolean;
+  /** Allow multiple answers (default: false) */
+  multipleChoice?: boolean;
+}
+
+/** Star gift from catalog */
+export interface StarGift {
+  /** Gift ID */
+  id: string;
+  /** Cost in Telegram Stars */
+  starsAmount: number;
+  /** Remaining available (limited gifts) */
+  availableAmount?: number;
+  /** Total supply (limited gifts) */
+  totalAmount?: number;
+}
+
+/** Received star gift */
+export interface ReceivedGift {
+  /** Gift ID */
+  id: string;
+  /** Sender user ID */
+  fromId?: number;
+  /** Unix timestamp when received */
+  date: number;
+  /** Stars value */
+  starsAmount: number;
+  /** Whether saved to profile */
+  saved: boolean;
+  /** Associated message ID */
+  messageId?: number;
+}
+
+/** Context passed to plugin start() hook */
+export interface StartContext {
+  /** Telegram bridge for advanced operations */
+  bridge: unknown;
+  /** Plugin's isolated SQLite database (null if unavailable) */
+  db: unknown;
+  /** Sanitized application config (no API keys) */
+  config: Record<string, unknown>;
+  /** Plugin-specific config from config.yaml */
+  pluginConfig: Record<string, unknown>;
+  /** Prefixed logger */
+  log: PluginLogger;
+}
+
 // ─── SDK Interfaces ──────────────────────────────────────────────
 
 /**
@@ -234,6 +412,94 @@ export interface TonSDK {
    * @throws {PluginSDKError} WALLET_NOT_INITIALIZED, OPERATION_FAILED
    */
   verifyPayment(params: SDKVerifyPaymentParams): Promise<SDKPaymentVerification>;
+
+  // ─── Jettons ───────────────────────────────────────────────
+
+  /**
+   * Get jetton (token) balances for an address.
+   * Defaults to the bot's own wallet.
+   *
+   * @param ownerAddress — TON address to query (default: bot wallet)
+   * @returns Array of jetton balances, or empty array on error.
+   */
+  getJettonBalances(ownerAddress?: string): Promise<JettonBalance[]>;
+
+  /**
+   * Get jetton metadata (name, symbol, decimals, supply, etc.).
+   *
+   * @param jettonAddress — Jetton master contract address
+   * @returns Jetton info, or null if not found.
+   */
+  getJettonInfo(jettonAddress: string): Promise<JettonInfo | null>;
+
+  /**
+   * Transfer jetton tokens to a recipient.
+   *
+   * WARNING: Irreversible blockchain transaction.
+   *
+   * @param jettonAddress — Jetton master contract address
+   * @param to — Recipient TON address
+   * @param amount — Amount in human-readable units (e.g. 100 for 100 USDT)
+   * @param opts — Optional comment for the transfer
+   * @throws {PluginSDKError} WALLET_NOT_INITIALIZED, INVALID_ADDRESS, OPERATION_FAILED
+   */
+  sendJetton(
+    jettonAddress: string,
+    to: string,
+    amount: number,
+    opts?: { comment?: string }
+  ): Promise<JettonSendResult>;
+
+  /**
+   * Get the jetton wallet address for a specific owner and jetton.
+   *
+   * @param ownerAddress — Owner's TON address
+   * @param jettonAddress — Jetton master contract address
+   * @returns Jetton wallet address, or null if not found.
+   */
+  getJettonWalletAddress(ownerAddress: string, jettonAddress: string): Promise<string | null>;
+
+  // ─── NFT ───────────────────────────────────────────────────
+
+  /**
+   * Get NFT items owned by an address.
+   * Defaults to the bot's own wallet.
+   *
+   * @param ownerAddress — TON address to query (default: bot wallet)
+   * @returns Array of NFT items, or empty array on error.
+   */
+  getNftItems(ownerAddress?: string): Promise<NftItem[]>;
+
+  /**
+   * Get NFT item information by address.
+   *
+   * @param nftAddress — NFT item contract address
+   * @returns NFT info, or null if not found.
+   */
+  getNftInfo(nftAddress: string): Promise<NftItem | null>;
+
+  // ─── Utilities ─────────────────────────────────────────────
+
+  /**
+   * Convert TON amount to nanoTON.
+   * @param amount — Amount in TON (e.g. 1.5)
+   * @returns Amount in nanoTON as bigint
+   */
+  toNano(amount: number | string): bigint;
+
+  /**
+   * Convert nanoTON to TON.
+   * @param nano — Amount in nanoTON
+   * @returns Human-readable TON string (e.g. "1.5")
+   */
+  fromNano(nano: bigint | string): string;
+
+  /**
+   * Validate a TON address format.
+   * @param address — Address string to validate
+   * @returns true if valid TON address
+   */
+  validateAddress(address: string): boolean;
 }
 
 /**
@@ -320,6 +586,355 @@ export interface TelegramSDK {
    * Check if the Telegram bridge is connected and ready.
    */
   isAvailable(): boolean;
+
+  /**
+   * Get the raw GramJS TelegramClient for advanced MTProto operations.
+   *
+   * Use this when the SDK methods don't cover your use case
+   * (e.g., inline bots, voice transcription, WebApp auth).
+   *
+   * The returned object is a `TelegramClient` from the `telegram` package.
+   * Cast it to the appropriate type in your plugin.
+   *
+   * @returns Raw GramJS client, or null if bridge not connected.
+   *
+   * @example
+   * ```typescript
+   * const client = sdk.telegram.getRawClient();
+   * if (!client) return { success: false, error: "Not connected" };
+   *
+   * const { Api } = require("telegram");
+   * const results = await client.invoke(
+   *   new Api.messages.GetInlineBotResults({ bot: "@pic", query: "cat", peer: chatId })
+   * );
+   * ```
+   */
+  getRawClient(): unknown | null;
+
+  // ─── Messages ──────────────────────────────────────────────
+
+  /**
+   * Delete a message.
+   *
+   * @param chatId — Chat ID
+   * @param messageId — Message ID to delete
+   * @param revoke — Also delete for other users (default: true)
+   * @throws {PluginSDKError} BRIDGE_NOT_CONNECTED, OPERATION_FAILED
+   */
+  deleteMessage(chatId: string, messageId: number, revoke?: boolean): Promise<void>;
+
+  /**
+   * Forward a message to another chat.
+   *
+   * @param fromChatId — Source chat ID
+   * @param toChatId — Destination chat ID
+   * @param messageId — Message ID to forward
+   * @returns Message ID of the forwarded message
+   * @throws {PluginSDKError} BRIDGE_NOT_CONNECTED, OPERATION_FAILED
+   */
+  forwardMessage(fromChatId: string, toChatId: string, messageId: number): Promise<number>;
+
+  /**
+   * Pin or unpin a message in a chat.
+   *
+   * @param chatId — Chat ID
+   * @param messageId — Message ID to pin/unpin
+   * @param opts — Options: silent (no notification), unpin (unpin instead)
+   * @throws {PluginSDKError} BRIDGE_NOT_CONNECTED, OPERATION_FAILED
+   */
+  pinMessage(
+    chatId: string,
+    messageId: number,
+    opts?: { silent?: boolean; unpin?: boolean }
+  ): Promise<void>;
+
+  /**
+   * Search messages in a chat.
+   *
+   * @param chatId — Chat ID to search in
+   * @param query — Search query string
+   * @param limit — Max results (default: 20)
+   * @returns Matching messages
+   */
+  searchMessages(chatId: string, query: string, limit?: number): Promise<SimpleMessage[]>;
+
+  /**
+   * Schedule a message for later delivery.
+   *
+   * @param chatId — Chat ID
+   * @param text — Message text
+   * @param scheduleDate — Unix timestamp for delivery
+   * @returns Scheduled message ID
+   * @throws {PluginSDKError} BRIDGE_NOT_CONNECTED, OPERATION_FAILED
+   */
+  scheduleMessage(chatId: string, text: string, scheduleDate: number): Promise<number>;
+
+  /**
+   * Get replies to a specific message (thread).
+   *
+   * @param chatId — Chat ID
+   * @param messageId — Parent message ID
+   * @param limit — Max replies (default: 50)
+   * @returns Reply messages
+   */
+  getReplies(chatId: string, messageId: number, limit?: number): Promise<SimpleMessage[]>;
+
+  // ─── Media ─────────────────────────────────────────────────
+
+  /**
+   * Send a photo.
+   *
+   * @param chatId — Chat ID
+   * @param photo — File path or Buffer
+   * @param opts — Caption, reply, keyboard options
+   * @returns Message ID
+   * @throws {PluginSDKError} BRIDGE_NOT_CONNECTED, OPERATION_FAILED
+   */
+  sendPhoto(chatId: string, photo: string | Buffer, opts?: MediaSendOptions): Promise<number>;
+
+  /**
+   * Send a video.
+   *
+   * @param chatId — Chat ID
+   * @param video — File path or Buffer
+   * @param opts — Caption, reply, keyboard options
+   * @returns Message ID
+   * @throws {PluginSDKError} BRIDGE_NOT_CONNECTED, OPERATION_FAILED
+   */
+  sendVideo(chatId: string, video: string | Buffer, opts?: MediaSendOptions): Promise<number>;
+
+  /**
+   * Send a voice message.
+   *
+   * @param chatId — Chat ID
+   * @param voice — File path or Buffer (OGG/Opus format)
+   * @param opts — Caption, reply, keyboard options
+   * @returns Message ID
+   * @throws {PluginSDKError} BRIDGE_NOT_CONNECTED, OPERATION_FAILED
+   */
+  sendVoice(chatId: string, voice: string | Buffer, opts?: MediaSendOptions): Promise<number>;
+
+  /**
+   * Send a file/document.
+   *
+   * @param chatId — Chat ID
+   * @param file — File path or Buffer
+   * @param opts — Caption, reply, keyboard, fileName options
+   * @returns Message ID
+   * @throws {PluginSDKError} BRIDGE_NOT_CONNECTED, OPERATION_FAILED
+   */
+  sendFile(
+    chatId: string,
+    file: string | Buffer,
+    opts?: MediaSendOptions & { fileName?: string }
+  ): Promise<number>;
+
+  /**
+   * Send an animated GIF.
+   *
+   * @param chatId — Chat ID
+   * @param gif — File path or Buffer
+   * @param opts — Caption, reply, keyboard options
+   * @returns Message ID
+   * @throws {PluginSDKError} BRIDGE_NOT_CONNECTED, OPERATION_FAILED
+   */
+  sendGif(chatId: string, gif: string | Buffer, opts?: MediaSendOptions): Promise<number>;
+
+  /**
+   * Send a sticker.
+   *
+   * @param chatId — Chat ID
+   * @param sticker — File path or Buffer (WEBP format)
+   * @returns Message ID
+   * @throws {PluginSDKError} BRIDGE_NOT_CONNECTED, OPERATION_FAILED
+   */
+  sendSticker(chatId: string, sticker: string | Buffer): Promise<number>;
+
+  /**
+   * Download media from a message.
+   *
+   * @param chatId — Chat ID
+   * @param messageId — Message ID containing media
+   * @returns Media as Buffer, or null if no media found
+   */
+  downloadMedia(chatId: string, messageId: number): Promise<Buffer | null>;
+
+  // ─── Chat & Users ──────────────────────────────────────────
+
+  /**
+   * Get chat/group/channel information.
+   *
+   * @param chatId — Chat ID
+   * @returns Chat info, or null if not found
+   */
+  getChatInfo(chatId: string): Promise<ChatInfo | null>;
+
+  /**
+   * Get user information.
+   *
+   * @param userId — User ID or username
+   * @returns User info, or null if not found
+   */
+  getUserInfo(userId: number | string): Promise<UserInfo | null>;
+
+  /**
+   * Resolve a @username to a peer entity.
+   *
+   * @param username — Username without @
+   * @returns Resolved peer info, or null if not found
+   */
+  resolveUsername(username: string): Promise<ResolvedPeer | null>;
+
+  /**
+   * Get participants of a group/channel.
+   *
+   * @param chatId — Chat ID (must be a group or channel)
+   * @param limit — Max participants (default: 100)
+   * @returns Array of user info
+   */
+  getParticipants(chatId: string, limit?: number): Promise<UserInfo[]>;
+
+  // ─── Interactive ───────────────────────────────────────────
+
+  /**
+   * Create a poll in a chat.
+   *
+   * @param chatId — Chat ID
+   * @param question — Poll question
+   * @param answers — Answer options (2-10)
+   * @param opts — Anonymous, multiple choice options
+   * @returns Message ID of the poll
+   * @throws {PluginSDKError} BRIDGE_NOT_CONNECTED, OPERATION_FAILED
+   */
+  createPoll(
+    chatId: string,
+    question: string,
+    answers: string[],
+    opts?: PollOptions
+  ): Promise<number>;
+
+  /**
+   * Create a quiz (poll with correct answer) in a chat.
+   *
+   * @param chatId — Chat ID
+   * @param question — Quiz question
+   * @param answers — Answer options
+   * @param correctIndex — Index of the correct answer (0-based)
+   * @param explanation — Explanation shown after answering
+   * @returns Message ID
+   * @throws {PluginSDKError} BRIDGE_NOT_CONNECTED, OPERATION_FAILED
+   */
+  createQuiz(
+    chatId: string,
+    question: string,
+    answers: string[],
+    correctIndex: number,
+    explanation?: string
+  ): Promise<number>;
+
+  // ─── Moderation ────────────────────────────────────────────
+
+  /**
+   * Ban a user from a group/channel.
+   *
+   * @param chatId — Group/channel ID
+   * @param userId — User ID to ban
+   * @throws {PluginSDKError} BRIDGE_NOT_CONNECTED, OPERATION_FAILED
+   */
+  banUser(chatId: string, userId: number | string): Promise<void>;
+
+  /**
+   * Unban a user from a group/channel.
+   *
+   * @param chatId — Group/channel ID
+   * @param userId — User ID to unban
+   * @throws {PluginSDKError} BRIDGE_NOT_CONNECTED, OPERATION_FAILED
+   */
+  unbanUser(chatId: string, userId: number | string): Promise<void>;
+
+  /**
+   * Mute a user in a group (restrict sending messages).
+   *
+   * @param chatId — Group/channel ID
+   * @param userId — User ID to mute
+   * @param untilDate — Unix timestamp when mute expires (0 = forever)
+   * @throws {PluginSDKError} BRIDGE_NOT_CONNECTED, OPERATION_FAILED
+   */
+  muteUser(chatId: string, userId: number | string, untilDate?: number): Promise<void>;
+
+  // ─── Stars & Gifts ─────────────────────────────────────────
+
+  /**
+   * Get current Telegram Stars balance.
+   *
+   * @returns Stars balance
+   * @throws {PluginSDKError} BRIDGE_NOT_CONNECTED, OPERATION_FAILED
+   */
+  getStarsBalance(): Promise<number>;
+
+  /**
+   * Send a star gift to a user.
+   *
+   * @param userId — Recipient user ID
+   * @param giftId — Gift ID from catalog
+   * @param opts — Optional message and anonymity
+   * @throws {PluginSDKError} BRIDGE_NOT_CONNECTED, OPERATION_FAILED
+   */
+  sendGift(
+    userId: number | string,
+    giftId: string,
+    opts?: { message?: string; anonymous?: boolean }
+  ): Promise<void>;
+
+  /**
+   * Get available star gifts catalog.
+   *
+   * @returns Array of available gifts
+   */
+  getAvailableGifts(): Promise<StarGift[]>;
+
+  /**
+   * Get star gifts received by the bot.
+   *
+   * @param limit — Max gifts to return (default: 50)
+   * @returns Array of received gifts
+   */
+  getMyGifts(limit?: number): Promise<ReceivedGift[]>;
+
+  /**
+   * Get star gifts available for resale.
+   *
+   * @param limit — Max results (default: 50)
+   * @returns Array of resale gifts
+   */
+  getResaleGifts(limit?: number): Promise<StarGift[]>;
+
+  /**
+   * Buy a star gift from resale market.
+   *
+   * @param giftId — Gift ID to purchase
+   * @throws {PluginSDKError} BRIDGE_NOT_CONNECTED, OPERATION_FAILED
+   */
+  buyResaleGift(giftId: string): Promise<void>;
+
+  /**
+   * Post a story to the bot's profile.
+   *
+   * @param mediaPath — Path to photo/video file
+   * @param opts — Caption options
+   * @returns Story ID
+   * @throws {PluginSDKError} BRIDGE_NOT_CONNECTED, OPERATION_FAILED
+   */
+  sendStory(mediaPath: string, opts?: { caption?: string }): Promise<number>;
+
+  // ─── Advanced ──────────────────────────────────────────────
+
+  /**
+   * Show "typing..." indicator in a chat.
+   *
+   * @param chatId — Chat ID
+   */
+  setTyping(chatId: string): Promise<void>;
 }
 
 /**
@@ -335,6 +950,91 @@ export interface PluginLogger {
   error(...args: unknown[]): void;
   /** Log debug message (only visible when DEBUG or VERBOSE env vars are set) */
   debug(...args: unknown[]): void;
+}
+
+// ─── Secrets Types ──────────────────────────────────────────────
+
+/** Manifest secret declaration */
+export interface SecretDeclaration {
+  /** Whether this secret is required for the plugin to function */
+  required: boolean;
+  /** Human-readable description shown when prompting admin */
+  description: string;
+}
+
+/**
+ * Secure access to plugin secrets (API keys, tokens, credentials).
+ *
+ * Resolution order:
+ * 1. Environment variable (PLUGINNAME_KEY)
+ * 2. Secrets store (set via /plugin set command)
+ * 3. pluginConfig from config.yaml
+ *
+ * @example
+ * ```typescript
+ * const apiKey = sdk.secrets.get("api_key");
+ * if (!apiKey) {
+ *   return { success: false, error: "API key not configured" };
+ * }
+ * ```
+ */
+export interface SecretsSDK {
+  /**
+   * Get a secret value by key.
+   *
+   * @param key — Secret key name (e.g. "api_key", "bearer_token")
+   * @returns Secret value, or undefined if not configured.
+   */
+  get(key: string): string | undefined;
+
+  /**
+   * Get a secret value, throwing if not found.
+   *
+   * @param key — Secret key name
+   * @throws {PluginSDKError} SECRET_NOT_FOUND
+   */
+  require(key: string): string;
+
+  /**
+   * Check if a secret is configured.
+   *
+   * @param key — Secret key name
+   */
+  has(key: string): boolean;
+}
+
+// ─── Storage Types ──────────────────────────────────────────────
+
+/**
+ * Simple key-value storage for plugins.
+ *
+ * Alternative to raw SQL for simple persistence needs.
+ * Uses an auto-created `_kv` table in the plugin's isolated DB.
+ * No `migrate()` export required — table is created automatically.
+ *
+ * Values are JSON-serialized. Optional TTL for auto-expiration.
+ *
+ * @example
+ * ```typescript
+ * // Simple counter
+ * const count = sdk.storage.get<number>("visits") ?? 0;
+ * sdk.storage.set("visits", count + 1);
+ *
+ * // Cache with 5-minute TTL
+ * sdk.storage.set("api_result", data, { ttl: 300_000 });
+ * ```
+ */
+export interface StorageSDK {
+  /** Get a value by key. Returns undefined if not found or expired. */
+  get<T>(key: string): T | undefined;
+  /** Set a value. Optional TTL in milliseconds for auto-expiration. */
+  set<T>(key: string, value: T, opts?: { ttl?: number }): void;
+  /** Delete a key. Returns true if the key existed. */
+  delete(key: string): boolean;
+  /** Check if a key exists (and is not expired). */
+  has(key: string): boolean;
+  /** Delete all keys in this plugin's storage. */
+  clear(): void;
 }
 
 // ─── Plugin Definition Types ────────────────────────────────────
@@ -399,6 +1099,21 @@ export interface PluginManifest {
   defaultConfig?: Record<string, unknown>;
   /** Required SDK version range (e.g. ">=1.0.0", "^1.0.0") */
   sdkVersion?: string;
+  /**
+   * Secrets required by this plugin (API keys, tokens, etc.)
+   *
+   * When declared, the agent warns admin via Telegram if secrets are missing.
+   * Admin can set them with: /plugin set <plugin-name> <key> <value>
+   *
+   * @example
+   * ```typescript
+   * secrets: {
+   *   api_key: { required: true, description: "SwiftGifts API key" },
+   *   webhook_url: { required: false, description: "Webhook for notifications" },
+   * }
+   * ```
+   */
+  secrets?: Record<string, SecretDeclaration>;
 }
 
 // ─── Root SDK ────────────────────────────────────────────────────
@@ -442,6 +1157,12 @@ export interface PluginSDK {
 
   /** Plugin-specific config from config.yaml plugins section */
   readonly pluginConfig: Record<string, unknown>;
+
+  /** Secure access to plugin secrets (API keys, tokens) */
+  readonly secrets: SecretsSDK;
+
+  /** Simple key-value storage (null if no DB — use migrate() or storage auto-creates _kv table) */
+  readonly storage: StorageSDK | null;
 
   /** Prefixed logger */
   readonly log: PluginLogger;

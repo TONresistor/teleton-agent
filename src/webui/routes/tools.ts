@@ -27,7 +27,7 @@ export function createToolsRoutes(deps: WebUIServerDeps) {
               description: tool.description || "",
               module: moduleName,
               scope: config?.scope ?? toolEntry.scope,
-              category: (tool as any).category,
+              category: deps.toolRegistry.getToolCategory(tool.name),
               enabled: config?.enabled ?? true,
             } as ToolInfo;
           })
@@ -182,7 +182,7 @@ export function createToolsRoutes(deps: WebUIServerDeps) {
             description: tool.description || "",
             module: moduleName,
             scope: config?.scope ?? toolEntry.scope,
-            category: (tool as any).category,
+            category: deps.toolRegistry.getToolCategory(tool.name),
             enabled: config?.enabled ?? true,
           } as ToolInfo;
         })

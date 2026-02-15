@@ -3,7 +3,8 @@ export type SDKErrorCode =
   | "BRIDGE_NOT_CONNECTED"
   | "WALLET_NOT_INITIALIZED"
   | "INVALID_ADDRESS"
-  | "OPERATION_FAILED";
+  | "OPERATION_FAILED"
+  | "SECRET_NOT_FOUND";
 
 /**
  * Error thrown by Plugin SDK operations.

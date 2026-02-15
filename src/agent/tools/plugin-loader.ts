@@ -34,6 +34,8 @@ import {
   type SDKDependencies,
 } from "../../sdk/index.js";
 import type { PluginSDK } from "../../sdk/types.js";
+import { createSecretsSDK } from "../../sdk/secrets.js";
+import type { SecretDeclaration } from "@teleton-agent/sdk";
 
 const PLUGIN_DATA_DIR = join(TELETON_ROOT, "plugins", "data");
 
@@ -98,6 +100,32 @@ export function adaptPlugin(
 
   const log = (...args: unknown[]) => console.log(`[${pluginName}]`, ...args);
 
+  // Validate declared secrets and warn if missing
+  if (manifest?.secrets) {
+    const dummyLogger = {
+      info: log,
+      warn: (...a: unknown[]) => console.warn(`⚠️ [${pluginName}]`, ...a),
+      error: (...a: unknown[]) => console.error(`❌ [${pluginName}]`, ...a),
+      debug: () => {},
+    };
+    const secretsCheck = createSecretsSDK(pluginName, pluginConfig, dummyLogger);
+    const missing: string[] = [];
+    for (const [key, decl] of Object.entries(
+      manifest.secrets as Record<string, SecretDeclaration>
+    )) {
+      if (decl.required && !secretsCheck.has(key)) {
+        missing.push(`${key} — ${decl.description}`);
+      }
+    }
+    if (missing.length > 0) {
+      console.warn(
+        `⚠️  [${pluginName}] Missing required secrets:\n` +
+          missing.map((m) => `   • ${m}`).join("\n") +
+          `\n   Set via: /plugin set ${pluginName} <key> <value>`
+      );
+    }
+  }
+
   const hasMigrate = typeof raw.migrate === "function";
   let pluginDb: Database.Database | null = null;
   const getDb = () => pluginDb;
@@ -112,22 +140,27 @@ export function adaptPlugin(
     configure() {},
 
     migrate() {
-      if (!hasMigrate) return;
-
       try {
+        // Always create plugin DB (needed for sdk.storage even without migrate())
         const dbPath = join(PLUGIN_DATA_DIR, `${pluginName}.db`);
         pluginDb = openModuleDb(dbPath);
-        raw.migrate!(pluginDb);
 
-        const pluginTables = (
-          pluginDb
-            .prepare(
-              `SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'`
-            )
-            .all() as { name: string }[]
-        ).map((t) => t.name);
-        if (pluginTables.length > 0) {
-          migrateFromMainDb(pluginDb, pluginTables);
+        // Run plugin's custom migrations if provided
+        if (hasMigrate) {
+          raw.migrate!(pluginDb);
+
+          const pluginTables = (
+            pluginDb
+              .prepare(
+                `SELECT name FROM sqlite_master WHERE type='table' AND name NOT LIKE 'sqlite_%'`
+              )
+              .all() as { name: string }[]
+          )
+            .map((t) => t.name)
+            .filter((n) => n !== "_kv"); // Exclude storage table
+          if (pluginTables.length > 0) {
+            migrateFromMainDb(pluginDb, pluginTables);
+          }
         }
       } catch (err) {
         console.error(
@@ -184,7 +217,7 @@ export function adaptPlugin(
               },
               ...(def.category ? { category: def.category } : {}),
             } as Tool,
-            executor: hasMigrate && pluginDb ? withPluginDb(sandboxedExecutor) : sandboxedExecutor,
+            executor: pluginDb ? withPluginDb(sandboxedExecutor) : sandboxedExecutor,
             scope: def.scope as ToolScope | undefined,
           };
         });

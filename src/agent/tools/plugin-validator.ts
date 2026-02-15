@@ -24,6 +24,15 @@ const ManifestSchema = z.object({
   dependencies: z.array(z.string()).optional(),
   defaultConfig: z.record(z.string(), z.unknown()).optional(),
   sdkVersion: z.string().max(32).optional(),
+  secrets: z
+    .record(
+      z.string(),
+      z.object({
+        required: z.boolean(),
+        description: z.string().max(256),
+      })
+    )
+    .optional(),
 });
 
 export type PluginManifest = z.infer<typeof ManifestSchema>;
@@ -40,7 +49,7 @@ export interface SimpleToolDef {
     params: any,
     context: any
   ) => Promise<{ success: boolean; data?: unknown; error?: string }>;
-  scope?: "always" | "dm-only" | "group-only";
+  scope?: "always" | "dm-only" | "group-only" | "admin-only";
   category?: "data-bearing" | "action";
 }
 

@@ -35,5 +35,8 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: Test
+        run: npm test
+
       - name: Verify CLI
         run: node dist/cli/index.js --help

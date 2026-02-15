@@ -4,18 +4,27 @@ import type { PluginSDK, PluginLogger } from "@teleton-agent/sdk";
 import { SDK_VERSION } from "@teleton-agent/sdk";
 import { createTonSDK } from "./ton.js";
 import { createTelegramSDK } from "./telegram.js";
+import { createSecretsSDK } from "./secrets.js";
+import { createStorageSDK } from "./storage.js";
 
 // Re-export everything from @teleton-agent/sdk for internal consumers
 export type {
   PluginSDK,
   TonSDK,
   TelegramSDK,
+  SecretsSDK,
+  SecretDeclaration,
+  StorageSDK,
   PluginLogger,
   TonBalance,
   TonPrice,
   TonSendResult,
   TonTransaction,
   TransactionType,
+  JettonBalance,
+  JettonInfo,
+  JettonSendResult,
+  NftItem,
   SDKVerifyPaymentParams,
   SDKPaymentVerification,
   DiceResult,
@@ -23,6 +32,14 @@ export type {
   SimpleMessage,
   SendMessageOptions,
   EditMessageOptions,
+  ChatInfo,
+  UserInfo,
+  ResolvedPeer,
+  MediaSendOptions,
+  PollOptions,
+  StarGift,
+  ReceivedGift,
+  StartContext,
   SimpleToolDef,
   PluginManifest,
   ToolResult,
@@ -48,6 +65,8 @@ export function createPluginSDK(deps: SDKDependencies, opts: CreatePluginSDKOpti
 
   const ton = Object.freeze(createTonSDK(log, opts.db));
   const telegram = Object.freeze(createTelegramSDK(deps.bridge, log));
+  const secrets = Object.freeze(createSecretsSDK(opts.pluginName, opts.pluginConfig, log));
+  const storage = opts.db ? Object.freeze(createStorageSDK(opts.db)) : null;
   const frozenLog = Object.freeze(log);
   const frozenConfig = Object.freeze(opts.sanitizedConfig);
   const frozenPluginConfig = Object.freeze(opts.pluginConfig);
@@ -56,6 +75,8 @@ export function createPluginSDK(deps: SDKDependencies, opts: CreatePluginSDKOpti
     version: SDK_VERSION,
     ton,
     telegram,
+    secrets,
+    storage,
     db: opts.db,
     config: frozenConfig,
     pluginConfig: frozenPluginConfig,

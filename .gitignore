@@ -10,6 +10,9 @@ dist/
 # Build outputs
 *.tsbuildinfo
 
+# Test coverage
+coverage/
+
 # Runtime
 *.session
 *.session-journal

@@ -6,7 +6,7 @@ export function createStatusRoutes(deps: WebUIServerDeps) {
 
   app.get("/", (c) => {
     try {
-      const config = (deps.agent as any).config;
+      const config = deps.agent.getConfig();
 
       // Count active sessions from memory DB
       const sessionCountRow = deps.memory.db
