@@ -558,6 +558,7 @@ ${blue}  ┌──────────────────────�
       memory_file: `${workspace.root}/memory.json`,
       history_limit: 100,
     },
+    embedding: { provider: "local" },
     deals: DealsConfigSchema.parse({
       enabled: dealsEnabled,
       buy_max_floor_percent: buyMaxFloorPercent,
@@ -779,6 +780,7 @@ async function runNonInteractiveOnboarding(
       memory_file: `${workspace.root}/memory.json`,
       history_limit: 100,
     },
+    embedding: { provider: "local" },
     deals: DealsConfigSchema.parse({}),
     webui: {
       enabled: false,

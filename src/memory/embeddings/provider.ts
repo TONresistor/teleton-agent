@@ -5,6 +5,9 @@ export interface EmbeddingProvider {
 
   embedQuery(text: string): Promise<number[]>;
   embedBatch(texts: string[]): Promise<number[][]>;
+
+  /** Optional startup warmup — pre-load model, validate credentials, etc. */
+  warmup?(): Promise<boolean>;
 }
 
 export interface EmbeddingProviderConfig {

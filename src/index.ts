@@ -62,15 +62,17 @@ export class TeletonApp {
       floodSleepThreshold: TELEGRAM_FLOOD_SLEEP_THRESHOLD,
     });
 
+    const embeddingProvider = this.config.embedding.provider;
     this.memory = initializeMemory({
       database: {
         path: join(TELETON_ROOT, "memory.db"),
-        enableVectorSearch: true,
+        enableVectorSearch: embeddingProvider !== "none",
         vectorDimensions: 384,
       },
       embeddings: {
-        provider: "local",
-        model: "",
+        provider: embeddingProvider,
+        model: this.config.embedding.model,
+        apiKey: embeddingProvider === "anthropic" ? this.config.agent.api_key : undefined,
       },
       workspaceDir: join(TELETON_ROOT),
     });
@@ -177,6 +179,11 @@ ${blue}  ┌──────────────────────�
     // Cleanup old transcript files (>30 days)
     const { cleanupOldTranscripts } = await import("./session/transcript.js");
     cleanupOldTranscripts(30);
+
+    // Warmup embedding model (pre-download at startup, not on first message)
+    if (this.memory.embedder.warmup) {
+      await this.memory.embedder.warmup();
+    }
 
     // Index knowledge base (MEMORY.md, memory/*.md)
     const indexResult = await this.memory.knowledge.indexAll();

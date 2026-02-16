@@ -116,6 +116,19 @@ export const WebUIConfigSchema = z
   })
   .default({});
 
+export const EmbeddingConfigSchema = z
+  .object({
+    provider: z
+      .enum(["local", "anthropic", "none"])
+      .default("local")
+      .describe("Embedding provider: local (ONNX), anthropic (API), or none (FTS5-only)"),
+    model: z
+      .string()
+      .optional()
+      .describe("Model override (default: Xenova/all-MiniLM-L6-v2 for local)"),
+  })
+  .default({});
+
 export const DevConfigSchema = z
   .object({
     hot_reload: z
@@ -130,6 +143,7 @@ export const ConfigSchema = z.object({
   agent: AgentConfigSchema,
   telegram: TelegramConfigSchema,
   storage: StorageConfigSchema.default({}),
+  embedding: EmbeddingConfigSchema,
   deals: DealsConfigSchema,
   webui: WebUIConfigSchema,
   dev: DevConfigSchema,
@@ -150,4 +164,5 @@ export type StorageConfig = z.infer<typeof StorageConfigSchema>;
 export type SessionResetPolicy = z.infer<typeof SessionResetPolicySchema>;
 export type DealsConfig = z.infer<typeof DealsConfigSchema>;
 export type WebUIConfig = z.infer<typeof WebUIConfigSchema>;
+export type EmbeddingConfig = z.infer<typeof EmbeddingConfigSchema>;
 export type DevConfig = z.infer<typeof DevConfigSchema>;

@@ -55,6 +55,10 @@ export class CachedEmbeddingProvider implements EmbeddingProvider {
       .run(hash, this.model, this.id);
   }
 
+  async warmup(): Promise<boolean> {
+    return this.inner.warmup?.() ?? true;
+  }
+
   async embedQuery(text: string): Promise<number[]> {
     const hash = hashText(text);
 
