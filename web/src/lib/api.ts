@@ -90,10 +90,67 @@ export interface ToolConfigData {
   scope: string;
 }
 
+export interface ToolRagStatus {
+  enabled: boolean;
+  indexed: boolean;
+  topK: number;
+  totalTools: number;
+  alwaysInclude?: string[];
+  skipUnlimitedProviders?: boolean;
+}
+
+export interface McpServerInfo {
+  name: string;
+  type: 'stdio' | 'sse';
+  target: string;
+  scope: string;
+  enabled: boolean;
+  connected: boolean;
+  toolCount: number;
+  tools: string[];
+  envKeys: string[];
+}
+
+export interface ConfigKeyData {
+  key: string;
+  set: boolean;
+  value: string | null;
+  sensitive: boolean;
+  type: 'string' | 'number' | 'boolean' | 'enum';
+  options?: string[];
+  category: string;
+  description: string;
+}
+
 export interface LogEntry {
   level: 'log' | 'warn' | 'error';
   message: string;
   timestamp: number;
+}
+
+export interface MarketplacePlugin {
+  id: string;
+  name: string;
+  description: string;
+  author: string;
+  tags: string[];
+  remoteVersion: string;
+  installedVersion: string | null;
+  status: 'available' | 'installed' | 'updatable';
+  toolCount: number;
+  tools: Array<{ name: string; description: string }>;
+  secrets?: Record<string, { required: boolean; description: string; env?: string }>;
+}
+
+export interface SecretDeclaration {
+  required: boolean;
+  description: string;
+  env?: string;
+}
+
+export interface PluginSecretsInfo {
+  declared: Record<string, SecretDeclaration>;
+  configured: string[];
 }
 
 // ── API response wrapper ────────────────────────────────────────────
@@ -192,6 +249,34 @@ export const api = {
     return fetchAPI<APIResponse<PluginManifest[]>>('/plugins');
   },
 
+  async getToolRag() {
+    return fetchAPI<APIResponse<ToolRagStatus>>('/tools/rag');
+  },
+
+  async updateToolRag(config: { enabled?: boolean; topK?: number }) {
+    return fetchAPI<APIResponse<ToolRagStatus>>('/tools/rag', {
+      method: 'PUT',
+      body: JSON.stringify(config),
+    });
+  },
+
+  async getMcpServers() {
+    return fetchAPI<APIResponse<McpServerInfo[]>>('/mcp');
+  },
+
+  async addMcpServer(data: { package?: string; url?: string; name?: string; args?: string[]; scope?: string; env?: Record<string, string> }) {
+    return fetchAPI<APIResponse<{ name: string; message: string }>>('/mcp', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+
+  async removeMcpServer(name: string) {
+    return fetchAPI<APIResponse<{ name: string; message: string }>>(`/mcp/${encodeURIComponent(name)}`, {
+      method: 'DELETE',
+    });
+  },
+
   async updateToolConfig(
     toolName: string,
     config: { enabled?: boolean; scope?: 'always' | 'dm-only' | 'group-only' | 'admin-only' }
@@ -265,6 +350,66 @@ export const api = {
 
   async tasksCleanDone() {
     return fetchAPI<APIResponse<{ deleted: number }>>('/tasks/clean-done', { method: 'POST' });
+  },
+
+  async getConfigKeys() {
+    return fetchAPI<APIResponse<ConfigKeyData[]>>('/config');
+  },
+
+  async setConfigKey(key: string, value: string) {
+    return fetchAPI<APIResponse<ConfigKeyData>>(`/config/${key}`, {
+      method: 'PUT',
+      body: JSON.stringify({ value }),
+    });
+  },
+
+  async unsetConfigKey(key: string) {
+    return fetchAPI<APIResponse<ConfigKeyData>>(`/config/${key}`, {
+      method: 'DELETE',
+    });
+  },
+
+  async getMarketplace(refresh = false) {
+    const qs = refresh ? '?refresh=true' : '';
+    return fetchAPI<APIResponse<MarketplacePlugin[]>>(`/marketplace${qs}`);
+  },
+
+  async installPlugin(id: string) {
+    return fetchAPI<APIResponse<{ name: string; version: string; toolCount: number }>>('/marketplace/install', {
+      method: 'POST',
+      body: JSON.stringify({ id }),
+    });
+  },
+
+  async uninstallPlugin(id: string) {
+    return fetchAPI<APIResponse<{ message: string }>>('/marketplace/uninstall', {
+      method: 'POST',
+      body: JSON.stringify({ id }),
+    });
+  },
+
+  async updatePlugin(id: string) {
+    return fetchAPI<APIResponse<{ name: string; version: string; toolCount: number }>>('/marketplace/update', {
+      method: 'POST',
+      body: JSON.stringify({ id }),
+    });
+  },
+
+  async getPluginSecrets(pluginId: string) {
+    return fetchAPI<APIResponse<PluginSecretsInfo>>(`/marketplace/secrets/${encodeURIComponent(pluginId)}`);
+  },
+
+  async setPluginSecret(pluginId: string, key: string, value: string) {
+    return fetchAPI<APIResponse<{ key: string; set: boolean }>>(`/marketplace/secrets/${encodeURIComponent(pluginId)}/${encodeURIComponent(key)}`, {
+      method: 'PUT',
+      body: JSON.stringify({ value }),
+    });
+  },
+
+  async unsetPluginSecret(pluginId: string, key: string) {
+    return fetchAPI<APIResponse<{ key: string; set: boolean }>>(`/marketplace/secrets/${encodeURIComponent(pluginId)}/${encodeURIComponent(key)}`, {
+      method: 'DELETE',
+    });
   },
 
   connectLogs(onLog: (entry: LogEntry) => void, onError?: (error: Event) => void) {

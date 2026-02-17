@@ -87,8 +87,8 @@ export function Tasks() {
         if (!prev) return null;
         return all.find((t: Task) => t.id === prev.id) ?? null;
       });
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
     } finally {
       setLoading(false);
     }
@@ -104,8 +104,8 @@ export function Tasks() {
       await api.tasksCancel(id);
       loadTasks();
       if (selected?.id === id) setSelected(null);
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
     }
   };
 
@@ -115,8 +115,8 @@ export function Tasks() {
       await api.tasksDelete(id);
       loadTasks();
       if (selected?.id === id) setSelected(null);
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
     }
   };
 
@@ -184,8 +184,8 @@ export function Tasks() {
                 setError(null);
                 loadTasks();
                 setSelected(null);
-              } catch (err: any) {
-                setError(err.message);
+              } catch (err) {
+                setError(err instanceof Error ? err.message : String(err));
               }
             }}
           >

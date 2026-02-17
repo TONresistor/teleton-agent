@@ -20,8 +20,8 @@ export function Soul() {
       const res = await api.getSoulFile(filename);
       setContent(res.data.content);
       setSavedContent(res.data.content);
-    } catch (err: any) {
-      setMessage({ type: 'error', text: err.message });
+    } catch (err) {
+      setMessage({ type: 'error', text: err instanceof Error ? err.message : String(err) });
     } finally {
       setLoading(false);
     }
@@ -34,8 +34,8 @@ export function Soul() {
       const res = await api.updateSoulFile(activeTab, content);
       setSavedContent(content);
       setMessage({ type: 'success', text: res.data.message });
-    } catch (err: any) {
-      setMessage({ type: 'error', text: err.message });
+    } catch (err) {
+      setMessage({ type: 'error', text: err instanceof Error ? err.message : String(err) });
     } finally {
       setSaving(false);
     }

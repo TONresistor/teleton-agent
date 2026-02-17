@@ -17,8 +17,8 @@ export function Memory() {
       const res = await api.searchKnowledge(query);
       setResults(res.data);
       setHasSearched(true);
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
     } finally {
       setLoading(false);
     }

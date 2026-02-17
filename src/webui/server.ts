@@ -21,8 +21,11 @@ import { createLogsRoutes } from "./routes/logs.js";
 import { createMemoryRoutes } from "./routes/memory.js";
 import { createSoulRoutes } from "./routes/soul.js";
 import { createPluginsRoutes } from "./routes/plugins.js";
+import { createMcpRoutes } from "./routes/mcp.js";
 import { createWorkspaceRoutes } from "./routes/workspace.js";
 import { createTasksRoutes } from "./routes/tasks.js";
+import { createConfigRoutes } from "./routes/config.js";
+import { createMarketplaceRoutes } from "./routes/marketplace.js";
 
 function findWebDist(): string | null {
   // Try common locations relative to CWD (where teleton is launched from)
@@ -193,8 +196,11 @@ export class WebUIServer {
     this.app.route("/api/memory", createMemoryRoutes(this.deps));
     this.app.route("/api/soul", createSoulRoutes(this.deps));
     this.app.route("/api/plugins", createPluginsRoutes(this.deps));
+    this.app.route("/api/mcp", createMcpRoutes(this.deps));
     this.app.route("/api/workspace", createWorkspaceRoutes(this.deps));
     this.app.route("/api/tasks", createTasksRoutes(this.deps));
+    this.app.route("/api/config", createConfigRoutes(this.deps));
+    this.app.route("/api/marketplace", createMarketplaceRoutes(this.deps));
 
     // Serve static files in production (if built)
     const webDist = findWebDist();

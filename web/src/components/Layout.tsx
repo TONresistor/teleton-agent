@@ -42,6 +42,12 @@ export function Layout() {
           <Link to="/tasks" className={isActive('/tasks') ? 'active' : ''}>
             Tasks
           </Link>
+          <Link to="/mcp" className={isActive('/mcp') ? 'active' : ''}>
+            MCP
+          </Link>
+          <Link to="/config" className={isActive('/config') ? 'active' : ''}>
+            Config
+          </Link>
         </nav>
         <div style={{ marginTop: 'auto', padding: '14px' }}>
           <button

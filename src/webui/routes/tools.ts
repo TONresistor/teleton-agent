@@ -56,6 +56,65 @@ export function createToolsRoutes(deps: WebUIServerDeps) {
     }
   });
 
+  // ── Tool RAG (must be before /:name wildcard) ──────────────────────
+
+  // Get Tool RAG status
+  app.get("/rag", (c) => {
+    try {
+      const config = deps.agent.getConfig();
+      const toolIndex = deps.toolRegistry.getToolIndex();
+      const response: APIResponse = {
+        success: true,
+        data: {
+          enabled: config.tool_rag.enabled,
+          indexed: toolIndex?.isIndexed ?? false,
+          topK: config.tool_rag.top_k,
+          totalTools: deps.toolRegistry.count,
+          alwaysInclude: config.tool_rag.always_include,
+          skipUnlimitedProviders: config.tool_rag.skip_unlimited_providers,
+        },
+      };
+      return c.json(response);
+    } catch (error) {
+      return c.json({ success: false, error: String(error) }, 500);
+    }
+  });
+
+  // Toggle Tool RAG or update settings
+  app.put("/rag", async (c) => {
+    try {
+      const config = deps.agent.getConfig();
+      const body = await c.req.json();
+      const { enabled, topK } = body as { enabled?: boolean; topK?: number };
+
+      if (enabled !== undefined) {
+        config.tool_rag.enabled = enabled;
+      }
+      if (topK !== undefined) {
+        if (topK < 5 || topK > 200) {
+          return c.json({ success: false, error: "topK must be between 5 and 200" }, 400);
+        }
+        config.tool_rag.top_k = topK;
+      }
+
+      const toolIndex = deps.toolRegistry.getToolIndex();
+      const response: APIResponse = {
+        success: true,
+        data: {
+          enabled: config.tool_rag.enabled,
+          indexed: toolIndex?.isIndexed ?? false,
+          topK: config.tool_rag.top_k,
+          totalTools: deps.toolRegistry.count,
+        },
+      };
+      return c.json(response);
+    } catch (error) {
+      return c.json({ success: false, error: String(error) }, 500);
+    }
+  });
+
+  // ── Per-tool routes (wildcard) ─────────────────────────────────────
+
   // Update tool configuration
   app.put("/:name", async (c) => {
     try {

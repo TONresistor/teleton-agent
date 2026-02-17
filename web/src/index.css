@@ -7,17 +7,28 @@
 }
 
 :root {
+  color-scheme: dark;
+
+  /* ── Base ── */
   --bg: #000000;
   --surface: rgba(255, 255, 255, 0.05);
   --surface-hover: rgba(255, 255, 255, 0.08);
+  --surface-active: rgba(255, 255, 255, 0.12);
   --glass: rgba(255, 255, 255, 0.06);
   --glass-border: rgba(255, 255, 255, 0.1);
   --glass-border-strong: rgba(255, 255, 255, 0.15);
+
+  /* ── Text ── */
   --text: rgba(255, 255, 255, 0.92);
   --text-secondary: rgba(255, 255, 255, 0.55);
   --text-tertiary: rgba(255, 255, 255, 0.35);
+  --text-on-accent: #ffffff;
+
+  /* ── Accent ── */
   --accent: #0A84FF;
   --accent-dim: rgba(10, 132, 255, 0.15);
+
+  /* ── Semantic ── */
   --green: #30D158;
   --green-dim: rgba(48, 209, 88, 0.15);
   --orange: #FF9F0A;
@@ -28,11 +39,22 @@
   --purple-dim: rgba(191, 90, 242, 0.15);
   --cyan: #64D2FF;
   --cyan-dim: rgba(100, 210, 255, 0.15);
+
+  /* ── Chrome ── */
   --separator: rgba(255, 255, 255, 0.08);
+  --sidebar-bg: rgba(255, 255, 255, 0.03);
+  --scrollbar: rgba(255, 255, 255, 0.1);
+  --scrollbar-hover: rgba(255, 255, 255, 0.2);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.3);
+  --thumb-bg: #ffffff;
+
+  /* ── Radii ── */
   --radius-sm: 10px;
   --radius-md: 14px;
   --radius-lg: 20px;
   --radius-xl: 26px;
+
+  /* ── Effects ── */
   --blur: 40px;
   --blur-heavy: 80px;
 }
@@ -65,7 +87,7 @@ body {
 .sidebar {
   width: 220px;
   padding: 20px 12px;
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--sidebar-bg);
   border-right: 1px solid var(--separator);
   display: flex;
   flex-direction: column;
@@ -196,7 +218,7 @@ body {
 button {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
   background: var(--accent);
-  color: white;
+  color: var(--text-on-accent);
   border: none;
   padding: 8px 16px;
   border-radius: var(--radius-sm);
@@ -217,7 +239,7 @@ button:disabled {
 
 /* ---- Inputs ---- */
 
-input, textarea {
+input, textarea, select {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
   background: var(--surface);
   border: 1px solid var(--glass-border);
@@ -229,7 +251,93 @@ input, textarea {
   transition: border-color 0.2s ease;
 }
 
-input:focus, textarea:focus {
+select {
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='rgba(255,255,255,0.55)' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  padding-right: 36px;
+  cursor: pointer;
+}
+
+/* ---- Custom Select (dark-friendly dropdown) ---- */
+
+.custom-select {
+  position: relative;
+}
+
+.custom-select-trigger {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--surface);
+  border: 1px solid var(--glass-border);
+  color: var(--text);
+  padding: 10px 14px;
+  border-radius: var(--radius-sm);
+  font-size: 13px;
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  cursor: pointer;
+  transition: border-color 0.2s ease;
+}
+
+.custom-select-trigger:hover {
+  border-color: var(--glass-border-strong);
+  opacity: 1;
+}
+
+.custom-select-trigger:focus {
+  border-color: var(--accent);
+}
+
+.custom-select-trigger svg {
+  color: var(--text-secondary);
+  flex-shrink: 0;
+}
+
+.custom-select-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  background: var(--bg);
+  border: 1px solid var(--glass-border-strong);
+  border-radius: var(--radius-sm);
+  padding: 4px;
+  z-index: 50;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.custom-select-option {
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 13px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: all 0.1s ease;
+}
+
+.custom-select-option:hover,
+.custom-select-option.focused {
+  background: var(--surface-hover);
+  color: var(--text);
+}
+
+.custom-select-option.active {
+  background: var(--accent-dim);
+  color: var(--accent);
+}
+
+.custom-select-option.active.focused {
+  background: var(--accent-dim);
+  color: var(--accent);
+}
+
+input:focus, textarea:focus, select:focus {
   border-color: var(--accent);
 }
 
@@ -282,15 +390,17 @@ a:hover {
 
 .tabs {
   display: flex;
-  gap: 4px;
-  padding: 4px;
+  gap: 2px;
+  padding: 3px;
   background: var(--surface);
+  border: 1px solid var(--glass-border);
   border-radius: var(--radius-sm);
   margin-bottom: 16px;
 }
 
 .tab {
-  padding: 6px 14px;
+  position: relative;
+  padding: 7px 16px;
   background: none;
   border: none;
   color: var(--text-secondary);
@@ -299,6 +409,8 @@ a:hover {
   font-size: 13px;
   font-weight: 500;
   transition: all 0.2s ease;
+  flex: 1;
+  text-align: center;
 }
 
 .tab:hover {
@@ -308,7 +420,87 @@ a:hover {
 
 .tab.active {
   color: var(--text);
+  background: var(--surface-active);
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+.tab .tab-count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 5px;
+  margin-left: 6px;
+  border-radius: 9px;
+  font-size: 11px;
+  font-weight: 600;
+  background: var(--glass);
+  color: var(--text-tertiary);
+}
+
+.tab.active .tab-count {
+  background: var(--accent-dim);
+  color: var(--accent);
+}
+
+/* ---- Button variants ---- */
+
+button.btn-ghost {
+  background: var(--surface);
+  color: var(--text-secondary);
+  border: 1px solid var(--glass-border);
+}
+
+button.btn-ghost:hover {
   background: var(--surface-hover);
+  color: var(--text);
+  opacity: 1;
+}
+
+button.btn-danger {
+  background: var(--red-dim);
+  color: var(--red);
+  border: 1px solid rgba(255, 69, 58, 0.15);
+}
+
+button.btn-danger:hover {
+  background: rgba(255, 69, 58, 0.2);
+  opacity: 1;
+}
+
+button.btn-sm {
+  padding: 5px 10px;
+  font-size: 12px;
+  border-radius: 8px;
+}
+
+/* ---- Tag pill ---- */
+
+.tag-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 9px;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 500;
+  background: var(--surface);
+  color: var(--text-secondary);
+  border: 1px solid var(--glass-border);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.tag-pill:hover {
+  background: var(--surface-hover);
+  color: var(--text);
+  border-color: var(--glass-border-strong);
+}
+
+.tag-pill.active {
+  background: var(--accent-dim);
+  color: var(--accent);
+  border-color: rgba(10, 132, 255, 0.3);
 }
 
 /* ---- Form ---- */
@@ -353,7 +545,7 @@ a:hover {
 }
 
 .file-row:hover {
-  background-color: rgba(255, 255, 255, 0.03);
+  background-color: var(--sidebar-bg);
 }
 
 /* ---- Icon buttons (action buttons in tables) ---- */
@@ -523,12 +715,12 @@ a:hover {
 }
 
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--scrollbar);
   border-radius: 3px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.2);
+  background: var(--scrollbar-hover);
 }
 
 /* ---- Segmented Control ---- */
@@ -536,7 +728,7 @@ a:hover {
 .scope-seg {
   display: inline-flex;
   padding: 2px;
-  background: rgba(255, 255, 255, 0.06);
+  background: var(--glass);
   border-radius: 8px;
   gap: 2px;
 }
@@ -559,7 +751,7 @@ a:hover {
 }
 
 .scope-seg button.active {
-  background: rgba(255, 255, 255, 0.12);
+  background: var(--surface-active);
   color: var(--text);
 }
 
@@ -588,7 +780,7 @@ a:hover {
 .toggle-track {
   position: absolute;
   inset: 0;
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--scrollbar);
   border-radius: 13px;
   transition: background 0.25s ease;
 }
@@ -603,10 +795,10 @@ a:hover {
   left: 3px;
   width: 20px;
   height: 20px;
-  background: #fff;
+  background: var(--thumb-bg);
   border-radius: 50%;
   transition: transform 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+  box-shadow: var(--shadow-sm);
 }
 
 .toggle input:checked ~ .toggle-thumb {
@@ -619,6 +811,30 @@ a:hover {
 
 .toggle input:disabled ~ .toggle-thumb {
   opacity: 0.4;
+}
+
+/* ---- Modal ---- */
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+}
+
+.modal {
+  background: var(--bg);
+  border: 1px solid var(--glass-border-strong);
+  border-radius: var(--radius-lg);
+  padding: 24px;
+  max-width: 480px;
+  width: 90%;
+  max-height: 80vh;
+  overflow-y: auto;
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.5);
 }
 
 /* ---- Loading ---- */

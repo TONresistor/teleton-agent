@@ -37,8 +37,8 @@ export function Workspace() {
       const res = await api.workspaceList(path);
       setEntries(res.data ?? []);
       setCurrentPath(path);
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
     } finally {
       setLoading(false);
     }
@@ -74,8 +74,8 @@ export function Workspace() {
       setEditingFile(path);
       setEditContent(res.data?.content ?? '');
       setEditDirty(false);
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
     }
   };
 
@@ -94,8 +94,8 @@ export function Workspace() {
       await api.workspaceWrite(editingFile, editContent);
       setEditDirty(false);
       loadDir(currentPath);
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
     } finally {
       setSaving(false);
     }
@@ -114,8 +114,8 @@ export function Workspace() {
       }
       loadDir(currentPath);
       loadInfo();
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
     }
   };
 
@@ -142,8 +142,8 @@ export function Workspace() {
       setDialogInput('');
       loadDir(currentPath);
       loadInfo();
-    } catch (err: any) {
-      setError(err.message);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
     }
   };
 

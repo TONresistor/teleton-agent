@@ -10,6 +10,8 @@ import { Memory } from './pages/Memory';
 import { Logs } from './pages/Logs';
 import { Workspace } from './pages/Workspace';
 import { Tasks } from './pages/Tasks';
+import { Mcp } from './pages/Mcp';
+import { Config } from './pages/Config';
 import { checkAuth, login } from './lib/api';
 import { logStore } from './lib/log-store';
 
@@ -99,6 +101,8 @@ function App() {
             <Route path="logs" element={<Logs />} />
             <Route path="workspace" element={<Workspace />} />
             <Route path="tasks" element={<Tasks />} />
+            <Route path="mcp" element={<Mcp />} />
+            <Route path="config" element={<Config />} />
             <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
         </Routes>
