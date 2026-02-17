@@ -22,7 +22,7 @@ Complete guide to installing, configuring, and running your Teleton AI agent.
 
 **npm (recommended):**
 ```bash
-npm install -g teleton
+npm install -g teleton@latest
 ```
 
 **One-liner:**

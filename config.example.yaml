@@ -9,6 +9,7 @@ agent:
   # utility_model: "claude-3-5-haiku-20241022"  # Optional: cheap model for summarization
   max_tokens: 4096
   temperature: 0.7
+  # system_prompt: null              # Custom system prompt override (null = use SOUL.md)
   max_agentic_iterations: 5
   session_reset_policy:
     daily_reset_enabled: true
@@ -20,13 +21,23 @@ telegram:
   api_id: 0                          # From https://my.telegram.org/apps
   api_hash: "YOUR_API_HASH"
   phone: "+1234567890"               # Phone number linked to Telegram account
+  session_name: "teleton_session"    # GramJS session file name
+  session_path: "~/.teleton"         # Directory for session files
   dm_policy: "pairing"               # pairing | allowlist | open | disabled
+  allow_from: []                     # Telegram user IDs (for allowlist policy)
   group_policy: "open"               # open | allowlist | disabled
+  group_allow_from: []               # Group chat IDs (for allowlist group policy)
   require_mention: true              # In groups, only respond when mentioned
+  # max_message_length: 4096         # MTProto limit, rarely needs changing
+  typing_simulation: true            # Show "typing..." while processing
+  rate_limit_messages_per_second: 1.0
+  rate_limit_groups_per_minute: 20
   admin_ids: [123456789]             # Your Telegram user ID (from @userinfobot)
+  # agent_channel: null              # Channel username or ID for announcements
   owner_name: "Your Name"
   owner_username: "your_username"
-  debounce_ms: 1500                  # Group message batching delay
+  # owner_id: 123456789              # Owner's Telegram user ID
+  debounce_ms: 1500                  # Group message batching delay (0 = disabled)
 
   # Optional: inline bot for deals system
   # bot_token: "123456:ABC-DEF..."   # From @BotFather
@@ -34,6 +45,18 @@ telegram:
 
 # Optional: TonAPI key for higher rate limits
 # tonapi_key: "YOUR_TONAPI_KEY"      # From @tonapi_bot
+
+# Optional: Tavily API key for web search/fetch tools
+# tavily_api_key: "YOUR_TAVILY_KEY"  # From https://tavily.com
+
+# Embedding provider for RAG vector search
+embedding:
+  provider: "local"                  # local | anthropic | none
+  # model: "Xenova/all-MiniLM-L6-v2" # Model override (auto-detected per provider)
+  #
+  # local    = ONNX runtime, runs entirely on CPU, no API calls needed
+  # anthropic = uses Voyage API via your agent.api_key
+  # none     = FTS5 full-text search only (no vector embeddings)
 
 # Optional: WebUI dashboard (disabled by default for security)
 webui:
@@ -46,14 +69,57 @@ webui:
     - "http://localhost:7777"         # Production server
   log_requests: false                 # Log HTTP requests
 
-# Optional sections (defaults are fine for most users)
-# casino:
-#   enabled: true
-#   min_bet: 0.1
-#   cooldown_seconds: 30
+# Tool RAG: semantic tool selection per message
+# Reduces tool definitions sent to the LLM from 114+ to ~25 most relevant.
+# Essential for non-Anthropic providers with 128-tool limits.
+# tool_rag:
+#   enabled: true                      # Enable semantic tool retrieval
+#   top_k: 25                          # Max tools to retrieve per LLM call
+#   skip_unlimited_providers: false    # Apply Tool RAG even for Anthropic (saves tokens)
+#   always_include:                    # Tools always included regardless of query
+#     - telegram_send_message
+#     - telegram_reply_message
+#     - telegram_send_photo
+#     - telegram_send_document
+#     - "journal_*"                    # Prefix glob: all journal_ tools
+#     - "workspace_*"
+#     - "web_*"
 
+# Deals / OTC trading module
 # deals:
 #   enabled: true
-#   expiry_seconds: 120
-#   buy_max_floor_percent: 80
-#   sell_min_floor_percent: 115
+#   expiry_seconds: 120              # Seconds before a pending deal expires
+#   buy_max_floor_percent: 100       # Max price as % of floor for buy offers
+#   sell_min_floor_percent: 105      # Min price as % of floor for sell offers
+#   poll_interval_ms: 5000           # Payment verification polling interval
+#   max_verification_retries: 12     # Max payment verification attempts
+#   expiry_check_interval_ms: 60000  # Stale deal check interval
+
+# Storage paths (defaults are fine for most users)
+# storage:
+#   sessions_file: "~/.teleton/sessions.json"
+#   pairing_file: "~/.teleton/pairing.json"
+#   memory_file: "~/.teleton/memory.json"
+#   history_limit: 100
+
+# Developer options
+# dev:
+#   hot_reload: false                # Watch ~/.teleton/plugins/ for changes
+
+# MCP (Model Context Protocol) — external tool servers
+# mcp:
+#   servers:
+#     filesystem:
+#       command: npx -y @modelcontextprotocol/server-filesystem /tmp
+#     brave:
+#       command: npx -y @modelcontextprotocol/server-brave-search
+#       env:
+#         BRAVE_API_KEY: "sk-xxx"
+#     remote:
+#       url: http://localhost:3001/mcp
+
+# Per-plugin configuration (key = plugin name)
+# plugins:
+#   casino:
+#     min_bet: 0.1
+#     cooldown_seconds: 30
