@@ -10,7 +10,6 @@ import {
   CancelledError,
   input,
   select,
-  checkbox,
   confirm,
   password,
   inquirerTheme as theme,
@@ -162,6 +161,14 @@ const MODEL_OPTIONS: Record<string, Array<{ value: string; name: string; descrip
     },
     { value: "x-ai/grok-4", name: "Grok 4", description: "256K ctx, $3/M" },
   ],
+  moonshot: [
+    { value: "kimi-k2.5", name: "Kimi K2.5", description: "Free, 256K ctx, multimodal" },
+    {
+      value: "kimi-k2-thinking",
+      name: "Kimi K2 Thinking",
+      description: "Free, 256K ctx, reasoning",
+    },
+  ],
 };
 
 /**
@@ -195,7 +202,7 @@ async function runInteractiveOnboarding(
   // ── Shared state ──
   let selectedFlow: "quick" | "advanced" = "quick";
   let selectedProvider: SupportedProvider = "anthropic";
-  let dealsEnabled = false;
+  const dealsEnabled = true;
   let selectedModel = "";
   let apiKey = "";
   let apiId = 0;
@@ -301,20 +308,7 @@ async function runInteractiveOnboarding(
     ],
   });
 
-  // Optional modules
-  const enabledModules: string[] = await checkbox({
-    message: "Enable optional modules (Space to toggle)",
-    theme: {
-      ...theme,
-      icon: { cursor: TON("❯"), checked: GREEN("✔"), unchecked: DIM("○") },
-    },
-    choices: [
-      { value: "deals", name: "Gifts & Deals", description: "Gift/TON trading with escrow system" },
-    ],
-  });
-  dealsEnabled = enabledModules.includes("deals");
-
-  STEPS[0].value = `${agentName} (${selectedFlow})${dealsEnabled ? " +deals" : ""}`;
+  STEPS[0].value = `${agentName} (${selectedFlow})`;
 
   // ════════════════════════════════════════════════════════════════════
   // Step 1: Provider — select + tool limit warning + API key

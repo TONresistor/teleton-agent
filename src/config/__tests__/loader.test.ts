@@ -644,7 +644,7 @@ telegram:
     });
 
     it("should validate provider enum values", () => {
-      const providers = ["anthropic", "openai", "google", "xai", "groq", "openrouter"];
+      const providers = ["anthropic", "openai", "google", "xai", "groq", "openrouter", "moonshot"];
 
       providers.forEach((provider) => {
         const providerConfig = `

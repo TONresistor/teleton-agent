@@ -1,4 +1,11 @@
-export type SupportedProvider = "anthropic" | "openai" | "google" | "xai" | "groq" | "openrouter";
+export type SupportedProvider =
+  | "anthropic"
+  | "openai"
+  | "google"
+  | "xai"
+  | "groq"
+  | "openrouter"
+  | "moonshot";
 
 export interface ProviderMetadata {
   id: SupportedProvider;
@@ -85,6 +92,18 @@ const PROVIDER_REGISTRY: Record<SupportedProvider, ProviderMetadata> = {
     utilityModel: "google/gemini-2.5-flash-lite",
     toolLimit: 128,
     piAiProvider: "openrouter",
+  },
+  moonshot: {
+    id: "moonshot",
+    displayName: "Moonshot (Kimi K2.5)",
+    envVar: "MOONSHOT_API_KEY",
+    keyPrefix: "sk-",
+    keyHint: "sk-...",
+    consoleUrl: "https://platform.moonshot.ai/",
+    defaultModel: "kimi-k2.5",
+    utilityModel: "kimi-k2.5",
+    toolLimit: 128,
+    piAiProvider: "moonshot",
   },
 };
 

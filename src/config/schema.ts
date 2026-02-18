@@ -21,7 +21,7 @@ export const SessionResetPolicySchema = z.object({
 
 export const AgentConfigSchema = z.object({
   provider: z
-    .enum(["anthropic", "openai", "google", "xai", "groq", "openrouter"])
+    .enum(["anthropic", "openai", "google", "xai", "groq", "openrouter", "moonshot"])
     .default("anthropic"),
   api_key: z.string(),
   model: z.string().default("claude-opus-4-5-20251101"),

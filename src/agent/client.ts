@@ -21,12 +21,47 @@ export function isOAuthToken(apiKey: string, provider?: string): boolean {
 
 const modelCache = new Map<string, Model<Api>>();
 
+const MOONSHOT_MODELS: Record<string, Model<"openai-completions">> = {
+  "kimi-k2.5": {
+    id: "kimi-k2.5",
+    name: "Kimi K2.5",
+    api: "openai-completions",
+    provider: "moonshot",
+    baseUrl: "https://api.moonshot.ai/v1",
+    reasoning: false,
+    input: ["text", "image"],
+    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+    contextWindow: 256000,
+    maxTokens: 8192,
+  },
+  "kimi-k2-thinking": {
+    id: "kimi-k2-thinking",
+    name: "Kimi K2 Thinking",
+    api: "openai-completions",
+    provider: "moonshot",
+    baseUrl: "https://api.moonshot.ai/v1",
+    reasoning: true,
+    input: ["text"],
+    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+    contextWindow: 256000,
+    maxTokens: 8192,
+  },
+};
+
 export function getProviderModel(provider: SupportedProvider, modelId: string): Model<Api> {
   const cacheKey = `${provider}:${modelId}`;
   const cached = modelCache.get(cacheKey);
   if (cached) return cached;
 
   const meta = getProviderMetadata(provider);
+
+  if (meta.piAiProvider === "moonshot") {
+    const model = MOONSHOT_MODELS[modelId] ?? MOONSHOT_MODELS[meta.defaultModel];
+    if (model) {
+      modelCache.set(cacheKey, model);
+      return model;
+    }
+  }
 
   try {
     const model = getModel(meta.piAiProvider as any, modelId as any);
