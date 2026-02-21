@@ -104,6 +104,7 @@ export const CONFIGURABLE_KEYS: Record<string, ConfigKeyMeta> = {
       "moonshot",
       "mistral",
       "cocoon",
+      "local",
     ],
     validate: enumValidator([
       "anthropic",
@@ -115,6 +116,7 @@ export const CONFIGURABLE_KEYS: Record<string, ConfigKeyMeta> = {
       "moonshot",
       "mistral",
       "cocoon",
+      "local",
     ]),
     mask: identity,
     parse: identity,

@@ -1,5 +1,90 @@
 const API_BASE = '/api';
 
+// ── Setup types ─────────────────────────────────────────────────────
+
+export interface SetupStatusResponse {
+  workspaceExists: boolean;
+  configExists: boolean;
+  walletExists: boolean;
+  walletAddress: string | null;
+  sessionExists: boolean;
+  envVars: {
+    apiKey: string | null;
+    apiKeyRaw: boolean;
+    telegramApiId: string | null;
+    telegramApiHash: string | null;
+    telegramPhone: string | null;
+  };
+}
+
+export interface SetupProvider {
+  id: string;
+  displayName: string;
+  defaultModel: string;
+  utilityModel: string;
+  toolLimit: number | null;
+  keyPrefix: string | null;
+  consoleUrl: string | null;
+  requiresApiKey: boolean;
+}
+
+export interface SetupModelOption {
+  value: string;
+  name: string;
+  description: string;
+  isCustom?: boolean;
+}
+
+export interface BotValidation {
+  valid: boolean;
+  networkError: boolean;
+  bot?: { username: string; firstName: string };
+  error?: string;
+}
+
+export interface WalletStatus {
+  exists: boolean;
+  address?: string;
+}
+
+export interface WalletResult {
+  address: string;
+  mnemonic: string[];
+}
+
+export interface AuthCodeResult {
+  authSessionId: string;
+  codeViaApp: boolean;
+  expiresAt: number;
+}
+
+export interface AuthVerifyResult {
+  status: 'authenticated' | '2fa_required';
+  user?: { id: number; firstName: string; username: string };
+  passwordHint?: string;
+}
+
+export interface SetupConfig {
+  agent: { provider: string; api_key?: string; base_url?: string; model?: string; max_agentic_iterations?: number };
+  telegram: {
+    api_id: number;
+    api_hash: string;
+    phone: string;
+    admin_ids: number[];
+    owner_id: number;
+    dm_policy?: string;
+    group_policy?: string;
+    require_mention?: boolean;
+    bot_token?: string;
+    bot_username?: string;
+  };
+  cocoon?: { port: number };
+  deals?: { buy_max_floor_percent?: number; sell_min_floor_percent?: number };
+  tonapi_key?: string;
+  tavily_api_key?: string;
+  webui?: { enabled: boolean };
+}
+
 // ── Response types ──────────────────────────────────────────────────
 
 export interface StatusData {
@@ -159,7 +244,27 @@ interface APIResponse<T> {
   data: T;
 }
 
-// ── Fetch helper ────────────────────────────────────────────────────
+// ── Fetch helpers ───────────────────────────────────────────────────
+
+async function fetchSetupAPI<T>(endpoint: string, options?: RequestInit): Promise<T> {
+  const headers: HeadersInit = {
+    'Content-Type': 'application/json',
+    ...options?.headers,
+  };
+
+  const response = await fetch(`${API_BASE}${endpoint}`, {
+    ...options,
+    headers,
+  });
+
+  if (!response.ok) {
+    const error = await response.json().catch(() => ({ error: response.statusText }));
+    throw new Error(error.error || `HTTP ${response.status}`);
+  }
+
+  const json = await response.json();
+  return json.data !== undefined ? json.data : json;
+}
 
 async function fetchAPI<T>(endpoint: string, options?: RequestInit): Promise<T> {
   const headers: HeadersInit = {
@@ -431,5 +536,104 @@ export const api = {
     };
 
     return () => eventSource.close();
+  },
+};
+
+// ── Setup API (no auth required) ────────────────────────────────────
+
+export const setup = {
+  getStatus: () =>
+    fetchSetupAPI<SetupStatusResponse>('/setup/status'),
+
+  getProviders: () =>
+    fetchSetupAPI<SetupProvider[]>('/setup/providers'),
+
+  getModels: (provider: string) =>
+    fetchSetupAPI<SetupModelOption[]>(`/setup/models/${encodeURIComponent(provider)}`),
+
+  validateApiKey: (provider: string, apiKey: string) =>
+    fetchSetupAPI<{ valid: boolean; error?: string }>('/setup/validate/api-key', {
+      method: 'POST',
+      body: JSON.stringify({ provider, apiKey }),
+    }),
+
+  validateBotToken: (token: string) =>
+    fetchSetupAPI<BotValidation>('/setup/validate/bot-token', {
+      method: 'POST',
+      body: JSON.stringify({ token }),
+    }),
+
+  initWorkspace: (agentName?: string) =>
+    fetchSetupAPI<{ created: boolean; path: string }>('/setup/workspace/init', {
+      method: 'POST',
+      body: JSON.stringify({ agentName }),
+    }),
+
+  getWalletStatus: () =>
+    fetchSetupAPI<WalletStatus>('/setup/wallet/status'),
+
+  generateWallet: () =>
+    fetchSetupAPI<WalletResult>('/setup/wallet/generate', { method: 'POST' }),
+
+  importWallet: (mnemonic: string) =>
+    fetchSetupAPI<{ address: string }>('/setup/wallet/import', {
+      method: 'POST',
+      body: JSON.stringify({ mnemonic }),
+    }),
+
+  sendCode: (apiId: number, apiHash: string, phone: string) =>
+    fetchSetupAPI<AuthCodeResult>('/setup/telegram/send-code', {
+      method: 'POST',
+      body: JSON.stringify({ apiId, apiHash, phone }),
+    }),
+
+  verifyCode: (authSessionId: string, code: string) =>
+    fetchSetupAPI<AuthVerifyResult>('/setup/telegram/verify-code', {
+      method: 'POST',
+      body: JSON.stringify({ authSessionId, code }),
+    }),
+
+  verifyPassword: (authSessionId: string, password: string) =>
+    fetchSetupAPI<AuthVerifyResult>('/setup/telegram/verify-password', {
+      method: 'POST',
+      body: JSON.stringify({ authSessionId, password }),
+    }),
+
+  resendCode: (authSessionId: string) =>
+    fetchSetupAPI<{ codeViaApp: boolean }>('/setup/telegram/resend-code', {
+      method: 'POST',
+      body: JSON.stringify({ authSessionId }),
+    }),
+
+  saveConfig: (config: SetupConfig) =>
+    fetchSetupAPI<{ path: string }>('/setup/config/save', {
+      method: 'POST',
+      body: JSON.stringify(config),
+    }),
+
+  launch: () =>
+    fetchSetupAPI<{ token: string }>('/setup/launch', { method: 'POST' }),
+
+  pollHealth: async (timeoutMs = 30000): Promise<void> => {
+    const start = Date.now();
+    const interval = 1000;
+    // Wait a beat for the server to restart
+    await new Promise((r) => setTimeout(r, 1500));
+
+    while (Date.now() - start < timeoutMs) {
+      try {
+        const authRes = await fetch('/auth/check', { signal: AbortSignal.timeout(2000) });
+        if (authRes.ok) {
+          const json = await authRes.json();
+          // The setup server returns { data: { setup: true } } — reject it.
+          // The agent WebUI returns { data: { authenticated: bool } } without setup flag.
+          if (json.success && json.data && !json.data.setup) return;
+        }
+      } catch {
+        // Server not up yet (connection refused, timeout, etc.)
+      }
+      await new Promise((r) => setTimeout(r, interval));
+    }
+    throw new Error('Agent did not start within the expected time');
   },
 };

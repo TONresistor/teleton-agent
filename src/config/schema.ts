@@ -31,9 +31,15 @@ export const AgentConfigSchema = z.object({
       "moonshot",
       "mistral",
       "cocoon",
+      "local",
     ])
     .default("anthropic"),
   api_key: z.string().default(""),
+  base_url: z
+    .string()
+    .url()
+    .optional()
+    .describe("Base URL for local LLM server (e.g. http://localhost:11434/v1)"),
   model: z.string().default("claude-opus-4-5-20251101"),
   utility_model: z
     .string()

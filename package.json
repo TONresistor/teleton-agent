@@ -78,6 +78,7 @@
     "grammy": "^1.40.0",
     "hono": "^4.11.9",
     "js-tiktoken": "^1.0.21",
+    "lottie-react": "^2.4.1",
     "ora": "^9.3.0",
     "pino": "^10.3.1",
     "pino-pretty": "^13.1.3",

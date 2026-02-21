@@ -12,16 +12,52 @@ import { Workspace } from './pages/Workspace';
 import { Tasks } from './pages/Tasks';
 import { Mcp } from './pages/Mcp';
 import { Config } from './pages/Config';
+import { Setup } from './pages/Setup';
+import { SetupLayout } from './components/setup/SetupLayout';
 import { checkAuth, login } from './lib/api';
 import { logStore } from './lib/log-store';
 
 function App() {
+  // Setup route bypasses auth entirely
+  if (window.location.pathname.startsWith('/setup')) {
+    return (
+      <BrowserRouter>
+        <ErrorBoundary>
+          <Routes>
+            <Route path="/setup" element={<SetupLayout />}>
+              <Route index element={<Setup />} />
+            </Route>
+          </Routes>
+        </ErrorBoundary>
+      </BrowserRouter>
+    );
+  }
+
+  return <AuthenticatedApp />;
+}
+
+function AuthenticatedApp() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [loading, setLoading] = useState(true);
   const [tokenInput, setTokenInput] = useState('');
   const [loginError, setLoginError] = useState('');
 
   useEffect(() => {
+    // Check for token exchange (from setup launch flow)
+    const params = new URLSearchParams(window.location.search);
+    const exchangeToken = params.get('token');
+    if (window.location.pathname === '/auth/exchange' && exchangeToken) {
+      login(exchangeToken).then((success) => {
+        if (success) {
+          window.location.href = '/';
+        } else {
+          setLoading(false);
+          setLoginError('Token exchange failed');
+        }
+      });
+      return;
+    }
+
     // Check if we already have a valid session cookie
     checkAuth().then((valid) => {
       setIsAuthenticated(valid);
@@ -112,3 +148,4 @@ function App() {
 }
 
 export default App;
+export { AuthenticatedApp };

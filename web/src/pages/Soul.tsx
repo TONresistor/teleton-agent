@@ -98,7 +98,7 @@ export function Soul() {
               <button onClick={saveFile} disabled={saving || !dirty}>
                 {saving ? 'Saving...' : 'Save'}
               </button>
-              {dirty && <span style={{ color: 'var(--orange)', fontSize: '13px' }}>Unsaved changes</span>}
+              {dirty && <span style={{ color: 'var(--text-secondary)', fontSize: '13px' }}>Unsaved changes</span>}
             </div>
           </>
         )}

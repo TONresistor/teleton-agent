@@ -7,7 +7,8 @@ export type SupportedProvider =
   | "openrouter"
   | "moonshot"
   | "mistral"
-  | "cocoon";
+  | "cocoon"
+  | "local";
 
 export interface ProviderMetadata {
   id: SupportedProvider;
@@ -131,6 +132,18 @@ const PROVIDER_REGISTRY: Record<SupportedProvider, ProviderMetadata> = {
     toolLimit: 128,
     piAiProvider: "cocoon",
   },
+  local: {
+    id: "local",
+    displayName: "Local (Ollama, vLLM, LM Studio...)",
+    envVar: "",
+    keyPrefix: null,
+    keyHint: "No API key needed",
+    consoleUrl: "",
+    defaultModel: "auto",
+    utilityModel: "auto",
+    toolLimit: 128,
+    piAiProvider: "local",
+  },
 };
 
 export function getProviderMetadata(provider: SupportedProvider): ProviderMetadata {
@@ -148,7 +161,7 @@ export function getSupportedProviders(): ProviderMetadata[] {
 export function validateApiKeyFormat(provider: SupportedProvider, key: string): string | undefined {
   const meta = PROVIDER_REGISTRY[provider];
   if (!meta) return `Unknown provider: ${provider}`;
-  if (provider === "cocoon") return undefined; // No API key needed
+  if (provider === "cocoon" || provider === "local") return undefined; // No API key needed
   if (!key || key.trim().length === 0) return "API key is required";
   if (meta.keyPrefix && !key.startsWith(meta.keyPrefix)) {
     return `Invalid format (should start with ${meta.keyPrefix})`;

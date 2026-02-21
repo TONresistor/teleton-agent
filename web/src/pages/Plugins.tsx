@@ -285,7 +285,7 @@ export function Plugins() {
           >
             Marketplace
             {updatableCount > 0 && (
-              <span className="tab-count" style={{ background: 'var(--orange-dim)', color: 'var(--orange)' }}>
+              <span className="tab-count" style={{ background: 'rgba(255,255,255,0.08)', color: 'var(--text-secondary)' }}>
                 {updatableCount}
               </span>
             )}
@@ -464,7 +464,7 @@ export function Plugins() {
                                 <div key={key} className="tool-row" style={{ padding: '8px 12px', flexWrap: 'wrap' }}>
                                   <div style={{ flex: 1, minWidth: 0 }}>
                                     <span style={{ fontWeight: 600, fontSize: '13px' }}>{key}</span>
-                                    {decl.required && <span style={{ color: 'var(--orange)', marginLeft: '4px', fontSize: '11px' }}>required</span>}
+                                    {decl.required && <span style={{ color: 'var(--text-secondary)', marginLeft: '4px', fontSize: '11px' }}>required</span>}
                                     <span className={`badge ${isSet ? 'always' : 'warn'}`} style={{ marginLeft: '8px', fontSize: '10px' }}>
                                       {isSet ? 'Set' : 'Not set'}
                                     </span>
@@ -520,7 +520,7 @@ export function Plugins() {
             {Object.entries(secretsWizard.secrets).map(([key, decl]) => (
               <div key={key} style={{ marginBottom: '12px' }}>
                 <label style={{ display: 'block', fontSize: '13px', fontWeight: 600, marginBottom: '4px' }}>
-                  {key} {decl.required && <span style={{ color: 'var(--orange)' }}>*</span>}
+                  {key} {decl.required && <span style={{ color: 'var(--text-secondary)' }}>*</span>}
                 </label>
                 <p style={{ fontSize: '12px', color: 'var(--text-tertiary)', margin: '0 0 4px 0' }}>{decl.description}</p>
                 {decl.env && (
