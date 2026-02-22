@@ -15,7 +15,7 @@ export interface LoadedPlugin {
 
 export interface McpServerInfo {
   name: string;
-  type: "stdio" | "sse";
+  type: "stdio" | "sse" | "streamable-http";
   target: string;
   scope: string;
   enabled: boolean;
@@ -35,7 +35,7 @@ export interface WebUIServerDeps {
   };
   toolRegistry: ToolRegistry;
   plugins: LoadedPlugin[];
-  mcpServers: McpServerInfo[];
+  mcpServers: McpServerInfo[] | (() => McpServerInfo[]);
   config: WebUIConfig;
   configPath: string;
   lifecycle?: AgentLifecycle;
