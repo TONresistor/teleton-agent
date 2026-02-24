@@ -38,7 +38,7 @@ agent:
   provider: anthropic
   api_key: sk-ant-api03-fulltest456
   model: claude-opus-4-5-20251101
-  utility_model: claude-3-5-haiku-20241022
+  utility_model: claude-haiku-4-5-20251001
   max_tokens: 8192
   temperature: 0.8
   system_prompt: "Custom system prompt"
@@ -281,7 +281,7 @@ describe("Config Loader", () => {
 
       // Agent
       expect(config.agent.model).toBe("claude-opus-4-5-20251101");
-      expect(config.agent.utility_model).toBe("claude-3-5-haiku-20241022");
+      expect(config.agent.utility_model).toBe("claude-haiku-4-5-20251001");
       expect(config.agent.max_tokens).toBe(8192);
       expect(config.agent.temperature).toBe(0.8);
       expect(config.agent.max_agentic_iterations).toBe(10);

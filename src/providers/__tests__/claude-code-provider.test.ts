@@ -15,7 +15,7 @@ describe("claude-code provider registration", () => {
     expect(meta.piAiProvider).toBe("anthropic");
     expect(meta.toolLimit).toBeNull();
     expect(meta.defaultModel).toBe("claude-opus-4-6");
-    expect(meta.utilityModel).toBe("claude-3-5-haiku-20241022");
+    expect(meta.utilityModel).toBe("claude-haiku-4-5-20251001");
     expect(meta.keyPrefix).toBe("sk-ant-");
   });
 

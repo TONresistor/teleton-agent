@@ -118,9 +118,9 @@ const MODEL_OPTIONS: Record<string, Array<{ value: string; name: string; descrip
       description: "Fast & cheap, $1/M",
     },
     {
-      value: "claude-3-5-haiku-20241022",
-      name: "Claude 3.5 Haiku",
-      description: "Cheapest, $0.80/M",
+      value: "claude-haiku-4-5-20251001",
+      name: "Claude Haiku 4.5",
+      description: "Fast & cheap, $1/M",
     },
   ],
   openai: [
