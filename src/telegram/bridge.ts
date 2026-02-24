@@ -20,6 +20,7 @@ export interface TelegramMessage {
   _rawPeer?: Api.TypePeer;
   hasMedia: boolean;
   mediaType?: "photo" | "document" | "video" | "audio" | "voice" | "sticker";
+  replyToId?: number;
   _rawMessage?: Api.Message;
 }
 
@@ -315,6 +316,8 @@ export class TelegramBridge {
     else if (msg.sticker) mediaType = "sticker";
     else if (msg.document) mediaType = "document";
 
+    const replyToMsgId = msg.replyToMsgId; // GramJS getter, returns number | undefined
+
     let text = msg.message ?? "";
     if (!text && msg.media) {
       if (msg.media.className === "MessageMediaDice") {
@@ -352,12 +355,52 @@ export class TelegramBridge {
       _rawPeer: msg.peerId,
       hasMedia,
       mediaType,
-      _rawMessage: hasMedia ? msg : undefined,
+      replyToId: replyToMsgId,
+      _rawMessage: hasMedia || !!replyToMsgId ? msg : undefined,
     };
   }
 
   getPeer(chatId: string): Api.TypePeer | undefined {
     return this.peerCache.get(chatId);
+  }
+
+  async fetchReplyContext(
+    rawMsg: Api.Message
+  ): Promise<{ text?: string; senderName?: string; isAgent?: boolean } | undefined> {
+    try {
+      const replyMsg = await Promise.race([
+        rawMsg.getReplyMessage(),
+        new Promise<undefined>((resolve) => setTimeout(() => resolve(undefined), 5000)),
+      ]);
+      if (!replyMsg) return undefined;
+
+      let senderName: string | undefined;
+      try {
+        const sender = await Promise.race([
+          replyMsg.getSender(),
+          new Promise<undefined>((resolve) => setTimeout(() => resolve(undefined), 5000)),
+        ]);
+        if (sender && "firstName" in sender) {
+          senderName = (sender.firstName as string) ?? undefined;
+        }
+        if (sender && "username" in sender && !senderName) {
+          senderName = (sender.username as string) ?? undefined;
+        }
+      } catch {
+        // Non-critical
+      }
+
+      const replyMsgSenderId = replyMsg.senderId ? BigInt(replyMsg.senderId.toString()) : undefined;
+      const isAgent = this.ownUserId !== undefined && replyMsgSenderId === this.ownUserId;
+
+      return {
+        text: replyMsg.message || undefined,
+        senderName,
+        isAgent,
+      };
+    } catch {
+      return undefined;
+    }
   }
 
   getClient(): TelegramUserClient {

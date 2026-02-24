@@ -176,7 +176,8 @@ export class AgentRuntime {
     senderUsername?: string,
     hasMedia?: boolean,
     mediaType?: string,
-    messageId?: number
+    messageId?: number,
+    replyContext?: { senderName?: string; text: string; isAgent?: boolean }
   ): Promise<AgentResponse> {
     try {
       let session = getOrCreateSession(chatId);
@@ -231,6 +232,7 @@ export class AgentRuntime {
         hasMedia,
         mediaType,
         messageId,
+        replyContext,
       });
 
       if (pendingContext) {

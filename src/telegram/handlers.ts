@@ -348,6 +348,15 @@ export class MessageHandler {
           pendingContext = this.pendingHistory.getAndClearPending(message.chatId);
         }
 
+        // 5b. Resolve reply context (only for messages we're responding to)
+        let replyContext: { text: string; senderName?: string; isAgent?: boolean } | undefined;
+        if (message.replyToId && message._rawMessage) {
+          const raw = await this.bridge.fetchReplyContext(message._rawMessage);
+          if (raw?.text) {
+            replyContext = { text: raw.text, senderName: raw.senderName, isAgent: raw.isAgent };
+          }
+        }
+
         // 6. Build tool context
         const toolContext: Omit<ToolContext, "chatId" | "isGroup"> = {
           bridge: this.bridge,
@@ -370,7 +379,8 @@ export class MessageHandler {
           message.senderUsername,
           message.hasMedia,
           message.mediaType,
-          message.id
+          message.id,
+          replyContext
         );
 
         // 8. Handle response based on whether tools were used
@@ -460,7 +470,7 @@ export class MessageHandler {
         chatId: message.chatId,
         senderId: message.senderId?.toString() ?? null,
         text: message.text,
-        replyToId: undefined,
+        replyToId: message.replyToId?.toString(),
         isFromAgent,
         hasMedia: message.hasMedia,
         mediaType: message.mediaType,
