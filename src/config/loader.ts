@@ -52,7 +52,11 @@ export function loadConfig(configPath: string = DEFAULT_CONFIG_PATH): Config {
 
   const config = result.data;
   const provider = config.agent.provider as SupportedProvider;
-  if (provider !== "anthropic" && !(raw as Record<string, Record<string, unknown>>).agent?.model) {
+  if (
+    provider !== "anthropic" &&
+    provider !== "claude-code" &&
+    !(raw as Record<string, Record<string, unknown>>).agent?.model
+  ) {
     const meta = getProviderMetadata(provider);
     config.agent.model = meta.defaultModel;
   }

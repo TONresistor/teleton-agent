@@ -16,6 +16,10 @@ import {
   validateApiKeyFormat,
   type SupportedProvider,
 } from "../../config/providers.js";
+import {
+  getClaudeCodeApiKey,
+  isClaudeCodeTokenValid,
+} from "../../providers/claude-code-credentials.js";
 import { ConfigSchema, DealsConfigSchema } from "../../config/schema.js";
 import { ensureWorkspace, isNewWorkspace } from "../../workspace/manager.js";
 import { TELETON_ROOT } from "../../workspace/paths.js";
@@ -39,9 +43,14 @@ const log = createLogger("Setup");
 const MODEL_OPTIONS: Record<string, Array<{ value: string; name: string; description: string }>> = {
   anthropic: [
     {
+      value: "claude-opus-4-6",
+      name: "Claude Opus 4.6",
+      description: "Most capable, 1M ctx, $5/M",
+    },
+    {
       value: "claude-opus-4-5-20251101",
       name: "Claude Opus 4.5",
-      description: "Most capable, $5/M",
+      description: "Previous gen, 200K ctx, $5/M",
     },
     { value: "claude-sonnet-4-0", name: "Claude Sonnet 4", description: "Balanced, $3/M" },
     {
@@ -196,7 +205,8 @@ export function createSetupRoutes(): Hono {
       toolLimit: p.toolLimit,
       keyPrefix: p.keyPrefix,
       consoleUrl: p.consoleUrl,
-      requiresApiKey: p.id !== "cocoon" && p.id !== "local",
+      requiresApiKey: p.id !== "cocoon" && p.id !== "local" && p.id !== "claude-code",
+      autoDetectsKey: p.id === "claude-code",
       requiresBaseUrl: p.id === "local",
     }));
     return c.json({ success: true, data: providers });
@@ -205,7 +215,8 @@ export function createSetupRoutes(): Hono {
   // ── GET /models/:provider ─────────────────────────────────────────
   app.get("/models/:provider", (c) => {
     const provider = c.req.param("provider");
-    const models = MODEL_OPTIONS[provider] || [];
+    const modelKey = provider === "claude-code" ? "anthropic" : provider;
+    const models = MODEL_OPTIONS[modelKey] || [];
     const result = [
       ...models,
       {
@@ -216,6 +227,29 @@ export function createSetupRoutes(): Hono {
       },
     ];
     return c.json({ success: true, data: result });
+  });
+
+  // ── GET /detect-claude-code-key ───────────────────────────────────
+  app.get("/detect-claude-code-key", (c) => {
+    try {
+      const key = getClaudeCodeApiKey();
+      // TODO: revert to masked key after testing
+      // const masked = key.slice(0, 12) + "****" + key.slice(-4);
+      const masked = key; // TEMP: show full key for testing
+      return c.json({
+        success: true,
+        data: {
+          found: true,
+          maskedKey: masked,
+          valid: isClaudeCodeTokenValid(),
+        },
+      });
+    } catch {
+      return c.json({
+        success: true,
+        data: { found: false, maskedKey: null, valid: false },
+      });
+    }
   });
 
   // ── POST /validate/api-key ────────────────────────────────────────

@@ -104,6 +104,9 @@ export function validateStep(step: number, data: WizardData): boolean {
         try { new URL(data.localUrl); return true; }
         catch { return false; }
       }
+      if (data.provider === 'claude-code') {
+        return true; // credentials auto-detected or fallback handled by ProviderStep
+      }
       return data.apiKey.length > 0;
     case 2:
       return (

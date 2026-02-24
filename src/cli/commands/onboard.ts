@@ -52,6 +52,10 @@ import {
 import { TELEGRAM_MAX_MESSAGE_LENGTH } from "../../constants/limits.js";
 import { fetchWithTimeout } from "../../utils/fetch.js";
 import ora from "ora";
+import {
+  getClaudeCodeApiKey,
+  isClaudeCodeTokenValid,
+} from "../../providers/claude-code-credentials.js";
 
 export interface OnboardOptions {
   workspace?: string;
@@ -98,9 +102,14 @@ function sleep(ms: number): Promise<void> {
 const MODEL_OPTIONS: Record<string, Array<{ value: string; name: string; description: string }>> = {
   anthropic: [
     {
+      value: "claude-opus-4-6",
+      name: "Claude Opus 4.6",
+      description: "Most capable, 1M ctx, $5/M",
+    },
+    {
       value: "claude-opus-4-5-20251101",
       name: "Claude Opus 4.5",
-      description: "Most capable, $5/M",
+      description: "Previous gen, 200K ctx, $5/M",
     },
     { value: "claude-sonnet-4-0", name: "Claude Sonnet 4", description: "Balanced, $3/M" },
     {
@@ -469,6 +478,58 @@ async function runInteractiveOnboarding(
     );
 
     STEPS[1].value = `${providerMeta.displayName}  ${DIM(localBaseUrl)}`;
+  } else if (selectedProvider === "claude-code") {
+    // Claude Code — auto-detect credentials, fallback to manual key
+    let detected = false;
+    try {
+      const key = getClaudeCodeApiKey();
+      const valid = isClaudeCodeTokenValid();
+      apiKey = ""; // Don't store in config — auto-detected at runtime
+      detected = true;
+      const masked = key.length > 16 ? key.slice(0, 12) + "..." + key.slice(-4) : "***";
+      noteBox(
+        `Credentials auto-detected from Claude Code\n` +
+          `Key: ${masked}\n` +
+          `Status: ${valid ? GREEN("valid ✓") : "expired (will refresh on use)"}\n` +
+          `Token will auto-refresh when it expires.`,
+        "Claude Code",
+        TON
+      );
+      await confirm({
+        message: "Continue with auto-detected credentials?",
+        default: true,
+        theme,
+      });
+    } catch (err) {
+      if (err instanceof CancelledError) throw err;
+      prompter.warn(
+        "Claude Code credentials not found. Make sure Claude Code is installed and authenticated (claude login)."
+      );
+      const useFallback = await confirm({
+        message: "Enter an API key manually instead?",
+        default: true,
+        theme,
+      });
+      if (useFallback) {
+        apiKey = await password({
+          message: `Anthropic API Key (fallback)`,
+          theme,
+          validate: (value = "") => {
+            if (!value || value.trim().length === 0) return "API key is required";
+            return true;
+          },
+        });
+      } else {
+        throw new CancelledError();
+      }
+    }
+
+    if (detected) {
+      STEPS[1].value = `${providerMeta.displayName}  ${DIM("auto-detected ✓")}`;
+    } else {
+      const maskedKey = apiKey.length > 10 ? apiKey.slice(0, 6) + "..." + apiKey.slice(-4) : "***";
+      STEPS[1].value = `${providerMeta.displayName}  ${DIM(maskedKey)}`;
+    }
   } else {
     // Standard providers — API key required
     const envApiKey = process.env.TELETON_API_KEY;
@@ -593,7 +654,8 @@ async function runInteractiveOnboarding(
     selectedProvider !== "cocoon" &&
     selectedProvider !== "local"
   ) {
-    const providerModels = MODEL_OPTIONS[selectedProvider] || [];
+    const modelKey = selectedProvider === "claude-code" ? "anthropic" : selectedProvider;
+    const providerModels = MODEL_OPTIONS[modelKey] || [];
     const modelChoices = [
       ...providerModels,
       { value: "__custom__", name: "Custom", description: "Enter a model ID manually" },

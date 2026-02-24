@@ -96,6 +96,7 @@ export const CONFIGURABLE_KEYS: Record<string, ConfigKeyMeta> = {
     sensitive: false,
     options: [
       "anthropic",
+      "claude-code",
       "openai",
       "google",
       "xai",
@@ -108,6 +109,7 @@ export const CONFIGURABLE_KEYS: Record<string, ConfigKeyMeta> = {
     ],
     validate: enumValidator([
       "anthropic",
+      "claude-code",
       "openai",
       "google",
       "xai",

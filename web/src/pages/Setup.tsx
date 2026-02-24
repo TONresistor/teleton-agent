@@ -20,7 +20,7 @@ const STEP_COMPONENTS = [
 ];
 
 export function Setup() {
-  const { step, data, loading, error, saved, canAdvance, setData, next, prev, handleSave } =
+  const { step, data, loading, error, saved, canAdvance, setData, next, prev } =
     useSetup();
 
   if (saved) {
