@@ -297,11 +297,6 @@ select {
 
 .custom-select {
   position: relative;
-  z-index: 1;
-}
-
-.custom-select:has(.custom-select-menu) {
-  z-index: 200;
 }
 
 .custom-select-trigger {
@@ -335,15 +330,11 @@ select {
 }
 
 .custom-select-menu {
-  position: absolute;
-  top: calc(100% + 4px);
-  left: 0;
-  right: 0;
   background: var(--bg);
   border: 1px solid var(--glass-border-strong);
   border-radius: var(--radius-sm);
   padding: 4px;
-  z-index: 50;
+  z-index: 10000;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
   max-height: 200px;
   overflow-y: auto;

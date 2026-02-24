@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 
 interface SelectProps {
   value: string;
@@ -11,6 +12,7 @@ interface SelectProps {
 export function Select({ value, options, labels, onChange, style }: SelectProps) {
   const [open, setOpen] = useState(false);
   const [focusIdx, setFocusIdx] = useState(-1);
+  const [menuPos, setMenuPos] = useState<{ top: number; left: number; width: number } | null>(null);
   const ref = useRef<HTMLDivElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
   const idRef = useRef(Math.random().toString(36).slice(2));
@@ -19,12 +21,24 @@ export function Select({ value, options, labels, onChange, style }: SelectProps)
   useEffect(() => {
     if (!open) return;
     const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) {
+      const target = e.target as Node;
+      const clickedInside = ref.current?.contains(target) || menuRef.current?.contains(target);
+      if (!clickedInside) {
         setOpen(false);
       }
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
+  }, [open]);
+
+  // Calculate menu position when opening
+  useEffect(() => {
+    if (open && ref.current) {
+      const rect = ref.current.getBoundingClientRect();
+      setMenuPos({ top: rect.bottom + 4, left: rect.left, width: rect.width });
+    } else {
+      setMenuPos(null);
+    }
   }, [open]);
 
   // Reset focus index when opening
@@ -101,13 +115,14 @@ export function Select({ value, options, labels, onChange, style }: SelectProps)
           <path d="M6 9l6 6 6-6" />
         </svg>
       </button>
-      {open && (
+      {open && menuPos && createPortal(
         <div
           ref={menuRef}
           id={menuId}
           className="custom-select-menu"
           role="listbox"
           aria-activedescendant={focusIdx >= 0 ? `${menuId}-opt-${focusIdx}` : undefined}
+          style={{ position: 'fixed', top: menuPos.top, left: menuPos.left, width: menuPos.width }}
         >
           {options.map((opt, idx) => (
             <div
@@ -122,7 +137,8 @@ export function Select({ value, options, labels, onChange, style }: SelectProps)
               {labels ? labels[idx] ?? opt : opt}
             </div>
           ))}
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
