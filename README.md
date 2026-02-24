@@ -21,7 +21,7 @@
 
 - **Full Telegram access** - Operates as a real user via MTProto (GramJS), not a limited bot
 - **Agentic loop** - Up to 5 iterations of tool calling per message, the agent thinks, acts, observes, and repeats
-- **Multi-Provider LLM** - Anthropic, OpenAI, Google Gemini, xAI Grok, Groq, OpenRouter, Moonshot, Mistral, Cocoon, Local
+- **Multi-Provider LLM** - Anthropic, Claude Code, OpenAI, Google Gemini, xAI Grok, Groq, OpenRouter, Moonshot, Mistral, Cocoon, Local (11 providers)
 - **TON Blockchain** - Built-in W5R1 wallet, send/receive TON & jettons, swap on STON.fi and DeDust, NFTs, DNS domains
 - **Persistent memory** - Hybrid RAG (sqlite-vec + FTS5), auto-compaction with AI summarization, daily logs
 - **100+ built-in tools** - Messaging, media, blockchain, DEX trading, deals, DNS, journaling, and more
@@ -37,7 +37,7 @@
 
 | Category      | Tools | Description                                                                                                        |
 | ------------- | ----- | ------------------------------------------------------------------------------------------------------------------ |
-| Telegram      | 66    | Messaging, media, chats, groups, polls, stickers, gifts, stars, stories, contacts, folders, profile, memory, tasks |
+| Telegram      | 73    | Messaging, media, chats, groups, polls, stickers, gifts, stars, stories, contacts, folders, profile, memory, tasks, voice transcription, scheduled messages |
 | TON & Jettons | 15    | W5R1 wallet, send/receive TON & jettons, balances, prices, holders, history, charts, NFTs, smart DEX router        |
 | STON.fi DEX   | 5     | Swap, quote, search, trending tokens, liquidity pools                                                              |
 | DeDust DEX    | 5     | Swap, quote, pools, prices, token analytics (holders, top traders, buy/sell tax)                                   |
@@ -51,7 +51,7 @@
 
 | Capability              | Description                                                                                                                 |
 | ----------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| **Multi-Provider LLM**  | Switch between Anthropic, OpenAI, Google, xAI, Groq, OpenRouter, Moonshot, Mistral, Cocoon, or Local with one config change  |
+| **Multi-Provider LLM**  | Switch between Anthropic, Claude Code, OpenAI, Google, xAI, Groq, OpenRouter, Moonshot, Mistral, Cocoon, or Local — Dashboard validates API key before switching |
 | **RAG + Hybrid Search** | Local ONNX embeddings (384d) or Voyage AI (512d/1024d) with FTS5 keyword + sqlite-vec cosine similarity, fused via RRF      |
 | **Auto-Compaction**     | AI-summarized context management prevents overflow, preserves key information in `memory/*.md` files                        |
 | **Observation Masking** | Compresses old tool results to one-line summaries, saving ~90% context window                                               |
@@ -71,7 +71,7 @@
 ## Prerequisites
 
 - **Node.js 20.0.0+** - [Download](https://nodejs.org/)
-- **LLM API Key** - One of: [Anthropic](https://console.anthropic.com/) (recommended), [OpenAI](https://platform.openai.com/), [Google](https://aistudio.google.com/), [xAI](https://console.x.ai/), [Groq](https://console.groq.com/), [OpenRouter](https://openrouter.ai/)
+- **LLM API Key** - One of: [Anthropic](https://console.anthropic.com/) (recommended), [OpenAI](https://platform.openai.com/), [Google](https://aistudio.google.com/), [xAI](https://console.x.ai/), [Groq](https://console.groq.com/), [OpenRouter](https://openrouter.ai/), [Moonshot](https://platform.moonshot.ai/), [Mistral](https://console.mistral.ai/) — or keyless: Claude Code (auto-detect), Cocoon (TON), Local (Ollama/vLLM)
 - **Telegram Account** - Dedicated account recommended for security
 - **Telegram API Credentials** - From [my.telegram.org/apps](https://my.telegram.org/apps)
 - **Your Telegram User ID** - Message [@userinfobot](https://t.me/userinfobot)
@@ -109,7 +109,7 @@ teleton setup
 ```
 
 The wizard will configure:
-- LLM provider selection (Anthropic, OpenAI, Google, xAI, Groq, OpenRouter)
+- LLM provider selection (11 providers: Anthropic, Claude Code, OpenAI, Google, xAI, Groq, OpenRouter, Moonshot, Mistral, Cocoon, Local)
 - Telegram authentication (API credentials, phone, login code)
 - Access policies (DM/group response rules)
 - Admin user ID
@@ -152,10 +152,10 @@ The `teleton setup` wizard generates a fully configured `~/.teleton/config.yaml`
 
 ```yaml
 agent:
-  provider: "anthropic"              # anthropic | openai | google | xai | groq | openrouter
+  provider: "anthropic"              # anthropic | claude-code | openai | google | xai | groq | openrouter | moonshot | mistral | cocoon | local
   api_key: "sk-ant-api03-..."
-  model: "claude-opus-4-5-20251101"
-  utility_model: "claude-3-5-haiku-20241022"  # for summarization, compaction, vision
+  model: "claude-opus-4-6"
+  utility_model: "claude-haiku-4-5-20251001"  # for summarization, compaction, vision
   max_agentic_iterations: 5
 
 telegram:
@@ -182,6 +182,24 @@ webui:                       # Optional: Web dashboard
   host: "127.0.0.1"          # Localhost only (security)
   # auth_token: "..."        # Auto-generated if omitted
 ```
+
+### Supported Models
+
+All models are defined in `src/config/model-catalog.ts` and shared across the CLI setup, WebUI setup wizard, and Dashboard. To add a model, add it there — it will appear everywhere automatically.
+
+| Provider | Models |
+|----------|--------|
+| **Anthropic** | Claude Opus 4.6, Claude Opus 4.5, Claude Sonnet 4.6, Claude Haiku 4.5 |
+| **Claude Code** | Same as Anthropic (auto-detected credentials) |
+| **OpenAI** | GPT-5, GPT-5 Pro, GPT-5 Mini, GPT-5.1, GPT-4o, GPT-4.1, GPT-4.1 Mini, o4 Mini, o3, Codex Mini |
+| **Google** | Gemini 3 Pro (preview), Gemini 3 Flash (preview), Gemini 2.5 Pro, Gemini 2.5 Flash, Gemini 2.5 Flash Lite, Gemini 2.0 Flash |
+| **xAI** | Grok 4.1 Fast, Grok 4 Fast, Grok 4, Grok Code, Grok 3 |
+| **Groq** | Llama 4 Maverick, Qwen3 32B, DeepSeek R1 70B, Llama 3.3 70B |
+| **OpenRouter** | Claude Opus/Sonnet, GPT-5, Gemini, DeepSeek R1/V3, Qwen3 Coder/Max/235B, Nemotron, Sonar Pro, MiniMax, Grok 4 |
+| **Moonshot** | Kimi K2.5, Kimi K2 Thinking |
+| **Mistral** | Devstral Small/Medium, Mistral Large, Magistral Small |
+| **Cocoon** | Qwen/Qwen3-32B (decentralized, pays in TON) |
+| **Local** | Auto-detected (Ollama, vLLM, LM Studio) |
 
 ### MCP Servers
 
@@ -283,7 +301,7 @@ Teleton includes an **optional web dashboard** for monitoring and configuration.
 
 ### Features
 
-- **Dashboard**: System status, uptime, model info, session count, memory stats
+- **Dashboard**: System status, uptime, model info, session count, memory stats, provider switching with API key validation
 - **Tools Management**: View all tools grouped by module, toggle enable/disable, change scope per tool
 - **Plugin Marketplace**: Install, update, and manage plugins from registry with secrets management
 - **Soul Editor**: Edit SOUL.md, SECURITY.md, STRATEGY.md, MEMORY.md with unsaved changes warning
@@ -386,7 +404,7 @@ All admin commands support `/`, `!`, or `.` prefix:
 
 | Layer | Technology |
 |-------|------------|
-| LLM | Multi-provider via [pi-ai](https://github.com/mariozechner/pi-ai) (Anthropic, OpenAI, Google, xAI, Groq, OpenRouter) |
+| LLM | Multi-provider via [pi-ai](https://github.com/mariozechner/pi-ai) (11 providers: Anthropic, Claude Code, OpenAI, Google, xAI, Groq, OpenRouter, Moonshot, Mistral, Cocoon, Local) |
 | Telegram Userbot | [GramJS](https://gram.js.org/) (MTProto) |
 | Inline Bot | [Grammy](https://grammy.dev/) (Bot API, for deals) |
 | Blockchain | [TON SDK](https://github.com/ton-org/ton) (W5R1 wallet) |
@@ -414,7 +432,7 @@ src/
 │       ├── module-loader.ts    # Built-in module loading (deals → +5 tools)
 │       ├── plugin-loader.ts    # External plugin discovery, validation, hot-reload
 │       ├── mcp-loader.ts       # MCP client (stdio/SSE), tool discovery, lifecycle
-│       ├── telegram/       # Telegram operations (66 tools)
+│       ├── telegram/       # Telegram operations (73 tools)
 │       ├── ton/            # TON blockchain + jettons + DEX router (15 tools)
 │       ├── stonfi/         # STON.fi DEX (5 tools)
 │       ├── dedust/         # DeDust DEX (5 tools)
@@ -463,7 +481,8 @@ src/
 │   └── loader.ts           # 10 sections: soul + security + strategy + memory + context + ...
 ├── config/                 # Configuration
 │   ├── schema.ts           # Zod schemas + validation
-│   └── providers.ts        # Multi-provider LLM registry (10 providers)
+│   ├── providers.ts        # Multi-provider LLM registry (11 providers)
+│   └── model-catalog.ts    # Shared model catalog (60+ models across all providers)
 ├── webui/                  # Optional web dashboard
 │   ├── server.ts           # Hono server, auth middleware, static serving
 │   └── routes/             # 11 API route groups (status, tools, logs, memory, soul, plugins, mcp, tasks, workspace, config, marketplace)

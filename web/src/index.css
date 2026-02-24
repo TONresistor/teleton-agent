@@ -1466,6 +1466,16 @@ button.btn-lg {
   to { opacity: 1; }
 }
 
+/* ---- Provider Switch Zone ---- */
+
+.provider-switch-zone {
+  padding: 14px 16px;
+  background: var(--surface);
+  border: 1px solid var(--glass-border-strong);
+  border-radius: var(--radius-sm);
+  animation: step-fade-in 150ms ease-out;
+}
+
 /* ---- Loading spinner ---- */
 
 .spinner {

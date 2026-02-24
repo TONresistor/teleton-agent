@@ -9,6 +9,12 @@ import {
   writeRawConfig,
 } from "../../config/configurable-keys.js";
 import type { ConfigKeyType, ConfigCategory } from "../../config/configurable-keys.js";
+import { getModelsForProvider } from "../../config/model-catalog.js";
+import {
+  getProviderMetadata,
+  validateApiKeyFormat,
+  type SupportedProvider,
+} from "../../config/providers.js";
 
 interface ConfigKeyData {
   key: string;
@@ -160,6 +166,57 @@ export function createConfigRoutes(deps: WebUIServerDeps) {
       return c.json(
         { success: false, error: err instanceof Error ? err.message : String(err) } as APIResponse,
         500
+      );
+    }
+  });
+
+  // Get model options for a provider
+  app.get("/models/:provider", (c) => {
+    const provider = c.req.param("provider");
+    const models = getModelsForProvider(provider);
+    return c.json({ success: true, data: models } as APIResponse);
+  });
+
+  // Get provider metadata (for API key UX)
+  app.get("/provider-meta/:provider", (c) => {
+    const provider = c.req.param("provider");
+    try {
+      const meta = getProviderMetadata(provider as SupportedProvider);
+      const needsKey = provider !== "claude-code" && provider !== "cocoon" && provider !== "local";
+      return c.json({
+        success: true,
+        data: {
+          needsKey,
+          keyHint: meta.keyHint,
+          keyPrefix: meta.keyPrefix,
+          consoleUrl: meta.consoleUrl,
+          displayName: meta.displayName,
+        },
+      } as APIResponse);
+    } catch (err) {
+      return c.json(
+        { success: false, error: err instanceof Error ? err.message : String(err) } as APIResponse,
+        400
+      );
+    }
+  });
+
+  // Validate an API key format for a provider
+  app.post("/validate-api-key", async (c) => {
+    try {
+      const body = await c.req.json<{ provider: string; apiKey: string }>();
+      if (!body.provider || !body.apiKey) {
+        return c.json({ success: false, error: "Missing provider or apiKey" } as APIResponse, 400);
+      }
+      const error = validateApiKeyFormat(body.provider as SupportedProvider, body.apiKey);
+      return c.json({
+        success: true,
+        data: { valid: !error, error: error ?? null },
+      } as APIResponse);
+    } catch (err) {
+      return c.json(
+        { success: false, error: err instanceof Error ? err.message : String(err) } as APIResponse,
+        400
       );
     }
   });

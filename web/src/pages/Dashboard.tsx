@@ -2,6 +2,14 @@ import { useEffect, useState, useCallback } from 'react';
 import { api, StatusData, MemoryStats, ToolRagStatus } from '../lib/api';
 import { Select } from '../components/Select';
 
+interface ProviderMeta {
+  needsKey: boolean;
+  keyHint: string;
+  keyPrefix: string | null;
+  consoleUrl: string;
+  displayName: string;
+}
+
 export function Dashboard() {
   const [status, setStatus] = useState<StatusData | null>(null);
   const [stats, setStats] = useState<MemoryStats | null>(null);
@@ -9,6 +17,14 @@ export function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [saveSuccess, setSaveSuccess] = useState<string | null>(null);
+  const [modelOptions, setModelOptions] = useState<Array<{ value: string; name: string }>>([]);
+
+  // Provider switch gating state
+  const [pendingProvider, setPendingProvider] = useState<string | null>(null);
+  const [pendingMeta, setPendingMeta] = useState<ProviderMeta | null>(null);
+  const [pendingApiKey, setPendingApiKey] = useState('');
+  const [pendingValidating, setPendingValidating] = useState(false);
+  const [pendingError, setPendingError] = useState<string | null>(null);
 
   // Local input state — decoupled from server values to avoid sending empty/partial values
   const [localInputs, setLocalInputs] = useState<Record<string, string>>({});
@@ -38,6 +54,81 @@ export function Dashboard() {
   }, [loadData]);
 
   const getLocal = (key: string): string => localInputs[key] ?? '';
+
+  // Load model options when provider changes
+  const currentProvider = getLocal('agent.provider');
+  useEffect(() => {
+    if (!currentProvider) return;
+    api.getModelsForProvider(currentProvider).then((res) => {
+      const models = res.data.map((m) => ({ value: m.value, name: m.name }));
+      setModelOptions(models);
+      // Auto-select first model if current model isn't in the new list
+      const currentModel = localInputs['agent.model'] ?? '';
+      if (models.length > 0 && !models.some((m) => m.value === currentModel)) {
+        saveConfig('agent.model', models[0].value);
+      }
+    }).catch(() => setModelOptions([]));
+  }, [currentProvider]);
+
+  // Handle provider change — gate on API key
+  const handleProviderChange = async (newProvider: string) => {
+    if (newProvider === currentProvider) return;
+    try {
+      const res = await api.getProviderMeta(newProvider);
+      const meta = res.data;
+      if (!meta.needsKey) {
+        // No key needed — save directly
+        await saveConfig('agent.provider', newProvider);
+        setPendingProvider(null);
+        setPendingMeta(null);
+      } else {
+        // Show the gated transition zone
+        setPendingProvider(newProvider);
+        setPendingMeta(meta);
+        setPendingApiKey('');
+        setPendingError(null);
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  };
+
+  const handleProviderConfirm = async () => {
+    if (!pendingProvider || !pendingMeta) return;
+    if (pendingMeta.needsKey && !pendingApiKey.trim()) {
+      setPendingError('API key is required');
+      return;
+    }
+    setPendingValidating(true);
+    setPendingError(null);
+    try {
+      // Validate API key format
+      const valRes = await api.validateApiKey(pendingProvider, pendingApiKey);
+      if (!valRes.data.valid) {
+        setPendingError(valRes.data.error || 'Invalid API key');
+        setPendingValidating(false);
+        return;
+      }
+      // Save provider + API key
+      await api.setConfigKey('agent.api_key', pendingApiKey.trim());
+      await saveConfig('agent.provider', pendingProvider);
+      setPendingProvider(null);
+      setPendingMeta(null);
+      setPendingApiKey('');
+      showSuccess(`Switched to ${pendingMeta.displayName}`);
+    } catch (err) {
+      setPendingError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setPendingValidating(false);
+    }
+  };
+
+  const handleProviderCancel = () => {
+    setPendingProvider(null);
+    setPendingMeta(null);
+    setPendingApiKey('');
+    setPendingError(null);
+  };
 
   const setLocal = (key: string, value: string) => {
     setLocalInputs((prev) => ({ ...prev, [key]: value }));
@@ -139,20 +230,66 @@ export function Dashboard() {
           <div className="form-group" style={{ marginBottom: 0 }}>
             <label>Provider</label>
             <Select
-              value={getLocal('agent.provider')}
-              options={['anthropic', 'openai', 'google', 'xai', 'groq', 'openrouter']}
-              onChange={(v) => saveConfig('agent.provider', v)}
+              value={pendingProvider ?? getLocal('agent.provider')}
+              options={['anthropic', 'claude-code', 'openai', 'google', 'xai', 'groq', 'openrouter', 'moonshot', 'mistral', 'cocoon', 'local']}
+              labels={['Anthropic', 'Claude Code', 'OpenAI', 'Google', 'xAI', 'Groq', 'OpenRouter', 'Moonshot', 'Mistral', 'Cocoon', 'Local']}
+              onChange={handleProviderChange}
             />
           </div>
+
+          {/* Gated provider switch zone */}
+          {pendingProvider && pendingMeta && (
+            <div className="provider-switch-zone">
+              <div style={{ fontSize: '13px', fontWeight: 500, marginBottom: '12px' }}>
+                Switching to {pendingMeta.displayName}
+              </div>
+              {pendingMeta.needsKey && (
+                <div className="form-group" style={{ marginBottom: '8px' }}>
+                  <label>API Key</label>
+                  <input
+                    type="password"
+                    placeholder={pendingMeta.keyHint}
+                    value={pendingApiKey}
+                    onChange={(e) => { setPendingApiKey(e.target.value); setPendingError(null); }}
+                    onKeyDown={(e) => e.key === 'Enter' && handleProviderConfirm()}
+                    style={{ width: '100%' }}
+                    autoFocus
+                  />
+                  {pendingMeta.consoleUrl && (
+                    <a
+                      href={pendingMeta.consoleUrl}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px', display: 'inline-block' }}
+                    >
+                      Get key at {new URL(pendingMeta.consoleUrl).hostname} ↗
+                    </a>
+                  )}
+                </div>
+              )}
+              {pendingError && (
+                <div style={{ fontSize: '12px', color: 'var(--red)', marginBottom: '8px' }}>
+                  {pendingError}
+                </div>
+              )}
+              <div style={{ display: 'flex', gap: '8px' }}>
+                <button className="btn-ghost btn-sm" onClick={handleProviderCancel} disabled={pendingValidating}>
+                  Cancel
+                </button>
+                <button className="btn-sm" onClick={handleProviderConfirm} disabled={pendingValidating}>
+                  {pendingValidating ? <><span className="spinner sm" /> Validating...</> : 'Validate & Save'}
+                </button>
+              </div>
+            </div>
+          )}
+
           <div className="form-group" style={{ marginBottom: 0 }}>
             <label>Model</label>
-            <input
-              type="text"
+            <Select
               value={getLocal('agent.model')}
-              onChange={(e) => setLocal('agent.model', e.target.value)}
-              onBlur={(e) => saveConfig('agent.model', e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && saveConfig('agent.model', e.currentTarget.value)}
-              style={{ width: '100%' }}
+              options={modelOptions.map((m) => m.value)}
+              labels={modelOptions.map((m) => m.name)}
+              onChange={(v) => saveConfig('agent.model', v)}
             />
           </div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '16px' }}>

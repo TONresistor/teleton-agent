@@ -482,6 +482,21 @@ export const api = {
     });
   },
 
+  async getModelsForProvider(provider: string) {
+    return fetchAPI<APIResponse<Array<{ value: string; name: string; description: string }>>>(`/config/models/${encodeURIComponent(provider)}`);
+  },
+
+  async getProviderMeta(provider: string) {
+    return fetchAPI<APIResponse<{ needsKey: boolean; keyHint: string; keyPrefix: string | null; consoleUrl: string; displayName: string }>>(`/config/provider-meta/${encodeURIComponent(provider)}`);
+  },
+
+  async validateApiKey(provider: string, apiKey: string) {
+    return fetchAPI<APIResponse<{ valid: boolean; error: string | null }>>('/config/validate-api-key', {
+      method: 'POST',
+      body: JSON.stringify({ provider, apiKey }),
+    });
+  },
+
   async getMarketplace(_refresh = false) {
     const qs = _refresh ? '?refresh=true' : '';
     return fetchAPI<APIResponse<MarketplacePlugin[]>>(`/marketplace${qs}`);
