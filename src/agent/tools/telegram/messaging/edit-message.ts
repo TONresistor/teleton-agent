@@ -21,8 +21,7 @@ interface EditMessageParams {
  */
 export const telegramEditMessageTool: Tool = {
   name: "telegram_edit_message",
-  description:
-    "Edit a previously sent message in a Telegram chat. Use this to correct errors, update information, or modify content without deleting and resending. Only messages sent by the bot can be edited. Text messages can be edited within 48 hours of being sent.",
+  description: "Edit a previously sent message. Only your own messages can be edited, within 48h.",
   parameters: Type.Object({
     chatId: Type.String({
       description: "The chat ID where the message was sent",

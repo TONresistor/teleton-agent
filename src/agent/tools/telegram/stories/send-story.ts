@@ -25,8 +25,7 @@ interface SendStoryParams {
  */
 export const telegramSendStoryTool: Tool = {
   name: "telegram_send_story",
-  description:
-    "Post a story (ephemeral photo/video) to Telegram that disappears after 24 hours. Stories are displayed at the top of chats and provide high visibility. Use this for announcements, updates, or time-sensitive visual content. Supports photos (JPG, PNG) and videos (MP4).",
+  description: "Post a story (photo/video) that disappears after 24h. Supports JPG, PNG, MP4.",
   parameters: Type.Object({
     mediaPath: Type.String({
       description:

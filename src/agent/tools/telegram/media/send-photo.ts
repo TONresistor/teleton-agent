@@ -21,8 +21,7 @@ interface SendPhotoParams {
  */
 export const telegramSendPhotoTool: Tool = {
   name: "telegram_send_photo",
-  description:
-    "Send a photo/image to a Telegram chat. Provide the local file path to the image. Supports JPG, PNG, WEBP formats. Use this to share visual content, screenshots, or images with users.",
+  description: "Send a photo from a local file path to a Telegram chat. Supports JPG, PNG, WEBP.",
   parameters: Type.Object({
     chatId: Type.String({
       description: "The chat ID to send the photo to",

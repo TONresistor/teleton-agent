@@ -11,8 +11,7 @@ interface JettonTrendingParams {
 }
 export const stonfiTrendingTool: Tool = {
   name: "stonfi_trending",
-  description:
-    "Get trending/popular Jettons on the TON blockchain. Shows tokens ranked by trading volume and liquidity. Useful for discovering popular tokens.",
+  description: "Get trending jettons ranked by popularity on STON.fi.",
   category: "data-bearing",
   parameters: Type.Object({
     limit: Type.Optional(

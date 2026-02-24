@@ -28,8 +28,7 @@ interface JoinChannelParams {
  */
 export const telegramJoinChannelTool: Tool = {
   name: "telegram_join_channel",
-  description:
-    "Join a Telegram channel or group. Supports public channels (username/@channelname), channel IDs, and private invite links (t.me/+XXXX, t.me/joinchat/XXXX).",
+  description: "Join a channel or group. Accepts username, channel ID, or private invite link.",
   parameters: Type.Object({
     channel: Type.String({
       description:

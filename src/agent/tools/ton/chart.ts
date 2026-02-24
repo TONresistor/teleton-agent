@@ -13,8 +13,7 @@ interface ChartParams {
 
 export const tonChartTool: Tool = {
   name: "ton_chart",
-  description:
-    "Get price history chart for TON or any jetton. Returns price points over a time period with stats (min, max, change %). Use token param for jettons (master contract address).",
+  description: "Get price history chart for TON or any jetton over a configurable time period.",
   parameters: Type.Object({
     token: Type.Optional(
       Type.String({

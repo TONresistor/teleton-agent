@@ -16,8 +16,7 @@ interface JettonQuoteParams {
 }
 export const stonfiQuoteTool: Tool = {
   name: "stonfi_quote",
-  description:
-    "Get a price quote for a token swap WITHOUT executing it. Shows expected output, minimum output, price impact, and fees. Use this to preview a swap before committing. Use 'ton' as from_asset for TON, or jetton master address.",
+  description: "Get a swap price quote on STON.fi without executing. Use stonfi_swap to execute.",
   category: "data-bearing",
   parameters: Type.Object({
     from_asset: Type.String({

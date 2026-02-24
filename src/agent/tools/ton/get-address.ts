@@ -7,8 +7,7 @@ import { createLogger } from "../../../utils/logger.js";
 const log = createLogger("Tools");
 export const tonGetAddressTool: Tool = {
   name: "ton_get_address",
-  description:
-    "Get your TON wallet address. Returns the address where you can receive TON cryptocurrency.",
+  description: "Get your TON wallet address.",
   parameters: Type.Object({}),
 };
 export const tonGetAddressExecutor: ToolExecutor<{}> = async (

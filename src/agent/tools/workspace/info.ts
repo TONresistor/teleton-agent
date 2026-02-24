@@ -15,13 +15,7 @@ interface WorkspaceInfoParams {
 
 export const workspaceInfoTool: Tool = {
   name: "workspace_info",
-  description: `Get information about your workspace structure and usage.
-
-Returns:
-- Workspace root path
-- Directory structure
-- File counts and sizes
-- Usage limits`,
+  description: "Get workspace structure, file counts, sizes, and usage limits.",
   category: "data-bearing",
   parameters: Type.Object({
     detailed: Type.Optional(

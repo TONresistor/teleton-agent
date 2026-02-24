@@ -20,20 +20,41 @@ import {
   getTonPrice,
   loadWallet,
   getKeyPair,
+  getCachedTonClient,
 } from "../ton/wallet-service.js";
 import { sendTon } from "../ton/transfer.js";
 import { PAYMENT_TOLERANCE_RATIO } from "../constants/limits.js";
 import { withBlockchainRetry } from "../utils/retry.js";
 import { tonapiFetch } from "../constants/api-endpoints.js";
-import { toNano as tonToNano, fromNano as tonFromNano } from "@ton/ton";
-import { Address as TonAddress } from "@ton/core";
+import {
+  toNano as tonToNano,
+  fromNano as tonFromNano,
+  WalletContractV5R1,
+  internal,
+} from "@ton/ton";
+import { Address as TonAddress, beginCell, SendMode } from "@ton/core";
 import { withTxLock } from "../ton/tx-lock.js";
+import { formatTransactions } from "../ton/format-transactions.js";
 
 const DEFAULT_MAX_AGE_MINUTES = 10;
 
 const DEFAULT_TX_RETENTION_DAYS = 30;
 
 const CLEANUP_PROBABILITY = 0.1;
+
+/** Match a jetton in a balances array by raw address or parsed canonical form. */
+function findJettonBalance(balances: any[], jettonAddress: string): any | undefined {
+  return balances.find((b: any) => {
+    if (b.jetton.address.toLowerCase() === jettonAddress.toLowerCase()) return true;
+    try {
+      return (
+        TonAddress.parse(b.jetton.address).toString() === TonAddress.parse(jettonAddress).toString()
+      );
+    } catch {
+      return false;
+    }
+  });
+}
 
 function cleanupOldTransactions(
   db: Database.Database,
@@ -97,8 +118,7 @@ export function createTonSDK(log: PluginLogger, db: Database.Database | null): T
       }
 
       try {
-        const { Address } = await import("@ton/core");
-        Address.parse(to);
+        TonAddress.parse(to);
       } catch {
         throw new PluginSDKError("Invalid TON address format", "INVALID_ADDRESS");
       }
@@ -130,14 +150,8 @@ export function createTonSDK(log: PluginLogger, db: Database.Database | null): T
 
     async getTransactions(address: string, limit?: number): Promise<TonTransaction[]> {
       try {
-        const { TonClient } = await import("@ton/ton");
-        const { Address } = await import("@ton/core");
-        const { getCachedHttpEndpoint } = await import("../ton/endpoint.js");
-        const { formatTransactions } = await import("../ton/format-transactions.js");
-
-        const addressObj = Address.parse(address);
-        const endpoint = await getCachedHttpEndpoint();
-        const client = new TonClient({ endpoint });
+        const addressObj = TonAddress.parse(address);
+        const client = await getCachedTonClient();
 
         const transactions = await withBlockchainRetry(
           () =>
@@ -236,7 +250,7 @@ export function createTonSDK(log: PluginLogger, db: Database.Database | null): T
         const addr = ownerAddress ?? getWalletAddress();
         if (!addr) return [];
 
-        const response = await tonapiFetch(`/accounts/${addr}/jettons`);
+        const response = await tonapiFetch(`/accounts/${encodeURIComponent(addr)}/jettons`);
         if (!response.ok) {
           log.error(`ton.getJettonBalances() TonAPI error: ${response.status}`);
           return [];
@@ -282,7 +296,7 @@ export function createTonSDK(log: PluginLogger, db: Database.Database | null): T
 
     async getJettonInfo(jettonAddress: string): Promise<JettonInfo | null> {
       try {
-        const response = await tonapiFetch(`/jettons/${jettonAddress}`);
+        const response = await tonapiFetch(`/jettons/${encodeURIComponent(jettonAddress)}`);
         if (response.status === 404) return null;
         if (!response.ok) {
           log.error(`ton.getJettonInfo() TonAPI error: ${response.status}`);
@@ -316,10 +330,6 @@ export function createTonSDK(log: PluginLogger, db: Database.Database | null): T
       amount: number,
       opts?: { comment?: string }
     ): Promise<JettonSendResult> {
-      const { Address, beginCell, SendMode } = await import("@ton/core");
-      const { WalletContractV5R1, TonClient, toNano, internal } = await import("@ton/ton");
-      const { getCachedHttpEndpoint } = await import("../ton/endpoint.js");
-
       const walletData = loadWallet();
       if (!walletData) {
         throw new PluginSDKError("Wallet not initialized", "WALLET_NOT_INITIALIZED");
@@ -330,14 +340,16 @@ export function createTonSDK(log: PluginLogger, db: Database.Database | null): T
       }
 
       try {
-        Address.parse(to);
+        TonAddress.parse(to);
       } catch {
         throw new PluginSDKError("Invalid recipient address", "INVALID_ADDRESS");
       }
 
       try {
         // Get sender's jetton wallet from balances
-        const jettonsResponse = await tonapiFetch(`/accounts/${walletData.address}/jettons`);
+        const jettonsResponse = await tonapiFetch(
+          `/accounts/${encodeURIComponent(walletData.address)}/jettons`
+        );
         if (!jettonsResponse.ok) {
           throw new PluginSDKError(
             `Failed to fetch jetton balances: ${jettonsResponse.status}`,
@@ -346,11 +358,7 @@ export function createTonSDK(log: PluginLogger, db: Database.Database | null): T
         }
 
         const jettonsData = await jettonsResponse.json();
-        const jettonBalance = jettonsData.balances?.find(
-          (b: any) =>
-            b.jetton.address.toLowerCase() === jettonAddress.toLowerCase() ||
-            Address.parse(b.jetton.address).toString() === Address.parse(jettonAddress).toString()
-        );
+        const jettonBalance = findJettonBalance(jettonsData.balances ?? [], jettonAddress);
 
         if (!jettonBalance) {
           throw new PluginSDKError(
@@ -387,12 +395,12 @@ export function createTonSDK(log: PluginLogger, db: Database.Database | null): T
           .storeUint(JETTON_TRANSFER_OP, 32)
           .storeUint(0, 64) // query_id
           .storeCoins(amountInUnits)
-          .storeAddress(Address.parse(to))
-          .storeAddress(Address.parse(walletData.address)) // response_destination
+          .storeAddress(TonAddress.parse(to))
+          .storeAddress(TonAddress.parse(walletData.address)) // response_destination
           .storeBit(false) // no custom_payload
-          .storeCoins(comment ? toNano("0.01") : BigInt(1)) // forward_ton_amount
-          .storeBit(comment ? true : false)
-          .storeMaybeRef(comment ? forwardPayload : null)
+          .storeCoins(comment ? tonToNano("0.01") : BigInt(1)) // forward_ton_amount
+          .storeBit(comment ? 1 : 0)
+          .storeRef(comment ? forwardPayload : beginCell().endCell())
           .endCell();
 
         const keyPair = await getKeyPair();
@@ -406,8 +414,7 @@ export function createTonSDK(log: PluginLogger, db: Database.Database | null): T
             publicKey: keyPair.publicKey,
           });
 
-          const endpoint = await getCachedHttpEndpoint();
-          const client = new TonClient({ endpoint });
+          const client = await getCachedTonClient();
           const walletContract = client.open(wallet);
           const seq = await walletContract.getSeqno();
 
@@ -417,8 +424,8 @@ export function createTonSDK(log: PluginLogger, db: Database.Database | null): T
             sendMode: SendMode.PAY_GAS_SEPARATELY,
             messages: [
               internal({
-                to: Address.parse(senderJettonWallet),
-                value: toNano("0.05"),
+                to: TonAddress.parse(senderJettonWallet),
+                value: tonToNano("0.05"),
                 body: messageBody,
                 bounce: true,
               }),
@@ -443,21 +450,15 @@ export function createTonSDK(log: PluginLogger, db: Database.Database | null): T
       jettonAddress: string
     ): Promise<string | null> {
       try {
-        const response = await tonapiFetch(`/accounts/${ownerAddress}/jettons`);
+        const response = await tonapiFetch(`/accounts/${encodeURIComponent(ownerAddress)}/jettons`);
         if (!response.ok) {
           log.error(`ton.getJettonWalletAddress() TonAPI error: ${response.status}`);
           return null;
         }
 
-        const { Address } = await import("@ton/core");
         const data = await response.json();
 
-        const match = (data.balances || []).find(
-          (b: any) =>
-            b.jetton.address.toLowerCase() === jettonAddress.toLowerCase() ||
-            Address.parse(b.jetton.address).toString() === Address.parse(jettonAddress).toString()
-        );
-
+        const match = findJettonBalance(data.balances ?? [], jettonAddress);
         return match ? match.wallet_address.address : null;
       } catch (err) {
         log.error("ton.getJettonWalletAddress() failed:", err);
@@ -494,7 +495,7 @@ export function createTonSDK(log: PluginLogger, db: Database.Database | null): T
 
     async getNftInfo(nftAddress: string): Promise<NftItem | null> {
       try {
-        const response = await tonapiFetch(`/nfts/${nftAddress}`);
+        const response = await tonapiFetch(`/nfts/${encodeURIComponent(nftAddress)}`);
         if (response.status === 404) return null;
         if (!response.ok) {
           log.error(`ton.getNftInfo() TonAPI error: ${response.status}`);

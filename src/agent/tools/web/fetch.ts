@@ -16,14 +16,7 @@ const ALLOWED_SCHEMES = new Set(["http:", "https:"]);
 
 export const webFetchTool: Tool = {
   name: "web_fetch",
-  description: `Fetch a web page and extract its readable text content using Tavily Extract.
-
-Returns clean, readable text extracted from the page — ideal for reading articles, docs, or links shared by users.
-Only http/https URLs are allowed. Content is truncated to max_length characters.
-
-Examples:
-- url="https://docs.ton.org/develop/overview"
-- url="https://example.com/article", max_length=10000`,
+  description: "Fetch a web page and extract readable text. HTTP/HTTPS only.",
   category: "data-bearing",
   parameters: Type.Object({
     url: Type.String({ description: "URL to fetch (http or https only)" }),

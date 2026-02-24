@@ -26,7 +26,7 @@ interface SearchResult {
 export const stonfiSearchTool: Tool = {
   name: "stonfi_search",
   description:
-    "Search for Jettons (tokens) by name or symbol. Returns a list of matching tokens with their addresses, useful for finding a token's address before swapping or checking prices. Search is case-insensitive.",
+    "Search for jettons by name or symbol. Returns addresses for use in swap/price tools.",
   category: "data-bearing",
   parameters: Type.Object({
     query: Type.String({

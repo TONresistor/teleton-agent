@@ -37,7 +37,7 @@ interface MemoryWriteParams {
 export const memoryWriteTool: Tool = {
   name: "memory_write",
   description:
-    "Write important information to your persistent memory. Use this to remember facts, lessons learned, decisions, preferences, or anything you want to recall in future sessions. 'persistent' writes to MEMORY.md (long-term), 'daily' writes to today's log (short-term notes).",
+    "Save to agent memory. Use 'persistent' for long-term facts, preferences, contacts, rules → MEMORY.md. Use 'daily' for session notes, events, temporary context → today's log. Disabled in group chats.",
   parameters: Type.Object({
     content: Type.String({
       description: "The content to write to memory. Be concise but complete.",

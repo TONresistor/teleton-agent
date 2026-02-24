@@ -15,18 +15,7 @@ interface WebSearchParams {
 
 export const webSearchTool: Tool = {
   name: "web_search",
-  description: `Search the web using Tavily. Returns results with title, URL, content snippet, and relevance score.
-
-Use this to find up-to-date information, verify facts, research topics, or get news.
-
-Parameters:
-- query: search query string
-- count: number of results (default 5, max ${WEB_SEARCH_MAX_RESULTS})
-- topic: "general" (default), "news", or "finance"
-
-Examples:
-- query="TON blockchain latest news", topic="news"
-- query="bitcoin price today", count=3, topic="finance"`,
+  description: "Search the web. Returns results with title, URL, and content snippet.",
   category: "data-bearing",
   parameters: Type.Object({
     query: Type.String({ description: "Search query" }),

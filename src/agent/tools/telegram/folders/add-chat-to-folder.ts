@@ -20,7 +20,7 @@ interface AddChatToFolderParams {
 export const telegramAddChatToFolderTool: Tool = {
   name: "telegram_add_chat_to_folder",
   description:
-    "Add a specific chat to an existing folder. The chat will appear in that folder's view for easy access. Use telegram_get_folders first to see available folder IDs. This helps organize important or related conversations together. Example: Add a project group to your 'Work' folder.",
+    "Add a chat to an existing folder. Use telegram_get_folders first to get folder IDs.",
   parameters: Type.Object({
     folderId: Type.Number({
       description:

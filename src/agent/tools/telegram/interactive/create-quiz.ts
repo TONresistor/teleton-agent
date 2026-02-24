@@ -26,7 +26,7 @@ interface CreateQuizParams {
 export const telegramCreateQuizTool: Tool = {
   name: "telegram_create_quiz",
   description:
-    "Create a quiz (poll with a correct answer) in a Telegram chat. Unlike regular polls, quizzes have one correct answer that gets revealed when users vote. Optionally add an explanation. Use this for educational content, trivia games, or testing knowledge. For opinion polls without correct answers, use telegram_create_poll instead.",
+    "Create a quiz (poll with one correct answer revealed on vote). For opinion polls, use telegram_create_poll.",
   parameters: Type.Object({
     chatId: Type.String({
       description: "The chat ID where the quiz will be created",

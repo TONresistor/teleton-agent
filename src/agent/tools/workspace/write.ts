@@ -18,18 +18,8 @@ interface WorkspaceWriteParams {
 
 export const workspaceWriteTool: Tool = {
   name: "workspace_write",
-  description: `Write a file to your workspace.
-
-You can ONLY write files within ~/.teleton/workspace/. This includes:
-- memory/ - Daily logs and notes
-- uploads/ - Files to send
-- temp/ - Temporary files
-
-You CANNOT write to protected locations like config.yaml, wallet.json, etc.
-
-Examples:
-- Save a note: path="memory/note.md", content="..."
-- Prepare upload: path="uploads/message.txt", content="..."`,
+  description:
+    "Write a file to workspace. Only ~/.teleton/workspace/ is writable. Cannot write to protected locations.",
 
   parameters: Type.Object({
     path: Type.String({

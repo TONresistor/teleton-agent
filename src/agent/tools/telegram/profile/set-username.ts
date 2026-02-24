@@ -19,7 +19,7 @@ interface SetUsernameParams {
 export const telegramSetUsernameTool: Tool = {
   name: "telegram_set_username",
   description:
-    "Set or change your Telegram username (the @handle people use to find you). Usernames are unique across Telegram - must be 5-32 characters, alphanumeric plus underscores, and available. Use this to claim a memorable handle or update your public identifier. Empty string removes username. Warning: Changing username breaks existing t.me/username links.",
+    "Set or change your Telegram @username. Must be 5-32 chars, alphanumeric + underscores. Empty string removes it. Warning: breaks existing t.me/ links.",
   parameters: Type.Object({
     username: Type.String({
       description:

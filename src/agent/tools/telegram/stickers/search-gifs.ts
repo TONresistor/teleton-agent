@@ -20,7 +20,7 @@ interface SearchGifsParams {
 export const telegramSearchGifsTool: Tool = {
   name: "telegram_search_gifs",
   description:
-    "Search for GIF animations using Telegram's built-in GIF search (@gif bot). Returns GIF results with IDs and query_id. To send a GIF: 1) Use this tool to search, 2) Note the queryId and a result's id, 3) Use telegram_send_gif with queryId + resultId. This ensures proper sending via Telegram's inline bot system.",
+    "Search for GIFs via @gif bot. Returns queryId + result IDs needed by telegram_send_gif.",
   parameters: Type.Object({
     query: Type.String({
       description: "Search query for GIFs. Example: 'happy', 'dancing', 'thumbs up', 'laughing'",

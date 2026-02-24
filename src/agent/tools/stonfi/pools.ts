@@ -12,8 +12,7 @@ interface JettonPoolsParams {
 }
 export const stonfiPoolsTool: Tool = {
   name: "stonfi_pools",
-  description:
-    "Get liquidity pools for a Jetton or list top pools by volume. Shows pool addresses, liquidity, volume, APY, and trading pairs. Useful for finding where to trade a token or analyzing DeFi opportunities.",
+  description: "List STON.fi liquidity pools. Filter by jetton or get top pools by volume.",
   category: "data-bearing",
   parameters: Type.Object({
     jetton_address: Type.Optional(

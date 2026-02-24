@@ -95,14 +95,7 @@ export async function executeDeal(
       });
 
       if (!txHash) {
-        // Release lock since send failed
-        db.prepare(
-          `UPDATE deals SET agent_sent_at = NULL, status = 'failed', notes = 'TON transfer returned no tx hash' WHERE id = ?`
-        ).run(dealId);
-        return {
-          success: false,
-          error: "TON transfer failed (no tx hash returned)",
-        };
+        throw new Error("TON transfer failed (wallet not initialized or invalid parameters)");
       }
 
       // Update deal: mark as completed (agent_sent_at already set by lock)

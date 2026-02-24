@@ -1,7 +1,6 @@
-import { WalletContractV5R1, TonClient, toNano, internal } from "@ton/ton";
+import { WalletContractV5R1, toNano, internal } from "@ton/ton";
 import { Address, SendMode } from "@ton/core";
-import { getCachedHttpEndpoint } from "./endpoint.js";
-import { getKeyPair } from "./wallet-service.js";
+import { getKeyPair, getCachedTonClient, invalidateTonClientCache } from "./wallet-service.js";
 import { createLogger } from "../utils/logger.js";
 import { withTxLock } from "./tx-lock.js";
 
@@ -43,8 +42,7 @@ export async function sendTon(params: SendTonParams): Promise<string | null> {
         publicKey: keyPair.publicKey,
       });
 
-      const endpoint = await getCachedHttpEndpoint();
-      const client = new TonClient({ endpoint });
+      const client = await getCachedTonClient();
       const contract = client.open(wallet);
 
       const seqno = await contract.getSeqno();
@@ -68,9 +66,13 @@ export async function sendTon(params: SendTonParams): Promise<string | null> {
       log.info(`Sent ${amount} TON to ${toAddress.slice(0, 8)}... - seqno: ${seqno}`);
 
       return pseudoHash;
-    } catch (error) {
+    } catch (error: any) {
+      // Invalidate node cache on 5xx so next attempt picks a fresh node
+      if (error?.status >= 500 || error?.response?.status >= 500) {
+        invalidateTonClientCache();
+      }
       log.error({ err: error }, "Error sending TON");
-      return null;
+      throw error;
     }
   }); // withTxLock
 }

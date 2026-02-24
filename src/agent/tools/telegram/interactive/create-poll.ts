@@ -28,7 +28,7 @@ interface CreatePollParams {
 export const telegramCreatePollTool: Tool = {
   name: "telegram_create_poll",
   description:
-    "Create a poll in a Telegram chat to gather opinions or votes from users. Polls can be anonymous or public, allow single or multiple answers. Use this to make group decisions, conduct surveys, or engage users with questions. For quizzes with correct answers, use telegram_create_quiz instead.",
+    "Create a poll in a chat. For quizzes with a correct answer, use telegram_create_quiz instead.",
   parameters: Type.Object({
     chatId: Type.String({
       description: "The chat ID where the poll will be created",

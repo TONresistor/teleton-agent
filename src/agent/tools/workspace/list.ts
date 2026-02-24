@@ -19,16 +19,7 @@ interface WorkspaceListParams {
 
 export const workspaceListTool: Tool = {
   name: "workspace_list",
-  description: `List files and directories in your workspace.
-
-Your workspace is at ~/.teleton/workspace/ and contains:
-- SOUL.md, MEMORY.md, IDENTITY.md (config files)
-- memory/ (daily logs)
-- downloads/ (downloaded media)
-- uploads/ (files to send)
-- temp/ (temporary files)
-
-You can ONLY access files within this workspace. Files outside (config.yaml, wallet.json, etc.) are protected.`,
+  description: "List files and directories in the workspace.",
   category: "data-bearing",
   parameters: Type.Object({
     path: Type.Optional(

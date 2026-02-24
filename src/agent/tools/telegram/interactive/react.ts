@@ -19,8 +19,7 @@ interface ReactParams {
  */
 export const telegramReactTool: Tool = {
   name: "telegram_react",
-  description:
-    "Add an emoji reaction to a Telegram message. Use this to quickly acknowledge, approve, or express emotions without sending a full message. Common reactions: 👍 (like/approve), ❤️ (love), 🔥 (fire/hot), 😂 (funny), 😢 (sad), 🎉 (celebrate), 👎 (dislike), 🤔 (thinking). The message ID comes from the current conversation context or from telegram_get_history.",
+  description: "Add an emoji reaction to a message.",
   parameters: Type.Object({
     chatId: Type.String({
       description: "The chat ID where the message is located",

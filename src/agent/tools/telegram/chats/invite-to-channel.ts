@@ -21,18 +21,8 @@ interface InviteToChannelParams {
  */
 export const telegramInviteToChannelTool: Tool = {
   name: "telegram_invite_to_channel",
-  description: `Invite users to a channel or group.
-
-USAGE:
-- Pass channelId and either userIds or usernames (or both)
-- You must be an admin with invite rights
-- Users must allow being added to groups (privacy settings)
-
-LIMITS:
-- Can invite up to 200 users at once
-- Some users may have privacy settings preventing invites
-
-For public channels, you can also share the invite link instead.`,
+  description:
+    "Invite users to a channel or group by userIds or usernames. Requires admin invite rights.",
   parameters: Type.Object({
     channelId: Type.String({
       description: "Channel or group ID to invite users to",

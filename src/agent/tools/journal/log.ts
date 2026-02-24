@@ -25,21 +25,8 @@ interface JournalLogParams {
 
 export const journalLogTool: Tool = {
   name: "journal_log",
-  description: `Log a business operation to the trading journal.
-
-Use this to record:
-- **trade**: Crypto swaps, buy/sell operations
-- **gift**: Gift purchases, sales, or exchanges
-- **middleman**: Escrow services (record both sides if applicable)
-- **kol**: Posts, moderation, bullposting services
-
-ALWAYS include 'reasoning' to explain WHY you took this action.
-
-Examples:
-- trade: "Bought TON dip (-28% in 72h), community active, narrative fits ecosystem"
-- gift: "Sold Deluxe Heart at 120% floor - buyer was eager"
-- middleman: "Escrow for 150 TON gift trade - 3% fee"
-- kol: "Posted project review in channel - 75 TON fee"`,
+  description:
+    "Log a business operation (trade, gift, middleman, kol) to the journal. Always include reasoning.",
 
   parameters: Type.Object({
     type: Type.Union(

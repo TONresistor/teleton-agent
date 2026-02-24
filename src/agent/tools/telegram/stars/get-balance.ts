@@ -11,8 +11,7 @@ const log = createLogger("Tools");
  */
 export const telegramGetStarsBalanceTool: Tool = {
   name: "telegram_get_stars_balance",
-  description:
-    "Get your current Telegram Stars balance. Stars are Telegram's virtual currency used to buy gifts, tip creators, and purchase digital goods. Returns your total balance and any pending/withdrawable amounts.",
+  description: "Get your current Telegram Stars balance.",
   category: "data-bearing",
   parameters: Type.Object({}),
 };

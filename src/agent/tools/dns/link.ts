@@ -26,8 +26,7 @@ interface DnsLinkParams {
 }
 export const dnsLinkTool: Tool = {
   name: "dns_link",
-  description:
-    "Link a wallet address to a .ton domain you own. This sets the wallet record so the domain resolves to the specified address. If no wallet_address is provided, links to your own wallet.",
+  description: "Link a wallet address to a .ton domain you own. Defaults to your own wallet.",
   parameters: Type.Object({
     domain: Type.String({
       description: "Domain name (with or without .ton extension)",

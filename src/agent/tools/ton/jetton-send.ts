@@ -1,9 +1,8 @@
 import { Type } from "@sinclair/typebox";
 import type { Tool, ToolExecutor, ToolResult } from "../types.js";
-import { loadWallet, getKeyPair } from "../../../ton/wallet-service.js";
-import { WalletContractV5R1, TonClient, toNano, internal } from "@ton/ton";
+import { loadWallet, getKeyPair, getCachedTonClient } from "../../../ton/wallet-service.js";
+import { WalletContractV5R1, toNano, internal } from "@ton/ton";
 import { Address, SendMode, beginCell } from "@ton/core";
-import { getCachedHttpEndpoint } from "../../../ton/endpoint.js";
 import { tonapiFetch } from "../../../constants/api-endpoints.js";
 import { getErrorMessage } from "../../../utils/errors.js";
 import { createLogger } from "../../../utils/logger.js";
@@ -21,7 +20,7 @@ interface JettonSendParams {
 export const jettonSendTool: Tool = {
   name: "jetton_send",
   description:
-    "Send Jettons (tokens) to another address. Requires the jetton master address, recipient address, and amount. Amount is in human-readable units (e.g., 10 for 10 USDT). Use jetton_balances first to see what tokens you own and their addresses.",
+    "Send jettons to another address. Amount in human-readable units. Use jetton_balances first to find addresses.",
   parameters: Type.Object({
     jetton_address: Type.String({
       description: "Jetton master contract address (EQ... or 0:... format)",
@@ -65,7 +64,9 @@ export const jettonSendExecutor: ToolExecutor<JettonSendParams> = async (
     }
 
     // Get sender's jetton wallet address from TonAPI
-    const jettonsResponse = await tonapiFetch(`/accounts/${walletData.address}/jettons`);
+    const jettonsResponse = await tonapiFetch(
+      `/accounts/${encodeURIComponent(walletData.address)}/jettons`
+    );
 
     if (!jettonsResponse.ok) {
       return {
@@ -76,12 +77,17 @@ export const jettonSendExecutor: ToolExecutor<JettonSendParams> = async (
 
     const jettonsData = await jettonsResponse.json();
 
-    // Find the jetton in our balances
-    const jettonBalance = jettonsData.balances?.find(
-      (b: any) =>
-        b.jetton.address.toLowerCase() === jetton_address.toLowerCase() ||
-        Address.parse(b.jetton.address).toString() === Address.parse(jetton_address).toString()
-    );
+    // Find the jetton in our balances (safe: skip entries with malformed addresses)
+    const jettonBalance = jettonsData.balances?.find((b: any) => {
+      if (b.jetton.address.toLowerCase() === jetton_address.toLowerCase()) return true;
+      try {
+        return (
+          Address.parse(b.jetton.address).toString() === Address.parse(jetton_address).toString()
+        );
+      } catch {
+        return false;
+      }
+    });
 
     if (!jettonBalance) {
       return {
@@ -127,8 +133,8 @@ export const jettonSendExecutor: ToolExecutor<JettonSendParams> = async (
       .storeAddress(Address.parse(walletData.address)) // response_destination (excess returns here)
       .storeBit(false) // no custom_payload
       .storeCoins(comment ? toNano("0.01") : BigInt(1)) // forward_ton_amount (for notification)
-      .storeBit(comment ? true : false) // forward_payload flag
-      .storeMaybeRef(comment ? forwardPayload : null) // forward_payload
+      .storeBit(comment ? 1 : 0) // forward_payload: Either tag (0=inline, 1=ref)
+      .storeRef(comment ? forwardPayload : beginCell().endCell()) // forward_payload
       .endCell();
 
     const keyPair = await getKeyPair();
@@ -140,8 +146,7 @@ export const jettonSendExecutor: ToolExecutor<JettonSendParams> = async (
       publicKey: keyPair.publicKey,
     });
 
-    const endpoint = await getCachedHttpEndpoint();
-    const client = new TonClient({ endpoint });
+    const client = await getCachedTonClient();
     const walletContract = client.open(wallet);
 
     const seqno = await walletContract.getSeqno();

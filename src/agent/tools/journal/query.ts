@@ -18,19 +18,8 @@ interface JournalQueryParams {
 
 export const journalQueryTool: Tool = {
   name: "journal_query",
-  description: `Query the trading journal to analyze past operations.
-
-Use this to:
-- Review recent trades, gifts, or services
-- Analyze performance (win rate, P&L)
-- Find specific operations by asset or outcome
-- Learn from past decisions (read the 'reasoning' field!)
-
-Examples:
-- "Show me my last 10 trades"
-- "What gifts did I sell this week?"
-- "Show all profitable TON trades"
-- "What's my win rate on crypto trades?"`,
+  description:
+    "Query the trading journal. Filter by type/asset/outcome/period. Includes P&L summary.",
   category: "data-bearing",
   parameters: Type.Object({
     type: Type.Optional(

@@ -13,7 +13,7 @@ interface JettonInfoParams {
 export const jettonInfoTool: Tool = {
   name: "jetton_info",
   description:
-    "Get detailed information about a Jetton (token) by its master contract address. Returns name, symbol, decimals, total supply, holders count, and verification status. Useful to research a token before buying or sending.",
+    "Get jetton metadata: name, symbol, decimals, total supply, holders, verification status.",
   category: "data-bearing",
   parameters: Type.Object({
     jetton_address: Type.String({

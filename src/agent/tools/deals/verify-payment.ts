@@ -16,15 +16,8 @@ interface DealVerifyPaymentParams {
 
 export const dealVerifyPaymentTool: Tool = {
   name: "deal_verify_payment",
-  description: `Verify payment/gift for an ACCEPTED deal.
-
-For TON payments: Checks blockchain for transaction with memo = dealId
-For gift transfers: Polls telegram_get_my_gifts for newly received gift
-
-Updates deal status to 'verified' if successful.
-Auto-triggers executor after verification.
-
-IMPORTANT: Only call this for deals with status = 'accepted'.`,
+  description:
+    "Verify payment/gift for an accepted deal. Checks blockchain (TON) or gift inbox. Auto-executes on success. Only for status='accepted'.",
   parameters: Type.Object({
     dealId: Type.String({ description: "Deal ID to verify payment for" }),
   }),

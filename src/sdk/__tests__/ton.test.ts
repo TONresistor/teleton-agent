@@ -10,6 +10,7 @@ vi.mock("../../ton/wallet-service.js", () => ({
   getTonPrice: vi.fn(),
   loadWallet: vi.fn(),
   getKeyPair: vi.fn(),
+  getCachedTonClient: vi.fn(),
 }));
 
 vi.mock("../../ton/transfer.js", () => ({
@@ -73,6 +74,7 @@ import {
   getTonPrice,
   loadWallet,
   getKeyPair,
+  getCachedTonClient,
 } from "../../ton/wallet-service.js";
 import { sendTon } from "../../ton/transfer.js";
 import { tonapiFetch } from "../../constants/api-endpoints.js";
@@ -295,9 +297,7 @@ describe("createTonSDK", () => {
       it("returns formatted transactions", async () => {
         const mockTxs = [{ hash: "abc", type: "ton_received" }];
         const mockGetTx = vi.fn().mockResolvedValue(mockTxs);
-        mocks.tonClient.mockImplementation(function (this: any) {
-          this.getTransactions = mockGetTx;
-        });
+        (getCachedTonClient as Mock).mockResolvedValue({ getTransactions: mockGetTx });
         mocks.formatTransactions.mockReturnValue(mockTxs);
 
         const result = await sdk.getTransactions(VALID_ADDRESS, 5);
@@ -306,9 +306,7 @@ describe("createTonSDK", () => {
 
       it("caps limit at 50", async () => {
         const mockGetTx = vi.fn().mockResolvedValue([]);
-        mocks.tonClient.mockImplementation(function (this: any) {
-          this.getTransactions = mockGetTx;
-        });
+        (getCachedTonClient as Mock).mockResolvedValue({ getTransactions: mockGetTx });
         mocks.formatTransactions.mockReturnValue([]);
 
         await sdk.getTransactions(VALID_ADDRESS, 999);
@@ -320,9 +318,7 @@ describe("createTonSDK", () => {
 
       it("defaults limit to 10 when not specified", async () => {
         const mockGetTx = vi.fn().mockResolvedValue([]);
-        mocks.tonClient.mockImplementation(function (this: any) {
-          this.getTransactions = mockGetTx;
-        });
+        (getCachedTonClient as Mock).mockResolvedValue({ getTransactions: mockGetTx });
         mocks.formatTransactions.mockReturnValue([]);
 
         await sdk.getTransactions(VALID_ADDRESS);
@@ -333,9 +329,7 @@ describe("createTonSDK", () => {
       });
 
       it("returns empty array on error", async () => {
-        mocks.tonClient.mockImplementation(function () {
-          throw new Error("connection failed");
-        });
+        (getCachedTonClient as Mock).mockRejectedValue(new Error("connection failed"));
 
         const result = await sdk.getTransactions(VALID_ADDRESS);
         expect(result).toEqual([]);
@@ -601,6 +595,7 @@ describe("createTonSDK", () => {
           storeCoins: vi.fn().mockReturnThis(),
           storeAddress: vi.fn().mockReturnThis(),
           storeBit: vi.fn().mockReturnThis(),
+          storeRef: vi.fn().mockReturnThis(),
           storeMaybeRef: vi.fn().mockReturnThis(),
           storeStringTail: vi.fn().mockReturnThis(),
           endCell: vi.fn().mockReturnValue(cellMock),
@@ -613,13 +608,13 @@ describe("createTonSDK", () => {
         // Mock toNano (used in TEP-74 transfer body)
         mocks.toNano.mockReturnValue(BigInt(1));
 
-        // Mock TonClient (must use regular function for `new` constructor)
+        // Mock getCachedTonClient — returns a client with an open() method
         const mockWalletContract = {
           getSeqno: vi.fn().mockResolvedValue(42),
           sendTransfer: vi.fn().mockResolvedValue(undefined),
         };
-        mocks.tonClient.mockImplementation(function (this: any) {
-          this.open = vi.fn().mockReturnValue(mockWalletContract);
+        (getCachedTonClient as Mock).mockResolvedValue({
+          open: vi.fn().mockReturnValue(mockWalletContract),
         });
       });
 

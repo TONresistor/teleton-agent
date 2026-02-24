@@ -22,7 +22,7 @@ interface JettonSwapParams {
 export const stonfiSwapTool: Tool = {
   name: "stonfi_swap",
   description:
-    "Swap tokens on STON.fi DEX. Supports TON↔Jetton and Jetton↔Jetton swaps. Use 'ton' as from_asset to buy jettons with TON, or provide jetton master address. Amount is in human-readable units (will be converted based on decimals). Example: swap 10 TON for USDT, or swap USDT for SCALE.",
+    "Execute a token swap on STON.fi. Supports TON<->jetton and jetton<->jetton. Use stonfi_quote first to preview.",
   parameters: Type.Object({
     from_asset: Type.String({
       description: "Source asset: 'ton' for TON, or jetton master address (EQ... format)",

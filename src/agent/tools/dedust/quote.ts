@@ -20,7 +20,7 @@ interface DedustQuoteParams {
 export const dedustQuoteTool: Tool = {
   name: "dedust_quote",
   description:
-    "Get a price quote for a token swap on DeDust DEX WITHOUT executing it. Shows expected output, minimum output, and pool info. Use 'ton' as from_asset for TON, or jetton master address. Pool types: 'volatile' (default) or 'stable' (for stablecoins).",
+    "Get a price quote for a token swap on DeDust DEX without executing it. Use 'ton' for TON or jetton master address.",
   category: "data-bearing",
   parameters: Type.Object({
     from_asset: Type.String({

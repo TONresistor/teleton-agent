@@ -7,7 +7,7 @@ import { createLogger } from "../../../utils/logger.js";
 const log = createLogger("Tools");
 export const tonPriceTool: Tool = {
   name: "ton_price",
-  description: "Get current TON cryptocurrency price in USD. Returns real-time market price.",
+  description: "Get current TON price in USD.",
   category: "data-bearing",
   parameters: Type.Object({}),
 };

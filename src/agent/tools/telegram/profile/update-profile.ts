@@ -21,7 +21,7 @@ interface UpdateProfileParams {
 export const telegramUpdateProfileTool: Tool = {
   name: "telegram_update_profile",
   description:
-    "Update your Telegram profile information including first name, last name, and bio (about text). Changes are visible to all users who view your profile. Use this to keep your public identity current, reflect life changes, or update your description. Leave fields undefined to keep current values.",
+    "Update your profile (first name, last name, bio). Omit fields to keep current values.",
   parameters: Type.Object({
     firstName: Type.Optional(
       Type.String({

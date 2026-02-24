@@ -14,8 +14,7 @@ interface GetTransactionsParams {
 }
 export const tonGetTransactionsTool: Tool = {
   name: "ton_get_transactions",
-  description:
-    "Get transaction history for any TON address. Returns transactions with type (ton_received, ton_sent, jetton_received, jetton_sent, nft_received, nft_sent, gas_refund), amount, counterparty, and explorer link.",
+  description: "Get transaction history for any TON address.",
   category: "data-bearing",
   parameters: Type.Object({
     address: Type.String({

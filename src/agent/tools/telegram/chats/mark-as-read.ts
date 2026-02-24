@@ -20,7 +20,7 @@ interface MarkAsReadParams {
 export const telegramMarkAsReadTool: Tool = {
   name: "telegram_mark_as_read",
   description:
-    "Mark messages as read in a Telegram chat. Can mark up to a specific message or clear all unread. Use this to manage your inbox and acknowledge messages.",
+    "Mark messages as read in a chat. Can mark up to a specific message or clear all unread.",
   parameters: Type.Object({
     chatId: Type.String({
       description: "The chat ID to mark as read",

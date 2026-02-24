@@ -21,7 +21,7 @@ interface DedustSwapParams {
 export const dedustSwapTool: Tool = {
   name: "dedust_swap",
   description:
-    "Execute a token swap on DeDust DEX. Supports TON->Jetton and Jetton->TON/Jetton swaps. Use 'ton' as from_asset or to_asset for TON. Pool types: 'volatile' (default) or 'stable' (for stablecoins like USDT/USDC). Use dedust_quote first to preview the swap.",
+    "Execute a token swap on DeDust. Supports TON<->jetton and jetton<->jetton. Use dedust_quote first to preview.",
   parameters: Type.Object({
     from_asset: Type.String({
       description: "Source asset: 'ton' for TON, or jetton master address (EQ... format)",

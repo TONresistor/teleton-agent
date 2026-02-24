@@ -22,8 +22,7 @@ interface DnsUnlinkParams {
 }
 export const dnsUnlinkTool: Tool = {
   name: "dns_unlink",
-  description:
-    "Remove the wallet link from a .ton domain you own. This deletes the wallet record so the domain no longer resolves to any address.",
+  description: "Remove the wallet link from a .ton domain you own.",
   parameters: Type.Object({
     domain: Type.String({
       description: "Domain name (with or without .ton extension)",

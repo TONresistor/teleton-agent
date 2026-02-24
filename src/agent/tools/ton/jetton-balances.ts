@@ -27,8 +27,7 @@ interface JettonBalance {
 }
 export const jettonBalancesTool: Tool = {
   name: "jetton_balances",
-  description:
-    "Get all Jetton (token) balances owned by the agent. Returns a list of all tokens with their balances, names, symbols, and verification status. Useful to check what tokens you currently hold.",
+  description: "Get all jetton balances owned by the agent. Filters out blacklisted tokens.",
   parameters: Type.Object({}),
   category: "data-bearing",
 };

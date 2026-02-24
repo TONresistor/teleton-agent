@@ -10,8 +10,7 @@ interface DnsResolveParams {
 }
 export const dnsResolveTool: Tool = {
   name: "dns_resolve",
-  description:
-    "Resolve a .ton domain to its associated wallet address. Only works for domains that are already owned (not available or in auction).",
+  description: "Resolve a .ton domain to its wallet address. Only works for owned domains.",
   category: "data-bearing",
   parameters: Type.Object({
     domain: Type.String({

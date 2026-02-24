@@ -17,7 +17,7 @@ interface DnsStartAuctionParams {
 export const dnsStartAuctionTool: Tool = {
   name: "dns_start_auction",
   description:
-    "Start an auction for an unminted .ton domain. Sends TON to the DNS collection contract to mint a new domain NFT. Domain must be 4-126 characters, available (not minted), and amount must meet minimum price.",
+    "Start an auction for an unminted .ton domain. Amount must meet minimum price for domain length.",
   parameters: Type.Object({
     domain: Type.String({
       description: "Domain name to mint (without .ton extension, 4-126 chars)",

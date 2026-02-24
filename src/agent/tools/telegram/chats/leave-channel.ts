@@ -18,8 +18,7 @@ interface LeaveChannelParams {
  */
 export const telegramLeaveChannelTool: Tool = {
   name: "telegram_leave_channel",
-  description:
-    "Leave a Telegram channel or group that you're currently a member of. Use this to unsubscribe from channels or exit groups you no longer wish to participate in. Accepts username or channel ID.",
+  description: "Leave a channel or group you are a member of.",
   parameters: Type.Object({
     channel: Type.String({
       description:

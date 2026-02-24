@@ -44,8 +44,7 @@ interface DedustPoolResponse {
 }
 export const dedustPoolsTool: Tool = {
   name: "dedust_pools",
-  description:
-    "List liquidity pools on DeDust DEX. Can filter by jetton address or pool type. Shows reserves, fees, and trading volume.",
+  description: "List DeDust liquidity pools. Filter by jetton address or pool type.",
   category: "data-bearing",
   parameters: Type.Object({
     jetton_address: Type.Optional(

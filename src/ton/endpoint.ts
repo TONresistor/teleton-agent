@@ -49,3 +49,8 @@ export async function getCachedHttpEndpoint(): Promise<string> {
   _cache = { url, ts: Date.now() };
   return url;
 }
+
+/** Call this when a node returns a 5xx error — forces re-discovery on next call. */
+export function invalidateEndpointCache(): void {
+  _cache = null;
+}

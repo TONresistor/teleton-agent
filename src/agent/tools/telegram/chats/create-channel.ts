@@ -21,7 +21,7 @@ interface CreateChannelParams {
 export const telegramCreateChannelTool: Tool = {
   name: "telegram_create_channel",
   description:
-    "Create a new Telegram channel or megagroup. Channels are one-way broadcast tools where only admins can post, ideal for announcements or content distribution. Megagroups are large groups supporting up to 200k members with admin controls. Use this to establish a new communication platform for announcements, communities, or projects.",
+    "Create a new Telegram channel (broadcast) or megagroup (chat). Set megagroup=true for group mode.",
   parameters: Type.Object({
     title: Type.String({
       description: "Name of the channel/megagroup (max 128 characters)",

@@ -21,7 +21,7 @@ interface GetResaleGiftsParams {
 export const telegramGetResaleGiftsTool: Tool = {
   name: "telegram_get_resale_gifts",
   description:
-    "Browse the collectible gifts marketplace. Shows all collectibles currently listed for sale by other users. Can filter by specific gift type or browse all. Returns prices in Stars and seller info. Use telegram_buy_resale_gift to purchase.",
+    "Browse collectible gifts listed for resale. Filterable by gift type. Use telegram_buy_resale_gift to purchase.",
   category: "data-bearing",
   parameters: Type.Object({
     giftId: Type.Optional(

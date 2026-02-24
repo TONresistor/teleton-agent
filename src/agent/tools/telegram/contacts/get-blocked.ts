@@ -18,8 +18,7 @@ interface GetBlockedParams {
  */
 export const telegramGetBlockedTool: Tool = {
   name: "telegram_get_blocked",
-  description:
-    "Get list of users you have blocked on Telegram. Use this to see who's blocked, manage your block list, or identify users to unblock. Returns user information for each blocked contact.",
+  description: "Get your list of blocked users.",
   category: "data-bearing",
   parameters: Type.Object({
     limit: Type.Optional(

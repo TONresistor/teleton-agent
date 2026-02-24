@@ -15,14 +15,7 @@ interface DealListParams {
 
 export const dealListTool: Tool = {
   name: "deal_list",
-  description: `List recent deals with optional filters.
-
-Filters:
-- status: Filter by status (proposed, accepted, verified, completed, declined, expired, cancelled, failed)
-- userId: Filter by user's Telegram ID
-- limit: Max results (default 20)
-
-Returns summary of each deal with ID, status, parties, trade details, timestamps.`,
+  description: "List recent deals. Filter by status or user. Non-admins see only their own deals.",
   category: "data-bearing",
   parameters: Type.Object({
     status: Type.Optional(

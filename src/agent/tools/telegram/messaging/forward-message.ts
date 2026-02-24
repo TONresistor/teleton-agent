@@ -24,7 +24,7 @@ interface ForwardMessageParams {
 export const telegramForwardMessageTool: Tool = {
   name: "telegram_forward_message",
   description:
-    "Forward one or more messages from one chat to another. Useful for sharing messages, quotes, or content between conversations. The forwarded messages will show their original sender unless sent silently.",
+    "Forward one or more messages from one chat to another. Shows original sender attribution.",
   parameters: Type.Object({
     fromChatId: Type.String({
       description: "The chat ID where the original message(s) are located",

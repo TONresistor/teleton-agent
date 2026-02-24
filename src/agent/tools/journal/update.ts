@@ -18,22 +18,8 @@ interface JournalUpdateParams {
 
 export const journalUpdateTool: Tool = {
   name: "journal_update",
-  description: `Update a journal entry with outcome and P&L.
-
-Use this to:
-- Close pending operations with final results
-- Record profit/loss after selling or closing a position
-- Update transaction hash after confirmation
-- Mark operations as cancelled
-
-ALWAYS calculate P&L when closing trades:
-- pnl_ton = final value in TON - initial cost in TON
-- pnl_pct = (pnl_ton / initial_cost) * 100
-
-Examples:
-- "Close trade #42 - sold at profit"
-- "Mark gift sale #38 as complete"
-- "Update escrow #55 with tx hash"`,
+  description:
+    "Update a journal entry with outcome, P&L, or tx_hash. Auto-sets closed_at when outcome changes from pending.",
 
   parameters: Type.Object({
     id: Type.Number({ description: "Journal entry ID to update" }),

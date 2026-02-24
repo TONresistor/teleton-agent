@@ -21,7 +21,7 @@ interface DeleteMessageParams {
 export const telegramDeleteMessageTool: Tool = {
   name: "telegram_delete_message",
   description:
-    "Delete one or more messages from a chat. Can delete your own messages in any chat, or any message in groups where you have admin rights. Use 'revoke: true' to delete for everyone (not just yourself). Be careful - deletion is permanent!",
+    "Delete messages from a chat. Own messages in any chat, or any message with admin rights. Deletion is permanent.",
   parameters: Type.Object({
     chatId: Type.String({
       description: "The chat ID where the messages are located",
