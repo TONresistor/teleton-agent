@@ -22,6 +22,8 @@ const TEMPLATES_DIR = join(findPackageRoot(), "src", "templates");
 export interface WorkspaceConfig {
   workspaceDir?: string;
   ensureTemplates?: boolean;
+  /** Suppress log.info() output (useful when CLI spinners are active) */
+  silent?: boolean;
 }
 
 export interface Workspace {
@@ -50,16 +52,18 @@ export interface Workspace {
  * Ensure workspace directory structure exists and is initialized
  */
 export async function ensureWorkspace(config?: WorkspaceConfig): Promise<Workspace> {
+  const silent = config?.silent ?? false;
+
   // Create base teleton directory
   if (!existsSync(TELETON_ROOT)) {
     mkdirSync(TELETON_ROOT, { recursive: true });
-    log.info(`Created Teleton root at ${TELETON_ROOT}`);
+    if (!silent) log.info(`Created Teleton root at ${TELETON_ROOT}`);
   }
 
   // Create workspace directory
   if (!existsSync(WORKSPACE_ROOT)) {
     mkdirSync(WORKSPACE_ROOT, { recursive: true });
-    log.info(`Created workspace at ${WORKSPACE_ROOT}`);
+    if (!silent) log.info(`Created workspace at ${WORKSPACE_ROOT}`);
   }
 
   // Create workspace subdirectories
@@ -102,7 +106,7 @@ export async function ensureWorkspace(config?: WorkspaceConfig): Promise<Workspa
 
   // Bootstrap templates if requested
   if (config?.ensureTemplates) {
-    await bootstrapTemplates(workspace);
+    await bootstrapTemplates(workspace, silent);
   }
 
   return workspace;
@@ -111,7 +115,7 @@ export async function ensureWorkspace(config?: WorkspaceConfig): Promise<Workspa
 /**
  * Bootstrap workspace with template files
  */
-async function bootstrapTemplates(workspace: Workspace): Promise<void> {
+async function bootstrapTemplates(workspace: Workspace, silent = false): Promise<void> {
   const templates = [
     { name: "SOUL.md", path: workspace.soulPath },
     { name: "MEMORY.md", path: workspace.memoryPath },
@@ -126,7 +130,7 @@ async function bootstrapTemplates(workspace: Workspace): Promise<void> {
       const templateSource = join(TEMPLATES_DIR, template.name);
       if (existsSync(templateSource)) {
         copyFileSync(templateSource, template.path);
-        log.info(`Created ${template.name}`);
+        if (!silent) log.info(`Created ${template.name}`);
       }
     }
   }

@@ -1,12 +1,9 @@
-import { useState, useEffect } from 'react';
-import { setup, SetupModelOption, BotValidation } from '../../lib/api';
+import { useState } from 'react';
+import { setup, BotValidation } from '../../lib/api';
 import { Select } from '../Select';
 import type { StepProps } from '../../pages/Setup';
 
 export function ConfigStep({ data, onChange }: StepProps) {
-  const [models, setModels] = useState<SetupModelOption[]>([]);
-  const [loadingModels, setLoadingModels] = useState(false);
-
   const [botLoading, setBotLoading] = useState(false);
   const [botValid, setBotValid] = useState<boolean | null>(null);
   const [botNetworkError, setBotNetworkError] = useState(false);
@@ -36,21 +33,6 @@ export function ConfigStep({ data, onChange }: StepProps) {
     }
   };
 
-  // Always load models (no quick/advanced gate)
-  useEffect(() => {
-    if (data.provider === 'cocoon' || data.provider === 'local' || !data.provider) return;
-    setLoadingModels(true);
-    setup.getModels(data.provider)
-      .then((m) => {
-        setModels(m);
-        if (!data.model && m.length > 0) {
-          onChange({ ...data, model: m[0].value });
-        }
-      })
-      .catch(() => setModels([]))
-      .finally(() => setLoadingModels(false));
-  }, [data.provider]);
-
   const policyOptions = ['open', 'allowlist', 'disabled'];
   const policyLabels = ['Open', 'Allowlist', 'Disabled'];
 
@@ -70,39 +52,8 @@ export function ConfigStep({ data, onChange }: StepProps) {
     <div className="step-content">
       <h2 className="step-title">Configuration</h2>
       <p className="step-description">
-        Configure your agent's model and behavior. Defaults are pre-filled — adjust what you need.
+        Configure your agent's behavior policies. Defaults are pre-filled — adjust what you need.
       </p>
-
-      {(data.provider === 'cocoon' || data.provider === 'local') ? (
-        <div className="info-panel">
-          Model is auto-discovered from the {data.provider === 'local' ? 'local server' : 'Cocoon proxy'} at startup.
-        </div>
-      ) : (
-        <div className="form-group">
-          <label>Model</label>
-          {loadingModels ? (
-            <div className="text-muted"><span className="spinner sm" /> Loading models...</div>
-          ) : (
-            <Select
-              value={data.model}
-              options={models.map((m) => m.value)}
-              labels={models.map((m) => m.isCustom ? 'Custom...' : `${m.name} - ${m.description}`)}
-              onChange={(v) => onChange({ ...data, model: v })}
-              style={{ width: '100%' }}
-            />
-          )}
-          {data.model === '__custom__' && (
-            <input
-              type="text"
-              value={data.customModel}
-              onChange={(e) => onChange({ ...data, customModel: e.target.value })}
-              placeholder="Enter custom model ID"
-              className="w-full"
-              style={{ marginTop: '8px' }}
-            />
-          )}
-        </div>
-      )}
 
       <div className="form-group">
         <label>DM Policy</label>

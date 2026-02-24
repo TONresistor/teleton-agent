@@ -77,9 +77,9 @@ export interface OnboardOptions {
 
 const STEPS: StepDef[] = [
   { label: "Agent", desc: "Name & mode" },
-  { label: "Provider", desc: "LLM & API key" },
+  { label: "Provider", desc: "LLM, key & model" },
   { label: "Telegram", desc: "Credentials" },
-  { label: "Config", desc: "Model & policies" },
+  { label: "Config", desc: "Policies" },
   { label: "Modules", desc: "Optional features" },
   { label: "Wallet", desc: "TON blockchain" },
   { label: "Connect", desc: "Telegram auth" },
@@ -242,6 +242,7 @@ async function runInteractiveOnboarding(
   const workspace = await ensureWorkspace({
     workspaceDir: options.workspace,
     ensureTemplates: true,
+    silent: true,
   });
   const isNew = isNewWorkspace(workspace);
   spinner.succeed(DIM(`Workspace: ${workspace.root}`));
@@ -460,6 +461,42 @@ async function runInteractiveOnboarding(
     STEPS[1].value = `${providerMeta.displayName}  ${DIM(maskedKey)}`;
   }
 
+  // Model selection (advanced mode only, after provider + API key)
+  selectedModel = providerMeta.defaultModel;
+
+  if (
+    selectedFlow === "advanced" &&
+    selectedProvider !== "cocoon" &&
+    selectedProvider !== "local"
+  ) {
+    const providerModels = getModelsForProvider(selectedProvider);
+    const modelChoices = [
+      ...providerModels,
+      { value: "__custom__", name: "Custom", description: "Enter a model ID manually" },
+    ];
+
+    const modelChoice = await select({
+      message: "Model",
+      default: providerMeta.defaultModel,
+      theme,
+      choices: modelChoices,
+    });
+
+    if (modelChoice === "__custom__") {
+      const customModel = await input({
+        message: "Model ID",
+        default: providerMeta.defaultModel,
+        theme,
+      });
+      if (customModel?.trim()) selectedModel = customModel.trim();
+    } else {
+      selectedModel = modelChoice;
+    }
+
+    const modelLabel = providerModels.find((m) => m.value === selectedModel)?.name ?? selectedModel;
+    STEPS[1].value = `${STEPS[1].value ?? providerMeta.displayName}, ${modelLabel}`;
+  }
+
   // ════════════════════════════════════════════════════════════════════
   // Step 2: Telegram — credentials
   // ════════════════════════════════════════════════════════════════════
@@ -538,41 +575,11 @@ async function runInteractiveOnboarding(
   STEPS[2].value = `${phone} (ID: ${userId})`;
 
   // ════════════════════════════════════════════════════════════════════
-  // Step 3: Config — model + policies (advanced only)
+  // Step 3: Config — policies (advanced only)
   // ════════════════════════════════════════════════════════════════════
   redraw(3);
 
-  selectedModel = providerMeta.defaultModel;
-
-  if (
-    selectedFlow === "advanced" &&
-    selectedProvider !== "cocoon" &&
-    selectedProvider !== "local"
-  ) {
-    const providerModels = getModelsForProvider(selectedProvider);
-    const modelChoices = [
-      ...providerModels,
-      { value: "__custom__", name: "Custom", description: "Enter a model ID manually" },
-    ];
-
-    const modelChoice = await select({
-      message: "Model",
-      default: providerMeta.defaultModel,
-      theme,
-      choices: modelChoices,
-    });
-
-    if (modelChoice === "__custom__") {
-      const customModel = await input({
-        message: "Model ID",
-        default: providerMeta.defaultModel,
-        theme,
-      });
-      if (customModel?.trim()) selectedModel = customModel.trim();
-    } else {
-      selectedModel = modelChoice;
-    }
-
+  if (selectedFlow === "advanced") {
     dmPolicy = await select({
       message: "DM policy (private messages)",
       default: "open",
@@ -611,10 +618,9 @@ async function runInteractiveOnboarding(
       },
     });
 
-    const modelLabel = providerModels.find((m) => m.value === selectedModel)?.name ?? selectedModel;
-    STEPS[3].value = `${modelLabel}, ${dmPolicy}/${groupPolicy}`;
+    STEPS[3].value = `${dmPolicy}/${groupPolicy}`;
   } else {
-    STEPS[3].value = `${selectedModel} (defaults)`;
+    STEPS[3].value = "defaults";
   }
 
   // ════════════════════════════════════════════════════════════════════

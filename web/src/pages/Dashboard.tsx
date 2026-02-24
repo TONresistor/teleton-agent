@@ -231,8 +231,8 @@ export function Dashboard() {
             <label>Provider</label>
             <Select
               value={pendingProvider ?? getLocal('agent.provider')}
-              options={['anthropic', 'claude-code', 'openai', 'google', 'xai', 'groq', 'openrouter', 'moonshot', 'mistral', 'cocoon', 'local']}
-              labels={['Anthropic', 'Claude Code', 'OpenAI', 'Google', 'xAI', 'Groq', 'OpenRouter', 'Moonshot', 'Mistral', 'Cocoon', 'Local']}
+              options={['claude-code', 'anthropic', 'openai', 'google', 'xai', 'groq', 'openrouter', 'moonshot', 'mistral', 'cocoon', 'local']}
+              labels={['Claude Code', 'Anthropic', 'OpenAI', 'Google', 'xAI', 'Groq', 'OpenRouter', 'Moonshot', 'Mistral', 'Cocoon', 'Local']}
               onChange={handleProviderChange}
             />
           </div>

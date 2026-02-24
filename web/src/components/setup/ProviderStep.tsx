@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
-import { setup, SetupProvider, ClaudeCodeKeyDetection } from '../../lib/api';
+import { setup, SetupProvider, SetupModelOption, ClaudeCodeKeyDetection } from '../../lib/api';
+import { Select } from '../Select';
 import type { StepProps } from '../../pages/Setup';
 
 export function ProviderStep({ data, onChange }: StepProps) {
@@ -13,6 +14,8 @@ export function ProviderStep({ data, onChange }: StepProps) {
   const [ccDetection, setCcDetection] = useState<ClaudeCodeKeyDetection | null>(null);
   const [ccDetecting, setCcDetecting] = useState(false);
   const [ccShowFallback, setCcShowFallback] = useState(false);
+  const [models, setModels] = useState<SetupModelOption[]>([]);
+  const [loadingModels, setLoadingModels] = useState(false);
 
   useEffect(() => {
     setup.getProviders()
@@ -41,6 +44,24 @@ export function ProviderStep({ data, onChange }: StepProps) {
         .finally(() => setCcDetecting(false));
     }
   }, [selected?.id]);
+
+  // Load models when provider changes
+  useEffect(() => {
+    if (!data.provider || data.provider === 'cocoon' || data.provider === 'local') {
+      setModels([]);
+      return;
+    }
+    setLoadingModels(true);
+    setup.getModels(data.provider)
+      .then((m) => {
+        setModels(m);
+        if (!data.model && m.length > 0) {
+          onChange({ ...data, model: m[0].value });
+        }
+      })
+      .catch(() => setModels([]))
+      .finally(() => setLoadingModels(false));
+  }, [data.provider]);
 
   const handleSelect = (id: string) => {
     onChange({ ...data, provider: id, apiKey: '', model: '', customModel: '' });
@@ -242,6 +263,33 @@ export function ProviderStep({ data, onChange }: StepProps) {
               Ollama :11434 · vLLM :8000 · LM Studio :1234 · llama.cpp :8080
             </div>
           </div>
+        </div>
+      )}
+
+      {selected && selected.id !== 'cocoon' && selected.id !== 'local' && (
+        <div className="form-group" style={{ marginTop: '16px' }}>
+          <label>Model</label>
+          {loadingModels ? (
+            <div className="text-muted"><span className="spinner sm" /> Loading models...</div>
+          ) : (
+            <Select
+              value={data.model}
+              options={models.map((m) => m.value)}
+              labels={models.map((m) => m.isCustom ? 'Custom...' : `${m.name} - ${m.description}`)}
+              onChange={(v) => onChange({ ...data, model: v })}
+              style={{ width: '100%' }}
+            />
+          )}
+          {data.model === '__custom__' && (
+            <input
+              type="text"
+              value={data.customModel}
+              onChange={(e) => onChange({ ...data, customModel: e.target.value })}
+              placeholder="Enter custom model ID"
+              className="w-full"
+              style={{ marginTop: '8px' }}
+            />
+          )}
         </div>
       )}
     </div>
