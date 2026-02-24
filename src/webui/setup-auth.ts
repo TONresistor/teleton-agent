@@ -28,6 +28,8 @@ interface AuthSession {
   phoneCodeHash: string; // NEVER sent to frontend
   state: "code_sent" | "2fa_required" | "authenticated" | "failed";
   passwordHint?: string;
+  fragmentUrl?: string;
+  codeLength?: number;
   codeAttempts: number;
   passwordAttempts: number;
   createdAt: number;
@@ -46,7 +48,13 @@ export class TelegramAuthManager {
     apiId: number,
     apiHash: string,
     phone: string
-  ): Promise<{ authSessionId: string; codeViaApp: boolean; expiresAt: number }> {
+  ): Promise<{
+    authSessionId: string;
+    codeDelivery: "app" | "sms" | "fragment";
+    fragmentUrl?: string;
+    codeLength?: number;
+    expiresAt: number;
+  }> {
     // Clean up any existing session
     await this.cleanup();
 
@@ -59,7 +67,35 @@ export class TelegramAuthManager {
 
     await client.connect();
 
-    const result = await client.sendCode({ apiId, apiHash }, phone);
+    const result = await client.invoke(
+      new Api.auth.SendCode({
+        phoneNumber: phone,
+        apiId,
+        apiHash,
+        settings: new Api.CodeSettings({}),
+      })
+    );
+
+    if (result instanceof Api.auth.SentCodeSuccess) {
+      await client.disconnect();
+      throw new Error("Account already authenticated (SentCodeSuccess)");
+    }
+
+    // Detect code delivery method
+    let codeDelivery: "app" | "sms" | "fragment" = "sms";
+    let fragmentUrl: string | undefined;
+    let codeLength: number | undefined;
+
+    if (result.type instanceof Api.auth.SentCodeTypeApp) {
+      codeDelivery = "app";
+      codeLength = result.type.length;
+    } else if (result.type instanceof Api.auth.SentCodeTypeFragmentSms) {
+      codeDelivery = "fragment";
+      fragmentUrl = result.type.url;
+      codeLength = result.type.length;
+    } else if ("length" in result.type) {
+      codeLength = result.type.length as number;
+    }
 
     const id = randomBytes(16).toString("hex");
     const expiresAt = Date.now() + SESSION_TTL_MS;
@@ -70,6 +106,8 @@ export class TelegramAuthManager {
       phone,
       phoneCodeHash: result.phoneCodeHash,
       state: "code_sent",
+      fragmentUrl,
+      codeLength,
       codeAttempts: 0,
       passwordAttempts: 0,
       createdAt: Date.now(),
@@ -79,7 +117,7 @@ export class TelegramAuthManager {
     };
 
     log.info("Telegram verification code sent");
-    return { authSessionId: id, codeViaApp: result.isCodeViaApp, expiresAt };
+    return { authSessionId: id, codeDelivery, fragmentUrl, codeLength, expiresAt };
   }
 
   /**
@@ -191,7 +229,11 @@ export class TelegramAuthManager {
   /**
    * Resend verification code
    */
-  async resendCode(authSessionId: string): Promise<{ codeViaApp: boolean } | null> {
+  async resendCode(authSessionId: string): Promise<{
+    codeDelivery: "app" | "sms" | "fragment";
+    fragmentUrl?: string;
+    codeLength?: number;
+  } | null> {
     const session = this.getSession(authSessionId);
     if (!session || session.state !== "code_sent") return null;
 
@@ -206,12 +248,30 @@ export class TelegramAuthManager {
     if (result instanceof Api.auth.SentCode) {
       session.phoneCodeHash = result.phoneCodeHash;
       session.codeAttempts = 0;
-      const codeViaApp = result.type instanceof Api.auth.SentCodeTypeApp;
-      return { codeViaApp };
+
+      let codeDelivery: "app" | "sms" | "fragment" = "sms";
+      let fragmentUrl: string | undefined;
+      let codeLength: number | undefined;
+
+      if (result.type instanceof Api.auth.SentCodeTypeApp) {
+        codeDelivery = "app";
+        codeLength = result.type.length;
+      } else if (result.type instanceof Api.auth.SentCodeTypeFragmentSms) {
+        codeDelivery = "fragment";
+        fragmentUrl = result.type.url;
+        codeLength = result.type.length;
+      } else if ("length" in result.type) {
+        codeLength = result.type.length as number;
+      }
+
+      session.fragmentUrl = fragmentUrl;
+      session.codeLength = codeLength;
+
+      return { codeDelivery, fragmentUrl, codeLength };
     }
 
     // SentCodeSuccess means already authenticated
-    return { codeViaApp: false };
+    return { codeDelivery: "sms" };
   }
 
   /**

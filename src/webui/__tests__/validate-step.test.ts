@@ -133,6 +133,18 @@ describe("validateStep", () => {
     it("returns false when userId is 0", () => {
       expect(validateStep(2, makeData({ ...validTelegram, userId: 0 }))).toBe(false);
     });
+
+    it("returns true for +888 anonymous number with valid userId", () => {
+      expect(
+        validateStep(2, makeData({ ...validTelegram, phone: "+88812345678", userId: 789 }))
+      ).toBe(true);
+    });
+
+    it("returns false for +888 anonymous number without userId", () => {
+      expect(
+        validateStep(2, makeData({ ...validTelegram, phone: "+88812345678", userId: 0 }))
+      ).toBe(false);
+    });
   });
 
   // ── Step 3: Config ───────────────────────────────────────────────

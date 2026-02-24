@@ -971,6 +971,12 @@ async function runInteractiveOnboarding(
     console.log(RED("  │") + " ".repeat(W) + RED("│"));
     console.log(RED(`  └${"─".repeat(W)}┘`));
     console.log();
+
+    await confirm({
+      message: "I have written down my seed phrase",
+      default: true,
+      theme,
+    });
   }
 
   STEPS[5].value = `${wallet.address.slice(0, 8)}...${wallet.address.slice(-4)}`;

@@ -612,6 +612,47 @@ describe("Setup API Routes", () => {
       const data = await res.json();
       expect(data.error).toBe("PHONE_NUMBER_INVALID");
     });
+
+    it("returns codeDelivery: fragment with fragmentUrl for +888 numbers", async () => {
+      mockAuthManager.sendCode.mockResolvedValue({
+        authSessionId: "sess-frag-1",
+        codeDelivery: "fragment",
+        fragmentUrl: "https://fragment.com/number/88812345678",
+        codeLength: 5,
+        expiresAt: Date.now() + 300000,
+      });
+
+      const res = await post(app, "/telegram/send-code", {
+        apiId: 12345,
+        apiHash: "abcdef",
+        phone: "+88812345678",
+      });
+      expect(res.status).toBe(200);
+      const data = await res.json();
+      expect(data.success).toBe(true);
+      expect(data.data.codeDelivery).toBe("fragment");
+      expect(data.data.fragmentUrl).toBe("https://fragment.com/number/88812345678");
+      expect(data.data.authSessionId).toBe("sess-frag-1");
+    });
+
+    it("returns codeDelivery: app for Telegram app delivery", async () => {
+      mockAuthManager.sendCode.mockResolvedValue({
+        authSessionId: "sess-app-1",
+        codeDelivery: "app",
+        codeLength: 5,
+        expiresAt: Date.now() + 300000,
+      });
+
+      const res = await post(app, "/telegram/send-code", {
+        apiId: 12345,
+        apiHash: "abcdef",
+        phone: "+1234567890",
+      });
+      expect(res.status).toBe(200);
+      const data = await res.json();
+      expect(data.data.codeDelivery).toBe("app");
+      expect(data.data.fragmentUrl).toBeUndefined();
+    });
   });
 
   // ── POST /telegram/verify-code ──────────────────────────────────────────
@@ -759,6 +800,23 @@ describe("Setup API Routes", () => {
         authSessionId: "sess-123",
       });
       expect(res.status).toBe(429);
+    });
+
+    it("returns codeDelivery: fragment with fragmentUrl on resend", async () => {
+      mockAuthManager.resendCode.mockResolvedValue({
+        codeDelivery: "fragment",
+        fragmentUrl: "https://fragment.com/number/88812345678",
+        codeLength: 5,
+      });
+
+      const res = await post(app, "/telegram/resend-code", {
+        authSessionId: "sess-frag-1",
+      });
+      expect(res.status).toBe(200);
+      const data = await res.json();
+      expect(data.success).toBe(true);
+      expect(data.data.codeDelivery).toBe("fragment");
+      expect(data.data.fragmentUrl).toBe("https://fragment.com/number/88812345678");
     });
   });
 

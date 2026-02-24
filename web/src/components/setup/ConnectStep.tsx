@@ -26,7 +26,8 @@ export function ConnectStep({ data, onChange }: StepProps) {
   const [code, setCode] = useState('');
   const [password, setPassword] = useState('');
   const [passwordHint, setPasswordHint] = useState('');
-  const [codeViaApp, setCodeViaApp] = useState(false);
+  const [codeDelivery, setCodeDelivery] = useState<"app" | "sms" | "fragment">("sms");
+  const [fragmentUrl, setFragmentUrl] = useState("");
   const [canResend, setCanResend] = useState(false);
   const [floodWait, setFloodWait] = useState(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -64,7 +65,8 @@ export function ConnectStep({ data, onChange }: StepProps) {
     try {
       const result = await setup.sendCode(data.apiId, data.apiHash, data.phone);
       onChange({ ...data, authSessionId: result.authSessionId });
-      setCodeViaApp(result.codeViaApp);
+      setCodeDelivery(result.codeDelivery);
+      if (result.fragmentUrl) setFragmentUrl(result.fragmentUrl);
       setPhase('code_sent');
       setCanResend(false);
     } catch (err) {
@@ -122,7 +124,8 @@ export function ConnectStep({ data, onChange }: StepProps) {
     setError('');
     try {
       const result = await setup.resendCode(data.authSessionId);
-      setCodeViaApp(result.codeViaApp);
+      setCodeDelivery(result.codeDelivery);
+      if (result.fragmentUrl) setFragmentUrl(result.fragmentUrl);
       setCode('');
       setCanResend(false);
     } catch (err) {
@@ -154,9 +157,42 @@ export function ConnectStep({ data, onChange }: StepProps) {
       {phase === 'code_sent' && (
         <div className="text-center" style={{ padding: '20px 0' }}>
           <LottiePlayer loader={codeAnimation} size={180} />
-          <div className="text-muted" style={{ marginBottom: '16px' }}>
-            Code sent via {codeViaApp ? 'Telegram app' : 'SMS'}
-          </div>
+
+          {codeDelivery === 'fragment' ? (
+            <>
+              <div className="info-panel" style={{ textAlign: 'left', marginBottom: '16px' }}>
+                <strong>Anonymous number detected (+888)</strong>
+                <p className="text-muted" style={{ margin: '8px 0' }}>
+                  Your number is an anonymous number purchased on Fragment. To receive the login code,
+                  open Fragment.com, connect your TON wallet, and navigate to "My Assets" to find the code.
+                </p>
+                {fragmentUrl && (
+                  <a
+                    href={fragmentUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="btn-lg btn-ghost"
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', marginTop: '4px' }}
+                  >
+                    Open Fragment.com
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6" />
+                      <polyline points="15 3 21 3 21 9" />
+                      <line x1="10" y1="14" x2="21" y2="3" />
+                    </svg>
+                  </a>
+                )}
+              </div>
+              <div className="text-muted" style={{ marginBottom: '16px' }}>
+                Enter the code shown on Fragment
+              </div>
+            </>
+          ) : (
+            <div className="text-muted" style={{ marginBottom: '16px' }}>
+              Code sent via {codeDelivery === 'app' ? 'Telegram app' : 'SMS'}
+            </div>
+          )}
+
           <div style={{ display: 'flex', justifyContent: 'center', marginBottom: '16px' }}>
             <input
               className="code-input"

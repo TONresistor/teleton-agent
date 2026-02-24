@@ -61,7 +61,9 @@ export interface WalletResult {
 
 export interface AuthCodeResult {
   authSessionId: string;
-  codeViaApp: boolean;
+  codeDelivery: "app" | "sms" | "fragment";
+  fragmentUrl?: string;
+  codeLength?: number;
   expiresAt: number;
 }
 
@@ -608,7 +610,7 @@ export const setup = {
     }),
 
   resendCode: (authSessionId: string) =>
-    fetchSetupAPI<{ codeViaApp: boolean }>('/setup/telegram/resend-code', {
+    fetchSetupAPI<{ codeDelivery: "app" | "sms" | "fragment"; fragmentUrl?: string; codeLength?: number }>('/setup/telegram/resend-code', {
       method: 'POST',
       body: JSON.stringify({ authSessionId }),
     }),
