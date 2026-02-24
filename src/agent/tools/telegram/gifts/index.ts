@@ -15,6 +15,10 @@ import {
 import { telegramGetResaleGiftsTool, telegramGetResaleGiftsExecutor } from "./get-resale-gifts.js";
 import { telegramBuyResaleGiftTool, telegramBuyResaleGiftExecutor } from "./buy-resale-gift.js";
 import { telegramSetGiftStatusTool, telegramSetGiftStatusExecutor } from "./set-gift-status.js";
+import {
+  telegramGetCollectibleInfoTool,
+  telegramGetCollectibleInfoExecutor,
+} from "./get-collectible-info.js";
 import type { ToolEntry } from "../../types.js";
 
 export { telegramGetAvailableGiftsTool, telegramGetAvailableGiftsExecutor };
@@ -25,6 +29,7 @@ export { telegramSetCollectiblePriceTool, telegramSetCollectiblePriceExecutor };
 export { telegramGetResaleGiftsTool, telegramGetResaleGiftsExecutor };
 export { telegramBuyResaleGiftTool, telegramBuyResaleGiftExecutor };
 export { telegramSetGiftStatusTool, telegramSetGiftStatusExecutor };
+export { telegramGetCollectibleInfoTool, telegramGetCollectibleInfoExecutor };
 
 export const tools: ToolEntry[] = [
   { tool: telegramGetAvailableGiftsTool, executor: telegramGetAvailableGiftsExecutor },
@@ -43,4 +48,5 @@ export const tools: ToolEntry[] = [
   { tool: telegramGetResaleGiftsTool, executor: telegramGetResaleGiftsExecutor },
   { tool: telegramBuyResaleGiftTool, executor: telegramBuyResaleGiftExecutor, scope: "dm-only" },
   { tool: telegramSetGiftStatusTool, executor: telegramSetGiftStatusExecutor, scope: "dm-only" },
+  { tool: telegramGetCollectibleInfoTool, executor: telegramGetCollectibleInfoExecutor },
 ];

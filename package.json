@@ -63,7 +63,7 @@
     "@hono/node-server": "^1.19.9",
     "@huggingface/transformers": "^3.8.1",
     "@inquirer/prompts": "^8.2.1",
-    "@mariozechner/pi-ai": "^0.52.12",
+    "@mariozechner/pi-ai": "^0.54.2",
     "@modelcontextprotocol/sdk": "^1.26.0",
     "@sinclair/typebox": "^0.34.48",
     "@tavily/core": "^0.7.1",

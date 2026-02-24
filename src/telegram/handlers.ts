@@ -15,6 +15,7 @@ import {
 } from "../agent/tools/telegram/index.js";
 import type { ToolContext } from "../agent/tools/types.js";
 import { TELEGRAM_SEND_TOOLS } from "../constants/tools.js";
+import { telegramTranscribeAudioExecutor } from "../agent/tools/telegram/media/transcribe-audio.js";
 import { createLogger } from "../utils/logger.js";
 
 const log = createLogger("Telegram");
@@ -357,6 +358,32 @@ export class MessageHandler {
           }
         }
 
+        // 5c. Auto-transcribe voice/audio messages
+        let transcriptionText: string | null = null;
+        if (message.mediaType === "voice" || message.mediaType === "audio") {
+          try {
+            const transcribeResult = await telegramTranscribeAudioExecutor(
+              { chatId: message.chatId, messageId: message.id },
+              {
+                bridge: this.bridge,
+                db: this.db,
+                chatId: message.chatId,
+                senderId: message.senderId,
+                isGroup: message.isGroup,
+                config: this.fullConfig,
+              }
+            );
+            if (transcribeResult.success && (transcribeResult.data as any)?.text) {
+              transcriptionText = (transcribeResult.data as any).text;
+              log.info(
+                `🎤 Auto-transcribed voice msg ${message.id}: "${transcriptionText!.substring(0, 80)}..."`
+              );
+            }
+          } catch (err) {
+            log.warn({ err }, `Failed to auto-transcribe voice message ${message.id}`);
+          }
+        }
+
         // 6. Build tool context
         const toolContext: Omit<ToolContext, "chatId" | "isGroup"> = {
           bridge: this.bridge,
@@ -368,9 +395,13 @@ export class MessageHandler {
         // 7. Get response from agent (with tools)
         const userName =
           message.senderFirstName || message.senderUsername || `user:${message.senderId}`;
+        // Inject transcription into message text if available
+        const effectiveText = transcriptionText
+          ? `🎤 (voice): ${transcriptionText}${message.text ? `\n${message.text}` : ""}`
+          : message.text;
         const response = await this.agent.processMessage(
           message.chatId,
-          message.text,
+          effectiveText,
           userName,
           message.timestamp.getTime(),
           message.isGroup,
