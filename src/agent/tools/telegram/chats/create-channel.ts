@@ -9,10 +9,13 @@ const log = createLogger("Tools");
 /**
  * Parameters for telegram_create_channel tool
  */
+const USERNAME_REGEX = /^[a-zA-Z0-9][a-zA-Z0-9_]{3,30}[a-zA-Z0-9]$/;
+
 interface CreateChannelParams {
   title: string;
   about?: string;
   megagroup?: boolean;
+  username?: string;
 }
 
 /**
@@ -39,6 +42,13 @@ export const telegramCreateChannelTool: Tool = {
           "Create as megagroup (large group with chat) instead of broadcast channel. Default: false (creates broadcast channel).",
       })
     ),
+    username: Type.Optional(
+      Type.String({
+        description:
+          "Public username for the channel (5-32 chars, letters/numbers/underscores, no @). Makes the channel publicly discoverable at t.me/<username>. If the username is unavailable, the channel is still created without it.",
+        maxLength: 32,
+      })
+    ),
   }),
 };
 
@@ -50,7 +60,7 @@ export const telegramCreateChannelExecutor: ToolExecutor<CreateChannelParams> = 
   context
 ): Promise<ToolResult> => {
   try {
-    const { title, about = "", megagroup = false } = params;
+    const { title, about = "", megagroup = false, username } = params;
 
     // Get underlying GramJS client
     const gramJsClient = context.bridge.getClient().getClient();
@@ -68,14 +78,49 @@ export const telegramCreateChannelExecutor: ToolExecutor<CreateChannelParams> = 
     // Extract channel info from updates
     const channel = result.chats?.[0];
 
+    const data: Record<string, unknown> = {
+      channelId: channel?.id?.toString() || "unknown",
+      title,
+      type: megagroup ? "megagroup" : "channel",
+      accessHash: channel?.accessHash?.toString(),
+    };
+
+    // Set username if provided (best-effort — creation still succeeds on failure)
+    if (username && channel) {
+      const clean = username.replace(/^@/, "");
+
+      if (!USERNAME_REGEX.test(clean)) {
+        data.usernameError =
+          "Invalid username format. Must be 5-32 characters, alphanumeric and underscores only, cannot start/end with underscore.";
+      } else {
+        try {
+          await gramJsClient.invoke(
+            new Api.channels.UpdateUsername({
+              channel: channel as Api.Channel,
+              username: clean,
+            })
+          );
+          data.username = clean;
+          data.link = `https://t.me/${clean}`;
+        } catch (usernameError: any) {
+          const msg = getErrorMessage(usernameError);
+          if (msg.includes("USERNAME_OCCUPIED")) {
+            data.usernameError = `Username @${clean} is already taken.`;
+          } else if (msg.includes("CHANNELS_ADMIN_PUBLIC_TOO_MUCH")) {
+            data.usernameError = "Too many public channels. Make some private first.";
+          } else if (msg.includes("USERNAME_PURCHASE_AVAILABLE")) {
+            data.usernameError = `Username @${clean} is available for purchase on fragment.com.`;
+          } else {
+            data.usernameError = msg;
+          }
+          log.warn({ err: usernameError }, "Failed to set username on new channel");
+        }
+      }
+    }
+
     return {
       success: true,
-      data: {
-        channelId: channel?.id?.toString() || "unknown",
-        title,
-        type: megagroup ? "megagroup" : "channel",
-        accessHash: channel?.accessHash?.toString(),
-      },
+      data,
     };
   } catch (error) {
     log.error({ err: error }, "Error creating channel");
