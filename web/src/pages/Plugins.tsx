@@ -318,6 +318,16 @@ export function Plugins() {
             style={{ minWidth: '140px' }}
           />
         )}
+        {tab === 'installed' && updatableCount > 0 && (
+          <button
+            className="btn-sm"
+            onClick={handleUpdateAll}
+            disabled={!!operating || marketLoading}
+            style={{ whiteSpace: 'nowrap' }}
+          >
+            {operating ? 'Updating...' : `Update All (${updatableCount})`}
+          </button>
+        )}
         {tab === 'marketplace' && (
           <>
             {updatableCount > 0 ? (

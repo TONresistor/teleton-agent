@@ -35,7 +35,7 @@ export function Logs() {
         </div>
       </div>
 
-      <div className="card" style={{ maxHeight: '70vh', overflow: 'auto', padding: '14px' }}>
+      <div style={{ height: 'calc(100vh - 160px)', overflow: 'auto' }}>
         {logs.length === 0 ? (
           <div className="empty">Waiting for logs...</div>
         ) : (

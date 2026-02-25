@@ -1570,3 +1570,39 @@ button.btn-lg {
     font-size: 16px; /* prevents iOS zoom */
   }
 }
+
+/* ── Pill Bar ── */
+
+.pill-bar {
+  display: inline-flex;
+  gap: var(--space-sm);
+  padding: var(--space-xs);
+  background: var(--surface);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+  margin-bottom: var(--space-xl);
+  overflow-x: auto;
+}
+
+.pill-bar button {
+  padding: var(--space-sm) var(--space-lg);
+  border-radius: var(--radius-sm);
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: var(--font-md);
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+}
+
+.pill-bar button:hover {
+  color: var(--text);
+  background: var(--surface-hover);
+}
+
+.pill-bar button.active {
+  background: var(--accent);
+  color: var(--text-on-accent);
+}
