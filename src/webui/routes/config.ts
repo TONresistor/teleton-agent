@@ -25,6 +25,7 @@ interface ConfigKeyData {
   type: ConfigKeyType;
   category: ConfigCategory;
   description: string;
+  hotReload: "instant" | "restart";
   options?: string[];
   optionLabels?: Record<string, string>;
   itemType?: "string" | "number";
@@ -58,6 +59,7 @@ export function createConfigRoutes(deps: WebUIServerDeps) {
           type: meta.type,
           category: meta.category,
           description: meta.description,
+          hotReload: meta.hotReload,
           ...(meta.options ? { options: meta.options } : {}),
           ...(meta.optionLabels ? { optionLabels: meta.optionLabels } : {}),
           ...(meta.itemType ? { itemType: meta.itemType } : {}),
@@ -140,6 +142,7 @@ export function createConfigRoutes(deps: WebUIServerDeps) {
           type: meta.type,
           category: meta.category,
           description: meta.description,
+          hotReload: meta.hotReload,
           ...(meta.itemType ? { itemType: meta.itemType } : {}),
         };
         return c.json({ success: true, data: result } as APIResponse<ConfigKeyData>);
@@ -207,6 +210,7 @@ export function createConfigRoutes(deps: WebUIServerDeps) {
         type: meta.type,
         category: meta.category,
         description: meta.description,
+        hotReload: meta.hotReload,
         ...(meta.options ? { options: meta.options } : {}),
       };
       return c.json({ success: true, data: result } as APIResponse<ConfigKeyData>);
@@ -251,6 +255,7 @@ export function createConfigRoutes(deps: WebUIServerDeps) {
         type: meta.type,
         category: meta.category,
         description: meta.description,
+        hotReload: meta.hotReload,
         ...(meta.options ? { options: meta.options } : {}),
         ...(meta.itemType ? { itemType: meta.itemType } : {}),
       };

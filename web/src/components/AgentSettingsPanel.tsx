@@ -1,10 +1,14 @@
 import { ProviderMeta } from '../hooks/useConfigState';
 import { Select } from './Select';
+import { EditableField } from './EditableField';
+import { InfoTip } from './InfoTip';
 
 interface AgentSettingsPanelProps {
   getLocal: (key: string) => string;
+  getServer?: (key: string) => string;
   setLocal: (key: string, value: string) => void;
   saveConfig: (key: string, value: string) => Promise<void>;
+  cancelLocal?: (key: string) => void;
   modelOptions: Array<{ value: string; name: string }>;
   pendingProvider: string | null;
   pendingMeta: ProviderMeta | null;
@@ -21,7 +25,8 @@ interface AgentSettingsPanelProps {
 }
 
 export function AgentSettingsPanel({
-  getLocal, setLocal, saveConfig, modelOptions,
+  getLocal, getServer = () => '', setLocal, saveConfig, cancelLocal = () => {},
+  modelOptions,
   pendingProvider, pendingMeta, pendingApiKey, setPendingApiKey,
   pendingValidating, pendingError, setPendingError,
   handleProviderChange, handleProviderConfirm, handleProviderCancel,
@@ -32,7 +37,7 @@ export function AgentSettingsPanel({
       <div className="section-title">Agent</div>
       <div style={{ display: 'grid', gap: '16px' }}>
         <div className="form-group" style={{ marginBottom: 0 }}>
-          <label>Provider</label>
+          <label>Provider <InfoTip text="LLM provider" /></label>
           <Select
             value={pendingProvider ?? getLocal('agent.provider')}
             options={['claude-code', 'anthropic', 'openai', 'google', 'xai', 'groq', 'openrouter', 'moonshot', 'mistral', 'cocoon', 'local']}
@@ -88,7 +93,7 @@ export function AgentSettingsPanel({
         )}
 
         <div className="form-group" style={{ marginBottom: 0 }}>
-          <label>Model</label>
+          <label>Model <InfoTip text="Main LLM model ID" /></label>
           <Select
             value={getLocal('agent.model')}
             options={modelOptions.map((m) => m.value)}
@@ -98,45 +103,48 @@ export function AgentSettingsPanel({
         </div>
         {!compact && (
           <div style={{ display: 'grid', gap: '12px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <label style={{ fontSize: '13px', color: 'var(--text)' }}>Temperature (0-2)</label>
-              <input
-                type="number"
-                min="0"
-                max="2"
-                step="0.1"
-                value={getLocal('agent.temperature')}
-                onChange={(e) => setLocal('agent.temperature', e.target.value)}
-                onBlur={(e) => saveConfig('agent.temperature', e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && saveConfig('agent.temperature', e.currentTarget.value)}
-                style={{ width: '120px', textAlign: 'right' }}
-              />
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <label style={{ fontSize: '13px', color: 'var(--text)' }}>Max Tokens</label>
-              <input
-                type="number"
-                min="1"
-                value={getLocal('agent.max_tokens')}
-                onChange={(e) => setLocal('agent.max_tokens', e.target.value)}
-                onBlur={(e) => saveConfig('agent.max_tokens', e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && saveConfig('agent.max_tokens', e.currentTarget.value)}
-                style={{ width: '120px', textAlign: 'right' }}
-              />
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <label style={{ fontSize: '13px', color: 'var(--text)' }}>Max Iterations (1-20)</label>
-              <input
-                type="number"
-                min="1"
-                max="20"
-                value={getLocal('agent.max_agentic_iterations')}
-                onChange={(e) => setLocal('agent.max_agentic_iterations', e.target.value)}
-                onBlur={(e) => saveConfig('agent.max_agentic_iterations', e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && saveConfig('agent.max_agentic_iterations', e.currentTarget.value)}
-                style={{ width: '120px', textAlign: 'right' }}
-              />
-            </div>
+            <EditableField
+              label="Temperature"
+              description="Response creativity (0.0 = deterministic, 2.0 = max)"
+              configKey="agent.temperature"
+              type="number"
+              value={getLocal('agent.temperature')}
+              serverValue={getServer('agent.temperature')}
+              onChange={(v) => setLocal('agent.temperature', v)}
+              onSave={(v) => saveConfig('agent.temperature', v)}
+              onCancel={() => cancelLocal('agent.temperature')}
+              min={0}
+              max={2}
+              step={0.1}
+              inline
+            />
+            <EditableField
+              label="Max Tokens"
+              description="Maximum response length in tokens"
+              configKey="agent.max_tokens"
+              type="number"
+              value={getLocal('agent.max_tokens')}
+              serverValue={getServer('agent.max_tokens')}
+              onChange={(v) => setLocal('agent.max_tokens', v)}
+              onSave={(v) => saveConfig('agent.max_tokens', v)}
+              onCancel={() => cancelLocal('agent.max_tokens')}
+              min={1}
+              inline
+            />
+            <EditableField
+              label="Max Iterations"
+              description="Max tool-call loop iterations per message"
+              configKey="agent.max_agentic_iterations"
+              type="number"
+              value={getLocal('agent.max_agentic_iterations')}
+              serverValue={getServer('agent.max_agentic_iterations')}
+              onChange={(v) => setLocal('agent.max_agentic_iterations', v)}
+              onSave={(v) => saveConfig('agent.max_agentic_iterations', v)}
+              onCancel={() => cancelLocal('agent.max_agentic_iterations')}
+              min={1}
+              max={20}
+              inline
+            />
           </div>
         )}
       </div>

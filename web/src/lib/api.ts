@@ -226,6 +226,7 @@ export interface ConfigKeyData {
   value: string | null;
   sensitive: boolean;
   type: 'string' | 'number' | 'boolean' | 'enum' | 'array';
+  hotReload: 'instant' | 'restart';
   itemType?: 'string' | 'number';
   options?: string[];
   optionLabels?: Record<string, string>;

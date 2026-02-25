@@ -7,6 +7,9 @@ import { AgentSettingsPanel } from '../components/AgentSettingsPanel';
 import { TelegramSettingsPanel } from '../components/TelegramSettingsPanel';
 import { Select } from '../components/Select';
 import { ArrayInput } from '../components/ArrayInput';
+import { EditableField } from '../components/EditableField';
+import { ConfigSection } from '../components/ConfigSection';
+import { InfoTip } from '../components/InfoTip';
 
 const TABS = [
   { id: 'llm', label: 'LLM' },
@@ -17,11 +20,6 @@ const TABS = [
 ];
 
 const API_KEY_KEYS = ['agent.api_key', 'telegram.bot_token', 'tavily_api_key', 'tonapi_key'];
-const TELEGRAM_KEYS = [
-  'telegram.admin_ids', 'telegram.allow_from', 'telegram.group_allow_from',
-  'telegram.owner_id', 'telegram.max_message_length',
-  'telegram.rate_limit_messages_per_second', 'telegram.rate_limit_groups_per_minute',
-];
 const ADVANCED_KEYS = [
   'embedding.provider', 'embedding.model', 'webui.port', 'webui.log_requests',
   'deals.enabled', 'deals.expiry_seconds', 'deals.buy_max_floor_percent', 'deals.sell_min_floor_percent',
@@ -34,26 +32,19 @@ export function Config() {
 
   const config = useConfigState();
 
-  // Raw config keys state for API Keys / Advanced tabs
+  // Raw config keys state for ConfigSection tabs
   const [configKeys, setConfigKeys] = useState<ConfigKeyData[]>([]);
-  const [keysLoading, setKeysLoading] = useState(false);
-  const [editingKey, setEditingKey] = useState<string | null>(null);
-  const [editValue, setEditValue] = useState('');
-  const [saving, setSaving] = useState(false);
 
   const handleTabChange = (id: string) => {
     setSearchParams({ tab: id }, { replace: true });
   };
 
-  // Load raw config keys when switching to tabs that use renderKeyValueList
+  // Load config keys on mount (needed by ConfigSection in multiple tabs)
   useEffect(() => {
-    if (activeTab === 'api-keys' || activeTab === 'advanced' || activeTab === 'telegram') {
-      setKeysLoading(true);
-      api.getConfigKeys()
-        .then((res) => { setConfigKeys(res.data); setKeysLoading(false); })
-        .catch(() => setKeysLoading(false));
-    }
-  }, [activeTab]);
+    api.getConfigKeys()
+      .then((res) => setConfigKeys(res.data))
+      .catch(() => {});
+  }, []);
 
   const loadKeys = () => {
     api.getConfigKeys()
@@ -61,57 +52,7 @@ export function Config() {
       .catch(() => {});
   };
 
-  const startEdit = (item: ConfigKeyData) => {
-    setEditingKey(item.key);
-    if (item.type === 'boolean') {
-      setEditValue(item.set && item.value !== null ? item.value : 'true');
-    } else if (item.type === 'enum' && item.options?.length) {
-      setEditValue(item.set && item.value !== null ? item.value : item.options[0]);
-    } else {
-      setEditValue('');
-    }
-  };
-
-  const handleSave = async (key: string) => {
-    const item = configKeys.find((k) => k.key === key);
-    const isSelectType = item?.type === 'boolean' || item?.type === 'enum';
-    if (!isSelectType && !editValue.trim()) return;
-    setSaving(true);
-    config.setError(null);
-    try {
-      await api.setConfigKey(key, editValue.trim());
-      setEditingKey(null);
-      setEditValue('');
-      config.showSuccess(`${key} updated successfully`);
-      loadKeys();
-    } catch (err) {
-      config.setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleUnset = async (key: string) => {
-    setSaving(true);
-    config.setError(null);
-    try {
-      await api.unsetConfigKey(key);
-      config.showSuccess(`${key} removed`);
-      loadKeys();
-    } catch (err) {
-      config.setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleCancel = () => {
-    setEditingKey(null);
-    setEditValue('');
-  };
-
   const handleArraySave = async (key: string, values: string[]) => {
-    setSaving(true);
     config.setError(null);
     try {
       await api.setConfigKey(key, values);
@@ -119,140 +60,10 @@ export function Config() {
       loadKeys();
     } catch (err) {
       config.setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setSaving(false);
     }
   };
 
   if (config.loading) return <div className="loading">Loading...</div>;
-
-  const renderKeyValueList = (filterKeys: string[]) => {
-    if (keysLoading) return <div className="loading">Loading...</div>;
-    const items = configKeys.filter((k) => filterKeys.includes(k.key));
-    if (items.length === 0) return <div style={{ color: 'var(--text-secondary)', fontSize: '13px' }}>No keys found</div>;
-
-    return items.map((item, idx) => (
-      <div
-        key={item.key}
-        style={{
-          padding: '12px 0',
-          borderBottom: idx < items.length - 1 ? '1px solid var(--separator)' : 'none',
-        }}
-      >
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <div>
-            <strong>{item.label}</strong>
-            <span
-              style={{
-                marginLeft: '10px',
-                fontSize: '11px',
-                padding: '2px 8px',
-                borderRadius: '4px',
-                background: item.set ? 'var(--accent)' : 'var(--surface)',
-                color: item.set ? 'var(--text-on-accent)' : 'var(--text-secondary)',
-              }}
-            >
-              {item.set ? 'Set' : 'Not set'}
-            </span>
-            {item.sensitive && (
-              <span style={{ marginLeft: '6px', fontSize: '11px', color: 'var(--text-secondary)' }}>
-                sensitive
-              </span>
-            )}
-            <div style={{ fontSize: '11px', color: 'var(--text-secondary)', fontFamily: 'monospace', marginTop: '2px' }}>
-              {item.key}
-            </div>
-          </div>
-          {item.type !== 'array' && (
-            <div style={{ display: 'flex', gap: '6px' }}>
-              <button
-                onClick={() => startEdit(item)}
-                style={{ padding: '4px 12px', fontSize: '12px' }}
-                disabled={saving}
-              >
-                Edit
-              </button>
-              {item.set && (
-                <button
-                  onClick={() => handleUnset(item.key)}
-                  style={{ padding: '4px 12px', fontSize: '12px', opacity: 0.7 }}
-                  disabled={saving}
-                >
-                  Remove
-                </button>
-              )}
-            </div>
-          )}
-        </div>
-
-        <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>
-          {item.description}
-        </div>
-
-        {item.type === 'array' ? (
-          <div style={{ marginTop: '8px' }}>
-            <ArrayInput
-              value={item.value ? JSON.parse(item.value) : []}
-              onChange={(values) => handleArraySave(item.key, values)}
-              validate={item.itemType === 'number' ? (v) => (/^\d+$/.test(v) ? null : 'Must be a number') : undefined}
-              placeholder={item.itemType === 'number' ? 'Enter ID...' : 'Enter value...'}
-              disabled={saving}
-            />
-          </div>
-        ) : (
-          <>
-            {item.set && item.value && editingKey !== item.key && (
-              <div style={{ marginTop: '6px', fontSize: '13px', color: 'var(--text)', fontFamily: 'monospace' }}>
-                {item.optionLabels?.[item.value] ?? item.value}
-              </div>
-            )}
-
-            {editingKey === item.key && (
-              <div className="form-group" style={{ marginTop: '10px', marginBottom: 0 }}>
-                {item.type === 'boolean' ? (
-                  <Select
-                    value={editValue}
-                    options={['true', 'false']}
-                    onChange={setEditValue}
-                    style={{ width: '100%', marginBottom: '8px' }}
-                  />
-                ) : item.type === 'enum' && item.options ? (
-                  <Select
-                    value={editValue}
-                    options={item.options}
-                    labels={item.optionLabels ? item.options.map((o) => item.optionLabels![o] ?? o) : undefined}
-                    onChange={setEditValue}
-                    style={{ width: '100%', marginBottom: '8px' }}
-                  />
-                ) : (
-                  <input
-                    type={item.type === 'number' ? 'number' : item.sensitive ? 'password' : 'text'}
-                    value={editValue}
-                    onChange={(e) => setEditValue(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && handleSave(item.key)}
-                    placeholder={`Enter value for ${item.key}...`}
-                    autoFocus
-                    style={{ width: '100%', marginBottom: '8px' }}
-                  />
-                )}
-                <div style={{ display: 'flex', gap: '6px' }}>
-                  <button
-                    onClick={() => handleSave(item.key)}
-                    disabled={saving || (item.type !== 'boolean' && item.type !== 'enum' && !editValue.trim())}
-                  >
-                    {saving ? 'Saving...' : 'Save'}
-                  </button>
-                  <button onClick={handleCancel} style={{ opacity: 0.7 }} disabled={saving}>
-                    Cancel
-                  </button>
-                </div>
-              </div>
-            )}
-          </>
-        )}
-      </div>
-    ));
-  };
 
   return (
     <div>
@@ -284,8 +95,10 @@ export function Config() {
           <div className="card">
             <AgentSettingsPanel
               getLocal={config.getLocal}
+              getServer={config.getServer}
               setLocal={config.setLocal}
               saveConfig={config.saveConfig}
+              cancelLocal={config.cancelLocal}
               modelOptions={config.modelOptions}
               pendingProvider={config.pendingProvider}
               pendingMeta={config.pendingMeta}
@@ -303,20 +116,21 @@ export function Config() {
           {config.getLocal('agent.provider') === 'cocoon' && (
             <div className="card">
               <div className="section-title">Cocoon</div>
-              <div className="form-group" style={{ marginBottom: 0 }}>
-                <label>Proxy Port <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>(requires restart)</span></label>
-                <input
-                  type="number"
-                  min="1"
-                  max="65535"
-                  value={config.getLocal('cocoon.port')}
-                  onChange={(e) => config.setLocal('cocoon.port', e.target.value)}
-                  onBlur={(e) => config.saveConfig('cocoon.port', e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && config.saveConfig('cocoon.port', e.currentTarget.value)}
-                  placeholder="11434"
-                  style={{ width: '100%' }}
-                />
-              </div>
+              <EditableField
+                label="Proxy Port"
+                description="Cocoon Network proxy port"
+                configKey="cocoon.port"
+                type="number"
+                value={config.getLocal('cocoon.port')}
+                serverValue={config.getServer('cocoon.port')}
+                onChange={(v) => config.setLocal('cocoon.port', v)}
+                onSave={(v) => config.saveConfig('cocoon.port', v)}
+                onCancel={() => config.cancelLocal('cocoon.port')}
+                min={1}
+                max={65535}
+                placeholder="11434"
+                hotReload="restart"
+              />
             </div>
           )}
 
@@ -341,11 +155,15 @@ export function Config() {
               </div>
               <div style={{ display: 'grid', gap: '12px' }}>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <label style={{ fontSize: '13px', color: 'var(--text)' }}>Indexed</label>
+                  <label style={{ fontSize: '13px', color: 'var(--text)' }}>
+                    Indexed <InfoTip text="Whether tool embeddings have been indexed for semantic search" />
+                  </label>
                   <span style={{ fontSize: '13px', color: 'var(--text)' }}>{config.toolRag.indexed ? 'Yes' : 'No'}</span>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <label style={{ fontSize: '13px', color: 'var(--text)' }}>Top-K</label>
+                  <label style={{ fontSize: '13px', color: 'var(--text)' }}>
+                    Top-K <InfoTip text="Number of most relevant tools to send per message" />
+                  </label>
                   <Select
                     value={String(config.toolRag.topK)}
                     options={['10', '15', '20', '25', '30', '40', '50']}
@@ -354,12 +172,14 @@ export function Config() {
                   />
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <label style={{ fontSize: '13px', color: 'var(--text)' }}>Total Tools</label>
+                  <label style={{ fontSize: '13px', color: 'var(--text)' }}>
+                    Total Tools <InfoTip text="Total number of registered tools available" />
+                  </label>
                   <span style={{ fontSize: '13px', color: 'var(--text)' }}>{config.toolRag.totalTools}</span>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                   <label style={{ fontSize: '13px', color: 'var(--text)', cursor: 'pointer' }} htmlFor="skip-unlimited">
-                    Skip Unlimited Providers
+                    Skip Unlimited Providers <InfoTip text="Skip RAG filtering for providers with no tool limit" />
                   </label>
                   <label className="toggle">
                     <input
@@ -374,7 +194,7 @@ export function Config() {
                 </div>
                 <div>
                   <label style={{ fontSize: '13px', color: 'var(--text)', display: 'block', marginBottom: '6px' }}>
-                    Always Include (glob patterns)
+                    Always Include (glob patterns) <InfoTip text="Tool name patterns that are always included regardless of RAG scoring" />
                   </label>
                   <ArrayInput
                     value={config.toolRag.alwaysInclude ?? []}
@@ -390,98 +210,70 @@ export function Config() {
 
       {/* Telegram Tab */}
       {activeTab === 'telegram' && (
-        <>
-          <div className="card">
-            <TelegramSettingsPanel
-              getLocal={config.getLocal}
-              setLocal={config.setLocal}
-              saveConfig={config.saveConfig}
-              extended={true}
-            />
-          </div>
-          <div className="card">
-            <div className="section-title">Telegram Settings</div>
-            {renderKeyValueList(TELEGRAM_KEYS)}
-          </div>
-        </>
+        <div className="card">
+          <TelegramSettingsPanel
+            getLocal={config.getLocal}
+            getServer={config.getServer}
+            setLocal={config.setLocal}
+            saveConfig={config.saveConfig}
+            cancelLocal={config.cancelLocal}
+            configKeys={configKeys}
+            onArraySave={handleArraySave}
+            extended={true}
+          />
+        </div>
       )}
 
       {/* Session Tab */}
       {activeTab === 'session' && (
         <div className="card">
-          <div className="section-title">Session</div>
-          <div style={{ display: 'grid', gap: '16px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <label style={{ fontSize: '13px', color: 'var(--text)', cursor: 'pointer' }} htmlFor="daily-reset">
-                Daily Reset
-              </label>
-              <label className="toggle">
-                <input
-                  id="daily-reset"
-                  type="checkbox"
-                  checked={config.getLocal('agent.session_reset_policy.daily_reset_enabled') === 'true'}
-                  onChange={(e) =>
-                    config.saveConfig('agent.session_reset_policy.daily_reset_enabled', String(e.target.checked))
-                  }
-                />
-                <span className="toggle-track" />
-                <span className="toggle-thumb" />
-              </label>
-            </div>
-            <div className="form-group" style={{ marginBottom: 0 }}>
-              <label>Reset Hour (0-23)</label>
-              <Select
-                value={config.getLocal('agent.session_reset_policy.daily_reset_hour')}
-                options={Array.from({ length: 24 }, (_, i) => String(i))}
-                onChange={(v) => config.saveConfig('agent.session_reset_policy.daily_reset_hour', v)}
-              />
-            </div>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-              <label style={{ fontSize: '13px', color: 'var(--text)', cursor: 'pointer' }} htmlFor="idle-expiry">
-                Idle Expiry
-              </label>
-              <label className="toggle">
-                <input
-                  id="idle-expiry"
-                  type="checkbox"
-                  checked={config.getLocal('agent.session_reset_policy.idle_expiry_enabled') === 'true'}
-                  onChange={(e) =>
-                    config.saveConfig('agent.session_reset_policy.idle_expiry_enabled', String(e.target.checked))
-                  }
-                />
-                <span className="toggle-track" />
-                <span className="toggle-thumb" />
-              </label>
-            </div>
-            <div className="form-group" style={{ marginBottom: 0 }}>
-              <label>Idle Minutes</label>
-              <input
-                type="number"
-                min="1"
-                value={config.getLocal('agent.session_reset_policy.idle_expiry_minutes')}
-                onChange={(e) => config.setLocal('agent.session_reset_policy.idle_expiry_minutes', e.target.value)}
-                onBlur={(e) => config.saveConfig('agent.session_reset_policy.idle_expiry_minutes', e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && config.saveConfig('agent.session_reset_policy.idle_expiry_minutes', e.currentTarget.value)}
-                style={{ width: '100%' }}
-              />
-            </div>
-          </div>
+          <ConfigSection
+            keys={[
+              'agent.session_reset_policy.daily_reset_enabled',
+              'agent.session_reset_policy.daily_reset_hour',
+              'agent.session_reset_policy.idle_expiry_enabled',
+              'agent.session_reset_policy.idle_expiry_minutes',
+            ]}
+            configKeys={configKeys}
+            getLocal={config.getLocal}
+            getServer={config.getServer}
+            setLocal={config.setLocal}
+            saveConfig={config.saveConfig}
+            cancelLocal={config.cancelLocal}
+            title="Session"
+          />
         </div>
       )}
 
       {/* API Keys Tab */}
       {activeTab === 'api-keys' && (
         <div className="card">
-          <div className="section-title">API Keys</div>
-          {renderKeyValueList(API_KEY_KEYS)}
+          <ConfigSection
+            keys={API_KEY_KEYS}
+            configKeys={configKeys}
+            getLocal={config.getLocal}
+            getServer={config.getServer}
+            setLocal={config.setLocal}
+            saveConfig={config.saveConfig}
+            cancelLocal={config.cancelLocal}
+            title="API Keys"
+          />
         </div>
       )}
 
       {/* Advanced Tab */}
       {activeTab === 'advanced' && (
         <div className="card">
-          <div className="section-title">Advanced</div>
-          {renderKeyValueList(ADVANCED_KEYS)}
+          <ConfigSection
+            keys={ADVANCED_KEYS}
+            configKeys={configKeys}
+            getLocal={config.getLocal}
+            getServer={config.getServer}
+            setLocal={config.setLocal}
+            saveConfig={config.saveConfig}
+            cancelLocal={config.cancelLocal}
+            title="Advanced"
+          />
         </div>
       )}
     </div>

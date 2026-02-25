@@ -25,6 +25,9 @@ export function useConfigState() {
   const [pendingValidating, setPendingValidating] = useState(false);
   const [pendingError, setPendingError] = useState<string | null>(null);
 
+  // Server input state — last known values from API (for dirty detection)
+  const [serverInputs, setServerInputs] = useState<Record<string, string>>({});
+
   // Local input state — decoupled from server values to avoid sending empty/partial values
   const [localInputs, setLocalInputs] = useState<Record<string, string>>({});
 
@@ -34,11 +37,12 @@ export function useConfigState() {
         setStatus(statusRes.data);
         setStats(statsRes.data);
         setToolRag(ragRes.data);
-        // Sync local inputs from server values
+        // Sync both server and local inputs from API values
         const inputs: Record<string, string> = {};
         for (const c of configRes.data) {
           if (c.value != null) inputs[c.key] = c.value;
         }
+        setServerInputs(inputs);
         setLocalInputs(inputs);
         setLoading(false);
       })
@@ -53,6 +57,10 @@ export function useConfigState() {
   }, [loadData]);
 
   const getLocal = (key: string): string => localInputs[key] ?? '';
+  const getServer = (key: string): string => serverInputs[key] ?? '';
+  const cancelLocal = (key: string): void => {
+    setLocalInputs((prev) => ({ ...prev, [key]: serverInputs[key] ?? '' }));
+  };
 
   const showSuccess = (msg: string) => {
     setSaveSuccess(msg);
@@ -162,7 +170,7 @@ export function useConfigState() {
 
   return {
     loading, error, setError, saveSuccess, status, stats, toolRag,
-    localInputs, getLocal, setLocal, saveConfig, saveToolRag, showSuccess,
+    localInputs, getLocal, getServer, setLocal, cancelLocal, saveConfig, saveToolRag, showSuccess,
     modelOptions, pendingProvider, pendingMeta, pendingApiKey, setPendingApiKey,
     pendingValidating, pendingError, setPendingError,
     handleProviderChange, handleProviderConfirm, handleProviderCancel, loadData,

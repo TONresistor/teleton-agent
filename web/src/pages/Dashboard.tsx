@@ -5,7 +5,7 @@ import { TelegramSettingsPanel } from '../components/TelegramSettingsPanel';
 export function Dashboard() {
   const {
     loading, error, setError, saveSuccess, status, stats,
-    getLocal, setLocal, saveConfig,
+    getLocal, getServer, setLocal, cancelLocal, saveConfig,
     modelOptions, pendingProvider, pendingMeta,
     pendingApiKey, setPendingApiKey,
     pendingValidating, pendingError, setPendingError,
@@ -77,7 +77,7 @@ export function Dashboard() {
       <div className="card">
         <AgentSettingsPanel
           compact
-          getLocal={getLocal} setLocal={setLocal} saveConfig={saveConfig}
+          getLocal={getLocal} getServer={getServer} setLocal={setLocal} saveConfig={saveConfig} cancelLocal={cancelLocal}
           modelOptions={modelOptions}
           pendingProvider={pendingProvider} pendingMeta={pendingMeta}
           pendingApiKey={pendingApiKey} setPendingApiKey={setPendingApiKey}
@@ -90,7 +90,7 @@ export function Dashboard() {
       </div>
 
       <div className="card">
-        <TelegramSettingsPanel getLocal={getLocal} setLocal={setLocal} saveConfig={saveConfig} />
+        <TelegramSettingsPanel getLocal={getLocal} getServer={getServer} setLocal={setLocal} saveConfig={saveConfig} cancelLocal={cancelLocal} />
       </div>
     </div>
   );
