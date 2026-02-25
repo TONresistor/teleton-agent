@@ -12,9 +12,10 @@ export function createMcpRoutes(deps: WebUIServerDeps) {
 
   // List all MCP servers with their connection status and tools
   app.get("/", (c) => {
+    const servers = typeof deps.mcpServers === "function" ? deps.mcpServers() : deps.mcpServers;
     const response: APIResponse<McpServerInfo[]> = {
       success: true,
-      data: deps.mcpServers,
+      data: servers,
     };
     return c.json(response);
   });

@@ -6,6 +6,7 @@ import type { WebUIConfig, Config } from "../config/schema.js";
 import type { Database } from "better-sqlite3";
 import type { PluginModule, PluginContext } from "../agent/tools/types.js";
 import type { SDKDependencies } from "../sdk/index.js";
+import type { AgentLifecycle } from "../agent/lifecycle.js";
 
 export interface LoadedPlugin {
   name: string;
@@ -14,7 +15,7 @@ export interface LoadedPlugin {
 
 export interface McpServerInfo {
   name: string;
-  type: "stdio" | "sse";
+  type: "stdio" | "sse" | "streamable-http";
   target: string;
   scope: string;
   enabled: boolean;
@@ -34,9 +35,10 @@ export interface WebUIServerDeps {
   };
   toolRegistry: ToolRegistry;
   plugins: LoadedPlugin[];
-  mcpServers: McpServerInfo[];
+  mcpServers: McpServerInfo[] | (() => McpServerInfo[]);
   config: WebUIConfig;
   configPath: string;
+  lifecycle?: AgentLifecycle;
   marketplace?: MarketplaceDeps;
 }
 

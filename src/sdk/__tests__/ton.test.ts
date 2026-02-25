@@ -963,57 +963,73 @@ describe("createTonSDK", () => {
   // UTILITY METHODS
   // ═══════════════════════════════════════════════════════════════
 
-  // Note: toNano/fromNano/validateAddress use require() at runtime,
-  // which loads the real @ton/ton and @ton/core modules (not mocked).
-  // We test them against the real implementations.
+  // These now use top-level ESM imports (mocked by vi.mock).
+  // We configure the mock return values to match the real behaviour.
   describe("Utility methods", () => {
     describe("toNano()", () => {
       it("converts a number to nanoTON", () => {
+        mocks.toNano.mockReturnValue(BigInt("1500000000"));
         const result = sdk.toNano(1.5);
+        expect(mocks.toNano).toHaveBeenCalledWith("1.5");
         expect(result).toBe(BigInt("1500000000"));
       });
 
       it("converts a string to nanoTON", () => {
+        mocks.toNano.mockReturnValue(BigInt("2000000000"));
         const result = sdk.toNano("2");
+        expect(mocks.toNano).toHaveBeenCalledWith("2");
         expect(result).toBe(BigInt("2000000000"));
       });
 
       it("converts zero", () => {
+        mocks.toNano.mockReturnValue(BigInt(0));
         expect(sdk.toNano(0)).toBe(BigInt(0));
       });
 
       it("throws PluginSDKError on invalid input", () => {
+        mocks.toNano.mockImplementation(() => {
+          throw new Error("Invalid number");
+        });
         expect(() => sdk.toNano("not_a_number")).toThrow(PluginSDKError);
       });
     });
 
     describe("fromNano()", () => {
       it("converts nanoTON bigint to string", () => {
+        mocks.fromNano.mockReturnValue("1.5");
         const result = sdk.fromNano(BigInt("1500000000"));
         expect(result).toBe("1.5");
       });
 
       it("converts nanoTON string to string", () => {
+        mocks.fromNano.mockReturnValue("3");
         const result = sdk.fromNano("3000000000");
         expect(result).toBe("3");
       });
 
       it("converts zero", () => {
+        mocks.fromNano.mockReturnValue("0");
         expect(sdk.fromNano(BigInt(0))).toBe("0");
       });
     });
 
     describe("validateAddress()", () => {
       it("returns true for a valid TON address", () => {
-        // Use the real @ton/core Address.parse
+        mocks.addressParse.mockReturnValue({});
         expect(sdk.validateAddress(VALID_ADDRESS)).toBe(true);
       });
 
       it("returns false for an invalid address", () => {
+        mocks.addressParse.mockImplementation(() => {
+          throw new Error("Invalid");
+        });
         expect(sdk.validateAddress("not-an-address")).toBe(false);
       });
 
       it("returns false for empty string", () => {
+        mocks.addressParse.mockImplementation(() => {
+          throw new Error("Invalid");
+        });
         expect(sdk.validateAddress("")).toBe(false);
       });
     });

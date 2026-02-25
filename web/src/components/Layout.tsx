@@ -1,5 +1,6 @@
 import { Link, useLocation } from 'react-router-dom';
 import { Shell } from './Shell';
+import { AgentControl } from './AgentControl';
 import { logout } from '../lib/api';
 
 function DashboardNav() {
@@ -25,13 +26,16 @@ function DashboardNav() {
         <Link to="/mcp" className={isActive('/mcp') ? 'active' : ''}>MCP</Link>
         <Link to="/config" className={isActive('/config') ? 'active' : ''}>Config</Link>
       </nav>
-      <div style={{ marginTop: 'auto', padding: '14px' }}>
-        <button
-          onClick={handleLogout}
-          style={{ width: '100%', opacity: 0.7, fontSize: '13px' }}
-        >
-          Logout
-        </button>
+      <div style={{ marginTop: 'auto' }}>
+        <AgentControl />
+        <div style={{ padding: '0 12px 14px' }}>
+          <button
+            onClick={handleLogout}
+            style={{ width: '100%', opacity: 0.7, fontSize: '13px' }}
+          >
+            Logout
+          </button>
+        </div>
       </div>
     </>
   );

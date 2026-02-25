@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-02-23
+
+### Added
+- **Agent Run/Stop control**: Separate agent lifecycle from WebUI — start/stop the agent at runtime without killing the server. New `AgentLifecycle` state machine (`stopped/starting/running/stopping`), REST endpoints (`POST /api/agent/start`, `/stop`, `GET /api/agent/status`), SSE endpoint (`GET /api/agent/events`) for real-time state push, `useAgentStatus` hook (SSE + polling fallback), and `AgentControl` sidebar component with confirmation dialog
+- **MCP Streamable HTTP transport**: `StreamableHTTPClientTransport` as primary transport for URL-based MCP servers, with automatic fallback to `SSEClientTransport` on failure. `mcpServers` list is now a lazy function for live status. Resource cleanup (AbortController, sockets) on fallback. Improved error logging with stack traces
+
+### Fixed
+- **WebUI setup wizard**: Neutralize color accent overuse — selection states, warning cards, tag pills, step dots all moved to neutral white/grey palette; security notice collapsed into `<details>`; "Optional Integrations" renamed to "Optional API Keys"; bot token marked as "(recommended)"
+- **Jetton send**: Wrap entire `sendJetton` flow in try/catch for consistent `PluginSDKError` propagation; remove `SendMode.IGNORE_ERRORS` (errors are no longer silently swallowed); fix `||` → `??` on jetton decimals (prevents `0` decimals being replaced by `9`)
+
 ## [0.7.0] - 2026-02-21
 
 ### Added
@@ -268,7 +278,8 @@ Git history rewritten to fix commit attribution (email update from `tonresistor@
 - Professional distribution (npm, Docker, CI/CD)
 - Pre-commit hooks and linting infrastructure
 
-[Unreleased]: https://github.com/TONresistor/teleton-agent/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/TONresistor/teleton-agent/compare/v0.7.1...HEAD
+[0.7.1]: https://github.com/TONresistor/teleton-agent/compare/v0.7.0...v0.7.1
 [0.7.0]: https://github.com/TONresistor/teleton-agent/compare/v0.6.0...v0.7.0
 [0.6.0]: https://github.com/TONresistor/teleton-agent/compare/v0.5.2...v0.6.0
 [0.5.2]: https://github.com/TONresistor/teleton-agent/compare/v0.5.1...v0.5.2

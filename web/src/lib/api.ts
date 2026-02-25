@@ -185,7 +185,7 @@ export interface ToolRagStatus {
 
 export interface McpServerInfo {
   name: string;
-  type: 'stdio' | 'sse';
+  type: 'stdio' | 'sse' | 'streamable-http';
   target: string;
   scope: string;
   enabled: boolean;
@@ -391,10 +391,10 @@ export const api = {
     });
   },
 
-  async workspaceList(path = '', recursive = false) {
+  async workspaceList(_path = '', _recursive = false) {
     const params = new URLSearchParams();
-    if (path) params.set('path', path);
-    if (recursive) params.set('recursive', 'true');
+    if (_path) params.set('path', _path);
+    if (_recursive) params.set('recursive', 'true');
     const qs = params.toString();
     return fetchAPI<APIResponse<FileEntry[]>>(`/workspace${qs ? `?${qs}` : ''}`);
   },
@@ -435,8 +435,8 @@ export const api = {
     return fetchAPI<APIResponse<WorkspaceInfo>>('/workspace/info');
   },
 
-  async tasksList(status?: string) {
-    const qs = status ? `?status=${status}` : '';
+  async tasksList(_status?: string) {
+    const qs = _status ? `?status=${_status}` : '';
     return fetchAPI<APIResponse<TaskData[]>>(`/tasks${qs}`);
   },
 
@@ -444,12 +444,12 @@ export const api = {
     return fetchAPI<APIResponse<TaskData>>(`/tasks/${id}`);
   },
 
-  async tasksDelete(id: string) {
-    return fetchAPI<APIResponse<{ message: string }>>(`/tasks/${id}`, { method: 'DELETE' });
+  async tasksDelete(_id: string) {
+    return fetchAPI<APIResponse<{ message: string }>>(`/tasks/${_id}`, { method: 'DELETE' });
   },
 
-  async tasksCancel(id: string) {
-    return fetchAPI<APIResponse<TaskData>>(`/tasks/${id}/cancel`, { method: 'POST' });
+  async tasksCancel(_id: string) {
+    return fetchAPI<APIResponse<TaskData>>(`/tasks/${_id}/cancel`, { method: 'POST' });
   },
 
   async tasksCleanDone() {
@@ -473,8 +473,8 @@ export const api = {
     });
   },
 
-  async getMarketplace(refresh = false) {
-    const qs = refresh ? '?refresh=true' : '';
+  async getMarketplace(_refresh = false) {
+    const qs = _refresh ? '?refresh=true' : '';
     return fetchAPI<APIResponse<MarketplacePlugin[]>>(`/marketplace${qs}`);
   },
 
@@ -517,9 +517,7 @@ export const api = {
   },
 
   connectLogs(onLog: (entry: LogEntry) => void, onError?: (error: Event) => void) {
-    // No token needed — HttpOnly cookie is sent automatically by the browser
     const url = `${API_BASE}/logs/stream`;
-
     const eventSource = new EventSource(url);
 
     eventSource.addEventListener('log', (event) => {
@@ -548,8 +546,8 @@ export const setup = {
   getProviders: () =>
     fetchSetupAPI<SetupProvider[]>('/setup/providers'),
 
-  getModels: (provider: string) =>
-    fetchSetupAPI<SetupModelOption[]>(`/setup/models/${encodeURIComponent(provider)}`),
+  getModels: (_provider: string) =>
+    fetchSetupAPI<SetupModelOption[]>(`/setup/models/${encodeURIComponent(_provider)}`),
 
   validateApiKey: (provider: string, apiKey: string) =>
     fetchSetupAPI<{ valid: boolean; error?: string }>('/setup/validate/api-key', {

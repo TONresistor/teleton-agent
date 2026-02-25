@@ -1,12 +1,14 @@
 import { Hono } from "hono";
 import { serve } from "@hono/node-server";
 import { cors } from "hono/cors";
+import { streamSSE } from "hono/streaming";
 import { bodyLimit } from "hono/body-limit";
 import { setCookie, getCookie, deleteCookie } from "hono/cookie";
 import { existsSync, readFileSync } from "node:fs";
 import { join, dirname, resolve, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { WebUIServerDeps } from "./types.js";
+import type { StateChangeEvent } from "../agent/lifecycle.js";
 import { createLogger } from "../utils/logger.js";
 
 const log = createLogger("WebUI");
@@ -204,6 +206,113 @@ export class WebUIServer {
     this.app.route("/api/tasks", createTasksRoutes(this.deps));
     this.app.route("/api/config", createConfigRoutes(this.deps));
     this.app.route("/api/marketplace", createMarketplaceRoutes(this.deps));
+
+    // Agent lifecycle routes
+    this.app.post("/api/agent/start", async (c) => {
+      const lifecycle = this.deps.lifecycle;
+      if (!lifecycle) {
+        return c.json({ error: "Agent lifecycle not available" }, 503);
+      }
+      const state = lifecycle.getState();
+      if (state === "running") {
+        return c.json({ state: "running" }, 409);
+      }
+      if (state === "stopping") {
+        return c.json({ error: "Agent is currently stopping, please wait" }, 409);
+      }
+      // Fire-and-forget: start is async, we return immediately
+      lifecycle.start().catch((err: Error) => {
+        log.error({ err }, "Agent start failed");
+      });
+      return c.json({ state: "starting" });
+    });
+
+    this.app.post("/api/agent/stop", async (c) => {
+      const lifecycle = this.deps.lifecycle;
+      if (!lifecycle) {
+        return c.json({ error: "Agent lifecycle not available" }, 503);
+      }
+      const state = lifecycle.getState();
+      if (state === "stopped") {
+        return c.json({ state: "stopped" }, 409);
+      }
+      if (state === "starting") {
+        return c.json({ error: "Agent is currently starting, please wait" }, 409);
+      }
+      // Fire-and-forget: stop is async, we return immediately
+      lifecycle.stop().catch((err: Error) => {
+        log.error({ err }, "Agent stop failed");
+      });
+      return c.json({ state: "stopping" });
+    });
+
+    this.app.get("/api/agent/status", (c) => {
+      const lifecycle = this.deps.lifecycle;
+      if (!lifecycle) {
+        return c.json({ error: "Agent lifecycle not available" }, 503);
+      }
+      return c.json({
+        state: lifecycle.getState(),
+        uptime: lifecycle.getUptime(),
+        error: lifecycle.getError() ?? null,
+      });
+    });
+
+    this.app.get("/api/agent/events", (c) => {
+      const lifecycle = this.deps.lifecycle;
+      if (!lifecycle) {
+        return c.json({ error: "Agent lifecycle not available" }, 503);
+      }
+
+      return streamSSE(c, async (stream) => {
+        let aborted = false;
+
+        stream.onAbort(() => {
+          aborted = true;
+        });
+
+        // Push current state immediately on connection
+        const now = Date.now();
+        await stream.writeSSE({
+          event: "status",
+          id: String(now),
+          data: JSON.stringify({
+            state: lifecycle.getState(),
+            error: lifecycle.getError() ?? null,
+            timestamp: now,
+          }),
+          retry: 3000,
+        });
+
+        // Listen for state changes
+        const onStateChange = (event: StateChangeEvent) => {
+          if (aborted) return;
+          stream.writeSSE({
+            event: "status",
+            id: String(event.timestamp),
+            data: JSON.stringify({
+              state: event.state,
+              error: event.error ?? null,
+              timestamp: event.timestamp,
+            }),
+          });
+        };
+
+        lifecycle.on("stateChange", onStateChange);
+
+        // Heartbeat loop + keep connection alive
+        while (!aborted) {
+          await stream.sleep(30_000);
+          if (aborted) break;
+          await stream.writeSSE({
+            event: "ping",
+            data: "",
+          });
+        }
+
+        lifecycle.off("stateChange", onStateChange);
+      });
+    });
 
     // Serve static files in production (if built)
     const webDist = findWebDist();

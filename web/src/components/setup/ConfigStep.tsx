@@ -163,7 +163,7 @@ export function ConfigStep({ data, onChange }: StepProps) {
 
       {/* ── Optional Integrations ── */}
       <h3 style={{ fontSize: '14px', fontWeight: 600, marginTop: '24px', marginBottom: '12px' }}>
-        Optional Integrations
+        Optional API Keys
       </h3>
 
       <div className="module-list">
@@ -172,7 +172,7 @@ export function ConfigStep({ data, onChange }: StepProps) {
           <div className="form-row" style={{ gap: '12px', alignItems: 'center' }}>
             <div style={{ flex: 1 }}>
               <strong style={{ fontSize: 'var(--font-md)' }}>Bot Token</strong>
-              <span className="module-desc" style={{ marginLeft: '8px' }}>(optional)</span>
+              <span className="module-desc" style={{ marginLeft: '8px' }}>(recommended)</span>
             </div>
             <input
               type="password"

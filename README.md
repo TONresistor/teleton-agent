@@ -1,4 +1,6 @@
-<h1 align="center">Teleton Agent</h1>
+<p align="center">
+  <img src="./logo_dark.png" alt="Teleton Agent" width="700" />
+</p>
 
 <p align="center"><b>Autonomous AI agent platform for Telegram with native TON blockchain integration</b></p>
 
@@ -7,21 +9,22 @@
   <a href="https://nodejs.org/"><img src="https://img.shields.io/badge/node-%3E%3D20.0.0-brightgreen" alt="Node.js"></a>
   <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-5.7-blue" alt="TypeScript"></a>
   <a href="https://teletonagent.dev"><img src="https://img.shields.io/badge/Website-teletonagent.dev-ff6600" alt="Website"></a>
-  <a href="https://deepwiki.com/TONresistor/teleton-agent"><img src="https://deepwiki.com/badge.svg" alt="Ask DeepWiki"></a>
+  <a href="https://docs.teletonagent.dev"><img src="https://img.shields.io/badge/docs-Teleton%20Agents-blue" alt="Documentation"></a>
+  <a href="https://ton.org"><img src="https://img.shields.io/badge/Built_on-TON-0098EA?logo=ton&logoColor=white" alt="Built on TON"></a>
 </p>
 
 ---
 
-<p align="center">Teleton is an autonomous AI agent platform that operates as a real Telegram user account (not a bot). It thinks through an agentic loop with tool calling, remembers conversations across sessions with hybrid RAG, and natively integrates the TON blockchain: send crypto, swap on DEXs, bid on domains, verify payments - all from a chat message. It can schedule tasks to run autonomously at any time. It ships with 114 built-in tools, supports 6 LLM providers, and exposes a Plugin SDK so you can build your own tools on top of the platform.</p>
+<p align="center">Teleton is an autonomous AI agent platform that operates as a real Telegram user account (not a bot). It thinks through an agentic loop with tool calling, remembers conversations across sessions with hybrid RAG, and natively integrates the TON blockchain: send crypto, swap on DEXs, bid on domains, verify payments - all from a chat message. It can schedule tasks to run autonomously at any time. It ships with 100+ built-in tools, supports 10 LLM providers, and exposes a Plugin SDK so you can build your own tools on top of the platform.</p>
 
 ### Key Highlights
 
 - **Full Telegram access** - Operates as a real user via MTProto (GramJS), not a limited bot
 - **Agentic loop** - Up to 5 iterations of tool calling per message, the agent thinks, acts, observes, and repeats
-- **Multi-Provider LLM** - Anthropic, OpenAI, Google Gemini, xAI Grok, Groq, OpenRouter
+- **Multi-Provider LLM** - Anthropic, OpenAI, Google Gemini, xAI Grok, Groq, OpenRouter, Moonshot, Mistral, Cocoon, Local
 - **TON Blockchain** - Built-in W5R1 wallet, send/receive TON & jettons, swap on STON.fi and DeDust, NFTs, DNS domains
 - **Persistent memory** - Hybrid RAG (sqlite-vec + FTS5), auto-compaction with AI summarization, daily logs
-- **114 built-in tools** - Messaging, media, blockchain, DEX trading, deals, DNS, journaling, and more
+- **100+ built-in tools** - Messaging, media, blockchain, DEX trading, deals, DNS, journaling, and more
 - **Plugin SDK** - Extend the agent with custom tools, frozen SDK with isolated databases, secrets management, lifecycle hooks
 - **MCP Client** - Connect external tool servers (stdio/SSE) with 2 lines of YAML, no code, no rebuild
 - **Secure by design** - Prompt injection defense, sandboxed workspace, plugin isolation, wallet encryption
@@ -48,7 +51,7 @@
 
 | Capability              | Description                                                                                                                 |
 | ----------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| **Multi-Provider LLM**  | Switch between Anthropic, OpenAI, Google, xAI, Groq, OpenRouter with one config change                                      |
+| **Multi-Provider LLM**  | Switch between Anthropic, OpenAI, Google, xAI, Groq, OpenRouter, Moonshot, Mistral, Cocoon, or Local with one config change  |
 | **RAG + Hybrid Search** | Local ONNX embeddings (384d) or Voyage AI (512d/1024d) with FTS5 keyword + sqlite-vec cosine similarity, fused via RRF      |
 | **Auto-Compaction**     | AI-summarized context management prevents overflow, preserves key information in `memory/*.md` files                        |
 | **Observation Masking** | Compresses old tool results to one-line summaries, saving ~90% context window                                               |
@@ -405,7 +408,7 @@ src/
 ├── agent/                  # Core agent runtime
 │   ├── runtime.ts          # Agentic loop (5 iterations, tool calling, masking, compaction)
 │   ├── client.ts           # Multi-provider LLM client
-│   └── tools/              # 114 built-in tools
+│   └── tools/              # 100+ built-in tools
 │       ├── register-all.ts # Central tool registration (8 categories, 109 tools)
 │       ├── registry.ts     # Tool registry, scope filtering, provider limits
 │       ├── module-loader.ts    # Built-in module loading (deals → +5 tools)
@@ -460,7 +463,7 @@ src/
 │   └── loader.ts           # 10 sections: soul + security + strategy + memory + context + ...
 ├── config/                 # Configuration
 │   ├── schema.ts           # Zod schemas + validation
-│   └── providers.ts        # Multi-provider LLM registry (6 providers)
+│   └── providers.ts        # Multi-provider LLM registry (10 providers)
 ├── webui/                  # Optional web dashboard
 │   ├── server.ts           # Hono server, auth middleware, static serving
 │   └── routes/             # 11 API route groups (status, tools, logs, memory, soul, plugins, mcp, tasks, workspace, config, marketplace)
