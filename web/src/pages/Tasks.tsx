@@ -1,4 +1,4 @@
-import React, { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { api, TaskData } from '../lib/api';
 
 type TaskStatus = TaskData['status'];
@@ -19,6 +19,7 @@ const STATUS_LABELS: Record<TaskStatus, string> = {
   failed: 'Failed',
   cancelled: 'Cancelled',
 };
+
 
 function StatusBadge({ status }: { status: TaskStatus }) {
   return (
@@ -70,9 +71,15 @@ export function Tasks() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<TaskStatus | ''>('');
+  const [searchQuery, setSearchQuery] = useState('');
 
   // Detail panel
   const [selected, setSelected] = useState<Task | null>(null);
+
+  // Clean dropdown + confirm modal
+  const [cleanMenuOpen, setCleanMenuOpen] = useState(false);
+  const [cleanConfirm, setCleanConfirm] = useState<TaskStatus | null>(null);
+  const cleanRef = useRef<HTMLDivElement>(null);
 
   // Always fetch ALL tasks so filter counts are accurate
   const loadTasks = useCallback(async () => {
@@ -97,6 +104,32 @@ export function Tasks() {
   useEffect(() => {
     loadTasks();
   }, [loadTasks]);
+
+  // Close clean dropdown on click outside
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (cleanRef.current && !cleanRef.current.contains(e.target as Node)) {
+        setCleanMenuOpen(false);
+      }
+    }
+    if (cleanMenuOpen) {
+      document.addEventListener('mousedown', handleClickOutside);
+      return () => document.removeEventListener('mousedown', handleClickOutside);
+    }
+  }, [cleanMenuOpen]);
+
+  const handleClean = async (status: TaskStatus) => {
+    setCleanConfirm(null);
+    setCleanMenuOpen(false);
+    try {
+      await api.tasksClean(status);
+      setError(null);
+      loadTasks();
+      setSelected(null);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    }
+  };
 
   const cancelTask = async (id: string) => {
     if (!confirm('Cancel this task?')) return;
@@ -128,7 +161,16 @@ export function Tasks() {
     },
     {} as Record<string, number>
   );
-  const filteredTasks = filter ? tasks.filter((t) => t.status === filter) : tasks;
+  const terminalCount = (counts['done'] || 0) + (counts['failed'] || 0) + (counts['cancelled'] || 0);
+  const statusFiltered = filter ? tasks.filter((t) => t.status === filter) : tasks;
+  const trimmedQuery = searchQuery.trim().toLowerCase();
+  const filteredTasks = trimmedQuery
+    ? statusFiltered.filter((t) =>
+        t.description.toLowerCase().includes(trimmedQuery) ||
+        (t.reason ?? '').toLowerCase().includes(trimmedQuery) ||
+        t.id.toLowerCase().includes(trimmedQuery)
+      )
+    : statusFiltered;
 
   return (
     <div>
@@ -147,7 +189,7 @@ export function Tasks() {
       )}
 
       {/* Stats bar */}
-      <div className="card" style={{ padding: '10px 14px', marginBottom: '14px', display: 'flex', gap: '16px', alignItems: 'center', flexWrap: 'wrap' }}>
+      <div className="card" style={{ padding: '10px 14px', marginBottom: '14px', display: 'flex', gap: '16px', alignItems: 'center', flexWrap: 'wrap', overflow: 'visible', position: 'relative', zIndex: 2 }}>
         <span
           onClick={() => setFilter('')}
           style={{
@@ -174,31 +216,121 @@ export function Tasks() {
           </span>
         ))}
 
-        {(counts['done'] || 0) > 0 && (
-          <button
-            style={{ marginLeft: 'auto', padding: '4px 12px', fontSize: '12px', opacity: 0.7 }}
-            onClick={async () => {
-              if (!confirm(`Delete all ${counts['done']} done tasks?`)) return;
-              try {
-                await api.tasksCleanDone();
-                setError(null);
-                loadTasks();
-                setSelected(null);
-              } catch (err) {
-                setError(err instanceof Error ? err.message : String(err));
-              }
-            }}
-          >
-            Clean done ({counts['done']})
-          </button>
+        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: '8px' }}>
+          <div style={{ position: 'relative' }}>
+            <input
+              type="text"
+              placeholder="Search tasks..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              onKeyDown={(e) => { if (e.key === 'Escape') setSearchQuery(''); }}
+              style={{
+                padding: '4px 24px 4px 12px',
+                fontSize: '13px',
+                border: '1px solid var(--separator)',
+                borderRadius: '14px',
+                backgroundColor: 'transparent',
+                color: 'var(--text)',
+                width: '180px',
+                outline: 'none',
+              }}
+            />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery('')}
+                style={{
+                  position: 'absolute',
+                  right: '4px',
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  background: 'none',
+                  border: 'none',
+                  color: 'var(--text-secondary)',
+                  cursor: 'pointer',
+                  padding: '0 2px',
+                  fontSize: '14px',
+                  lineHeight: 1,
+                }}
+              >
+                &#x2715;
+              </button>
+            )}
+          </div>
+          {trimmedQuery && (
+            <span style={{ fontSize: '11px', color: 'var(--text-secondary)', whiteSpace: 'nowrap' }}>
+              {filteredTasks.length} of {statusFiltered.length} tasks
+            </span>
+          )}
+        </div>
+
+        {/* Clean dropdown */}
+        {terminalCount > 0 && (
+          <div ref={cleanRef} style={{ position: 'relative' }}>
+            <button
+              className="btn-ghost btn-sm"
+              onClick={() => setCleanMenuOpen(!cleanMenuOpen)}
+            >
+              Clean
+            </button>
+            {cleanMenuOpen && (
+              <div
+                className="custom-select-menu"
+                style={{
+                  position: 'absolute',
+                  top: '100%',
+                  right: 0,
+                  marginTop: '4px',
+                  zIndex: 10,
+                  minWidth: '170px',
+                  width: 'auto',
+                }}
+              >
+                {(['done', 'failed', 'cancelled'] as TaskStatus[])
+                  .filter((s) => (counts[s] || 0) > 0)
+                  .map((s) => (
+                    <div
+                      key={s}
+                      className="custom-select-option"
+                      onClick={() => { setCleanMenuOpen(false); setCleanConfirm(s); }}
+                      style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
+                    >
+                      <span style={{ width: '8px', height: '8px', borderRadius: '50%', backgroundColor: STATUS_COLORS[s], flexShrink: 0 }} />
+                      {STATUS_LABELS[s]} ({counts[s]})
+                    </div>
+                  ))}
+              </div>
+            )}
+          </div>
         )}
         <button
-          style={{ marginLeft: counts['done'] ? undefined : 'auto', padding: '4px 12px', fontSize: '12px', opacity: 0.7 }}
+          style={{ padding: '4px 12px', fontSize: '12px', opacity: 0.7 }}
           onClick={loadTasks}
         >
           Refresh
         </button>
       </div>
+
+      {/* Clean confirmation modal */}
+      {cleanConfirm && (
+        <div className="modal-overlay" onClick={() => setCleanConfirm(null)}>
+          <div className="modal" style={{ maxWidth: '380px' }} onClick={(e) => e.stopPropagation()}>
+            <h2 style={{ marginBottom: '4px' }}>Clean {STATUS_LABELS[cleanConfirm].toLowerCase()} tasks</h2>
+            <p style={{ color: 'var(--text-secondary)', fontSize: '13px', marginBottom: '16px' }}>
+              Permanently delete all {counts[cleanConfirm] || 0}{' '}
+              <span style={{ color: STATUS_COLORS[cleanConfirm], fontWeight: 600 }}>
+                {STATUS_LABELS[cleanConfirm].toLowerCase()}
+              </span>{' '}
+              tasks? This cannot be undone.
+            </p>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
+              <button className="btn-ghost" onClick={() => setCleanConfirm(null)}>Cancel</button>
+              <button className="btn-danger btn-sm" onClick={() => handleClean(cleanConfirm)}>
+                Delete {counts[cleanConfirm] || 0} tasks
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Task list */}
       <div className="card" style={{ padding: 0 }}>
@@ -206,7 +338,9 @@ export function Tasks() {
           <div style={{ padding: '20px', textAlign: 'center' }}>Loading...</div>
         ) : filteredTasks.length === 0 ? (
           <div style={{ padding: '20px', textAlign: 'center', color: 'var(--text-secondary)' }}>
-            {filter ? `No ${STATUS_LABELS[filter].toLowerCase()} tasks` : 'No tasks yet'}
+            {trimmedQuery
+              ? 'No tasks match your search'
+              : filter ? `No ${STATUS_LABELS[filter].toLowerCase()} tasks` : 'No tasks yet'}
           </div>
         ) : (
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px', tableLayout: 'fixed' }}>

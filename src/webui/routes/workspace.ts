@@ -42,6 +42,17 @@ function errorResponse(c: any, error: unknown, status: number = 500) {
   return c.json(response, code);
 }
 
+const IMAGE_MIME_TYPES: Record<string, string> = {
+  ".png": "image/png",
+  ".jpg": "image/jpeg",
+  ".jpeg": "image/jpeg",
+  ".gif": "image/gif",
+  ".webp": "image/webp",
+  ".svg": "image/svg+xml",
+  ".bmp": "image/bmp",
+  ".ico": "image/x-icon",
+};
+
 /** Recursively count files and total size */
 function getWorkspaceStats(dir: string): { files: number; size: number } {
   let files = 0;
@@ -135,6 +146,57 @@ export function createWorkspaceRoutes(_deps: WebUIServerDeps) {
 
       const response: APIResponse<FileEntry[]> = { success: true, data: entries };
       return c.json(response);
+    } catch (error) {
+      return errorResponse(c, error);
+    }
+  });
+
+  // Serve raw image file with correct MIME type
+  app.get("/raw", (c) => {
+    try {
+      const path = c.req.query("path");
+      if (!path) {
+        const response: APIResponse = { success: false, error: "Missing 'path' query parameter" };
+        return c.json(response, 400);
+      }
+
+      const validated = validateReadPath(path);
+      const mime = IMAGE_MIME_TYPES[validated.extension];
+
+      if (!mime) {
+        const response: APIResponse = {
+          success: false,
+          error: "Unsupported file type for raw preview",
+        };
+        return c.json(response, 415);
+      }
+
+      const stats = statSync(validated.absolutePath);
+
+      // 5MB limit for image preview
+      if (stats.size > 5 * 1024 * 1024) {
+        const response: APIResponse = {
+          success: false,
+          error: "Image too large for preview (max 5MB)",
+        };
+        return c.json(response, 413);
+      }
+
+      const buffer = readFileSync(validated.absolutePath);
+
+      const headers: Record<string, string> = {
+        "Content-Type": mime,
+        "Content-Length": String(buffer.byteLength),
+        "Content-Disposition": "inline",
+        "Cache-Control": "private, max-age=60",
+      };
+
+      // SVG security: sandbox to prevent script execution if opened directly
+      if (validated.extension === ".svg") {
+        headers["Content-Security-Policy"] = "sandbox";
+      }
+
+      return c.body(buffer, 200, headers);
     } catch (error) {
       return errorResponse(c, error);
     }

@@ -4,6 +4,7 @@ import { getTaskStore, type TaskStatus } from "../../memory/agent/tasks.js";
 import { getErrorMessage } from "../../utils/errors.js";
 
 const VALID_STATUSES: TaskStatus[] = ["pending", "in_progress", "done", "failed", "cancelled"];
+const TERMINAL_STATUSES: TaskStatus[] = ["done", "failed", "cancelled"];
 
 export function createTasksRoutes(deps: WebUIServerDeps) {
   const app = new Hono();
@@ -92,7 +93,38 @@ export function createTasksRoutes(deps: WebUIServerDeps) {
     }
   });
 
-  // Clean done tasks (bulk delete)
+  // Clean tasks by terminal status (bulk delete)
+  app.post("/clean", async (c) => {
+    try {
+      const body = await c.req.json<{ status?: string }>().catch(() => ({ status: undefined }));
+      const status = body.status as TaskStatus | undefined;
+
+      if (!status || !TERMINAL_STATUSES.includes(status as TaskStatus)) {
+        const response: APIResponse = {
+          success: false,
+          error: `Invalid status. Must be one of: ${TERMINAL_STATUSES.join(", ")}`,
+        };
+        return c.json(response, 400);
+      }
+
+      const tasks = store().listTasks({ status });
+      let deleted = 0;
+      for (const t of tasks) {
+        if (store().deleteTask(t.id)) deleted++;
+      }
+
+      const response: APIResponse = { success: true, data: { deleted } };
+      return c.json(response);
+    } catch (error) {
+      const response: APIResponse = {
+        success: false,
+        error: getErrorMessage(error),
+      };
+      return c.json(response, 500);
+    }
+  });
+
+  // Backward-compatible alias
   app.post("/clean-done", (c) => {
     try {
       const doneTasks = store().listTasks({ status: "done" });

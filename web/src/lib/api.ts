@@ -120,6 +120,21 @@ export interface SearchResult {
   keywordScore?: number;
 }
 
+export interface MemorySourceFile {
+  source: string;
+  entryCount: number;
+  lastUpdated: number;
+}
+
+export interface MemoryChunk {
+  id: string;
+  text: string;
+  source: string;
+  startLine: number | null;
+  endLine: number | null;
+  updatedAt: number;
+}
+
 export interface ToolInfo {
   name: string;
   description: string;
@@ -206,11 +221,14 @@ export interface McpServerInfo {
 
 export interface ConfigKeyData {
   key: string;
+  label: string;
   set: boolean;
   value: string | null;
   sensitive: boolean;
-  type: 'string' | 'number' | 'boolean' | 'enum';
+  type: 'string' | 'number' | 'boolean' | 'enum' | 'array';
+  itemType?: 'string' | 'number';
   options?: string[];
+  optionLabels?: Record<string, string>;
   category: string;
   description: string;
 }
@@ -347,6 +365,14 @@ export const api = {
     return fetchAPI<APIResponse<SearchResult[]>>(`/memory/search?q=${encodeURIComponent(query)}&limit=${limit}`);
   },
 
+  async getMemorySources() {
+    return fetchAPI<APIResponse<MemorySourceFile[]>>('/memory/sources');
+  },
+
+  async getSourceChunks(sourceKey: string) {
+    return fetchAPI<APIResponse<MemoryChunk[]>>(`/memory/sources/${encodeURIComponent(sourceKey)}`);
+  },
+
   async getSoulFile(filename: string) {
     return fetchAPI<APIResponse<{ content: string }>>(`/soul/${filename}`);
   },
@@ -366,7 +392,7 @@ export const api = {
     return fetchAPI<APIResponse<ToolRagStatus>>('/tools/rag');
   },
 
-  async updateToolRag(config: { enabled?: boolean; topK?: number }) {
+  async updateToolRag(config: { enabled?: boolean; topK?: number; alwaysInclude?: string[]; skipUnlimitedProviders?: boolean }) {
     return fetchAPI<APIResponse<ToolRagStatus>>('/tools/rag', {
       method: 'PUT',
       body: JSON.stringify(config),
@@ -444,6 +470,10 @@ export const api = {
     return fetchAPI<APIResponse<WorkspaceInfo>>('/workspace/info');
   },
 
+  workspaceRawUrl(path: string): string {
+    return `/api/workspace/raw?path=${encodeURIComponent(path)}`;
+  },
+
   async tasksList(_status?: string) {
     const qs = _status ? `?status=${_status}` : '';
     return fetchAPI<APIResponse<TaskData[]>>(`/tasks${qs}`);
@@ -461,6 +491,13 @@ export const api = {
     return fetchAPI<APIResponse<TaskData>>(`/tasks/${_id}/cancel`, { method: 'POST' });
   },
 
+  async tasksClean(status: string) {
+    return fetchAPI<APIResponse<{ deleted: number }>>('/tasks/clean', {
+      method: 'POST',
+      body: JSON.stringify({ status }),
+    });
+  },
+
   async tasksCleanDone() {
     return fetchAPI<APIResponse<{ deleted: number }>>('/tasks/clean-done', { method: 'POST' });
   },
@@ -469,7 +506,7 @@ export const api = {
     return fetchAPI<APIResponse<ConfigKeyData[]>>('/config');
   },
 
-  async setConfigKey(key: string, value: string) {
+  async setConfigKey(key: string, value: string | string[]) {
     return fetchAPI<APIResponse<ConfigKeyData>>(`/config/${key}`, {
       method: 'PUT',
       body: JSON.stringify({ value }),

@@ -14,6 +14,8 @@ import { TelegramClient, Api } from "telegram";
 import { StringSession } from "telegram/sessions/index.js";
 import { Logger, LogLevel } from "telegram/extensions/Logger.js";
 import bigInt from "big-integer";
+import { existsSync, readFileSync, writeFileSync, mkdirSync } from "fs";
+import { dirname } from "path";
 import { GRAMJS_RETRY_DELAY_MS } from "../constants/timeouts.js";
 import { withFloodRetry } from "../telegram/flood-retry.js";
 import { createLogger } from "../utils/logger.js";
@@ -51,15 +53,46 @@ export function decodeInlineMessageId(encoded: string): Api.TypeInputBotInlineMe
 export class GramJSBotClient {
   private client: TelegramClient;
   private connected = false;
+  private sessionPath: string | undefined;
 
-  constructor(apiId: number, apiHash: string) {
+  constructor(apiId: number, apiHash: string, sessionPath?: string) {
+    this.sessionPath = sessionPath;
+    const sessionString = this.loadSession();
     const logger = new Logger(LogLevel.NONE);
-    this.client = new TelegramClient(new StringSession(""), apiId, apiHash, {
+    this.client = new TelegramClient(new StringSession(sessionString), apiId, apiHash, {
       connectionRetries: 3,
       retryDelay: GRAMJS_RETRY_DELAY_MS,
       autoReconnect: true,
       baseLogger: logger,
     });
+  }
+
+  private loadSession(): string {
+    if (!this.sessionPath) return "";
+    try {
+      if (existsSync(this.sessionPath)) {
+        return readFileSync(this.sessionPath, "utf-8").trim();
+      }
+    } catch (error) {
+      log.warn({ err: error }, "[GramJS Bot] Failed to load session");
+    }
+    return "";
+  }
+
+  private saveSession(): void {
+    if (!this.sessionPath) return;
+    try {
+      const sessionString = this.client.session.save() as string | undefined;
+      if (typeof sessionString !== "string" || !sessionString) return;
+      const dir = dirname(this.sessionPath);
+      if (!existsSync(dir)) {
+        mkdirSync(dir, { recursive: true });
+      }
+      writeFileSync(this.sessionPath, sessionString, { encoding: "utf-8", mode: 0o600 });
+      log.debug("[GramJS Bot] Session saved");
+    } catch (error) {
+      log.error({ err: error }, "[GramJS Bot] Failed to save session");
+    }
   }
 
   /**
@@ -69,7 +102,7 @@ export class GramJSBotClient {
     try {
       await this.client.start({ botAuthToken: botToken });
       this.connected = true;
-      // Styled buttons ready (MTProto connected)
+      this.saveSession();
     } catch (error) {
       log.error({ err: error }, "[GramJS Bot] Connection failed");
       throw error;

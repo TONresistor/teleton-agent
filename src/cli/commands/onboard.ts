@@ -189,7 +189,7 @@ async function runInteractiveOnboarding(
   let tavilyApiKey: string | undefined;
   let botToken: string | undefined;
   let botUsername: string | undefined;
-  let dmPolicy: "open" | "allowlist" | "pairing" | "disabled" = "open";
+  let dmPolicy: "open" | "allowlist" | "disabled" = "open";
   let groupPolicy: "open" | "allowlist" | "disabled" = "open";
   let requireMention = true;
   let maxAgenticIterations = "5";
@@ -917,7 +917,6 @@ async function runInteractiveOnboarding(
     },
     storage: {
       sessions_file: `${workspace.root}/sessions.json`,
-      pairing_file: `${workspace.root}/pairing.json`,
       memory_file: `${workspace.root}/memory.json`,
       history_limit: 100,
     },
@@ -1088,7 +1087,6 @@ async function runNonInteractiveOnboarding(
     },
     storage: {
       sessions_file: `${workspace.root}/sessions.json`,
-      pairing_file: `${workspace.root}/pairing.json`,
       memory_file: `${workspace.root}/memory.json`,
       history_limit: 100,
     },

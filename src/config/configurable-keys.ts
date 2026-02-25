@@ -5,7 +5,7 @@ import { ConfigSchema } from "./schema.js";
 
 // ── Types ──────────────────────────────────────────────────────────────
 
-export type ConfigKeyType = "string" | "number" | "boolean" | "enum";
+export type ConfigKeyType = "string" | "number" | "boolean" | "enum" | "array";
 
 export type ConfigCategory =
   | "API Keys"
@@ -20,12 +20,15 @@ export type ConfigCategory =
 export interface ConfigKeyMeta {
   type: ConfigKeyType;
   category: ConfigCategory;
+  label: string;
   description: string;
   sensitive: boolean;
   validate: (v: string) => string | undefined;
   mask: (v: string) => string;
   parse: (v: string) => unknown;
   options?: string[];
+  optionLabels?: Record<string, string>;
+  itemType?: "string" | "number";
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────
@@ -47,6 +50,18 @@ function enumValidator(options: string[]) {
   return (v: string) => (options.includes(v) ? undefined : `Must be one of: ${options.join(", ")}`);
 }
 
+function positiveInteger(v: string) {
+  const n = Number(v);
+  if (!Number.isInteger(n) || n <= 0) return "Must be a positive integer";
+  return undefined;
+}
+
+function validateUrl(v: string) {
+  if (v === "") return undefined; // empty to reset
+  if (v.startsWith("http://") || v.startsWith("https://")) return undefined;
+  return "Must be empty or start with http:// or https://";
+}
+
 // ── Whitelist ──────────────────────────────────────────────────────────
 
 export const CONFIGURABLE_KEYS: Record<string, ConfigKeyMeta> = {
@@ -54,6 +69,7 @@ export const CONFIGURABLE_KEYS: Record<string, ConfigKeyMeta> = {
   "agent.api_key": {
     type: "string",
     category: "API Keys",
+    label: "LLM API Key",
     description: "LLM provider API key",
     sensitive: true,
     validate: (v) => (v.length >= 10 ? undefined : "Must be at least 10 characters"),
@@ -63,6 +79,7 @@ export const CONFIGURABLE_KEYS: Record<string, ConfigKeyMeta> = {
   tavily_api_key: {
     type: "string",
     category: "API Keys",
+    label: "Tavily API Key",
     description: "Tavily API key for web search",
     sensitive: true,
     validate: (v) => (v.startsWith("tvly-") ? undefined : "Must start with 'tvly-'"),
@@ -72,6 +89,7 @@ export const CONFIGURABLE_KEYS: Record<string, ConfigKeyMeta> = {
   tonapi_key: {
     type: "string",
     category: "API Keys",
+    label: "TonAPI Key",
     description: "TonAPI key for higher rate limits",
     sensitive: true,
     validate: (v) => (v.length >= 10 ? undefined : "Must be at least 10 characters"),
@@ -81,6 +99,7 @@ export const CONFIGURABLE_KEYS: Record<string, ConfigKeyMeta> = {
   "telegram.bot_token": {
     type: "string",
     category: "API Keys",
+    label: "Bot Token",
     description: "Bot token from @BotFather",
     sensitive: true,
     validate: (v) => (v.includes(":") ? undefined : "Must contain ':' (e.g., 123456:ABC...)"),
@@ -92,6 +111,7 @@ export const CONFIGURABLE_KEYS: Record<string, ConfigKeyMeta> = {
   "agent.provider": {
     type: "enum",
     category: "Agent",
+    label: "Provider",
     description: "LLM provider",
     sensitive: false,
     options: [
@@ -126,6 +146,7 @@ export const CONFIGURABLE_KEYS: Record<string, ConfigKeyMeta> = {
   "agent.model": {
     type: "string",
     category: "Agent",
+    label: "Model",
     description: "Main LLM model ID",
     sensitive: false,
     validate: nonEmpty,
@@ -135,6 +156,7 @@ export const CONFIGURABLE_KEYS: Record<string, ConfigKeyMeta> = {
   "agent.utility_model": {
     type: "string",
     category: "Agent",
+    label: "Utility Model",
     description: "Cheap model for summarization (auto-detected if empty)",
     sensitive: false,
     validate: noValidation,
@@ -144,6 +166,7 @@ export const CONFIGURABLE_KEYS: Record<string, ConfigKeyMeta> = {
   "agent.temperature": {
     type: "number",
     category: "Agent",
+    label: "Temperature",
     description: "Response creativity (0.0 = deterministic, 2.0 = max)",
     sensitive: false,
     validate: numberInRange(0, 2),
@@ -153,6 +176,7 @@ export const CONFIGURABLE_KEYS: Record<string, ConfigKeyMeta> = {
   "agent.max_tokens": {
     type: "number",
     category: "Agent",
+    label: "Max Tokens",
     description: "Maximum response length in tokens",
     sensitive: false,
     validate: numberInRange(256, 128000),
@@ -162,9 +186,30 @@ export const CONFIGURABLE_KEYS: Record<string, ConfigKeyMeta> = {
   "agent.max_agentic_iterations": {
     type: "number",
     category: "Agent",
+    label: "Max Iterations",
     description: "Max tool-call loop iterations per message",
     sensitive: false,
     validate: numberInRange(1, 20),
+    mask: identity,
+    parse: (v) => Number(v),
+  },
+  "agent.base_url": {
+    type: "string",
+    category: "Agent",
+    label: "API Base URL",
+    description: "Base URL for local LLM server (requires restart)",
+    sensitive: false,
+    validate: validateUrl,
+    mask: identity,
+    parse: identity,
+  },
+  "cocoon.port": {
+    type: "number",
+    category: "Agent",
+    label: "Cocoon Port",
+    description: "Cocoon proxy port (requires restart)",
+    sensitive: false,
+    validate: numberInRange(1, 65535),
     mask: identity,
     parse: (v) => Number(v),
   },
@@ -173,6 +218,7 @@ export const CONFIGURABLE_KEYS: Record<string, ConfigKeyMeta> = {
   "agent.session_reset_policy.daily_reset_enabled": {
     type: "boolean",
     category: "Session",
+    label: "Daily Reset",
     description: "Enable daily session reset at specified hour",
     sensitive: false,
     validate: enumValidator(["true", "false"]),
@@ -182,6 +228,7 @@ export const CONFIGURABLE_KEYS: Record<string, ConfigKeyMeta> = {
   "agent.session_reset_policy.daily_reset_hour": {
     type: "number",
     category: "Session",
+    label: "Reset Hour",
     description: "Hour (0-23 UTC) for daily session reset",
     sensitive: false,
     validate: numberInRange(0, 23),
@@ -191,6 +238,7 @@ export const CONFIGURABLE_KEYS: Record<string, ConfigKeyMeta> = {
   "agent.session_reset_policy.idle_expiry_enabled": {
     type: "boolean",
     category: "Session",
+    label: "Idle Expiry",
     description: "Enable automatic session expiry after idle period",
     sensitive: false,
     validate: enumValidator(["true", "false"]),
@@ -200,6 +248,7 @@ export const CONFIGURABLE_KEYS: Record<string, ConfigKeyMeta> = {
   "agent.session_reset_policy.idle_expiry_minutes": {
     type: "number",
     category: "Session",
+    label: "Idle Minutes",
     description: "Idle minutes before session expires (minimum 1)",
     sensitive: false,
     validate: numberInRange(1, Number.MAX_SAFE_INTEGER),
@@ -211,6 +260,7 @@ export const CONFIGURABLE_KEYS: Record<string, ConfigKeyMeta> = {
   "telegram.bot_username": {
     type: "string",
     category: "Telegram",
+    label: "Bot Username",
     description: "Bot username without @",
     sensitive: false,
     validate: (v) => (v.length >= 3 ? undefined : "Must be at least 3 characters"),
@@ -220,19 +270,23 @@ export const CONFIGURABLE_KEYS: Record<string, ConfigKeyMeta> = {
   "telegram.dm_policy": {
     type: "enum",
     category: "Telegram",
-    description: "DM access policy",
+    label: "DM Policy",
+    description: "Who can message the bot in private",
     sensitive: false,
-    options: ["pairing", "allowlist", "open", "disabled"],
-    validate: enumValidator(["pairing", "allowlist", "open", "disabled"]),
+    options: ["open", "allowlist", "disabled"],
+    optionLabels: { open: "Open", allowlist: "Allow Users", disabled: "Admin Only" },
+    validate: enumValidator(["allowlist", "open", "disabled"]),
     mask: identity,
     parse: identity,
   },
   "telegram.group_policy": {
     type: "enum",
     category: "Telegram",
-    description: "Group access policy",
+    label: "Group Policy",
+    description: "Which groups the bot can respond in",
     sensitive: false,
     options: ["open", "allowlist", "disabled"],
+    optionLabels: { open: "Open", allowlist: "Allow Groups", disabled: "Disabled" },
     validate: enumValidator(["open", "allowlist", "disabled"]),
     mask: identity,
     parse: identity,
@@ -240,6 +294,7 @@ export const CONFIGURABLE_KEYS: Record<string, ConfigKeyMeta> = {
   "telegram.require_mention": {
     type: "boolean",
     category: "Telegram",
+    label: "Require Mention",
     description: "Require @mention in groups to respond",
     sensitive: false,
     validate: enumValidator(["true", "false"]),
@@ -249,6 +304,7 @@ export const CONFIGURABLE_KEYS: Record<string, ConfigKeyMeta> = {
   "telegram.owner_name": {
     type: "string",
     category: "Telegram",
+    label: "Owner Name",
     description: "Owner's first name (used in system prompt)",
     sensitive: false,
     validate: noValidation,
@@ -258,6 +314,7 @@ export const CONFIGURABLE_KEYS: Record<string, ConfigKeyMeta> = {
   "telegram.owner_username": {
     type: "string",
     category: "Telegram",
+    label: "Owner Username",
     description: "Owner's Telegram username (without @)",
     sensitive: false,
     validate: noValidation,
@@ -267,6 +324,7 @@ export const CONFIGURABLE_KEYS: Record<string, ConfigKeyMeta> = {
   "telegram.debounce_ms": {
     type: "number",
     category: "Telegram",
+    label: "Debounce (ms)",
     description: "Group message debounce delay in ms (0 = disabled)",
     sensitive: false,
     validate: numberInRange(0, 10000),
@@ -276,6 +334,7 @@ export const CONFIGURABLE_KEYS: Record<string, ConfigKeyMeta> = {
   "telegram.agent_channel": {
     type: "string",
     category: "Telegram",
+    label: "Agent Channel",
     description: "Channel username for auto-publishing",
     sensitive: false,
     validate: noValidation,
@@ -285,21 +344,106 @@ export const CONFIGURABLE_KEYS: Record<string, ConfigKeyMeta> = {
   "telegram.typing_simulation": {
     type: "boolean",
     category: "Telegram",
+    label: "Typing Simulation",
     description: "Simulate typing indicator before sending replies",
     sensitive: false,
     validate: enumValidator(["true", "false"]),
     mask: identity,
     parse: (v) => v === "true",
   },
+  "telegram.owner_id": {
+    type: "number",
+    category: "Telegram",
+    label: "Admin ID",
+    description: "Primary admin Telegram user ID (auto-added to Admin IDs)",
+    sensitive: false,
+    validate: positiveInteger,
+    mask: identity,
+    parse: (v) => Number(v),
+  },
+  "telegram.max_message_length": {
+    type: "number",
+    category: "Telegram",
+    label: "Max Message Length",
+    description: "Maximum message length in characters",
+    sensitive: false,
+    validate: numberInRange(1, 32768),
+    mask: identity,
+    parse: (v) => Number(v),
+  },
+  "telegram.rate_limit_messages_per_second": {
+    type: "number",
+    category: "Telegram",
+    label: "Rate Limit — Messages/sec",
+    description: "Rate limit: messages per second (requires restart)",
+    sensitive: false,
+    validate: numberInRange(0.1, 10),
+    mask: identity,
+    parse: (v) => Number(v),
+  },
+  "telegram.rate_limit_groups_per_minute": {
+    type: "number",
+    category: "Telegram",
+    label: "Rate Limit — Groups/min",
+    description: "Rate limit: groups per minute (requires restart)",
+    sensitive: false,
+    validate: numberInRange(1, 60),
+    mask: identity,
+    parse: (v) => Number(v),
+  },
+  "telegram.admin_ids": {
+    type: "array",
+    itemType: "number",
+    category: "Telegram",
+    label: "Admin IDs",
+    description: "Admin user IDs with elevated access",
+    sensitive: false,
+    validate: positiveInteger,
+    mask: identity,
+    parse: (v) => Number(v),
+  },
+  "telegram.allow_from": {
+    type: "array",
+    itemType: "number",
+    category: "Telegram",
+    label: "Allowed Users",
+    description: "User IDs allowed for DM access",
+    sensitive: false,
+    validate: positiveInteger,
+    mask: identity,
+    parse: (v) => Number(v),
+  },
+  "telegram.group_allow_from": {
+    type: "array",
+    itemType: "number",
+    category: "Telegram",
+    label: "Allowed Groups",
+    description: "Group IDs allowed for group access",
+    sensitive: false,
+    validate: positiveInteger,
+    mask: identity,
+    parse: (v) => Number(v),
+  },
 
   // ─── Embedding ─────────────────────────────────────────────────────
   "embedding.provider": {
     type: "enum",
     category: "Embedding",
+    label: "Embedding Provider",
     description: "Embedding provider for RAG",
     sensitive: false,
     options: ["local", "anthropic", "none"],
     validate: enumValidator(["local", "anthropic", "none"]),
+    mask: identity,
+    parse: identity,
+  },
+  "embedding.model": {
+    type: "string",
+    category: "Embedding",
+    label: "Embedding Model",
+    description: "Embedding model ID (requires restart)",
+    sensitive: false,
+    validate: noValidation,
     mask: identity,
     parse: identity,
   },
@@ -308,6 +452,7 @@ export const CONFIGURABLE_KEYS: Record<string, ConfigKeyMeta> = {
   "webui.port": {
     type: "number",
     category: "WebUI",
+    label: "WebUI Port",
     description: "HTTP server port (requires restart)",
     sensitive: false,
     validate: numberInRange(1024, 65535),
@@ -317,6 +462,7 @@ export const CONFIGURABLE_KEYS: Record<string, ConfigKeyMeta> = {
   "webui.log_requests": {
     type: "boolean",
     category: "WebUI",
+    label: "Log HTTP Requests",
     description: "Log all HTTP requests to console",
     sensitive: false,
     validate: enumValidator(["true", "false"]),
@@ -328,17 +474,49 @@ export const CONFIGURABLE_KEYS: Record<string, ConfigKeyMeta> = {
   "deals.enabled": {
     type: "boolean",
     category: "Deals",
+    label: "Deals Enabled",
     description: "Enable the deals/escrow module",
     sensitive: false,
     validate: enumValidator(["true", "false"]),
     mask: identity,
     parse: (v) => v === "true",
   },
+  "deals.expiry_seconds": {
+    type: "number",
+    category: "Deals",
+    label: "Deal Expiry",
+    description: "Deal expiry timeout in seconds",
+    sensitive: false,
+    validate: numberInRange(10, 3600),
+    mask: identity,
+    parse: (v) => Number(v),
+  },
+  "deals.buy_max_floor_percent": {
+    type: "number",
+    category: "Deals",
+    label: "Buy Max Floor %",
+    description: "Maximum floor % for buy deals",
+    sensitive: false,
+    validate: numberInRange(1, 100),
+    mask: identity,
+    parse: (v) => Number(v),
+  },
+  "deals.sell_min_floor_percent": {
+    type: "number",
+    category: "Deals",
+    label: "Sell Min Floor %",
+    description: "Minimum floor % for sell deals",
+    sensitive: false,
+    validate: numberInRange(100, 500),
+    mask: identity,
+    parse: (v) => Number(v),
+  },
 
   // ─── Developer ─────────────────────────────────────────────────────
   "dev.hot_reload": {
     type: "boolean",
     category: "Developer",
+    label: "Hot Reload",
     description: "Watch ~/.teleton/plugins/ for live changes",
     sensitive: false,
     validate: enumValidator(["true", "false"]),

@@ -71,7 +71,7 @@ export function useConfigState() {
     }
   };
 
-  const saveToolRag = async (update: { enabled?: boolean; topK?: number }) => {
+  const saveToolRag = async (update: { enabled?: boolean; topK?: number; alwaysInclude?: string[]; skipUnlimitedProviders?: boolean }) => {
     try {
       const res = await api.updateToolRag(update);
       setToolRag(res.data);

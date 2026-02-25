@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { TELEGRAM_MAX_MESSAGE_LENGTH } from "../constants/limits.js";
 
-export const DMPolicy = z.enum(["pairing", "allowlist", "open", "disabled"]);
+export const DMPolicy = z.enum(["allowlist", "open", "disabled"]);
 export const GroupPolicy = z.enum(["open", "allowlist", "disabled"]);
 
 export const SessionResetPolicySchema = z.object({
@@ -62,7 +62,7 @@ export const TelegramConfigSchema = z.object({
   phone: z.string(),
   session_name: z.string().default("teleton_session"),
   session_path: z.string().default("~/.teleton"),
-  dm_policy: DMPolicy.default("pairing"),
+  dm_policy: DMPolicy.default("allowlist"),
   allow_from: z.array(z.number()).default([]),
   group_policy: GroupPolicy.default("open"),
   group_allow_from: z.array(z.number()).default([]),
@@ -92,7 +92,6 @@ export const TelegramConfigSchema = z.object({
 
 export const StorageConfigSchema = z.object({
   sessions_file: z.string().default("~/.teleton/sessions.json"),
-  pairing_file: z.string().default("~/.teleton/pairing.json"),
   memory_file: z.string().default("~/.teleton/memory.json"),
   history_limit: z.number().default(100),
 });

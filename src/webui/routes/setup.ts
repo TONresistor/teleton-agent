@@ -471,7 +471,6 @@ export function createSetupRoutes(): Hono {
         },
         storage: {
           sessions_file: `${workspace.root}/sessions.json`,
-          pairing_file: `${workspace.root}/pairing.json`,
           memory_file: `${workspace.root}/memory.json`,
           history_limit: 100,
         },

@@ -6,6 +6,7 @@ import { PillBar } from '../components/PillBar';
 import { AgentSettingsPanel } from '../components/AgentSettingsPanel';
 import { TelegramSettingsPanel } from '../components/TelegramSettingsPanel';
 import { Select } from '../components/Select';
+import { ArrayInput } from '../components/ArrayInput';
 
 const TABS = [
   { id: 'llm', label: 'LLM' },
@@ -16,7 +17,16 @@ const TABS = [
 ];
 
 const API_KEY_KEYS = ['agent.api_key', 'telegram.bot_token', 'tavily_api_key', 'tonapi_key'];
-const ADVANCED_KEYS = ['embedding.provider', 'webui.port', 'webui.log_requests', 'deals.enabled', 'dev.hot_reload'];
+const TELEGRAM_KEYS = [
+  'telegram.admin_ids', 'telegram.allow_from', 'telegram.group_allow_from',
+  'telegram.owner_id', 'telegram.max_message_length',
+  'telegram.rate_limit_messages_per_second', 'telegram.rate_limit_groups_per_minute',
+];
+const ADVANCED_KEYS = [
+  'embedding.provider', 'embedding.model', 'webui.port', 'webui.log_requests',
+  'deals.enabled', 'deals.expiry_seconds', 'deals.buy_max_floor_percent', 'deals.sell_min_floor_percent',
+  'agent.base_url', 'dev.hot_reload',
+];
 
 export function Config() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -35,9 +45,9 @@ export function Config() {
     setSearchParams({ tab: id }, { replace: true });
   };
 
-  // Load raw config keys when switching to API Keys or Advanced tab
+  // Load raw config keys when switching to tabs that use renderKeyValueList
   useEffect(() => {
-    if (activeTab === 'api-keys' || activeTab === 'advanced') {
+    if (activeTab === 'api-keys' || activeTab === 'advanced' || activeTab === 'telegram') {
       setKeysLoading(true);
       api.getConfigKeys()
         .then((res) => { setConfigKeys(res.data); setKeysLoading(false); })
@@ -100,6 +110,20 @@ export function Config() {
     setEditValue('');
   };
 
+  const handleArraySave = async (key: string, values: string[]) => {
+    setSaving(true);
+    config.setError(null);
+    try {
+      await api.setConfigKey(key, values);
+      config.showSuccess(`${key} updated successfully`);
+      loadKeys();
+    } catch (err) {
+      config.setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSaving(false);
+    }
+  };
+
   if (config.loading) return <div className="loading">Loading...</div>;
 
   const renderKeyValueList = (filterKeys: string[]) => {
@@ -117,7 +141,7 @@ export function Config() {
       >
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div>
-            <strong style={{ fontFamily: 'monospace' }}>{item.key}</strong>
+            <strong>{item.label}</strong>
             <span
               style={{
                 marginLeft: '10px',
@@ -135,76 +159,96 @@ export function Config() {
                 sensitive
               </span>
             )}
+            <div style={{ fontSize: '11px', color: 'var(--text-secondary)', fontFamily: 'monospace', marginTop: '2px' }}>
+              {item.key}
+            </div>
           </div>
-          <div style={{ display: 'flex', gap: '6px' }}>
-            <button
-              onClick={() => startEdit(item)}
-              style={{ padding: '4px 12px', fontSize: '12px' }}
-              disabled={saving}
-            >
-              Edit
-            </button>
-            {item.set && (
+          {item.type !== 'array' && (
+            <div style={{ display: 'flex', gap: '6px' }}>
               <button
-                onClick={() => handleUnset(item.key)}
-                style={{ padding: '4px 12px', fontSize: '12px', opacity: 0.7 }}
+                onClick={() => startEdit(item)}
+                style={{ padding: '4px 12px', fontSize: '12px' }}
                 disabled={saving}
               >
-                Remove
+                Edit
               </button>
-            )}
-          </div>
+              {item.set && (
+                <button
+                  onClick={() => handleUnset(item.key)}
+                  style={{ padding: '4px 12px', fontSize: '12px', opacity: 0.7 }}
+                  disabled={saving}
+                >
+                  Remove
+                </button>
+              )}
+            </div>
+          )}
         </div>
 
         <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>
           {item.description}
         </div>
 
-        {item.set && item.value && editingKey !== item.key && (
-          <div style={{ marginTop: '6px', fontSize: '13px', color: 'var(--text)', fontFamily: 'monospace' }}>
-            {item.value}
+        {item.type === 'array' ? (
+          <div style={{ marginTop: '8px' }}>
+            <ArrayInput
+              value={item.value ? JSON.parse(item.value) : []}
+              onChange={(values) => handleArraySave(item.key, values)}
+              validate={item.itemType === 'number' ? (v) => (/^\d+$/.test(v) ? null : 'Must be a number') : undefined}
+              placeholder={item.itemType === 'number' ? 'Enter ID...' : 'Enter value...'}
+              disabled={saving}
+            />
           </div>
-        )}
-
-        {editingKey === item.key && (
-          <div className="form-group" style={{ marginTop: '10px', marginBottom: 0 }}>
-            {item.type === 'boolean' ? (
-              <Select
-                value={editValue}
-                options={['true', 'false']}
-                onChange={setEditValue}
-                style={{ width: '100%', marginBottom: '8px' }}
-              />
-            ) : item.type === 'enum' && item.options ? (
-              <Select
-                value={editValue}
-                options={item.options}
-                onChange={setEditValue}
-                style={{ width: '100%', marginBottom: '8px' }}
-              />
-            ) : (
-              <input
-                type={item.type === 'number' ? 'number' : item.sensitive ? 'password' : 'text'}
-                value={editValue}
-                onChange={(e) => setEditValue(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleSave(item.key)}
-                placeholder={`Enter value for ${item.key}...`}
-                autoFocus
-                style={{ width: '100%', marginBottom: '8px' }}
-              />
+        ) : (
+          <>
+            {item.set && item.value && editingKey !== item.key && (
+              <div style={{ marginTop: '6px', fontSize: '13px', color: 'var(--text)', fontFamily: 'monospace' }}>
+                {item.optionLabels?.[item.value] ?? item.value}
+              </div>
             )}
-            <div style={{ display: 'flex', gap: '6px' }}>
-              <button
-                onClick={() => handleSave(item.key)}
-                disabled={saving || (item.type !== 'boolean' && item.type !== 'enum' && !editValue.trim())}
-              >
-                {saving ? 'Saving...' : 'Save'}
-              </button>
-              <button onClick={handleCancel} style={{ opacity: 0.7 }} disabled={saving}>
-                Cancel
-              </button>
-            </div>
-          </div>
+
+            {editingKey === item.key && (
+              <div className="form-group" style={{ marginTop: '10px', marginBottom: 0 }}>
+                {item.type === 'boolean' ? (
+                  <Select
+                    value={editValue}
+                    options={['true', 'false']}
+                    onChange={setEditValue}
+                    style={{ width: '100%', marginBottom: '8px' }}
+                  />
+                ) : item.type === 'enum' && item.options ? (
+                  <Select
+                    value={editValue}
+                    options={item.options}
+                    labels={item.optionLabels ? item.options.map((o) => item.optionLabels![o] ?? o) : undefined}
+                    onChange={setEditValue}
+                    style={{ width: '100%', marginBottom: '8px' }}
+                  />
+                ) : (
+                  <input
+                    type={item.type === 'number' ? 'number' : item.sensitive ? 'password' : 'text'}
+                    value={editValue}
+                    onChange={(e) => setEditValue(e.target.value)}
+                    onKeyDown={(e) => e.key === 'Enter' && handleSave(item.key)}
+                    placeholder={`Enter value for ${item.key}...`}
+                    autoFocus
+                    style={{ width: '100%', marginBottom: '8px' }}
+                  />
+                )}
+                <div style={{ display: 'flex', gap: '6px' }}>
+                  <button
+                    onClick={() => handleSave(item.key)}
+                    disabled={saving || (item.type !== 'boolean' && item.type !== 'enum' && !editValue.trim())}
+                  >
+                    {saving ? 'Saving...' : 'Save'}
+                  </button>
+                  <button onClick={handleCancel} style={{ opacity: 0.7 }} disabled={saving}>
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            )}
+          </>
         )}
       </div>
     ));
@@ -256,6 +300,26 @@ export function Config() {
             />
           </div>
 
+          {config.getLocal('agent.provider') === 'cocoon' && (
+            <div className="card">
+              <div className="section-title">Cocoon</div>
+              <div className="form-group" style={{ marginBottom: 0 }}>
+                <label>Proxy Port <span style={{ fontSize: '11px', color: 'var(--text-secondary)' }}>(requires restart)</span></label>
+                <input
+                  type="number"
+                  min="1"
+                  max="65535"
+                  value={config.getLocal('cocoon.port')}
+                  onChange={(e) => config.setLocal('cocoon.port', e.target.value)}
+                  onBlur={(e) => config.saveConfig('cocoon.port', e.target.value)}
+                  onKeyDown={(e) => e.key === 'Enter' && config.saveConfig('cocoon.port', e.currentTarget.value)}
+                  placeholder="11434"
+                  style={{ width: '100%' }}
+                />
+              </div>
+            </div>
+          )}
+
           {config.toolRag && (
             <div className="card">
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
@@ -293,6 +357,31 @@ export function Config() {
                   <label style={{ fontSize: '13px', color: 'var(--text)' }}>Total Tools</label>
                   <span style={{ fontSize: '13px', color: 'var(--text)' }}>{config.toolRag.totalTools}</span>
                 </div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <label style={{ fontSize: '13px', color: 'var(--text)', cursor: 'pointer' }} htmlFor="skip-unlimited">
+                    Skip Unlimited Providers
+                  </label>
+                  <label className="toggle">
+                    <input
+                      id="skip-unlimited"
+                      type="checkbox"
+                      checked={config.toolRag.skipUnlimitedProviders ?? false}
+                      onChange={() => config.saveToolRag({ skipUnlimitedProviders: !config.toolRag!.skipUnlimitedProviders })}
+                    />
+                    <span className="toggle-track" />
+                    <span className="toggle-thumb" />
+                  </label>
+                </div>
+                <div>
+                  <label style={{ fontSize: '13px', color: 'var(--text)', display: 'block', marginBottom: '6px' }}>
+                    Always Include (glob patterns)
+                  </label>
+                  <ArrayInput
+                    value={config.toolRag.alwaysInclude ?? []}
+                    onChange={(values) => config.saveToolRag({ alwaysInclude: values })}
+                    placeholder="e.g. telegram_send_*"
+                  />
+                </div>
               </div>
             </div>
           )}
@@ -301,14 +390,20 @@ export function Config() {
 
       {/* Telegram Tab */}
       {activeTab === 'telegram' && (
-        <div className="card">
-          <TelegramSettingsPanel
-            getLocal={config.getLocal}
-            setLocal={config.setLocal}
-            saveConfig={config.saveConfig}
-            extended={true}
-          />
-        </div>
+        <>
+          <div className="card">
+            <TelegramSettingsPanel
+              getLocal={config.getLocal}
+              setLocal={config.setLocal}
+              saveConfig={config.saveConfig}
+              extended={true}
+            />
+          </div>
+          <div className="card">
+            <div className="section-title">Telegram Settings</div>
+            {renderKeyValueList(TELEGRAM_KEYS)}
+          </div>
+        </>
       )}
 
       {/* Session Tab */}

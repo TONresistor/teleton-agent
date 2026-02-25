@@ -75,7 +75,6 @@ telegram:
 
 storage:
   sessions_file: "~/custom_sessions.json"
-  pairing_file: "~/custom_pairing.json"
   memory_file: "~/custom_memory.json"
   history_limit: 50
 
@@ -361,7 +360,7 @@ describe("Config Loader", () => {
 
       // Telegram defaults
       expect(config.telegram.session_name).toBe("teleton_session");
-      expect(config.telegram.dm_policy).toBe("pairing");
+      expect(config.telegram.dm_policy).toBe("allowlist");
       expect(config.telegram.group_policy).toBe("open");
       expect(config.telegram.require_mention).toBe(true);
       expect(config.telegram.typing_simulation).toBe(true);
@@ -526,7 +525,6 @@ telegram:
       const config = loadConfig(TEST_CONFIG_PATH);
 
       expect(config.storage.sessions_file).toBe(join(homedir(), ".teleton/sessions.json"));
-      expect(config.storage.pairing_file).toBe(join(homedir(), ".teleton/pairing.json"));
       expect(config.storage.memory_file).toBe(join(homedir(), ".teleton/memory.json"));
     });
 
@@ -542,7 +540,6 @@ telegram:
   session_path: "~/custom/session"
 storage:
   sessions_file: "~/custom/sessions.json"
-  pairing_file: "~/custom/pairing.json"
   memory_file: "~/custom/memory.json"
 `;
       writeTestConfig(customPathConfig);

@@ -7,6 +7,7 @@ export interface BotConfig {
   username: string;
   apiId?: number;
   apiHash?: string;
+  gramjsSessionPath?: string;
 }
 
 export interface DealContext {

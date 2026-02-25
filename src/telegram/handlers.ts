@@ -205,16 +205,6 @@ export class MessageHandler {
             };
           }
           break;
-        case "pairing":
-          if (!this.config.allow_from.includes(message.senderId) && !isAdmin) {
-            return {
-              message,
-              isAdmin,
-              shouldRespond: false,
-              reason: "Not paired",
-            };
-          }
-          break;
         case "open":
           break;
       }

@@ -63,7 +63,6 @@ export function loadConfig(configPath: string = DEFAULT_CONFIG_PATH): Config {
 
   config.telegram.session_path = expandPath(config.telegram.session_path);
   config.storage.sessions_file = expandPath(config.storage.sessions_file);
-  config.storage.pairing_file = expandPath(config.storage.pairing_file);
   config.storage.memory_file = expandPath(config.storage.memory_file);
 
   if (process.env.TELETON_API_KEY) {

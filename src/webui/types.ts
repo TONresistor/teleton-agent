@@ -137,3 +137,9 @@ export interface SessionInfo {
   contextTokens: number;
   lastActivity: number;
 }
+
+export interface MemorySourceFile {
+  source: string;
+  entryCount: number;
+  lastUpdated: number;
+}

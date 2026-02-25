@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import type { WebUIServerDeps, ToolInfo, ModuleInfo, APIResponse } from "../types.js";
 import { getErrorMessage } from "../../utils/errors.js";
+import { readRawConfig, setNestedValue, writeRawConfig } from "../../config/configurable-keys.js";
 
 export function createToolsRoutes(deps: WebUIServerDeps) {
   const app = new Hono();
@@ -86,7 +87,12 @@ export function createToolsRoutes(deps: WebUIServerDeps) {
     try {
       const config = deps.agent.getConfig();
       const body = await c.req.json();
-      const { enabled, topK } = body as { enabled?: boolean; topK?: number };
+      const { enabled, topK, alwaysInclude, skipUnlimitedProviders } = body as {
+        enabled?: boolean;
+        topK?: number;
+        alwaysInclude?: string[];
+        skipUnlimitedProviders?: boolean;
+      };
 
       if (enabled !== undefined) {
         config.tool_rag.enabled = enabled;
@@ -97,6 +103,33 @@ export function createToolsRoutes(deps: WebUIServerDeps) {
         }
         config.tool_rag.top_k = topK;
       }
+      if (alwaysInclude !== undefined) {
+        if (
+          !Array.isArray(alwaysInclude) ||
+          alwaysInclude.some((s) => typeof s !== "string" || s.length === 0)
+        ) {
+          return c.json(
+            { success: false, error: "alwaysInclude must be an array of non-empty strings" },
+            400
+          );
+        }
+        config.tool_rag.always_include = alwaysInclude;
+      }
+      if (skipUnlimitedProviders !== undefined) {
+        config.tool_rag.skip_unlimited_providers = skipUnlimitedProviders;
+      }
+
+      // Persist to YAML
+      const raw = readRawConfig(deps.configPath);
+      setNestedValue(raw, "tool_rag.enabled", config.tool_rag.enabled);
+      setNestedValue(raw, "tool_rag.top_k", config.tool_rag.top_k);
+      setNestedValue(raw, "tool_rag.always_include", config.tool_rag.always_include);
+      setNestedValue(
+        raw,
+        "tool_rag.skip_unlimited_providers",
+        config.tool_rag.skip_unlimited_providers
+      );
+      writeRawConfig(raw, deps.configPath);
 
       const toolIndex = deps.toolRegistry.getToolIndex();
       const response: APIResponse = {
@@ -106,6 +139,8 @@ export function createToolsRoutes(deps: WebUIServerDeps) {
           indexed: toolIndex?.isIndexed ?? false,
           topK: config.tool_rag.top_k,
           totalTools: deps.toolRegistry.count,
+          alwaysInclude: config.tool_rag.always_include,
+          skipUnlimitedProviders: config.tool_rag.skip_unlimited_providers,
         },
       };
       return c.json(response);
