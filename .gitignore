@@ -28,6 +28,11 @@ telegram_session.txt
 telegram-offset.json
 .reference/
 
+# Specs & working docs (local only)
+specs/
+docs/plans/
+TODOS/
+
 # TTS voice models (large binaries)
 piper-voices/
 
