@@ -855,7 +855,7 @@ button.btn-sm {
 }
 
 .toggle input:checked + .toggle-track {
-  background: var(--green);
+  background: var(--accent);
 }
 
 .toggle-thumb {

@@ -142,69 +142,73 @@ export function ArrayInput({ value, onChange, validate, placeholder, disabled }:
   const handleCancel = () => { setDraft(value); setError(null); };
 
   return (
-    <div>
-      <div
-        role="listbox"
-        aria-orientation="horizontal"
-        style={{
-          display: 'flex',
-          flexWrap: 'wrap',
-          gap: 'var(--space-xs)',
-          background: 'var(--surface)',
-          border: '1px solid var(--glass-border)',
-          borderRadius: 'var(--radius-sm)',
-          minHeight: '38px',
-          padding: 'var(--space-sm)',
-          alignItems: 'center',
-          opacity: disabled ? 0.5 : 1,
-        }}
-        onClick={() => { if (!disabled) inputRef.current?.focus(); }}
-      >
-        {draft.map((item, idx) => (
-          <div
-            key={`${item}-${idx}`}
-            ref={el => { chipRefs.current[idx] = el; }}
-            role="option"
-            aria-selected="true"
-            tabIndex={focusedChip === idx ? 0 : -1}
-            onKeyDown={e => handleChipKeyDown(e, idx)}
-            onFocus={() => setFocusedChip(idx)}
-            onBlur={() => { if (focusedChip === idx) setFocusedChip(-1); }}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 'var(--space-xs)',
-              padding: '2px var(--space-sm)',
-              background: 'var(--accent-dim)',
-              color: 'var(--text)',
-              borderRadius: 'calc(var(--radius-sm) - 2px)',
-              fontSize: 'var(--font-sm)',
-              outline: focusedChip === idx ? '2px solid var(--accent)' : 'none',
-              outlineOffset: focusedChip === idx ? '1px' : undefined,
-            }}
-          >
-            <span>{item}</span>
-            <button
-              type="button"
-              aria-label={`Remove ${item}`}
-              disabled={disabled}
-              onClick={e => { e.stopPropagation(); removeItem(idx); }}
-              onMouseEnter={() => setHoverRemove(idx)}
-              onMouseLeave={() => setHoverRemove(-1)}
+    <div style={{ opacity: disabled ? 0.5 : 1 }}>
+      {/* Chips */}
+      {draft.length > 0 && (
+        <div
+          role="listbox"
+          aria-orientation="horizontal"
+          style={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            gap: '6px',
+            marginBottom: 'var(--space-sm)',
+          }}
+        >
+          {draft.map((item, idx) => (
+            <div
+              key={`${item}-${idx}`}
+              ref={el => { chipRefs.current[idx] = el; }}
+              role="option"
+              aria-selected="true"
+              tabIndex={focusedChip === idx ? 0 : -1}
+              onKeyDown={e => handleChipKeyDown(e, idx)}
+              onFocus={() => setFocusedChip(idx)}
+              onBlur={() => { if (focusedChip === idx) setFocusedChip(-1); }}
               style={{
-                background: 'none',
-                border: 'none',
-                color: hoverRemove === idx ? 'var(--red)' : 'var(--text-secondary)',
-                cursor: disabled ? 'not-allowed' : 'pointer',
-                padding: '0 2px',
-                fontSize: 'var(--font-xs)',
-                lineHeight: '1',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '4px',
+                padding: '3px 8px',
+                background: 'var(--surface)',
+                border: '1px solid var(--glass-border)',
+                color: 'var(--text-secondary)',
+                borderRadius: '6px',
+                fontSize: 'var(--font-sm)',
+                lineHeight: '1.4',
+                outline: focusedChip === idx ? '2px solid var(--accent)' : 'none',
+                outlineOffset: focusedChip === idx ? '1px' : undefined,
+                cursor: 'default',
               }}
             >
-              &times;
-            </button>
-          </div>
-        ))}
+              <span style={{ fontFamily: 'var(--font-mono)', letterSpacing: '-0.2px' }}>{item}</span>
+              <button
+                type="button"
+                aria-label={`Remove ${item}`}
+                disabled={disabled}
+                onClick={e => { e.stopPropagation(); removeItem(idx); }}
+                onMouseEnter={() => setHoverRemove(idx)}
+                onMouseLeave={() => setHoverRemove(-1)}
+                style={{
+                  background: 'none',
+                  border: 'none',
+                  color: hoverRemove === idx ? 'var(--red)' : 'var(--text-tertiary)',
+                  cursor: disabled ? 'not-allowed' : 'pointer',
+                  padding: '0 1px',
+                  fontSize: '13px',
+                  lineHeight: '1',
+                  transition: 'color 0.15s',
+                }}
+              >
+                &times;
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Input row */}
+      <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
         <input
           ref={inputRef}
           type="text"
@@ -212,45 +216,54 @@ export function ArrayInput({ value, onChange, validate, placeholder, disabled }:
           onChange={e => { setInputValue(e.target.value); setError(null); }}
           onKeyDown={handleInputKeyDown}
           onPaste={handlePaste}
-          placeholder={draft.length === 0 ? placeholder : undefined}
+          placeholder={placeholder ?? 'Add pattern…'}
           disabled={disabled}
           aria-invalid={error ? true : undefined}
           style={{
             flex: 1,
-            minWidth: '120px',
-            background: 'transparent',
-            border: 'none',
-            outline: 'none',
+            background: 'var(--surface)',
+            border: '1px solid var(--glass-border)',
+            borderRadius: '6px',
             color: 'var(--text)',
             fontSize: 'var(--font-sm)',
-            padding: 0,
+            padding: '5px 10px',
+            outline: 'none',
+            fontFamily: 'var(--font-mono)',
           }}
+          onFocus={e => { e.target.style.borderColor = 'var(--glass-border-strong)'; }}
+          onBlur={e => { e.target.style.borderColor = 'var(--glass-border)'; }}
         />
         <button
           type="button"
           disabled={disabled || !inputValue.trim()}
           onClick={() => addItem(inputValue)}
           style={{
-            padding: '2px 8px',
-            fontSize: 'var(--font-xs)',
-            borderRadius: 'calc(var(--radius-sm) - 2px)',
+            padding: '4px 10px',
+            fontSize: 'var(--font-sm)',
+            borderRadius: '6px',
             minHeight: 'auto',
+            lineHeight: '1.4',
           }}
         >
           Add
         </button>
       </div>
+
       {error && (
-        <div style={{ fontSize: '12px', color: 'var(--red)', marginTop: '4px' }}>
+        <div style={{ fontSize: 'var(--font-sm)', color: 'var(--red)', marginTop: '4px' }}>
           {error}
         </div>
       )}
       {isDirty && (
-        <div style={{ display: 'flex', gap: '6px', marginTop: '8px' }}>
-          <button type="button" onClick={handleSave} disabled={disabled}>
+        <div style={{ display: 'flex', gap: '6px', marginTop: 'var(--space-sm)' }}>
+          <button type="button" onClick={handleSave} disabled={disabled}
+            style={{ padding: '4px 12px', fontSize: 'var(--font-sm)', borderRadius: '6px', minHeight: 'auto' }}
+          >
             Save
           </button>
-          <button type="button" className="btn-ghost" onClick={handleCancel} disabled={disabled}>
+          <button type="button" className="btn-ghost" onClick={handleCancel} disabled={disabled}
+            style={{ padding: '4px 12px', fontSize: 'var(--font-sm)', borderRadius: '6px', minHeight: 'auto' }}
+          >
             Cancel
           </button>
         </div>
