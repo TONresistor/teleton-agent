@@ -6,9 +6,9 @@ import { setup, SetupConfig } from '../../lib/api';
 export const STEPS = [
   { id: 'welcome',  label: 'Welcome' },
   { id: 'provider', label: 'Provider' },
-  { id: 'telegram', label: 'Telegram' },
   { id: 'config',   label: 'Config' },
   { id: 'wallet',   label: 'Wallet' },
+  { id: 'telegram', label: 'Telegram' },
   { id: 'connect',  label: 'Connect' },
 ];
 
@@ -77,7 +77,7 @@ const DEFAULTS: WizardData = {
   tonapiKey: '',
   tavilyKey: '',
   customizeThresholds: false,
-  buyMaxFloor: 100,
+  buyMaxFloor: 95,
   sellMinFloor: 105,
   walletAction: 'generate',
   mnemonic: '',
@@ -108,25 +108,26 @@ export function validateStep(step: number, data: WizardData): boolean {
         return true; // credentials auto-detected or fallback handled by ProviderStep
       }
       return data.apiKey.length > 0;
-    case 2:
-      return (
-        data.apiId > 0 &&
-        data.apiHash.length >= 10 &&
-        data.phone.startsWith('+') &&
-        data.userId > 0
-      );
-    case 3: {
+    case 2: {
+      // Config
       if (data.provider !== 'cocoon' && data.provider !== 'local') {
         const modelValue = data.model === '__custom__' ? data.customModel : data.model;
         if (!modelValue) return false;
       }
-      return data.maxIterations >= 1 && data.maxIterations <= 50;
+      return data.userId > 0 && data.maxIterations >= 1 && data.maxIterations <= 50;
     }
-    case 4:
+    case 3:
       // Wallet: if generated/imported, must confirm mnemonic saved
       if (data.walletAction === 'keep') return true;
       if (!data.walletAddress) return false;
       return data.mnemonicSaved;
+    case 4:
+      // Telegram
+      return (
+        data.apiId > 0 &&
+        data.apiHash.length >= 10 &&
+        data.phone.startsWith('+')
+      );
     case 5:
       return data.telegramUser !== null || data.skipConnect;
     default:
@@ -211,9 +212,12 @@ export function SetupProvider({ children }: { children: ReactNode }) {
           ...(data.botUsername ? { bot_username: data.botUsername } : {}),
         },
         ...(data.provider === 'cocoon' ? { cocoon: { port: data.cocoonPort } } : {}),
-        ...(data.customizeThresholds
-          ? { deals: { buy_max_floor_percent: data.buyMaxFloor, sell_min_floor_percent: data.sellMinFloor } }
-          : {}),
+        deals: {
+          enabled: !!data.botToken,
+          ...(data.customizeThresholds
+            ? { buy_max_floor_percent: data.buyMaxFloor, sell_min_floor_percent: data.sellMinFloor }
+            : {}),
+        },
         ...(data.tonapiKey ? { tonapi_key: data.tonapiKey } : {}),
         ...(data.tavilyKey ? { tavily_api_key: data.tavilyKey } : {}),
         webui: { enabled: true },

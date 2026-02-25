@@ -56,6 +56,21 @@ export function ConfigStep({ data, onChange }: StepProps) {
       </p>
 
       <div className="form-group">
+        <label>Admin User ID</label>
+        <input
+          type="number"
+          value={data.userId || ''}
+          onChange={(e) => onChange({ ...data, userId: parseInt(e.target.value) || 0 })}
+          placeholder="123456789"
+          className="w-full"
+        />
+        <div className="helper-text">
+          This account will have admin control over the agent in DMs and groups.
+          Get your ID from <a href="https://t.me/userinfobot" target="_blank" rel="noopener noreferrer">@userinfobot</a> on Telegram.
+        </div>
+      </div>
+
+      <div className="form-group">
         <label>DM Policy</label>
         <Select
           value={data.dmPolicy}

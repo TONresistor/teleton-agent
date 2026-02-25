@@ -76,12 +76,12 @@ export interface OnboardOptions {
 // ── Progress steps ────────────────────────────────────────────────────
 
 const STEPS: StepDef[] = [
-  { label: "Agent", desc: "Name & mode" },
+  { label: "Agent", desc: "Name" },
   { label: "Provider", desc: "LLM, key & model" },
-  { label: "Telegram", desc: "Credentials" },
   { label: "Config", desc: "Policies" },
-  { label: "Modules", desc: "Optional features" },
+  { label: "Modules", desc: "Optional API keys" },
   { label: "Wallet", desc: "TON blockchain" },
+  { label: "Telegram", desc: "Credentials" },
   { label: "Connect", desc: "Telegram auth" },
 ];
 
@@ -178,9 +178,7 @@ async function runInteractiveOnboarding(
   prompter: ReturnType<typeof createPrompter>
 ): Promise<void> {
   // ── Shared state ──
-  let selectedFlow: "quick" | "advanced" = "quick";
   let selectedProvider: SupportedProvider = "anthropic";
-  const dealsEnabled = true;
   let selectedModel = "";
   let apiKey = "";
   let apiId = 0;
@@ -196,8 +194,6 @@ async function runInteractiveOnboarding(
   let requireMention = true;
   let maxAgenticIterations = "5";
   let cocoonInstance = 10000;
-  let buyMaxFloorPercent = 100;
-  let sellMinFloorPercent = 105;
 
   // Intro
   console.clear();
@@ -273,22 +269,7 @@ async function runInteractiveOnboarding(
     writeFileSync(workspace.identityPath, updated, "utf-8");
   }
 
-  // Installation mode
-  selectedFlow = await select({
-    message: "Installation mode",
-    default: "quick",
-    theme,
-    choices: [
-      {
-        value: "quick" as const,
-        name: "⚡ QuickStart",
-        description: "Minimal configuration (recommended)",
-      },
-      { value: "advanced" as const, name: "⚙  Advanced", description: "Detailed configuration" },
-    ],
-  });
-
-  STEPS[0].value = `${agentName} (${selectedFlow})`;
+  STEPS[0].value = agentName;
 
   // ════════════════════════════════════════════════════════════════════
   // Step 1: Provider — select + tool limit warning + API key
@@ -464,11 +445,7 @@ async function runInteractiveOnboarding(
   // Model selection (advanced mode only, after provider + API key)
   selectedModel = providerMeta.defaultModel;
 
-  if (
-    selectedFlow === "advanced" &&
-    selectedProvider !== "cocoon" &&
-    selectedProvider !== "local"
-  ) {
+  if (selectedProvider !== "cocoon" && selectedProvider !== "local") {
     const providerModels = getModelsForProvider(selectedProvider);
     const modelChoices = [
       ...providerModels,
@@ -498,59 +475,11 @@ async function runInteractiveOnboarding(
   }
 
   // ════════════════════════════════════════════════════════════════════
-  // Step 2: Telegram — credentials
+  // Step 2: Config — admin + policies
   // ════════════════════════════════════════════════════════════════════
   redraw(2);
 
-  noteBox(
-    "You need Telegram credentials from https://my.telegram.org/apps\n" +
-      "Create an application and note the API ID and API Hash",
-    "Telegram",
-    TON
-  );
-
-  const envApiId = process.env.TELETON_TG_API_ID;
-  const envApiHash = process.env.TELETON_TG_API_HASH;
-  const envPhone = process.env.TELETON_TG_PHONE;
-
-  const apiIdStr = options.apiId
-    ? options.apiId.toString()
-    : await input({
-        message: envApiId ? "API ID (from env)" : "API ID (from my.telegram.org)",
-        default: envApiId,
-        theme,
-        validate: (value) => {
-          if (!value || isNaN(parseInt(value))) return "Invalid API ID (must be a number)";
-          return true;
-        },
-      });
-  apiId = parseInt(apiIdStr);
-
-  apiHash = options.apiHash
-    ? options.apiHash
-    : await input({
-        message: envApiHash ? "API Hash (from env)" : "API Hash (from my.telegram.org)",
-        default: envApiHash,
-        theme,
-        validate: (value) => {
-          if (!value || value.length < 10) return "Invalid API Hash";
-          return true;
-        },
-      });
-
-  phone = options.phone
-    ? options.phone
-    : await input({
-        message: envPhone ? "Phone number (from env)" : "Phone number (international format)",
-        default: envPhone,
-        theme,
-        validate: (value) => {
-          if (!value || !value.startsWith("+")) return "Must start with +";
-          return true;
-        },
-      });
-
-  // User ID
+  // Admin User ID
   noteBox(
     "To get your Telegram User ID:\n" +
       "1. Open @userinfobot on Telegram\n" +
@@ -572,103 +501,67 @@ async function runInteractiveOnboarding(
       });
   userId = parseInt(userIdStr);
 
-  STEPS[2].value = `${phone} (ID: ${userId})`;
+  dmPolicy = await select({
+    message: "DM policy (private messages)",
+    default: "open",
+    theme,
+    choices: [
+      { value: "open" as const, name: "Open", description: "Reply to everyone" },
+      { value: "allowlist" as const, name: "Allowlist", description: "Only specific users" },
+      { value: "disabled" as const, name: "Disabled", description: "No DM replies" },
+    ],
+  });
+
+  groupPolicy = await select({
+    message: "Group policy",
+    default: "open",
+    theme,
+    choices: [
+      { value: "open" as const, name: "Open", description: "Reply in all groups" },
+      { value: "allowlist" as const, name: "Allowlist", description: "Only specific groups" },
+      { value: "disabled" as const, name: "Disabled", description: "No group replies" },
+    ],
+  });
+
+  requireMention = await confirm({
+    message: "Require @mention in groups?",
+    default: true,
+    theme,
+  });
+
+  maxAgenticIterations = await input({
+    message: "Max agentic iterations (tool call loops per message)",
+    default: "5",
+    theme,
+    validate: (v) => {
+      const n = parseInt(v, 10);
+      return !isNaN(n) && n >= 1 && n <= 50 ? true : "Must be 1–50";
+    },
+  });
+
+  STEPS[2].value = `${dmPolicy}/${groupPolicy}`;
 
   // ════════════════════════════════════════════════════════════════════
-  // Step 3: Config — policies (advanced only)
+  // Step 3: Modules — optional API keys
   // ════════════════════════════════════════════════════════════════════
   redraw(3);
 
-  if (selectedFlow === "advanced") {
-    dmPolicy = await select({
-      message: "DM policy (private messages)",
-      default: "open",
-      theme,
-      choices: [
-        { value: "open" as const, name: "Open", description: "Reply to everyone" },
-        { value: "allowlist" as const, name: "Allowlist", description: "Only specific users" },
-        { value: "disabled" as const, name: "Disabled", description: "No DM replies" },
-      ],
-    });
-
-    groupPolicy = await select({
-      message: "Group policy",
-      default: "open",
-      theme,
-      choices: [
-        { value: "open" as const, name: "Open", description: "Reply in all groups" },
-        { value: "allowlist" as const, name: "Allowlist", description: "Only specific groups" },
-        { value: "disabled" as const, name: "Disabled", description: "No group replies" },
-      ],
-    });
-
-    requireMention = await confirm({
-      message: "Require @mention in groups?",
-      default: true,
-      theme,
-    });
-
-    maxAgenticIterations = await input({
-      message: "Max agentic iterations (tool call loops per message)",
-      default: "5",
-      theme,
-      validate: (v) => {
-        const n = parseInt(v, 10);
-        return !isNaN(n) && n >= 1 && n <= 50 ? true : "Must be 1–50";
-      },
-    });
-
-    STEPS[3].value = `${dmPolicy}/${groupPolicy}`;
-  } else {
-    STEPS[3].value = "defaults";
-  }
-
-  // ════════════════════════════════════════════════════════════════════
-  // Step 4: Modules — deals bot + TonAPI + Tavily
-  // ════════════════════════════════════════════════════════════════════
-  redraw(4);
-
   const extras: string[] = [];
 
-  if (dealsEnabled) {
-    // Trading thresholds
-    const customizeStrategy = await confirm({
-      message: `Customize trading thresholds? ${DIM("(default: buy ≤ floor, sell ≥ floor +5%)")}`,
-      default: false,
-      theme,
-    });
+  // Bot token (recommended — required for deals module)
+  const setupBot = await confirm({
+    message: `Add a Telegram bot token? ${DIM("(recommended — enables deals & inline buttons)")}`,
+    default: true,
+    theme,
+  });
 
-    if (customizeStrategy) {
-      const buyInput = await input({
-        message: "Max buy price (% of floor price)",
-        default: "100",
-        theme,
-        validate: (v) => {
-          const n = parseInt(v, 10);
-          return !isNaN(n) && n >= 50 && n <= 150 ? true : "Must be 50–150";
-        },
-      });
-      buyMaxFloorPercent = parseInt(buyInput, 10);
-
-      const sellInput = await input({
-        message: "Min sell price (% of floor price)",
-        default: "105",
-        theme,
-        validate: (v) => {
-          const n = parseInt(v, 10);
-          return !isNaN(n) && n >= 100 && n <= 200 ? true : "Must be 100–200";
-        },
-      });
-      sellMinFloorPercent = parseInt(sellInput, 10);
-    }
-
-    // Bot setup
+  if (setupBot) {
     noteBox(
       "Create a bot with @BotFather on Telegram:\n" +
         "1. Send /newbot and follow the instructions\n" +
         "2. Copy the bot token\n" +
         "3. Enable inline mode: /setinline on the bot",
-      "Deals Bot",
+      "Bot Token",
       TON
     );
 
@@ -692,6 +585,7 @@ async function runInteractiveOnboarding(
         botToken = tokenInput;
         botUsername = data.result.username;
         spinner.succeed(DIM(`Bot verified: @${botUsername}`));
+        extras.push("Bot");
       }
     } catch {
       spinner.warn(DIM("Could not validate bot token (network error) — saving anyway"));
@@ -705,9 +599,8 @@ async function runInteractiveOnboarding(
         },
       });
       botUsername = usernameInput;
+      extras.push("Bot");
     }
-
-    extras.push("Deals");
   }
 
   // TonAPI key
@@ -772,12 +665,12 @@ async function runInteractiveOnboarding(
     extras.push("Tavily");
   }
 
-  STEPS[4].value = extras.length ? extras.join(", ") : "defaults";
+  STEPS[3].value = extras.length ? extras.join(", ") : "defaults";
 
   // ════════════════════════════════════════════════════════════════════
-  // Step 5: Wallet — generate / import / keep
+  // Step 4: Wallet — generate / import / keep
   // ════════════════════════════════════════════════════════════════════
-  redraw(5);
+  redraw(4);
 
   let wallet;
   const existingWallet = walletExists() ? loadWallet() : null;
@@ -822,10 +715,39 @@ async function runInteractiveOnboarding(
       spinner.succeed(DIM("New TON wallet generated"));
     }
   } else {
-    spinner.start(DIM("Generating TON wallet..."));
-    wallet = await generateWallet();
-    saveWallet(wallet);
-    spinner.succeed(DIM("TON wallet generated"));
+    const walletAction = await select({
+      message: "TON Wallet",
+      default: "generate",
+      theme,
+      choices: [
+        {
+          value: "generate",
+          name: "Generate new wallet",
+          description: "Create a fresh TON wallet",
+        },
+        { value: "import", name: "Import from mnemonic", description: "Restore from 24-word seed" },
+      ],
+    });
+
+    if (walletAction === "import") {
+      const mnemonicInput = await input({
+        message: "Enter your 24-word mnemonic (space-separated)",
+        theme,
+        validate: (value = "") => {
+          const words = value.trim().split(/\s+/);
+          return words.length === 24 ? true : `Expected 24 words, got ${words.length}`;
+        },
+      });
+      spinner.start(DIM("Importing wallet..."));
+      wallet = await importWallet(mnemonicInput.trim().split(/\s+/));
+      saveWallet(wallet);
+      spinner.succeed(DIM(`Wallet imported: ${wallet.address}`));
+    } else {
+      spinner.start(DIM("Generating TON wallet..."));
+      wallet = await generateWallet();
+      saveWallet(wallet);
+      spinner.succeed(DIM("TON wallet generated"));
+    }
   }
 
   // Display mnemonic for new/regenerated wallets
@@ -879,7 +801,69 @@ async function runInteractiveOnboarding(
     });
   }
 
-  STEPS[5].value = `${wallet.address.slice(0, 8)}...${wallet.address.slice(-4)}`;
+  STEPS[4].value = `${wallet.address.slice(0, 8)}...${wallet.address.slice(-4)}`;
+
+  // ════════════════════════════════════════════════════════════════════
+  // Step 5: Telegram — credentials
+  // ════════════════════════════════════════════════════════════════════
+  redraw(5);
+
+  noteBox(
+    "To get your API credentials:\n" +
+      "\n" +
+      "  1. Go to https://my.telegram.org/apps\n" +
+      "  2. Log in with your phone number\n" +
+      '  3. Click "API development tools"\n' +
+      "  4. Create an application (any name/short name works)\n" +
+      "  5. Copy the API ID (number) and API Hash (hex string)\n" +
+      "\n" +
+      "⚠ Do NOT use a VPN — Telegram will block the login page.",
+    "Telegram",
+    TON
+  );
+
+  const envApiId = process.env.TELETON_TG_API_ID;
+  const envApiHash = process.env.TELETON_TG_API_HASH;
+  const envPhone = process.env.TELETON_TG_PHONE;
+
+  const apiIdStr = options.apiId
+    ? options.apiId.toString()
+    : await input({
+        message: envApiId ? "API ID (from env)" : "API ID (from my.telegram.org)",
+        default: envApiId,
+        theme,
+        validate: (value) => {
+          if (!value || isNaN(parseInt(value))) return "Invalid API ID (must be a number)";
+          return true;
+        },
+      });
+  apiId = parseInt(apiIdStr);
+
+  apiHash = options.apiHash
+    ? options.apiHash
+    : await input({
+        message: envApiHash ? "API Hash (from env)" : "API Hash (from my.telegram.org)",
+        default: envApiHash,
+        theme,
+        validate: (value) => {
+          if (!value || value.length < 10) return "Invalid API Hash";
+          return true;
+        },
+      });
+
+  phone = options.phone
+    ? options.phone
+    : await input({
+        message: envPhone ? "Phone number (from env)" : "Phone number (international format)",
+        default: envPhone,
+        theme,
+        validate: (value) => {
+          if (!value || !value.startsWith("+")) return "Must start with +";
+          return true;
+        },
+      });
+
+  STEPS[5].value = phone;
 
   // ════════════════════════════════════════════════════════════════════
   // Step 6: Connect — save config + Telegram auth
@@ -938,11 +922,7 @@ async function runInteractiveOnboarding(
       history_limit: 100,
     },
     embedding: { provider: "local" },
-    deals: DealsConfigSchema.parse({
-      enabled: dealsEnabled,
-      buy_max_floor_percent: buyMaxFloorPercent,
-      sell_min_floor_percent: sellMinFloorPercent,
-    }),
+    deals: DealsConfigSchema.parse({ enabled: !!botToken }),
     webui: {
       enabled: false,
       port: 7777,

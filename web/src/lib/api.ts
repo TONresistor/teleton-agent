@@ -88,7 +88,7 @@ export interface SetupConfig {
     bot_username?: string;
   };
   cocoon?: { port: number };
-  deals?: { buy_max_floor_percent?: number; sell_min_floor_percent?: number };
+  deals?: { enabled?: boolean; buy_max_floor_percent?: number; sell_min_floor_percent?: number };
   tonapi_key?: string;
   tavily_api_key?: string;
   webui?: { enabled: boolean };

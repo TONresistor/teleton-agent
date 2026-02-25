@@ -13,9 +13,9 @@ export type { WizardData, StepProps } from '../components/setup/SetupContext';
 const STEP_COMPONENTS = [
   WelcomeStep,
   ProviderStep,
-  TelegramStep,
   ConfigStep,
   WalletStep,
+  TelegramStep,
   ConnectStep,
 ];
 

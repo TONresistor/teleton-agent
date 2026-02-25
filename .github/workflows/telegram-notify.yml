@@ -29,15 +29,15 @@ jobs:
         run: |
           BODY="${{ steps.msg.outputs.body }}"
           if [ -n "$BODY" ]; then
-            MSG="*${{ steps.msg.outputs.title }}*
+            MSG="<b>${{ steps.msg.outputs.title }}</b>
 
           $BODY
 
-          [View commit](${{ github.event.head_commit.url }})"
+          <a href=\"${{ github.event.head_commit.url }}\">View commit</a>"
           else
-            MSG="*${{ steps.msg.outputs.title }}*
+            MSG="<b>${{ steps.msg.outputs.title }}</b>
 
-          [View commit](${{ github.event.head_commit.url }})"
+          <a href=\"${{ github.event.head_commit.url }}\">View commit</a>"
           fi
           {
             echo "text<<EOF"
@@ -50,7 +50,7 @@ jobs:
         with:
           to: ${{ secrets.TELEGRAM_CHAT_ID }}
           token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          format: markdown
+          format: html
           message: ${{ steps.fmt.outputs.text }}
 
   # ---- Release notification ----
@@ -67,13 +67,13 @@ jobs:
         with:
           to: ${{ secrets.TELEGRAM_CHAT_ID }}
           token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
-          format: markdown
+          format: html
           message: |
-            🚀 *New Release ${{ github.ref_name }}*
+            🚀 <b>New Release ${{ github.ref_name }}</b>
 
             Teleton ${{ steps.ver.outputs.version }} is now available on npm.
             Update your agents:
 
-            `npm i -g teleton@latest`
+            <code>npm i -g teleton@latest</code>
 
-            [View release](https://github.com/${{ github.repository }}/releases/tag/${{ github.ref_name }})
+            <a href="https://github.com/${{ github.repository }}/releases/tag/${{ github.ref_name }}">View release</a>

@@ -138,7 +138,7 @@ export function ModulesStep({ data, onChange }: StepProps) {
                   <input
                     type="number"
                     value={data.buyMaxFloor}
-                    onChange={(e) => onChange({ ...data, buyMaxFloor: parseInt(e.target.value) || 100 })}
+                    onChange={(e) => onChange({ ...data, buyMaxFloor: parseInt(e.target.value) || 95 })}
                     min={50}
                     max={150}
                     className="w-full"

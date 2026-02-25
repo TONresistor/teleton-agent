@@ -25,13 +25,6 @@ export function TelegramStep({ data, onChange }: StepProps) {
             <strong>Phone Number</strong>
             <p>The phone number linked to your Telegram account, with country code (e.g. +33612345678).</p>
           </div>
-          <div className="guide-section">
-            <strong>User ID</strong>
-            <ol>
-              <li>Open Telegram and search for <a href="https://t.me/userinfobot" target="_blank" rel="noopener noreferrer">@userinfobot</a></li>
-              <li>Send <code>/start</code> — the bot will reply with your numeric User ID</li>
-            </ol>
-          </div>
         </div>
       </details>
 
@@ -74,20 +67,6 @@ export function TelegramStep({ data, onChange }: StepProps) {
         )}
       </div>
 
-      <div className="form-group">
-        <label>Admin User ID</label>
-        <input
-          type="number"
-          value={data.userId || ''}
-          onChange={(e) => onChange({ ...data, userId: parseInt(e.target.value) || 0 })}
-          placeholder="123456789"
-          className="w-full"
-        />
-        <div className="helper-text">
-          This account will have admin control over the agent in DMs and groups.
-          Get your ID from <a href="https://t.me/userinfobot" target="_blank" rel="noopener noreferrer">@userinfobot</a> on Telegram.
-        </div>
-      </div>
     </div>
   );
 }

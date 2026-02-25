@@ -490,7 +490,7 @@ export function createSetupRoutes(): Hono {
         logging: { level: "info" as const, pretty: true },
         dev: { hot_reload: false },
         tool_rag: {
-          enabled: true,
+          enabled: false,
           top_k: 25,
           always_include: [
             "telegram_send_message",

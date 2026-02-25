@@ -107,7 +107,7 @@ export const MetaConfigSchema = z.object({
 const _DealsObject = z.object({
   enabled: z.boolean().default(true),
   expiry_seconds: z.number().default(120),
-  buy_max_floor_percent: z.number().default(100),
+  buy_max_floor_percent: z.number().default(95),
   sell_min_floor_percent: z.number().default(105),
   poll_interval_ms: z.number().default(5000),
   max_verification_retries: z.number().default(12),
