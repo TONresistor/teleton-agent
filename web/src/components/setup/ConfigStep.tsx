@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { setup, BotValidation } from '../../lib/api';
 import { Select } from '../Select';
+import { PasswordInput } from './PasswordInput';
 import type { StepProps } from '../../pages/Setup';
 
 export function ConfigStep({ data, onChange }: StepProps) {
@@ -143,8 +144,7 @@ export function ConfigStep({ data, onChange }: StepProps) {
             Inline buttons and deals module.
           </p>
           <div className="form-row" style={{ gap: '8px' }}>
-            <input
-              type="password"
+            <PasswordInput
               value={data.botToken}
               onChange={(e) => {
                 onChange({ ...data, botToken: e.target.value, botUsername: '' });
@@ -196,8 +196,7 @@ export function ConfigStep({ data, onChange }: StepProps) {
           <p style={{ fontSize: 'var(--font-sm)', margin: '0 0 8px' }}>
             Blockchain data — jettons, NFTs, prices, transaction history. Free key: 5 req/s (vs 1).
           </p>
-          <input
-            type="text"
+          <PasswordInput
             value={data.tonapiKey}
             onChange={(e) => onChange({ ...data, tonapiKey: e.target.value })}
             placeholder="Your TonAPI key"
@@ -217,8 +216,7 @@ export function ConfigStep({ data, onChange }: StepProps) {
           <p style={{ fontSize: 'var(--font-sm)', margin: '0 0 8px' }}>
             Blockchain RPC — send transactions, check balances. Dedicated endpoint (vs ORBS fallback).
           </p>
-          <input
-            type="text"
+          <PasswordInput
             value={data.toncenterKey}
             onChange={(e) => onChange({ ...data, toncenterKey: e.target.value })}
             placeholder="Your TonCenter API key"
@@ -238,8 +236,7 @@ export function ConfigStep({ data, onChange }: StepProps) {
           <p style={{ fontSize: 'var(--font-sm)', margin: '0 0 8px' }}>
             Web search for real-time info. Free tier: 1,000 req/month.
           </p>
-          <input
-            type="text"
+          <PasswordInput
             value={data.tavilyKey}
             onChange={(e) => onChange({ ...data, tavilyKey: e.target.value })}
             placeholder="tvly-..."

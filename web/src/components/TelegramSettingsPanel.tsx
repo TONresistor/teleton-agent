@@ -33,7 +33,7 @@ export function TelegramSettingsPanel({
   onArraySave,
   extended,
 }: TelegramSettingsPanelProps) {
-  return (
+  const telegramCore = (
     <>
       <div className="section-title">Telegram</div>
       <div style={{ display: 'grid', gap: '16px' }}>
@@ -153,128 +153,143 @@ export function TelegramSettingsPanel({
             </label>
           </div>
         )}
-
-        {/* ── Tuning (EditableField) ────────────────────────── */}
-        {extended && (
-          <div style={{ display: 'grid', gap: '12px' }}>
-            <EditableField
-              label="Debounce (ms)"
-              description="Group message debounce delay in ms (0 = disabled)"
-              configKey="telegram.debounce_ms"
-              type="number"
-              value={getLocal('telegram.debounce_ms')}
-              serverValue={getServer('telegram.debounce_ms')}
-              onChange={(v) => setLocal('telegram.debounce_ms', v)}
-              onSave={(v) => saveConfig('telegram.debounce_ms', v)}
-              onCancel={() => cancelLocal('telegram.debounce_ms')}
-              min={0}
-            />
-            <EditableField
-              label="Max Message Length"
-              description="Maximum message length in characters"
-              configKey="telegram.max_message_length"
-              type="number"
-              value={getLocal('telegram.max_message_length')}
-              serverValue={getServer('telegram.max_message_length')}
-              onChange={(v) => setLocal('telegram.max_message_length', v)}
-              onSave={(v) => saveConfig('telegram.max_message_length', v)}
-              onCancel={() => cancelLocal('telegram.max_message_length')}
-              min={1}
-            />
-            <EditableField
-              label="Agent Channel"
-              description="Channel username for auto-publishing"
-              configKey="telegram.agent_channel"
-              value={getLocal('telegram.agent_channel')}
-              serverValue={getServer('telegram.agent_channel')}
-              onChange={(v) => setLocal('telegram.agent_channel', v)}
-              onSave={(v) => saveConfig('telegram.agent_channel', v)}
-              onCancel={() => cancelLocal('telegram.agent_channel')}
-            />
-          </div>
-        )}
-
-        {/* ── Access Control (ArrayInput) ───────────────────── */}
-        {extended && onArraySave && (
-          <div style={{ display: 'grid', gap: '16px' }}>
-            <div className="form-group" style={{ marginBottom: 0 }}>
-              <label>
-                <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                  Admin IDs
-                  <InfoTip text="Admin user IDs with elevated access" />
-                </span>
-              </label>
-              <ArrayInput
-                value={getArrayValue(getLocal('telegram.admin_ids'))}
-                onChange={(values) => onArraySave('telegram.admin_ids', values)}
-                validate={(v) => /^\d+$/.test(v) ? null : 'Must be a number'}
-                placeholder="Enter ID..."
-              />
-            </div>
-            <div className="form-group" style={{ marginBottom: 0 }}>
-              <label>
-                <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                  Allowed Users
-                  <InfoTip text="User IDs allowed for DM access" />
-                </span>
-              </label>
-              <ArrayInput
-                value={getArrayValue(getLocal('telegram.allow_from'))}
-                onChange={(values) => onArraySave('telegram.allow_from', values)}
-                validate={(v) => /^\d+$/.test(v) ? null : 'Must be a number'}
-                placeholder="Enter ID..."
-              />
-            </div>
-            <div className="form-group" style={{ marginBottom: 0 }}>
-              <label>
-                <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                  Allowed Groups
-                  <InfoTip text="Group IDs allowed for group access" />
-                </span>
-              </label>
-              <ArrayInput
-                value={getArrayValue(getLocal('telegram.group_allow_from'))}
-                onChange={(values) => onArraySave('telegram.group_allow_from', values)}
-                validate={(v) => /^\d+$/.test(v) ? null : 'Must be a number'}
-                placeholder="Enter ID..."
-              />
-            </div>
-          </div>
-        )}
-
-        {/* ── Rate Limits (EditableField, restart badge) ────── */}
-        {extended && (
-          <div style={{ display: 'grid', gap: '12px' }}>
-            <EditableField
-              label="Rate Limit -- Messages/sec"
-              description="Rate limit: messages per second (requires restart)"
-              configKey="telegram.rate_limit_messages_per_second"
-              type="number"
-              value={getLocal('telegram.rate_limit_messages_per_second')}
-              serverValue={getServer('telegram.rate_limit_messages_per_second')}
-              onChange={(v) => setLocal('telegram.rate_limit_messages_per_second', v)}
-              onSave={(v) => saveConfig('telegram.rate_limit_messages_per_second', v)}
-              onCancel={() => cancelLocal('telegram.rate_limit_messages_per_second')}
-              hotReload="restart"
-              min={0}
-              step={0.1}
-            />
-            <EditableField
-              label="Rate Limit -- Groups/min"
-              description="Rate limit: groups per minute (requires restart)"
-              configKey="telegram.rate_limit_groups_per_minute"
-              type="number"
-              value={getLocal('telegram.rate_limit_groups_per_minute')}
-              serverValue={getServer('telegram.rate_limit_groups_per_minute')}
-              onChange={(v) => setLocal('telegram.rate_limit_groups_per_minute', v)}
-              onSave={(v) => saveConfig('telegram.rate_limit_groups_per_minute', v)}
-              onCancel={() => cancelLocal('telegram.rate_limit_groups_per_minute')}
-              hotReload="restart"
-              min={1}
-            />
-          </div>
-        )}
       </div>
     </>
   );
+
+  const telegramAdvanced = (
+    <>
+      <div className="section-title">Advanced Telegram</div>
+      <div style={{ display: 'grid', gap: '16px' }}>
+
+        {/* ── Tuning (EditableField) ────────────────────────── */}
+            <div style={{ display: 'grid', gap: '12px' }}>
+              <EditableField
+                label="Debounce (ms)"
+                description="Group message debounce delay in ms (0 = disabled)"
+                configKey="telegram.debounce_ms"
+                type="number"
+                value={getLocal('telegram.debounce_ms')}
+                serverValue={getServer('telegram.debounce_ms')}
+                onChange={(v) => setLocal('telegram.debounce_ms', v)}
+                onSave={(v) => saveConfig('telegram.debounce_ms', v)}
+                onCancel={() => cancelLocal('telegram.debounce_ms')}
+                min={0}
+              />
+              <EditableField
+                label="Max Message Length"
+                description="Maximum message length in characters"
+                configKey="telegram.max_message_length"
+                type="number"
+                value={getLocal('telegram.max_message_length')}
+                serverValue={getServer('telegram.max_message_length')}
+                onChange={(v) => setLocal('telegram.max_message_length', v)}
+                onSave={(v) => saveConfig('telegram.max_message_length', v)}
+                onCancel={() => cancelLocal('telegram.max_message_length')}
+                min={1}
+              />
+              <EditableField
+                label="Agent Channel"
+                description="Channel username for auto-publishing"
+                configKey="telegram.agent_channel"
+                value={getLocal('telegram.agent_channel')}
+                serverValue={getServer('telegram.agent_channel')}
+                onChange={(v) => setLocal('telegram.agent_channel', v)}
+                onSave={(v) => saveConfig('telegram.agent_channel', v)}
+                onCancel={() => cancelLocal('telegram.agent_channel')}
+              />
+            </div>
+
+            {/* ── Access Control (ArrayInput) ───────────────────── */}
+            {onArraySave && (
+              <div style={{ display: 'grid', gap: '16px' }}>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                      Admin IDs
+                      <InfoTip text="Admin user IDs with elevated access" />
+                    </span>
+                  </label>
+                  <ArrayInput
+                    value={getArrayValue(getLocal('telegram.admin_ids'))}
+                    onChange={(values) => onArraySave('telegram.admin_ids', values)}
+                    validate={(v) => /^\d+$/.test(v) ? null : 'Must be a number'}
+                    placeholder="Enter ID..."
+                  />
+                </div>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                      Allowed Users
+                      <InfoTip text="User IDs allowed for DM access" />
+                    </span>
+                  </label>
+                  <ArrayInput
+                    value={getArrayValue(getLocal('telegram.allow_from'))}
+                    onChange={(values) => onArraySave('telegram.allow_from', values)}
+                    validate={(v) => /^\d+$/.test(v) ? null : 'Must be a number'}
+                    placeholder="Enter ID..."
+                  />
+                </div>
+                <div className="form-group" style={{ marginBottom: 0 }}>
+                  <label>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                      Allowed Groups
+                      <InfoTip text="Group IDs allowed for group access" />
+                    </span>
+                  </label>
+                  <ArrayInput
+                    value={getArrayValue(getLocal('telegram.group_allow_from'))}
+                    onChange={(values) => onArraySave('telegram.group_allow_from', values)}
+                    validate={(v) => /^\d+$/.test(v) ? null : 'Must be a number'}
+                    placeholder="Enter ID..."
+                  />
+                </div>
+              </div>
+            )}
+
+            {/* ── Rate Limits (EditableField, restart badge) ────── */}
+            <div style={{ display: 'grid', gap: '12px' }}>
+              <EditableField
+                label="Rate Limit -- Messages/sec"
+                description="Rate limit: messages per second (requires restart)"
+                configKey="telegram.rate_limit_messages_per_second"
+                type="number"
+                value={getLocal('telegram.rate_limit_messages_per_second')}
+                serverValue={getServer('telegram.rate_limit_messages_per_second')}
+                onChange={(v) => setLocal('telegram.rate_limit_messages_per_second', v)}
+                onSave={(v) => saveConfig('telegram.rate_limit_messages_per_second', v)}
+                onCancel={() => cancelLocal('telegram.rate_limit_messages_per_second')}
+                hotReload="restart"
+                min={0}
+                step={0.1}
+              />
+              <EditableField
+                label="Rate Limit -- Groups/min"
+                description="Rate limit: groups per minute (requires restart)"
+                configKey="telegram.rate_limit_groups_per_minute"
+                type="number"
+                value={getLocal('telegram.rate_limit_groups_per_minute')}
+                serverValue={getServer('telegram.rate_limit_groups_per_minute')}
+                onChange={(v) => setLocal('telegram.rate_limit_groups_per_minute', v)}
+                onSave={(v) => saveConfig('telegram.rate_limit_groups_per_minute', v)}
+                onCancel={() => cancelLocal('telegram.rate_limit_groups_per_minute')}
+                hotReload="restart"
+                min={1}
+              />
+            </div>
+      </div>
+    </>
+  );
+
+  if (extended) {
+    return (
+      <>
+        <div className="card">{telegramCore}</div>
+        <div className="card">{telegramAdvanced}</div>
+      </>
+    );
+  }
+
+  return telegramCore;
 }

@@ -1,4 +1,5 @@
 import type { StepProps } from '../../pages/Setup';
+import { PasswordInput } from './PasswordInput';
 
 export function TelegramStep({ data, onChange }: StepProps) {
   return (
@@ -41,8 +42,7 @@ export function TelegramStep({ data, onChange }: StepProps) {
 
       <div className="form-group">
         <label>API Hash</label>
-        <input
-          type="text"
+        <PasswordInput
           value={data.apiHash}
           onChange={(e) => onChange({ ...data, apiHash: e.target.value })}
           placeholder="abcdef0123456789abcdef0123456789"

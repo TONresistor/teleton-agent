@@ -14,7 +14,6 @@ import { InfoTip } from '../components/InfoTip';
 const TABS = [
   { id: 'llm', label: 'LLM' },
   { id: 'telegram', label: 'Telegram' },
-  { id: 'session', label: 'Session' },
   { id: 'api-keys', label: 'API Keys' },
   { id: 'advanced', label: 'Advanced' },
 ];
@@ -134,115 +133,21 @@ export function Config() {
             </div>
           )}
 
-          {config.toolRag && (
-            <div className="card">
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                <div>
-                  <div className="section-title" style={{ marginBottom: '4px' }}>Tool RAG</div>
-                  <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: 0 }}>
-                    Semantic tool selection — sends only the most relevant tools to the LLM per message.
-                  </p>
-                </div>
-                <label className="toggle">
-                  <input
-                    type="checkbox"
-                    checked={config.toolRag.enabled}
-                    onChange={() => config.saveToolRag({ enabled: !config.toolRag!.enabled })}
-                  />
-                  <span className="toggle-track" />
-                  <span className="toggle-thumb" />
-                </label>
-              </div>
-              <div style={{ display: 'grid', gap: '12px' }}>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <label style={{ fontSize: '13px', color: 'var(--text)' }}>
-                    Indexed <InfoTip text="Whether tool embeddings have been indexed for semantic search" />
-                  </label>
-                  <span style={{ fontSize: '13px', color: 'var(--text)' }}>{config.toolRag.indexed ? 'Yes' : 'No'}</span>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <label style={{ fontSize: '13px', color: 'var(--text)' }}>
-                    Top-K <InfoTip text="Number of most relevant tools to send per message" />
-                  </label>
-                  <Select
-                    value={String(config.toolRag.topK)}
-                    options={['10', '15', '20', '25', '30', '40', '50']}
-                    onChange={(v) => config.saveToolRag({ topK: Number(v) })}
-                    style={{ minWidth: '80px' }}
-                  />
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <label style={{ fontSize: '13px', color: 'var(--text)' }}>
-                    Total Tools <InfoTip text="Total number of registered tools available" />
-                  </label>
-                  <span style={{ fontSize: '13px', color: 'var(--text)' }}>{config.toolRag.totalTools}</span>
-                </div>
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                  <label style={{ fontSize: '13px', color: 'var(--text)', cursor: 'pointer' }} htmlFor="skip-unlimited">
-                    Skip Unlimited Providers <InfoTip text="Skip RAG filtering for providers with no tool limit" />
-                  </label>
-                  <label className="toggle">
-                    <input
-                      id="skip-unlimited"
-                      type="checkbox"
-                      checked={config.toolRag.skipUnlimitedProviders ?? false}
-                      onChange={() => config.saveToolRag({ skipUnlimitedProviders: !config.toolRag!.skipUnlimitedProviders })}
-                    />
-                    <span className="toggle-track" />
-                    <span className="toggle-thumb" />
-                  </label>
-                </div>
-                <div>
-                  <label style={{ fontSize: '13px', color: 'var(--text)', display: 'block', marginBottom: '6px' }}>
-                    Always Include (glob patterns) <InfoTip text="Tool name patterns that are always included regardless of RAG scoring" />
-                  </label>
-                  <ArrayInput
-                    value={config.toolRag.alwaysInclude ?? []}
-                    onChange={(values) => config.saveToolRag({ alwaysInclude: values })}
-                    placeholder="e.g. telegram_send_*"
-                  />
-                </div>
-              </div>
-            </div>
-          )}
         </>
       )}
 
       {/* Telegram Tab */}
       {activeTab === 'telegram' && (
-        <div className="card">
-          <TelegramSettingsPanel
-            getLocal={config.getLocal}
-            getServer={config.getServer}
-            setLocal={config.setLocal}
-            saveConfig={config.saveConfig}
-            cancelLocal={config.cancelLocal}
-            configKeys={configKeys}
-            onArraySave={handleArraySave}
-            extended={true}
-          />
-        </div>
-      )}
-
-      {/* Session Tab */}
-      {activeTab === 'session' && (
-        <div className="card">
-          <ConfigSection
-            keys={[
-              'agent.session_reset_policy.daily_reset_enabled',
-              'agent.session_reset_policy.daily_reset_hour',
-              'agent.session_reset_policy.idle_expiry_enabled',
-              'agent.session_reset_policy.idle_expiry_minutes',
-            ]}
-            configKeys={configKeys}
-            getLocal={config.getLocal}
-            getServer={config.getServer}
-            setLocal={config.setLocal}
-            saveConfig={config.saveConfig}
-            cancelLocal={config.cancelLocal}
-            title="Session"
-          />
-        </div>
+        <TelegramSettingsPanel
+          getLocal={config.getLocal}
+          getServer={config.getServer}
+          setLocal={config.setLocal}
+          saveConfig={config.saveConfig}
+          cancelLocal={config.cancelLocal}
+          configKeys={configKeys}
+          onArraySave={handleArraySave}
+          extended={true}
+        />
       )}
 
       {/* API Keys Tab */}
@@ -263,18 +168,98 @@ export function Config() {
 
       {/* Advanced Tab */}
       {activeTab === 'advanced' && (
-        <div className="card">
-          <ConfigSection
-            keys={ADVANCED_KEYS}
-            configKeys={configKeys}
-            getLocal={config.getLocal}
-            getServer={config.getServer}
-            setLocal={config.setLocal}
-            saveConfig={config.saveConfig}
-            cancelLocal={config.cancelLocal}
-            title="Advanced"
-          />
-        </div>
+        <>
+          {config.toolRag && (
+            <div className="card">
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                <div>
+                  <div className="section-title" style={{ marginBottom: '4px' }}>Tool RAG</div>
+                  <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: 0 }}>
+                    Semantic tool selection — sends only the most relevant tools to the LLM per message.
+                  </p>
+                </div>
+                <label className="toggle">
+                  <input
+                    type="checkbox"
+                    checked={config.toolRag.enabled}
+                    onChange={() => config.saveToolRag({ enabled: !config.toolRag!.enabled })}
+                  />
+                  <span className="toggle-track" />
+                  <span className="toggle-thumb" />
+                </label>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <label style={{ fontSize: '13px', color: 'var(--text)' }}>
+                    Top-K <InfoTip text="Number of most relevant tools to send per message" />
+                  </label>
+                  <Select
+                    value={String(config.toolRag.topK)}
+                    options={['10', '15', '20', '25', '30', '40', '50']}
+                    onChange={(v) => config.saveToolRag({ topK: Number(v) })}
+                    style={{ minWidth: '80px' }}
+                  />
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <label style={{ fontSize: '13px', color: 'var(--text)', cursor: 'pointer' }} htmlFor="skip-unlimited">
+                    Skip Unlimited <InfoTip text="Skip RAG filtering for providers with no tool limit" />
+                  </label>
+                  <label className="toggle">
+                    <input
+                      id="skip-unlimited"
+                      type="checkbox"
+                      checked={config.toolRag.skipUnlimitedProviders ?? false}
+                      onChange={() => config.saveToolRag({ skipUnlimitedProviders: !config.toolRag!.skipUnlimitedProviders })}
+                    />
+                    <span className="toggle-track" />
+                    <span className="toggle-thumb" />
+                  </label>
+                </div>
+              </div>
+              <div style={{ marginTop: '12px' }}>
+                <label style={{ fontSize: '13px', color: 'var(--text)', display: 'block', marginBottom: '6px' }}>
+                  Always Include (glob patterns) <InfoTip text="Tool name patterns that are always included regardless of RAG scoring" />
+                </label>
+                <ArrayInput
+                  value={config.toolRag.alwaysInclude ?? []}
+                  onChange={(values) => config.saveToolRag({ alwaysInclude: values })}
+                  placeholder="e.g. telegram_send_*"
+                />
+              </div>
+            </div>
+          )}
+
+          <div className="card">
+            <ConfigSection
+              keys={ADVANCED_KEYS}
+              configKeys={configKeys}
+              getLocal={config.getLocal}
+              getServer={config.getServer}
+              setLocal={config.setLocal}
+              saveConfig={config.saveConfig}
+              cancelLocal={config.cancelLocal}
+              title="Advanced"
+            />
+          </div>
+
+          <div className="card">
+            <ConfigSection
+              keys={[
+                'agent.session_reset_policy.daily_reset_enabled',
+                'agent.session_reset_policy.daily_reset_hour',
+                'agent.session_reset_policy.idle_expiry_enabled',
+                'agent.session_reset_policy.idle_expiry_minutes',
+              ]}
+              configKeys={configKeys}
+              getLocal={config.getLocal}
+              getServer={config.getServer}
+              setLocal={config.setLocal}
+              saveConfig={config.saveConfig}
+              cancelLocal={config.cancelLocal}
+              title="Session"
+            />
+          </div>
+        </>
       )}
     </div>
   );

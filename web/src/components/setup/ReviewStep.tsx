@@ -41,6 +41,12 @@ export function ReviewStep({ data, onChange }: StepProps) {
         <div className="review-list">
           <div><span className="review-label">Phone:</span> {data.phone}</div>
           <div><span className="review-label">User ID:</span> {data.userId}</div>
+          {data.apiHash && (
+            <div><span className="review-label">API Hash:</span> <span className="mono">{maskKey(data.apiHash)}</span></div>
+          )}
+          {data.botToken && (
+            <div><span className="review-label">Bot Token:</span> <span className="mono">{maskKey(data.botToken)}</span></div>
+          )}
           {data.botUsername && (
             <div><span className="review-label">Bot:</span> @{data.botUsername}</div>
           )}
@@ -61,8 +67,9 @@ export function ReviewStep({ data, onChange }: StepProps) {
       <div className="card">
         <div className="section-title">Modules</div>
         <div className="review-list">
-          <div><span className="review-label">TonAPI:</span> {data.tonapiKey ? 'Yes' : 'No'}</div>
-          <div><span className="review-label">Web Search:</span> {data.tavilyKey ? 'Yes' : 'No'}</div>
+          <div><span className="review-label">TonAPI:</span> {data.tonapiKey ? <span className="mono">{maskKey(data.tonapiKey)}</span> : 'No'}</div>
+          <div><span className="review-label">TonCenter:</span> {data.toncenterKey ? <span className="mono">{maskKey(data.toncenterKey)}</span> : 'No'}</div>
+          <div><span className="review-label">Web Search:</span> {data.tavilyKey ? <span className="mono">{maskKey(data.tavilyKey)}</span> : 'No'}</div>
           {data.customizeThresholds && (
             <div><span className="review-label">Deals:</span> Buy max {data.buyMaxFloor}% / Sell min {data.sellMinFloor}%</div>
           )}

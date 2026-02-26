@@ -118,6 +118,9 @@ export function Memory() {
                   <React.Fragment key={src.source}>
                     <tr
                       onClick={() => toggleSource(src.source)}
+                      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); toggleSource(src.source); } }}
+                      tabIndex={0}
+                      role="button"
                       style={{
                         cursor: 'pointer',
                         borderBottom: isExpanded ? 'none' : '1px solid var(--separator)',

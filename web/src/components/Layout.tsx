@@ -20,7 +20,6 @@ function DashboardNav() {
         <Link to="/plugins" className={isActive('/plugins') ? 'active' : ''}>Plugins</Link>
         <Link to="/soul" className={isActive('/soul') ? 'active' : ''}>Soul</Link>
         <Link to="/memory" className={isActive('/memory') ? 'active' : ''}>Memory</Link>
-        <Link to="/logs" className={isActive('/logs') ? 'active' : ''}>Logs</Link>
         <Link to="/workspace" className={isActive('/workspace') ? 'active' : ''}>Workspace</Link>
         <Link to="/tasks" className={isActive('/tasks') ? 'active' : ''}>Tasks</Link>
         <Link to="/mcp" className={isActive('/mcp') ? 'active' : ''}>MCP</Link>

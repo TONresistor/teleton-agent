@@ -15,6 +15,19 @@ import {
   validateApiKeyFormat,
   type SupportedProvider,
 } from "../../config/providers.js";
+import { setTonapiKey } from "../../constants/api-endpoints.js";
+import { setToncenterApiKey, invalidateEndpointCache } from "../../ton/endpoint.js";
+import { invalidateTonClientCache } from "../../ton/wallet-service.js";
+
+/** Side-effects to run when specific config keys change at runtime. */
+const CONFIG_SIDE_EFFECTS: Record<string, (value: string | undefined) => void> = {
+  tonapi_key: (v) => setTonapiKey(v),
+  toncenter_api_key: (v) => {
+    setToncenterApiKey(v);
+    invalidateEndpointCache();
+    invalidateTonClientCache();
+  },
+};
 
 interface ConfigKeyData {
   key: string;
@@ -191,6 +204,7 @@ export function createConfigRoutes(deps: WebUIServerDeps) {
       // Update runtime config for immediate effect
       const runtimeConfig = deps.agent.getConfig() as Record<string, any>;
       setNestedValue(runtimeConfig, key, parsed);
+      CONFIG_SIDE_EFFECTS[key]?.(parsed as string);
 
       // Sync runtime admin_ids too
       if (key === "telegram.owner_id" && typeof parsed === "number") {
@@ -245,6 +259,7 @@ export function createConfigRoutes(deps: WebUIServerDeps) {
       // Clear from runtime config
       const runtimeConfig = deps.agent.getConfig() as Record<string, any>;
       deleteNestedValue(runtimeConfig, key);
+      CONFIG_SIDE_EFFECTS[key]?.(undefined);
 
       const result: ConfigKeyData = {
         key,

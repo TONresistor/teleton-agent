@@ -316,6 +316,9 @@ export function Workspace() {
                     parts.pop();
                     navigateTo(parts.join('/'));
                   }}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); const parts = currentPath.split('/'); parts.pop(); navigateTo(parts.join('/')); } }}
+                  tabIndex={0}
+                  role="button"
                   style={{ cursor: 'pointer', borderBottom: '1px solid var(--separator)' }}
                   className="file-row"
                 >
@@ -333,6 +336,9 @@ export function Workspace() {
                   <React.Fragment key={entry.path}>
                     <tr
                       onClick={() => entry.isDirectory ? navigateTo(entry.path) : handleFileClick(entry.path)}
+                      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); entry.isDirectory ? navigateTo(entry.path) : handleFileClick(entry.path); } }}
+                      tabIndex={0}
+                      role="button"
                       style={{
                         cursor: 'pointer',
                         borderBottom: isExpanded ? 'none' : '1px solid var(--separator)',

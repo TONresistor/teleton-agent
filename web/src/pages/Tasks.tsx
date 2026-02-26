@@ -368,6 +368,9 @@ export function Tasks() {
                   <React.Fragment key={task.id}>
                     <tr
                       onClick={() => setSelected(isExpanded ? null : task)}
+                      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelected(isExpanded ? null : task); } }}
+                      tabIndex={0}
+                      role="button"
                       style={{
                         cursor: 'pointer',
                         borderBottom: isExpanded ? 'none' : '1px solid var(--separator)',

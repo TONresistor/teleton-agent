@@ -1,6 +1,17 @@
+import { useEffect, useRef, useSyncExternalStore } from 'react';
 import { useConfigState } from '../hooks/useConfigState';
 import { AgentSettingsPanel } from '../components/AgentSettingsPanel';
 import { TelegramSettingsPanel } from '../components/TelegramSettingsPanel';
+import { logStore } from '../lib/log-store';
+
+function Metric({ label, value, mono }: { label: string; value: string | number; mono?: boolean }) {
+  return (
+    <div className="metric">
+      <span className="metric-label">{label}</span>
+      <span className={`metric-value${mono ? ' mono' : ''}`}>{value}</span>
+    </div>
+  );
+}
 
 export function Dashboard() {
   const {
@@ -12,14 +23,36 @@ export function Dashboard() {
     handleProviderChange, handleProviderConfirm, handleProviderCancel,
   } = useConfigState();
 
+  const logs = useSyncExternalStore(
+    (cb) => logStore.subscribe(cb),
+    () => logStore.getLogs()
+  );
+  const connected = useSyncExternalStore(
+    (cb) => logStore.subscribe(cb),
+    () => logStore.isConnected()
+  );
+  const bottomRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    logStore.connect();
+  }, []);
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [logs]);
+
   if (loading) return <div className="loading">Loading...</div>;
   if (!status || !stats) return <div className="alert error">Failed to load dashboard data</div>;
 
+  const uptime = status.uptime < 3600
+    ? `${Math.floor(status.uptime / 60)}m`
+    : `${Math.floor(status.uptime / 3600)}h ${Math.floor((status.uptime % 3600) / 60)}m`;
+
   return (
-    <div>
+    <div className="dashboard-root">
       <div className="header">
         <h1>Dashboard</h1>
-        <p>System status and settings</p>
+        <p>System overview</p>
       </div>
 
       {error && (
@@ -35,62 +68,66 @@ export function Dashboard() {
         </div>
       )}
 
-      <div className="stats">
-        <div className="stat-card">
-          <h3>Uptime</h3>
-          <div className="value">{Math.floor(status.uptime / 60)}m</div>
-        </div>
-        <div className="stat-card">
-          <h3>Model</h3>
-          <div className="value" style={{ fontSize: '14px' }}>
-            {status.model}
-          </div>
-        </div>
-        <div className="stat-card">
-          <h3>Sessions</h3>
-          <div className="value">{status.sessionCount}</div>
-        </div>
-        <div className="stat-card">
-          <h3>Tools</h3>
-          <div className="value">{status.toolCount}</div>
+      {/* ── Status bar ─────────────────────────────────────── */}
+      <div className="card status-bar">
+        <div className="status-row">
+          <Metric label="Uptime" value={uptime} />
+          <Metric label="Sessions" value={status.sessionCount} />
+          <Metric label="Tools" value={status.toolCount} />
+          <Metric label="Knowledge" value={stats.knowledge} />
+          <Metric label="Messages" value={stats.messages.toLocaleString()} />
+          <Metric label="Chats" value={stats.chats} />
         </div>
       </div>
 
-      <div className="card">
-        <div className="section-title">Memory</div>
-        <div className="stats" style={{ marginBottom: 0 }}>
-          <div className="stat-card">
-            <h3>Knowledge</h3>
-            <div className="value">{stats.knowledge}</div>
-          </div>
-          <div className="stat-card">
-            <h3>Messages</h3>
-            <div className="value">{stats.messages}</div>
-          </div>
-          <div className="stat-card">
-            <h3>Chats</h3>
-            <div className="value">{stats.chats}</div>
-          </div>
+      {/* ── Settings (side by side) ────────────────────────── */}
+      <div className="dashboard-settings">
+        <div className="card">
+          <AgentSettingsPanel
+            compact
+            getLocal={getLocal} getServer={getServer} setLocal={setLocal} saveConfig={saveConfig} cancelLocal={cancelLocal}
+            modelOptions={modelOptions}
+            pendingProvider={pendingProvider} pendingMeta={pendingMeta}
+            pendingApiKey={pendingApiKey} setPendingApiKey={setPendingApiKey}
+            pendingValidating={pendingValidating}
+            pendingError={pendingError} setPendingError={setPendingError}
+            handleProviderChange={handleProviderChange}
+            handleProviderConfirm={handleProviderConfirm}
+            handleProviderCancel={handleProviderCancel}
+          />
+        </div>
+        <div className="card">
+          <TelegramSettingsPanel getLocal={getLocal} getServer={getServer} setLocal={setLocal} saveConfig={saveConfig} cancelLocal={cancelLocal} />
         </div>
       </div>
 
-      <div className="card">
-        <AgentSettingsPanel
-          compact
-          getLocal={getLocal} getServer={getServer} setLocal={setLocal} saveConfig={saveConfig} cancelLocal={cancelLocal}
-          modelOptions={modelOptions}
-          pendingProvider={pendingProvider} pendingMeta={pendingMeta}
-          pendingApiKey={pendingApiKey} setPendingApiKey={setPendingApiKey}
-          pendingValidating={pendingValidating}
-          pendingError={pendingError} setPendingError={setPendingError}
-          handleProviderChange={handleProviderChange}
-          handleProviderConfirm={handleProviderConfirm}
-          handleProviderCancel={handleProviderCancel}
-        />
-      </div>
-
-      <div className="card">
-        <TelegramSettingsPanel getLocal={getLocal} getServer={getServer} setLocal={setLocal} saveConfig={saveConfig} cancelLocal={cancelLocal} />
+      {/* ── Live Logs ──────────────────────────────────────── */}
+      <div className="card dashboard-logs">
+        <div className="dashboard-logs-header">
+          <div className="section-title" style={{ marginBottom: 0 }}>
+            <span className={`status-dot ${connected ? 'connected' : 'disconnected'}`} />
+            Live Logs
+          </div>
+          <button className="btn-ghost btn-sm" onClick={() => logStore.clear()}>Clear</button>
+        </div>
+        <div className="dashboard-logs-scroll">
+          {logs.length === 0 ? (
+            <div className="empty">Waiting for logs...</div>
+          ) : (
+            logs.map((log, i) => (
+              <div key={i} className="log-entry">
+                <span className={`badge ${log.level === 'warn' ? 'warn' : log.level === 'error' ? 'error' : 'info'}`}>
+                  {log.level.toUpperCase()}
+                </span>{' '}
+                <span style={{ color: 'var(--text-tertiary)' }}>
+                  {new Date(log.timestamp).toLocaleTimeString()}
+                </span>{' '}
+                {log.message}
+              </div>
+            ))
+          )}
+          <div ref={bottomRef} />
+        </div>
       </div>
     </div>
   );

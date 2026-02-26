@@ -137,7 +137,7 @@ export function ConnectStep({ data, onChange }: StepProps) {
 
   return (
     <div className="step-content">
-      <h2 className="step-title">Connect to Telegram</h2>
+      <h2 className="step-title">Connect your Agent to Telegram</h2>
       <p className="step-description">
         Authenticate with your Telegram account. This lets the agent send and receive messages as you.
       </p>

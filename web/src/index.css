@@ -212,7 +212,7 @@ body {
   letter-spacing: -0.2px;
 }
 
-/* ---- Stats Grid ---- */
+/* ---- Stats Grid (legacy, used in Config) ---- */
 
 .stats {
   display: grid;
@@ -243,6 +243,95 @@ body {
   font-size: 24px;
   font-weight: 600;
   letter-spacing: -0.5px;
+}
+
+/* ---- Dashboard status bar ---- */
+
+.status-bar {
+  padding: 14px 18px !important;
+}
+
+.status-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+
+.status-divider {
+  height: 1px;
+  background: var(--separator);
+  margin: 10px 0;
+}
+
+.metric {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.metric-label {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.metric-value {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.metric-value.mono {
+  font-size: 13px;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+}
+
+/* ---- Dashboard layout ---- */
+
+.dashboard-root {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 64px);
+  min-height: 0;
+}
+
+.dashboard-settings {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+@media (max-width: 640px) {
+  .dashboard-settings {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ---- Dashboard logs ---- */
+
+.dashboard-logs {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 0 !important;
+}
+
+.dashboard-logs-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.dashboard-logs-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 /* ---- Buttons ---- */
@@ -367,6 +456,11 @@ select {
 
 input:focus, textarea:focus, select:focus {
   border-color: var(--accent);
+}
+
+input:focus-visible, textarea:focus-visible, select:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 input::placeholder, textarea::placeholder {
@@ -742,7 +836,7 @@ button.btn-sm {
 .section-title {
   font-size: 13px;
   font-weight: 600;
-  color: var(--text-secondary);
+  color: var(--text);
   text-transform: uppercase;
   letter-spacing: 0.5px;
   margin-bottom: 12px;
@@ -1261,6 +1355,29 @@ button.btn-sm {
   display: flex;
   align-items: center;
   gap: var(--space-sm);
+}
+
+.password-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.eye-toggle {
+  position: absolute;
+  right: 8px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  opacity: 0.4;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  color: var(--text);
+}
+
+.eye-toggle:hover {
+  opacity: 0.8;
 }
 
 .label-inline {
