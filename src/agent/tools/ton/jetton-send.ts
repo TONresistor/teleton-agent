@@ -6,6 +6,7 @@ import { Address, SendMode, beginCell } from "@ton/core";
 import { tonapiFetch } from "../../../constants/api-endpoints.js";
 import { getErrorMessage } from "../../../utils/errors.js";
 import { createLogger } from "../../../utils/logger.js";
+import { withTxLock } from "../../../ton/tx-lock.js";
 
 const log = createLogger("Tools");
 
@@ -30,7 +31,7 @@ export const jettonSendTool: Tool = {
     }),
     amount: Type.Number({
       description: "Amount to send in human-readable units (e.g., 10 for 10 tokens)",
-      minimum: 0,
+      exclusiveMinimum: 0,
     }),
     comment: Type.Optional(
       Type.String({
@@ -149,35 +150,37 @@ export const jettonSendExecutor: ToolExecutor<JettonSendParams> = async (
     const client = await getCachedTonClient();
     const walletContract = client.open(wallet);
 
-    const seqno = await walletContract.getSeqno();
+    return withTxLock(async () => {
+      const seqno = await walletContract.getSeqno();
 
-    // Send transfer to our jetton wallet (NOT to recipient!)
-    await walletContract.sendTransfer({
-      seqno,
-      secretKey: keyPair.secretKey,
-      sendMode: SendMode.PAY_GAS_SEPARATELY + SendMode.IGNORE_ERRORS,
-      messages: [
-        internal({
-          to: Address.parse(senderJettonWallet),
-          value: toNano("0.05"), // Gas for jetton transfer
-          body: messageBody,
-          bounce: true,
-        }),
-      ],
+      // Send transfer to our jetton wallet (NOT to recipient!)
+      await walletContract.sendTransfer({
+        seqno,
+        secretKey: keyPair.secretKey,
+        sendMode: SendMode.PAY_GAS_SEPARATELY,
+        messages: [
+          internal({
+            to: Address.parse(senderJettonWallet),
+            value: toNano("0.05"), // Gas for jetton transfer
+            body: messageBody,
+            bounce: true,
+          }),
+        ],
+      });
+
+      return {
+        success: true,
+        data: {
+          jetton: symbol,
+          jettonAddress: jetton_address,
+          amount: amount.toString(),
+          to,
+          from: walletData.address,
+          comment: comment || null,
+          message: `Sent ${amount} ${symbol} to ${to}${comment ? ` (${comment})` : ""}\n  Transaction sent (check balance in ~30 seconds)`,
+        },
+      };
     });
-
-    return {
-      success: true,
-      data: {
-        jetton: symbol,
-        jettonAddress: jetton_address,
-        amount: amount.toString(),
-        to,
-        from: walletData.address,
-        comment: comment || null,
-        message: `Sent ${amount} ${symbol} to ${to}${comment ? ` (${comment})` : ""}\n  Transaction sent (check balance in ~30 seconds)`,
-      },
-    };
   } catch (error) {
     log.error({ err: error }, "Error in jetton_send");
     return {

@@ -1,11 +1,11 @@
 import { Type } from "@sinclair/typebox";
 import type { Tool, ToolExecutor, ToolResult } from "../types.js";
-import { loadWallet, getKeyPair } from "../../../ton/wallet-service.js";
-import { WalletContractV5R1, TonClient, toNano, internal, beginCell } from "@ton/ton";
+import { loadWallet, getKeyPair, getCachedTonClient } from "../../../ton/wallet-service.js";
+import { WalletContractV5R1, toNano, internal, beginCell } from "@ton/ton";
 import { Address, SendMode } from "@ton/core";
-import { getCachedHttpEndpoint } from "../../../ton/endpoint.js";
 import { getErrorMessage } from "../../../utils/errors.js";
 import { createLogger } from "../../../utils/logger.js";
+import { withTxLock } from "../../../ton/tx-lock.js";
 
 const log = createLogger("Tools");
 
@@ -71,31 +71,32 @@ export const dnsStartAuctionExecutor: ToolExecutor<DnsStartAuctionParams> = asyn
       publicKey: keyPair.publicKey,
     });
 
-    const endpoint = await getCachedHttpEndpoint();
-    const client = new TonClient({ endpoint });
+    const client = await getCachedTonClient();
     const contract = client.open(wallet);
 
-    const seqno = await contract.getSeqno();
+    await withTxLock(async () => {
+      const seqno = await contract.getSeqno();
 
-    // Build message body: op=0, domain as UTF-8 string
-    const body = beginCell()
-      .storeUint(0, 32) // op = 0
-      .storeStringTail(domain) // domain without .ton
-      .endCell();
+      // Build message body: op=0, domain as UTF-8 string
+      const body = beginCell()
+        .storeUint(0, 32) // op = 0
+        .storeStringTail(domain) // domain without .ton
+        .endCell();
 
-    // Send transaction to DNS collection
-    await contract.sendTransfer({
-      seqno,
-      secretKey: keyPair.secretKey,
-      sendMode: SendMode.PAY_GAS_SEPARATELY + SendMode.IGNORE_ERRORS,
-      messages: [
-        internal({
-          to: Address.parse(DNS_COLLECTION),
-          value: toNano(amount),
-          body,
-          bounce: true,
-        }),
-      ],
+      // Send transaction to DNS collection
+      await contract.sendTransfer({
+        seqno,
+        secretKey: keyPair.secretKey,
+        sendMode: SendMode.PAY_GAS_SEPARATELY,
+        messages: [
+          internal({
+            to: Address.parse(DNS_COLLECTION),
+            value: toNano(amount),
+            body,
+            bounce: true,
+          }),
+        ],
+      });
     });
 
     return {

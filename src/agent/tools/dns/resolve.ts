@@ -1,4 +1,5 @@
 import { Type } from "@sinclair/typebox";
+import { Address } from "@ton/core";
 import type { Tool, ToolExecutor, ToolResult } from "../types.js";
 import { tonapiFetch } from "../../../constants/api-endpoints.js";
 import { getErrorMessage } from "../../../utils/errors.js";
@@ -56,8 +57,12 @@ export const dnsResolveExecutor: ToolExecutor<DnsResolveParams> = async (
       };
     }
 
-    const walletAddress = dnsInfo.item.owner.address;
-    const nftAddress = dnsInfo.item.address;
+    // TonAPI returns raw format (0:hex) — convert to friendly format
+    // so the LLM doesn't hallucinate the CRC16 checksum
+    const rawWallet = dnsInfo.item.owner.address;
+    const rawNft = dnsInfo.item.address;
+    const walletAddress = Address.parse(rawWallet).toString({ bounceable: false });
+    const nftAddress = Address.parse(rawNft).toString({ bounceable: true });
     const expiryDate = new Date(dnsInfo.expiring_at * 1000).toISOString().split("T")[0];
 
     return {

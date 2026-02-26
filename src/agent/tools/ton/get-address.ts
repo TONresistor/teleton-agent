@@ -1,4 +1,5 @@
 import { Type } from "@sinclair/typebox";
+import { Address } from "@ton/core";
 import type { Tool, ToolExecutor, ToolResult } from "../types.js";
 import { getWalletAddress } from "../../../ton/wallet-service.js";
 import { getErrorMessage } from "../../../utils/errors.js";
@@ -24,11 +25,14 @@ export const tonGetAddressExecutor: ToolExecutor<{}> = async (
       };
     }
 
+    // Display wallet in non-bounceable (UQ...) format — standard for user wallets
+    const friendly = Address.parse(address).toString({ bounceable: false });
+
     return {
       success: true,
       data: {
-        address,
-        message: `Your TON wallet address: ${address}`,
+        address: friendly,
+        message: `Your TON wallet address: ${friendly}`,
       },
     };
   } catch (error) {

@@ -1,12 +1,12 @@
 import { Type } from "@sinclair/typebox";
 import type { Tool, ToolExecutor, ToolResult } from "../types.js";
-import { loadWallet, getKeyPair } from "../../../ton/wallet-service.js";
-import { WalletContractV5R1, TonClient, toNano, internal, beginCell } from "@ton/ton";
+import { loadWallet, getKeyPair, getCachedTonClient } from "../../../ton/wallet-service.js";
+import { WalletContractV5R1, toNano, internal, beginCell } from "@ton/ton";
 import { Address, SendMode } from "@ton/core";
-import { getCachedHttpEndpoint } from "../../../ton/endpoint.js";
 import { tonapiFetch } from "../../../constants/api-endpoints.js";
 import { getErrorMessage } from "../../../utils/errors.js";
 import { createLogger } from "../../../utils/logger.js";
+import { withTxLock } from "../../../ton/tx-lock.js";
 
 const log = createLogger("Tools");
 
@@ -128,40 +128,41 @@ export const dnsLinkExecutor: ToolExecutor<DnsLinkParams> = async (
       publicKey: keyPair.publicKey,
     });
 
-    const endpoint = await getCachedHttpEndpoint();
-    const client = new TonClient({ endpoint });
+    const client = await getCachedTonClient();
     const contract = client.open(wallet);
 
-    const seqno = await contract.getSeqno();
+    await withTxLock(async () => {
+      const seqno = await contract.getSeqno();
 
-    // Build wallet record value cell: dns_smc_address#9fd3 + address + flags
-    const valueCell = beginCell()
-      .storeUint(DNS_SMC_ADDRESS_PREFIX, 16) // #9fd3
-      .storeAddress(Address.parse(targetAddress)) // MsgAddressInt
-      .storeUint(0, 8) // flags = 0 (simple wallet)
-      .endCell();
+      // Build wallet record value cell: dns_smc_address#9fd3 + address + flags
+      const valueCell = beginCell()
+        .storeUint(DNS_SMC_ADDRESS_PREFIX, 16) // #9fd3
+        .storeAddress(Address.parse(targetAddress)) // MsgAddressInt
+        .storeUint(0, 8) // flags = 0 (simple wallet)
+        .endCell();
 
-    // Build change_dns_record message body
-    const body = beginCell()
-      .storeUint(DNS_CHANGE_RECORD_OP, 32) // op = change_dns_record
-      .storeUint(0, 64) // query_id
-      .storeUint(WALLET_RECORD_KEY, 256) // key = sha256("wallet")
-      .storeRef(valueCell) // value cell reference
-      .endCell();
+      // Build change_dns_record message body
+      const body = beginCell()
+        .storeUint(DNS_CHANGE_RECORD_OP, 32) // op = change_dns_record
+        .storeUint(0, 64) // query_id
+        .storeUint(WALLET_RECORD_KEY, 256) // key = sha256("wallet")
+        .storeRef(valueCell) // value cell reference
+        .endCell();
 
-    // Send transaction to NFT address
-    await contract.sendTransfer({
-      seqno,
-      secretKey: keyPair.secretKey,
-      sendMode: SendMode.PAY_GAS_SEPARATELY + SendMode.IGNORE_ERRORS,
-      messages: [
-        internal({
-          to: Address.parse(nftAddress),
-          value: toNano("0.05"), // Gas for DNS record update
-          body,
-          bounce: true,
-        }),
-      ],
+      // Send transaction to NFT address
+      await contract.sendTransfer({
+        seqno,
+        secretKey: keyPair.secretKey,
+        sendMode: SendMode.PAY_GAS_SEPARATELY,
+        messages: [
+          internal({
+            to: Address.parse(nftAddress),
+            value: toNano("0.05"), // Gas for DNS record update
+            body,
+            bounce: true,
+          }),
+        ],
+      });
     });
 
     return {

@@ -1,8 +1,7 @@
 import { Type } from "@sinclair/typebox";
 import type { Tool, ToolExecutor, ToolResult } from "../types.js";
-import { TonClient } from "@ton/ton";
 import { Address } from "@ton/core";
-import { getCachedHttpEndpoint } from "../../../ton/endpoint.js";
+import { getCachedTonClient } from "../../../ton/wallet-service.js";
 import { Factory, Asset, PoolType, ReadinessStatus } from "@dedust/sdk";
 import { DEDUST_FACTORY_MAINNET, NATIVE_TON_ADDRESS } from "./constants.js";
 import { getDecimals, toUnits, fromUnits } from "./asset-cache.js";
@@ -24,10 +23,12 @@ export const dedustQuoteTool: Tool = {
   category: "data-bearing",
   parameters: Type.Object({
     from_asset: Type.String({
-      description: "Source asset: 'ton' for TON, or jetton master address (EQ... format)",
+      description:
+        "Source asset: 'ton' for native TON, or jetton master address (EQ... format). Always pass 'ton' as a string, never an address.",
     }),
     to_asset: Type.String({
-      description: "Destination asset: 'ton' for TON, or jetton master address (EQ... format)",
+      description:
+        "Destination asset: 'ton' for native TON, or jetton master address (EQ... format). Always pass 'ton' as a string, never an address.",
     }),
     amount: Type.Number({
       description: "Amount to swap in human-readable units",
@@ -85,8 +86,7 @@ export const dedustQuoteExecutor: ToolExecutor<DedustQuoteParams> = async (
       }
     }
 
-    const endpoint = await getCachedHttpEndpoint();
-    const tonClient = new TonClient({ endpoint });
+    const tonClient = await getCachedTonClient();
 
     const factory = tonClient.open(
       Factory.createFromAddress(Address.parse(DEDUST_FACTORY_MAINNET))
