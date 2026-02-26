@@ -9,6 +9,7 @@ import { MessageDebouncer } from "./telegram/debounce.js";
 import { getDatabase, closeDatabase, initializeMemory, type MemorySystem } from "./memory/index.js";
 import { getWalletAddress } from "./ton/wallet-service.js";
 import { setTonapiKey } from "./constants/api-endpoints.js";
+import { setToncenterApiKey } from "./ton/endpoint.js";
 import { TELETON_ROOT } from "./workspace/paths.js";
 import { TELEGRAM_CONNECTION_RETRIES, TELEGRAM_FLOOD_SLEEP_THRESHOLD } from "./constants/limits.js";
 import { join } from "path";
@@ -65,6 +66,9 @@ export class TeletonApp {
 
     if (this.config.tonapi_key) {
       setTonapiKey(this.config.tonapi_key);
+    }
+    if (this.config.toncenter_api_key) {
+      setToncenterApiKey(this.config.toncenter_api_key);
     }
 
     const soul = loadSoul();

@@ -186,6 +186,7 @@ async function runInteractiveOnboarding(
   let phone = "";
   let userId = 0;
   let tonapiKey: string | undefined;
+  let toncenterApiKey: string | undefined;
   let tavilyApiKey: string | undefined;
   let botToken: string | undefined;
   let botUsername: string | undefined;
@@ -605,17 +606,18 @@ async function runInteractiveOnboarding(
 
   // TonAPI key
   const setupTonapi = await confirm({
-    message: `Add a TonAPI key? ${DIM("(optional, recommended for 10x rate limits)")}`,
+    message: `Add a TonAPI key? ${DIM("(strongly recommended for TON features)")}`,
     default: false,
     theme,
   });
 
   if (setupTonapi) {
     noteBox(
-      "Without key: 1 req/s (you will hit rate limits)\n" +
-        "With free key: 10 req/s (recommended)\n" +
+      "Blockchain data — jettons, NFTs, prices, transaction history.\n" +
+        "Without key: 1 req/s (you WILL hit rate limits)\n" +
+        "With free key: 5 req/s\n" +
         "\n" +
-        "Open @tonapibot on Telegram → tap the mini app → generate a server key",
+        "Open @tonapibot on Telegram → mini app → generate a server key",
       "TonAPI",
       TON
     );
@@ -629,6 +631,35 @@ async function runInteractiveOnboarding(
     });
     tonapiKey = keyInput;
     extras.push("TonAPI");
+  }
+
+  // TonCenter key
+  const setupToncenter = await confirm({
+    message: `Add a TonCenter API key? ${DIM("(optional, dedicated RPC endpoint)")}`,
+    default: false,
+    theme,
+  });
+
+  if (setupToncenter) {
+    noteBox(
+      "Blockchain RPC — send transactions, check balances.\n" +
+        "Without key: falls back to ORBS network (decentralized, slower)\n" +
+        "With free key: dedicated RPC endpoint\n" +
+        "\n" +
+        "Go to https://toncenter.com → get a free API key (instant, no signup)",
+      "TonCenter",
+      TON
+    );
+    const keyInput = await input({
+      message: "TonCenter API key",
+      theme,
+      validate: (v) => {
+        if (!v || v.length < 10) return "Key too short";
+        return true;
+      },
+    });
+    toncenterApiKey = keyInput;
+    extras.push("TonCenter");
   }
 
   // Tavily key
@@ -949,6 +980,7 @@ async function runInteractiveOnboarding(
     plugins: {},
     ...(selectedProvider === "cocoon" ? { cocoon: { port: cocoonInstance } } : {}),
     tonapi_key: tonapiKey,
+    toncenter_api_key: toncenterApiKey,
     tavily_api_key: tavilyApiKey,
   };
 

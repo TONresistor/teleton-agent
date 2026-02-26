@@ -14,10 +14,12 @@ export function tonapiHeaders(): Record<string, string> {
   return headers;
 }
 
-const TONAPI_MAX_RPS = 5;
+const TONAPI_RPS_WITH_KEY = 5;
+const TONAPI_RPS_WITHOUT_KEY = 1;
 const _tonapiTimestamps: number[] = [];
 
 async function waitForTonapiSlot(): Promise<void> {
+  const maxRps = _tonapiKey ? TONAPI_RPS_WITH_KEY : TONAPI_RPS_WITHOUT_KEY;
   const clean = () => {
     const cutoff = Date.now() - 1000;
     while (_tonapiTimestamps.length > 0 && _tonapiTimestamps[0] <= cutoff) {
@@ -26,7 +28,7 @@ async function waitForTonapiSlot(): Promise<void> {
   };
 
   clean();
-  if (_tonapiTimestamps.length >= TONAPI_MAX_RPS) {
+  if (_tonapiTimestamps.length >= maxRps) {
     const waitMs = _tonapiTimestamps[0] + 1000 - Date.now() + 50;
     if (waitMs > 0) await new Promise((r) => setTimeout(r, waitMs));
     clean();

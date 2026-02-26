@@ -123,6 +123,9 @@ export function loadConfig(configPath: string = DEFAULT_CONFIG_PATH): Config {
   if (process.env.TELETON_TONAPI_KEY) {
     config.tonapi_key = process.env.TELETON_TONAPI_KEY;
   }
+  if (process.env.TELETON_TONCENTER_API_KEY) {
+    config.toncenter_api_key = process.env.TELETON_TONCENTER_API_KEY;
+  }
 
   return config;
 }

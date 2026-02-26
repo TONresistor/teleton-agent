@@ -19,58 +19,61 @@ export function InfoTip({ text }: InfoTipProps) {
           <text x="7" y="10.5" textAnchor="middle" fill="currentColor" fontSize="9" fontWeight="600" fontFamily="sans-serif">i</text>
         </svg>
       </span>
-      {show && (
+      <span
+        style={{
+          position: 'absolute',
+          bottom: 'calc(100% + 6px)',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          background: 'rgba(30, 30, 30, 0.75)',
+          backdropFilter: 'blur(12px)',
+          WebkitBackdropFilter: 'blur(12px)',
+          border: '1px solid rgba(255, 255, 255, 0.1)',
+          color: 'var(--text-secondary)',
+          fontSize: '12px',
+          fontWeight: 'normal',
+          maxWidth: '360px',
+          padding: '10px 14px',
+          borderRadius: '6px',
+          boxShadow: '0 4px 12px rgba(0, 0, 0, 0.3)',
+          zIndex: 10,
+          whiteSpace: 'normal',
+          lineHeight: '1.4',
+          pointerEvents: 'none',
+          opacity: show ? 1 : 0,
+          visibility: show ? 'visible' as const : 'hidden' as const,
+          transition: 'opacity 150ms ease, visibility 150ms ease',
+        }}
+      >
+        {text}
+        {/* Arrow pointing down */}
         <span
           style={{
             position: 'absolute',
-            bottom: 'calc(100% + 6px)',
+            top: '100%',
             left: '50%',
             transform: 'translateX(-50%)',
-            background: 'var(--surface)',
-            border: '1px solid var(--separator)',
-            color: 'var(--text-secondary)',
-            fontSize: '12px',
-            fontWeight: 'normal',
-            maxWidth: '280px',
-            padding: '8px 12px',
-            borderRadius: '6px',
-            boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
-            zIndex: 10,
-            whiteSpace: 'normal',
-            lineHeight: '1.4',
-            pointerEvents: 'none',
+            width: 0,
+            height: 0,
+            borderLeft: '5px solid transparent',
+            borderRight: '5px solid transparent',
+            borderTop: '5px solid rgba(255, 255, 255, 0.1)',
           }}
-        >
-          {text}
-          {/* Arrow pointing down */}
-          <span
-            style={{
-              position: 'absolute',
-              top: '100%',
-              left: '50%',
-              transform: 'translateX(-50%)',
-              width: 0,
-              height: 0,
-              borderLeft: '5px solid transparent',
-              borderRight: '5px solid transparent',
-              borderTop: '5px solid var(--separator)',
-            }}
-          />
-          <span
-            style={{
-              position: 'absolute',
-              top: 'calc(100% - 1px)',
-              left: '50%',
-              transform: 'translateX(-50%)',
-              width: 0,
-              height: 0,
-              borderLeft: '4px solid transparent',
-              borderRight: '4px solid transparent',
-              borderTop: '4px solid var(--surface)',
-            }}
-          />
-        </span>
-      )}
+        />
+        <span
+          style={{
+            position: 'absolute',
+            top: 'calc(100% - 1px)',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            width: 0,
+            height: 0,
+            borderLeft: '4px solid transparent',
+            borderRight: '4px solid transparent',
+            borderTop: '4px solid rgba(30, 30, 30, 0.75)',
+          }}
+        />
+      </span>
     </span>
   );
 }

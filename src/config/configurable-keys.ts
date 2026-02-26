@@ -100,6 +100,17 @@ export const CONFIGURABLE_KEYS: Record<string, ConfigKeyMeta> = {
     mask: (v) => v.slice(0, 10) + "****",
     parse: identity,
   },
+  toncenter_api_key: {
+    type: "string",
+    category: "API Keys",
+    label: "TonCenter API Key",
+    description: "TonCenter API key for dedicated RPC endpoint (free at toncenter.com)",
+    sensitive: true,
+    hotReload: "instant",
+    validate: (v) => (v.length >= 10 ? undefined : "Must be at least 10 characters"),
+    mask: (v) => v.slice(0, 10) + "****",
+    parse: identity,
+  },
   "telegram.bot_token": {
     type: "string",
     category: "API Keys",

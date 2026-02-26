@@ -35,6 +35,7 @@ export interface WizardData {
   botToken: string;
   botUsername: string;
   tonapiKey: string;
+  toncenterKey: string;
   tavilyKey: string;
   customizeThresholds: boolean;
   buyMaxFloor: number;
@@ -75,6 +76,7 @@ const DEFAULTS: WizardData = {
   botToken: '',
   botUsername: '',
   tonapiKey: '',
+  toncenterKey: '',
   tavilyKey: '',
   customizeThresholds: false,
   buyMaxFloor: 95,
@@ -219,6 +221,7 @@ export function SetupProvider({ children }: { children: ReactNode }) {
             : {}),
         },
         ...(data.tonapiKey ? { tonapi_key: data.tonapiKey } : {}),
+        ...(data.toncenterKey ? { toncenter_api_key: data.toncenterKey } : {}),
         ...(data.tavilyKey ? { tavily_api_key: data.tavilyKey } : {}),
         webui: { enabled: true },
       };

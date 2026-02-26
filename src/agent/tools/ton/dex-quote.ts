@@ -2,7 +2,7 @@ import { Type } from "@sinclair/typebox";
 import type { Tool, ToolExecutor, ToolResult } from "../types.js";
 import { TonClient } from "@ton/ton";
 import { Address } from "@ton/core";
-import { getCachedHttpEndpoint } from "../../../ton/endpoint.js";
+import { getCachedTonClient } from "../../../ton/wallet-service.js";
 import { StonApiClient } from "@ston-fi/api";
 import { Factory, Asset, PoolType, ReadinessStatus } from "@dedust/sdk";
 import { DEDUST_FACTORY_MAINNET, NATIVE_TON_ADDRESS } from "../dedust/constants.js";
@@ -227,8 +227,7 @@ export const dexQuoteExecutor: ToolExecutor<DexQuoteParams> = async (
     const { from_asset, to_asset, amount, slippage = 0.01 } = params;
 
     // Initialize TON client for DeDust
-    const endpoint = await getCachedHttpEndpoint();
-    const tonClient = new TonClient({ endpoint });
+    const tonClient = await getCachedTonClient();
 
     const [stonfiQuote, dedustQuote] = await Promise.all([
       getStonfiQuote(from_asset, to_asset, amount, slippage),

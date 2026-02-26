@@ -67,8 +67,9 @@ export async function sendTon(params: SendTonParams): Promise<string | null> {
 
       return pseudoHash;
     } catch (error: any) {
-      // Invalidate node cache on 5xx so next attempt picks a fresh node
-      if (error?.status >= 500 || error?.response?.status >= 500) {
+      // Invalidate node cache on 429/5xx so next attempt picks a fresh node
+      const status = error?.status || error?.response?.status;
+      if (status === 429 || status >= 500) {
         invalidateTonClientCache();
       }
       log.error({ err: error }, "Error sending TON");

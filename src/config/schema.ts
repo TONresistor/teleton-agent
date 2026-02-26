@@ -245,6 +245,10 @@ export const ConfigSchema = z.object({
     .string()
     .optional()
     .describe("TonAPI key for higher rate limits (from @tonapi_bot)"),
+  toncenter_api_key: z
+    .string()
+    .optional()
+    .describe("TonCenter API key for dedicated RPC endpoint (free at https://toncenter.com)"),
   tavily_api_key: z
     .string()
     .optional()

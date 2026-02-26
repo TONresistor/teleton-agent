@@ -506,6 +506,7 @@ export function createSetupRoutes(): Hono {
         plugins: {},
         ...(input.cocoon ? { cocoon: input.cocoon } : {}),
         ...(input.tonapi_key ? { tonapi_key: input.tonapi_key } : {}),
+        ...(input.toncenter_api_key ? { toncenter_api_key: input.toncenter_api_key } : {}),
         ...(input.tavily_api_key ? { tavily_api_key: input.tavily_api_key } : {}),
       };
 

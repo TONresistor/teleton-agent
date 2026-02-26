@@ -2,7 +2,7 @@ import { mnemonicNew, mnemonicToPrivateKey, mnemonicValidate } from "@ton/crypto
 import { WalletContractV5R1, TonClient, fromNano } from "@ton/ton";
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "fs";
 import { join, dirname } from "path";
-import { getCachedHttpEndpoint, invalidateEndpointCache } from "./endpoint.js";
+import { getCachedHttpEndpoint, invalidateEndpointCache, getToncenterApiKey } from "./endpoint.js";
 import { fetchWithTimeout } from "../utils/fetch.js";
 import { TELETON_ROOT } from "../workspace/paths.js";
 import { tonapiFetch, COINGECKO_API_URL } from "../constants/api-endpoints.js";
@@ -150,7 +150,8 @@ export async function getCachedTonClient(): Promise<TonClient> {
   if (_tonClientCache && _tonClientCache.endpoint === endpoint) {
     return _tonClientCache.client;
   }
-  const client = new TonClient({ endpoint });
+  const apiKey = getToncenterApiKey();
+  const client = new TonClient({ endpoint, ...(apiKey && { apiKey }) });
   _tonClientCache = { client, endpoint };
   return client;
 }

@@ -1,9 +1,7 @@
 import { Type } from "@sinclair/typebox";
 import type { Tool, ToolExecutor, ToolResult } from "../types.js";
-import { loadWallet } from "../../../ton/wallet-service.js";
-import { TonClient } from "@ton/ton";
+import { loadWallet, getCachedTonClient } from "../../../ton/wallet-service.js";
 import { Address } from "@ton/core";
-import { getCachedHttpEndpoint } from "../../../ton/endpoint.js";
 import { formatTransactions } from "../../../ton/format-transactions.js";
 import { getErrorMessage } from "../../../utils/errors.js";
 import { createLogger } from "../../../utils/logger.js";
@@ -46,8 +44,7 @@ export const tonMyTransactionsExecutor: ToolExecutor<MyTransactionsParams> = asy
 
     const addressObj = Address.parse(walletData.address);
 
-    const endpoint = await getCachedHttpEndpoint();
-    const client = new TonClient({ endpoint });
+    const client = await getCachedTonClient();
 
     const transactions = await client.getTransactions(addressObj, {
       limit: Math.min(limit, 50),
