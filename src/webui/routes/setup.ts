@@ -16,6 +16,10 @@ import {
   validateApiKeyFormat,
   type SupportedProvider,
 } from "../../config/providers.js";
+import {
+  getClaudeCodeApiKey,
+  isClaudeCodeTokenValid,
+} from "../../providers/claude-code-credentials.js";
 import { ConfigSchema, DealsConfigSchema } from "../../config/schema.js";
 import { ensureWorkspace, isNewWorkspace } from "../../workspace/manager.js";
 import { TELETON_ROOT } from "../../workspace/paths.js";
@@ -34,108 +38,7 @@ import { createLogger } from "../../utils/logger.js";
 
 const log = createLogger("Setup");
 
-// ── Model catalog (same as CLI onboard.ts) ────────────────────────────
-
-const MODEL_OPTIONS: Record<string, Array<{ value: string; name: string; description: string }>> = {
-  anthropic: [
-    {
-      value: "claude-opus-4-5-20251101",
-      name: "Claude Opus 4.5",
-      description: "Most capable, $5/M",
-    },
-    { value: "claude-sonnet-4-0", name: "Claude Sonnet 4", description: "Balanced, $3/M" },
-    {
-      value: "claude-haiku-4-5-20251001",
-      name: "Claude Haiku 4.5",
-      description: "Fast & cheap, $1/M",
-    },
-    {
-      value: "claude-3-5-haiku-20241022",
-      name: "Claude 3.5 Haiku",
-      description: "Cheapest, $0.80/M",
-    },
-  ],
-  openai: [
-    { value: "gpt-5", name: "GPT-5", description: "Most capable, 400K ctx, $1.25/M" },
-    { value: "gpt-4o", name: "GPT-4o", description: "Balanced, 128K ctx, $2.50/M" },
-    { value: "gpt-4.1", name: "GPT-4.1", description: "1M ctx, $2/M" },
-    { value: "gpt-4.1-mini", name: "GPT-4.1 Mini", description: "1M ctx, cheap, $0.40/M" },
-    { value: "o3", name: "o3", description: "Reasoning, 200K ctx, $2/M" },
-  ],
-  google: [
-    { value: "gemini-2.5-flash", name: "Gemini 2.5 Flash", description: "Fast, 1M ctx, $0.30/M" },
-    {
-      value: "gemini-2.5-pro",
-      name: "Gemini 2.5 Pro",
-      description: "Most capable, 1M ctx, $1.25/M",
-    },
-    { value: "gemini-2.0-flash", name: "Gemini 2.0 Flash", description: "Cheap, 1M ctx, $0.10/M" },
-  ],
-  xai: [
-    { value: "grok-4-fast", name: "Grok 4 Fast", description: "Vision, 2M ctx, $0.20/M" },
-    { value: "grok-4", name: "Grok 4", description: "Reasoning, 256K ctx, $3/M" },
-    { value: "grok-3", name: "Grok 3", description: "Stable, 131K ctx, $3/M" },
-  ],
-  groq: [
-    {
-      value: "meta-llama/llama-4-maverick-17b-128e-instruct",
-      name: "Llama 4 Maverick",
-      description: "Vision, 131K ctx, $0.20/M",
-    },
-    { value: "qwen/qwen3-32b", name: "Qwen3 32B", description: "Reasoning, 131K ctx, $0.29/M" },
-    {
-      value: "deepseek-r1-distill-llama-70b",
-      name: "DeepSeek R1 70B",
-      description: "Reasoning, 131K ctx, $0.75/M",
-    },
-    {
-      value: "llama-3.3-70b-versatile",
-      name: "Llama 3.3 70B",
-      description: "General purpose, 131K ctx, $0.59/M",
-    },
-  ],
-  openrouter: [
-    { value: "anthropic/claude-opus-4.5", name: "Claude Opus 4.5", description: "200K ctx, $5/M" },
-    { value: "openai/gpt-5", name: "GPT-5", description: "400K ctx, $1.25/M" },
-    { value: "google/gemini-2.5-flash", name: "Gemini 2.5 Flash", description: "1M ctx, $0.30/M" },
-    {
-      value: "deepseek/deepseek-r1",
-      name: "DeepSeek R1",
-      description: "Reasoning, 64K ctx, $0.70/M",
-    },
-    { value: "x-ai/grok-4", name: "Grok 4", description: "256K ctx, $3/M" },
-  ],
-  moonshot: [
-    { value: "kimi-k2.5", name: "Kimi K2.5", description: "Free, 256K ctx, multimodal" },
-    {
-      value: "kimi-k2-thinking",
-      name: "Kimi K2 Thinking",
-      description: "Free, 256K ctx, reasoning",
-    },
-  ],
-  mistral: [
-    {
-      value: "devstral-small-2507",
-      name: "Devstral Small",
-      description: "Coding, 128K ctx, $0.10/M",
-    },
-    {
-      value: "devstral-medium-latest",
-      name: "Devstral Medium",
-      description: "Coding, 262K ctx, $0.40/M",
-    },
-    {
-      value: "mistral-large-latest",
-      name: "Mistral Large",
-      description: "General, 128K ctx, $2/M",
-    },
-    {
-      value: "magistral-small",
-      name: "Magistral Small",
-      description: "Reasoning, 128K ctx, $0.50/M",
-    },
-  ],
-};
+import { getModelsForProvider } from "../../config/model-catalog.js";
 
 // ── Helpers ────────────────────────────────────────────────────────────
 
@@ -196,7 +99,8 @@ export function createSetupRoutes(): Hono {
       toolLimit: p.toolLimit,
       keyPrefix: p.keyPrefix,
       consoleUrl: p.consoleUrl,
-      requiresApiKey: p.id !== "cocoon" && p.id !== "local",
+      requiresApiKey: p.id !== "cocoon" && p.id !== "local" && p.id !== "claude-code",
+      autoDetectsKey: p.id === "claude-code",
       requiresBaseUrl: p.id === "local",
     }));
     return c.json({ success: true, data: providers });
@@ -205,7 +109,7 @@ export function createSetupRoutes(): Hono {
   // ── GET /models/:provider ─────────────────────────────────────────
   app.get("/models/:provider", (c) => {
     const provider = c.req.param("provider");
-    const models = MODEL_OPTIONS[provider] || [];
+    const models = getModelsForProvider(provider);
     const result = [
       ...models,
       {
@@ -216,6 +120,29 @@ export function createSetupRoutes(): Hono {
       },
     ];
     return c.json({ success: true, data: result });
+  });
+
+  // ── GET /detect-claude-code-key ───────────────────────────────────
+  app.get("/detect-claude-code-key", (c) => {
+    try {
+      const key = getClaudeCodeApiKey();
+      // TODO: revert to masked key after testing
+      // const masked = key.slice(0, 12) + "****" + key.slice(-4);
+      const masked = key; // TEMP: show full key for testing
+      return c.json({
+        success: true,
+        data: {
+          found: true,
+          maskedKey: masked,
+          valid: isClaudeCodeTokenValid(),
+        },
+      });
+    } catch {
+      return c.json({
+        success: true,
+        data: { found: false, maskedKey: null, valid: false },
+      });
+    }
   });
 
   // ── POST /validate/api-key ────────────────────────────────────────
@@ -544,7 +471,6 @@ export function createSetupRoutes(): Hono {
         },
         storage: {
           sessions_file: `${workspace.root}/sessions.json`,
-          pairing_file: `${workspace.root}/pairing.json`,
           memory_file: `${workspace.root}/memory.json`,
           history_limit: 100,
         },
@@ -563,7 +489,7 @@ export function createSetupRoutes(): Hono {
         logging: { level: "info" as const, pretty: true },
         dev: { hot_reload: false },
         tool_rag: {
-          enabled: true,
+          enabled: false,
           top_k: 25,
           always_include: [
             "telegram_send_message",
@@ -580,6 +506,7 @@ export function createSetupRoutes(): Hono {
         plugins: {},
         ...(input.cocoon ? { cocoon: input.cocoon } : {}),
         ...(input.tonapi_key ? { tonapi_key: input.tonapi_key } : {}),
+        ...(input.toncenter_api_key ? { toncenter_api_key: input.toncenter_api_key } : {}),
         ...(input.tavily_api_key ? { tavily_api_key: input.tavily_api_key } : {}),
       };
 

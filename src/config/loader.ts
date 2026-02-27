@@ -52,14 +52,17 @@ export function loadConfig(configPath: string = DEFAULT_CONFIG_PATH): Config {
 
   const config = result.data;
   const provider = config.agent.provider as SupportedProvider;
-  if (provider !== "anthropic" && !(raw as Record<string, Record<string, unknown>>).agent?.model) {
+  if (
+    provider !== "anthropic" &&
+    provider !== "claude-code" &&
+    !(raw as Record<string, Record<string, unknown>>).agent?.model
+  ) {
     const meta = getProviderMetadata(provider);
     config.agent.model = meta.defaultModel;
   }
 
   config.telegram.session_path = expandPath(config.telegram.session_path);
   config.storage.sessions_file = expandPath(config.storage.sessions_file);
-  config.storage.pairing_file = expandPath(config.storage.pairing_file);
   config.storage.memory_file = expandPath(config.storage.memory_file);
 
   if (process.env.TELETON_API_KEY) {
@@ -119,6 +122,9 @@ export function loadConfig(configPath: string = DEFAULT_CONFIG_PATH): Config {
   }
   if (process.env.TELETON_TONAPI_KEY) {
     config.tonapi_key = process.env.TELETON_TONAPI_KEY;
+  }
+  if (process.env.TELETON_TONCENTER_API_KEY) {
+    config.toncenter_api_key = process.env.TELETON_TONCENTER_API_KEY;
   }
 
   return config;

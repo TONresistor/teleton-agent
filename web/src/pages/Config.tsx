@@ -1,241 +1,266 @@
 import { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { api, ConfigKeyData } from '../lib/api';
+import { useConfigState } from '../hooks/useConfigState';
+import { PillBar } from '../components/PillBar';
+import { AgentSettingsPanel } from '../components/AgentSettingsPanel';
+import { TelegramSettingsPanel } from '../components/TelegramSettingsPanel';
 import { Select } from '../components/Select';
+import { ArrayInput } from '../components/ArrayInput';
+import { EditableField } from '../components/EditableField';
+import { ConfigSection } from '../components/ConfigSection';
+import { InfoTip } from '../components/InfoTip';
 
-const CATEGORY_ORDER = ['API Keys', 'Agent', 'Telegram', 'Embedding', 'WebUI', 'Deals', 'Developer'];
+const TABS = [
+  { id: 'llm', label: 'LLM' },
+  { id: 'telegram', label: 'Telegram' },
+  { id: 'api-keys', label: 'API Keys' },
+  { id: 'advanced', label: 'Advanced' },
+];
 
-function groupByCategory(keys: ConfigKeyData[]): Map<string, ConfigKeyData[]> {
-  const groups = new Map<string, ConfigKeyData[]>();
-  for (const key of keys) {
-    const cat = key.category || 'Other';
-    if (!groups.has(cat)) groups.set(cat, []);
-    groups.get(cat)!.push(key);
-  }
-  // Sort by CATEGORY_ORDER, unknown categories go last
-  const sorted = new Map<string, ConfigKeyData[]>();
-  for (const cat of CATEGORY_ORDER) {
-    if (groups.has(cat)) {
-      sorted.set(cat, groups.get(cat)!);
-      groups.delete(cat);
-    }
-  }
-  for (const [cat, items] of groups) {
-    sorted.set(cat, items);
-  }
-  return sorted;
-}
+const API_KEY_KEYS = ['agent.api_key', 'telegram.bot_token', 'tavily_api_key', 'tonapi_key', 'toncenter_api_key'];
+const ADVANCED_KEYS = [
+  'embedding.provider', 'embedding.model', 'webui.port', 'webui.log_requests',
+  'deals.enabled', 'deals.expiry_seconds', 'deals.buy_max_floor_percent', 'deals.sell_min_floor_percent',
+  'agent.base_url', 'dev.hot_reload',
+];
 
 export function Config() {
-  const [keys, setKeys] = useState<ConfigKeyData[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<string | null>(null);
-  const [editingKey, setEditingKey] = useState<string | null>(null);
-  const [editValue, setEditValue] = useState('');
-  const [saving, setSaving] = useState(false);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activeTab = searchParams.get('tab') || 'llm';
 
-  const loadKeys = (initial = false) => {
-    if (initial) setLoading(true);
+  const config = useConfigState();
+
+  // Raw config keys state for ConfigSection tabs
+  const [configKeys, setConfigKeys] = useState<ConfigKeyData[]>([]);
+
+  const handleTabChange = (id: string) => {
+    setSearchParams({ tab: id }, { replace: true });
+  };
+
+  // Load config keys on mount (needed by ConfigSection in multiple tabs)
+  useEffect(() => {
     api.getConfigKeys()
-      .then((res) => {
-        setKeys(res.data);
-        setLoading(false);
-      })
-      .catch((err) => {
-        setError(err instanceof Error ? err.message : String(err));
-        setLoading(false);
-      });
+      .then((res) => setConfigKeys(res.data))
+      .catch(() => {});
+  }, []);
+
+  const loadKeys = () => {
+    api.getConfigKeys()
+      .then((res) => setConfigKeys(res.data))
+      .catch(() => {});
   };
 
-  useEffect(() => { loadKeys(true); }, []);
-
-  const startEdit = (item: ConfigKeyData) => {
-    setEditingKey(item.key);
-    if (item.type === 'boolean') {
-      setEditValue(item.set && item.value !== null ? item.value : 'true');
-    } else if (item.type === 'enum' && item.options?.length) {
-      setEditValue(item.set && item.value !== null ? item.value : item.options[0]);
-    } else {
-      setEditValue('');
-    }
-  };
-
-  const handleSave = async (key: string) => {
-    const item = keys.find((k) => k.key === key);
-    const isSelectType = item?.type === 'boolean' || item?.type === 'enum';
-    if (!isSelectType && !editValue.trim()) return;
-    setSaving(true);
-    setError(null);
-    setSuccess(null);
+  const handleArraySave = async (key: string, values: string[]) => {
+    config.setError(null);
     try {
-      await api.setConfigKey(key, editValue.trim());
-      setEditingKey(null);
-      setEditValue('');
-      setSuccess(`${key} updated successfully`);
+      await api.setConfigKey(key, values);
+      config.showSuccess(`${key} updated successfully`);
       loadKeys();
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setSaving(false);
+      config.setError(err instanceof Error ? err.message : String(err));
     }
   };
 
-  const handleUnset = async (key: string) => {
-    setSaving(true);
-    setError(null);
-    setSuccess(null);
-    try {
-      await api.unsetConfigKey(key);
-      setSuccess(`${key} removed`);
-      loadKeys();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleCancel = () => {
-    setEditingKey(null);
-    setEditValue('');
-  };
-
-  if (loading) return <div className="loading">Loading...</div>;
-
-  const groups = groupByCategory(keys);
+  if (config.loading) return <div className="loading">Loading...</div>;
 
   return (
     <div>
       <div className="header">
         <h1>Configuration</h1>
-        <p>Manage API keys and settings</p>
+        <p>Manage settings and API keys</p>
       </div>
 
-      {error && (
+      {config.error && (
         <div className="alert error" style={{ marginBottom: '14px' }}>
-          {error}
-          <button onClick={() => setError(null)} style={{ marginLeft: '10px', padding: '2px 8px', fontSize: '12px' }}>
+          {config.error}
+          <button onClick={() => config.setError(null)} style={{ marginLeft: '10px', padding: '2px 8px', fontSize: '12px' }}>
             Dismiss
           </button>
         </div>
       )}
 
-      {success && (
-        <div className="alert success" style={{ marginBottom: '14px' }}>
-          {success}
-          <button onClick={() => setSuccess(null)} style={{ marginLeft: '10px', padding: '2px 8px', fontSize: '12px' }}>
-            Dismiss
-          </button>
+      {config.saveSuccess && (
+        <div className="alert success" style={{ marginBottom: '16px' }}>
+          {config.saveSuccess}
         </div>
       )}
 
-      {Array.from(groups.entries()).map(([category, items]) => (
-        <div key={category} className="card" style={{ marginBottom: '10px' }}>
-          <h2 style={{ marginBottom: '8px' }}>{category}</h2>
+      <PillBar tabs={TABS} activeTab={activeTab} onTabChange={handleTabChange} />
 
-          {items.map((item, idx) => (
-            <div
-              key={item.key}
-              style={{
-                padding: '12px 0',
-                borderBottom: idx < items.length - 1 ? '1px solid var(--separator)' : 'none',
-              }}
-            >
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <div>
-                  <strong style={{ fontFamily: 'monospace' }}>{item.key}</strong>
-                  <span
-                    style={{
-                      marginLeft: '10px',
-                      fontSize: '11px',
-                      padding: '2px 8px',
-                      borderRadius: '4px',
-                      background: item.set ? 'var(--accent)' : 'var(--surface)',
-                      color: item.set ? 'var(--text-on-accent)' : 'var(--text-secondary)',
-                    }}
-                  >
-                    {item.set ? 'Set' : 'Not set'}
-                  </span>
-                  {item.sensitive && (
-                    <span style={{ marginLeft: '6px', fontSize: '11px', color: 'var(--text-secondary)' }}>
-                      sensitive
-                    </span>
-                  )}
-                </div>
-                <div style={{ display: 'flex', gap: '6px' }}>
-                  <button
-                    onClick={() => startEdit(item)}
-                    style={{ padding: '4px 12px', fontSize: '12px' }}
-                    disabled={saving}
-                  >
-                    Edit
-                  </button>
-                  {item.set && (
-                    <button
-                      onClick={() => handleUnset(item.key)}
-                      style={{ padding: '4px 12px', fontSize: '12px', opacity: 0.7 }}
-                      disabled={saving}
-                    >
-                      Remove
-                    </button>
-                  )}
-                </div>
-              </div>
+      {/* LLM Tab */}
+      {activeTab === 'llm' && (
+        <>
+          <div className="card">
+            <AgentSettingsPanel
+              getLocal={config.getLocal}
+              getServer={config.getServer}
+              setLocal={config.setLocal}
+              saveConfig={config.saveConfig}
+              cancelLocal={config.cancelLocal}
+              modelOptions={config.modelOptions}
+              pendingProvider={config.pendingProvider}
+              pendingMeta={config.pendingMeta}
+              pendingApiKey={config.pendingApiKey}
+              setPendingApiKey={config.setPendingApiKey}
+              pendingValidating={config.pendingValidating}
+              pendingError={config.pendingError}
+              setPendingError={config.setPendingError}
+              handleProviderChange={config.handleProviderChange}
+              handleProviderConfirm={config.handleProviderConfirm}
+              handleProviderCancel={config.handleProviderCancel}
+            />
+          </div>
 
-              <div style={{ fontSize: '12px', color: 'var(--text-secondary)', marginTop: '4px' }}>
-                {item.description}
-              </div>
-
-              {item.set && item.value && editingKey !== item.key && (
-                <div style={{ marginTop: '6px', fontSize: '13px', color: 'var(--text-secondary)', fontFamily: 'monospace' }}>
-                  {item.value}
-                </div>
-              )}
-
-              {editingKey === item.key && (
-                <div className="form-group" style={{ marginTop: '10px', marginBottom: 0 }}>
-                  {item.type === 'boolean' ? (
-                    <Select
-                      value={editValue}
-                      options={['true', 'false']}
-                      onChange={setEditValue}
-                      style={{ width: '100%', marginBottom: '8px' }}
-                    />
-                  ) : item.type === 'enum' && item.options ? (
-                    <Select
-                      value={editValue}
-                      options={item.options}
-                      onChange={setEditValue}
-                      style={{ width: '100%', marginBottom: '8px' }}
-                    />
-                  ) : (
-                    <input
-                      type={item.type === 'number' ? 'number' : item.sensitive ? 'password' : 'text'}
-                      value={editValue}
-                      onChange={(e) => setEditValue(e.target.value)}
-                      onKeyDown={(e) => e.key === 'Enter' && handleSave(item.key)}
-                      placeholder={`Enter value for ${item.key}...`}
-                      autoFocus
-                      style={{ width: '100%', marginBottom: '8px' }}
-                    />
-                  )}
-                  <div style={{ display: 'flex', gap: '6px' }}>
-                    <button
-                      onClick={() => handleSave(item.key)}
-                      disabled={saving || (item.type !== 'boolean' && item.type !== 'enum' && !editValue.trim())}
-                    >
-                      {saving ? 'Saving...' : 'Save'}
-                    </button>
-                    <button onClick={handleCancel} style={{ opacity: 0.7 }} disabled={saving}>
-                      Cancel
-                    </button>
-                  </div>
-                </div>
-              )}
+          {config.getLocal('agent.provider') === 'cocoon' && (
+            <div className="card">
+              <div className="section-title">Cocoon</div>
+              <EditableField
+                label="Proxy Port"
+                description="Cocoon Network proxy port"
+                configKey="cocoon.port"
+                type="number"
+                value={config.getLocal('cocoon.port')}
+                serverValue={config.getServer('cocoon.port')}
+                onChange={(v) => config.setLocal('cocoon.port', v)}
+                onSave={(v) => config.saveConfig('cocoon.port', v)}
+                onCancel={() => config.cancelLocal('cocoon.port')}
+                min={1}
+                max={65535}
+                placeholder="11434"
+                hotReload="restart"
+              />
             </div>
-          ))}
+          )}
+
+        </>
+      )}
+
+      {/* Telegram Tab */}
+      {activeTab === 'telegram' && (
+        <TelegramSettingsPanel
+          getLocal={config.getLocal}
+          getServer={config.getServer}
+          setLocal={config.setLocal}
+          saveConfig={config.saveConfig}
+          cancelLocal={config.cancelLocal}
+          configKeys={configKeys}
+          onArraySave={handleArraySave}
+          extended={true}
+        />
+      )}
+
+      {/* API Keys Tab */}
+      {activeTab === 'api-keys' && (
+        <div className="card">
+          <ConfigSection
+            keys={API_KEY_KEYS}
+            configKeys={configKeys}
+            getLocal={config.getLocal}
+            getServer={config.getServer}
+            setLocal={config.setLocal}
+            saveConfig={config.saveConfig}
+            cancelLocal={config.cancelLocal}
+            title="API Keys"
+          />
         </div>
-      ))}
+      )}
+
+      {/* Advanced Tab */}
+      {activeTab === 'advanced' && (
+        <>
+          {config.toolRag && (
+            <div className="card">
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+                <div>
+                  <div className="section-title" style={{ marginBottom: '4px' }}>Tool RAG</div>
+                  <p style={{ fontSize: '13px', color: 'var(--text-secondary)', margin: 0 }}>
+                    Semantic tool selection — sends only the most relevant tools to the LLM per message.
+                  </p>
+                </div>
+                <label className="toggle">
+                  <input
+                    type="checkbox"
+                    checked={config.toolRag.enabled}
+                    onChange={() => config.saveToolRag({ enabled: !config.toolRag!.enabled })}
+                  />
+                  <span className="toggle-track" />
+                  <span className="toggle-thumb" />
+                </label>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <label style={{ fontSize: '13px', color: 'var(--text)' }}>
+                    Top-K <InfoTip text="Number of most relevant tools to send per message" />
+                  </label>
+                  <Select
+                    value={String(config.toolRag.topK)}
+                    options={['10', '15', '20', '25', '30', '40', '50']}
+                    onChange={(v) => config.saveToolRag({ topK: Number(v) })}
+                    style={{ minWidth: '80px' }}
+                  />
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <label style={{ fontSize: '13px', color: 'var(--text)', cursor: 'pointer' }} htmlFor="skip-unlimited">
+                    Skip Unlimited <InfoTip text="Skip RAG filtering for providers with no tool limit" />
+                  </label>
+                  <label className="toggle">
+                    <input
+                      id="skip-unlimited"
+                      type="checkbox"
+                      checked={config.toolRag.skipUnlimitedProviders ?? false}
+                      onChange={() => config.saveToolRag({ skipUnlimitedProviders: !config.toolRag!.skipUnlimitedProviders })}
+                    />
+                    <span className="toggle-track" />
+                    <span className="toggle-thumb" />
+                  </label>
+                </div>
+              </div>
+              <div style={{ marginTop: '12px' }}>
+                <label style={{ fontSize: '13px', color: 'var(--text)', display: 'block', marginBottom: '6px' }}>
+                  Always Include (glob patterns) <InfoTip text="Tool name patterns that are always included regardless of RAG scoring" />
+                </label>
+                <ArrayInput
+                  value={config.toolRag.alwaysInclude ?? []}
+                  onChange={(values) => config.saveToolRag({ alwaysInclude: values })}
+                  placeholder="e.g. telegram_send_*"
+                />
+              </div>
+            </div>
+          )}
+
+          <div className="card">
+            <ConfigSection
+              keys={ADVANCED_KEYS}
+              configKeys={configKeys}
+              getLocal={config.getLocal}
+              getServer={config.getServer}
+              setLocal={config.setLocal}
+              saveConfig={config.saveConfig}
+              cancelLocal={config.cancelLocal}
+              title="Advanced"
+            />
+          </div>
+
+          <div className="card">
+            <ConfigSection
+              keys={[
+                'agent.session_reset_policy.daily_reset_enabled',
+                'agent.session_reset_policy.daily_reset_hour',
+                'agent.session_reset_policy.idle_expiry_enabled',
+                'agent.session_reset_policy.idle_expiry_minutes',
+              ]}
+              configKeys={configKeys}
+              getLocal={config.getLocal}
+              getServer={config.getServer}
+              setLocal={config.setLocal}
+              saveConfig={config.saveConfig}
+              cancelLocal={config.cancelLocal}
+              title="Session"
+            />
+          </div>
+        </>
+      )}
     </div>
   );
 }

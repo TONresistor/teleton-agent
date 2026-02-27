@@ -14,18 +14,8 @@ interface WorkspaceReadParams {
 
 export const workspaceReadTool: Tool = {
   name: "workspace_read",
-  description: `Read a file from your workspace.
-
-You can ONLY read files within ~/.teleton/workspace/. Protected files like config.yaml, wallet.json, and telegram_session.txt are NOT accessible.
-
-Supported files:
-- Text files (.md, .txt, .json, .csv)
-- Use encoding="base64" for binary files
-
-Examples:
-- Read your memory: path="MEMORY.md"
-- Read today's log: path="memory/2024-01-15.md"
-- Read downloaded image info: path="downloads/image.jpg" (will return metadata only)`,
+  description:
+    "Read a file from workspace. Only ~/.teleton/workspace/ is accessible. Use encoding='base64' for binary files.",
   category: "data-bearing",
   parameters: Type.Object({
     path: Type.String({

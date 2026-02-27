@@ -15,6 +15,8 @@ import {
 } from "../agent/tools/telegram/index.js";
 import type { ToolContext } from "../agent/tools/types.js";
 import { TELEGRAM_SEND_TOOLS } from "../constants/tools.js";
+import { telegramTranscribeAudioExecutor } from "../agent/tools/telegram/media/transcribe-audio.js";
+import { TYPING_REFRESH_MS } from "../constants/timeouts.js";
 import { createLogger } from "../utils/logger.js";
 
 const log = createLogger("Telegram");
@@ -123,6 +125,8 @@ export class MessageHandler {
   private db: Database.Database;
   private chatQueue: ChatQueue = new ChatQueue();
   private pluginMessageHooks: Array<(e: PluginMessageEvent) => Promise<void>> = [];
+  private recentMessageIds: Set<number> = new Set();
+  private static readonly DEDUP_MAX_SIZE = 500;
 
   constructor(
     bridge: TelegramBridge,
@@ -204,16 +208,6 @@ export class MessageHandler {
             };
           }
           break;
-        case "pairing":
-          if (!this.config.allow_from.includes(message.senderId) && !isAdmin) {
-            return {
-              message,
-              isAdmin,
-              shouldRespond: false,
-              reason: "Not paired",
-            };
-          }
-          break;
         case "open":
           break;
       }
@@ -264,6 +258,17 @@ export class MessageHandler {
    * Process and respond to a message
    */
   async handleMessage(message: TelegramMessage): Promise<void> {
+    // 0. Dedup — GramJS may fire the same event multiple times via different MTProto update channels
+    if (this.recentMessageIds.has(message.id)) {
+      return;
+    }
+    this.recentMessageIds.add(message.id);
+    if (this.recentMessageIds.size > MessageHandler.DEDUP_MAX_SIZE) {
+      // Evict oldest half
+      const ids = [...this.recentMessageIds];
+      this.recentMessageIds = new Set(ids.slice(ids.length >> 1));
+    }
+
     const msgType = message.isGroup ? "group" : message.isChannel ? "channel" : "dm";
     log.debug(
       `📨 [Handler] Received ${msgType} message ${message.id} from ${message.senderId} (mentions: ${message.mentionsMe})`
@@ -337,89 +342,137 @@ export class MessageHandler {
           return;
         }
 
-        // 4. Typing simulation if enabled
+        // 4. Persistent typing simulation if enabled
+        let typingInterval: ReturnType<typeof setInterval> | undefined;
         if (this.config.typing_simulation) {
           await this.bridge.setTyping(message.chatId);
+          typingInterval = setInterval(() => {
+            void this.bridge.setTyping(message.chatId);
+          }, TYPING_REFRESH_MS);
         }
 
-        // 5. Get pending history for groups (if any)
-        let pendingContext: string | null = null;
-        if (message.isGroup) {
-          pendingContext = this.pendingHistory.getAndClearPending(message.chatId);
-        }
-
-        // 6. Build tool context
-        const toolContext: Omit<ToolContext, "chatId" | "isGroup"> = {
-          bridge: this.bridge,
-          db: this.db,
-          senderId: message.senderId,
-          config: this.fullConfig,
-        };
-
-        // 7. Get response from agent (with tools)
-        const userName =
-          message.senderFirstName || message.senderUsername || `user:${message.senderId}`;
-        const response = await this.agent.processMessage(
-          message.chatId,
-          message.text,
-          userName,
-          message.timestamp.getTime(),
-          message.isGroup,
-          pendingContext,
-          toolContext,
-          message.senderUsername,
-          message.hasMedia,
-          message.mediaType,
-          message.id
-        );
-
-        // 8. Handle response based on whether tools were used
-        const hasToolCalls = response.toolCalls && response.toolCalls.length > 0;
-
-        // Check if agent used any Telegram send tool - it already sent the message
-        const telegramSendCalled =
-          hasToolCalls && response.toolCalls?.some((tc) => TELEGRAM_SEND_TOOLS.has(tc.name));
-
-        if (!telegramSendCalled && response.content && response.content.trim().length > 0) {
-          // Agent returned text but didn't use the send tool - send it manually
-          let responseText = response.content;
-
-          // Truncate if needed
-          if (responseText.length > this.config.max_message_length) {
-            responseText = responseText.slice(0, this.config.max_message_length - 3) + "...";
+        try {
+          // 5. Get pending history for groups (if any)
+          let pendingContext: string | null = null;
+          if (message.isGroup) {
+            pendingContext = this.pendingHistory.getAndClearPending(message.chatId);
           }
 
-          const sentMessage = await this.bridge.sendMessage({
-            chatId: message.chatId,
-            text: responseText,
-            replyToId: message.id,
-          });
+          // 5b. Resolve reply context (only for messages we're responding to)
+          let replyContext: { text: string; senderName?: string; isAgent?: boolean } | undefined;
+          if (message.replyToId && message._rawMessage) {
+            const raw = await this.bridge.fetchReplyContext(message._rawMessage);
+            if (raw?.text) {
+              replyContext = { text: raw.text, senderName: raw.senderName, isAgent: raw.isAgent };
+            }
+          }
 
-          // Store agent's response to feed
-          await this.storeTelegramMessage(
-            {
-              id: sentMessage.id,
-              chatId: message.chatId,
-              senderId: this.ownUserId ? parseInt(this.ownUserId) : 0,
-              text: responseText,
-              isGroup: message.isGroup,
-              isChannel: message.isChannel,
-              isBot: false,
-              mentionsMe: false,
-              timestamp: new Date(sentMessage.date * 1000),
-              hasMedia: false,
-            },
-            true
+          // 5c. Auto-transcribe voice/audio messages
+          let transcriptionText: string | null = null;
+          if (message.mediaType === "voice" || message.mediaType === "audio") {
+            try {
+              const transcribeResult = await telegramTranscribeAudioExecutor(
+                { chatId: message.chatId, messageId: message.id },
+                {
+                  bridge: this.bridge,
+                  db: this.db,
+                  chatId: message.chatId,
+                  senderId: message.senderId,
+                  isGroup: message.isGroup,
+                  config: this.fullConfig,
+                }
+              );
+              if (transcribeResult.success && (transcribeResult.data as any)?.text) {
+                transcriptionText = (transcribeResult.data as any).text;
+                log.info(
+                  `🎤 Auto-transcribed voice msg ${message.id}: "${transcriptionText!.substring(0, 80)}..."`
+                );
+              }
+            } catch (err) {
+              log.warn({ err }, `Failed to auto-transcribe voice message ${message.id}`);
+            }
+          }
+
+          // 6. Build tool context
+          const toolContext: Omit<ToolContext, "chatId" | "isGroup"> = {
+            bridge: this.bridge,
+            db: this.db,
+            senderId: message.senderId,
+            config: this.fullConfig,
+          };
+
+          // 7. Get response from agent (with tools)
+          const userName =
+            message.senderFirstName || message.senderUsername || `user:${message.senderId}`;
+          // Inject transcription into message text if available
+          const effectiveText = transcriptionText
+            ? `🎤 (voice): ${transcriptionText}${message.text ? `\n${message.text}` : ""}`
+            : message.text;
+          const response = await this.agent.processMessage(
+            message.chatId,
+            effectiveText,
+            userName,
+            message.timestamp.getTime(),
+            message.isGroup,
+            pendingContext,
+            toolContext,
+            message.senderUsername,
+            message.hasMedia,
+            message.mediaType,
+            message.id,
+            replyContext
           );
-        }
 
-        // 9. Clear pending history after responding (for groups)
-        if (message.isGroup) {
-          this.pendingHistory.clearPending(message.chatId);
-        }
+          // 8. Handle response based on whether tools were used
+          const hasToolCalls = response.toolCalls && response.toolCalls.length > 0;
 
-        // Mark as processed AFTER successful handling (prevents message loss on crash)
-        writeOffset(message.id, message.chatId);
+          // Check if agent used any Telegram send tool - it already sent the message
+          const telegramSendCalled =
+            hasToolCalls && response.toolCalls?.some((tc) => TELEGRAM_SEND_TOOLS.has(tc.name));
+
+          if (!telegramSendCalled && response.content && response.content.trim().length > 0) {
+            // Agent returned text but didn't use the send tool - send it manually
+            let responseText = response.content;
+
+            // Truncate if needed
+            if (responseText.length > this.config.max_message_length) {
+              responseText = responseText.slice(0, this.config.max_message_length - 3) + "...";
+            }
+
+            const sentMessage = await this.bridge.sendMessage({
+              chatId: message.chatId,
+              text: responseText,
+              replyToId: message.id,
+            });
+
+            // Store agent's response to feed
+            await this.storeTelegramMessage(
+              {
+                id: sentMessage.id,
+                chatId: message.chatId,
+                senderId: this.ownUserId ? parseInt(this.ownUserId) : 0,
+                text: responseText,
+                isGroup: message.isGroup,
+                isChannel: message.isChannel,
+                isBot: false,
+                mentionsMe: false,
+                timestamp: new Date(sentMessage.date * 1000),
+                hasMedia: false,
+              },
+              true
+            );
+          }
+
+          // 9. Clear pending history after responding (for groups)
+          if (message.isGroup) {
+            this.pendingHistory.clearPending(message.chatId);
+          }
+
+          // Mark as processed AFTER successful handling (prevents message loss on crash)
+          writeOffset(message.id, message.chatId);
+        } finally {
+          if (typingInterval) clearInterval(typingInterval);
+        }
 
         log.debug(`Processed message ${message.id} in chat ${message.chatId}`);
       } catch (error) {
@@ -460,7 +513,7 @@ export class MessageHandler {
         chatId: message.chatId,
         senderId: message.senderId?.toString() ?? null,
         text: message.text,
-        replyToId: undefined,
+        replyToId: message.replyToId?.toString(),
         isFromAgent,
         hasMedia: message.hasMedia,
         mediaType: message.mediaType,

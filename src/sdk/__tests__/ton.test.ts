@@ -10,6 +10,7 @@ vi.mock("../../ton/wallet-service.js", () => ({
   getTonPrice: vi.fn(),
   loadWallet: vi.fn(),
   getKeyPair: vi.fn(),
+  getCachedTonClient: vi.fn(),
 }));
 
 vi.mock("../../ton/transfer.js", () => ({
@@ -73,6 +74,7 @@ import {
   getTonPrice,
   loadWallet,
   getKeyPair,
+  getCachedTonClient,
 } from "../../ton/wallet-service.js";
 import { sendTon } from "../../ton/transfer.js";
 import { tonapiFetch } from "../../constants/api-endpoints.js";
@@ -295,9 +297,7 @@ describe("createTonSDK", () => {
       it("returns formatted transactions", async () => {
         const mockTxs = [{ hash: "abc", type: "ton_received" }];
         const mockGetTx = vi.fn().mockResolvedValue(mockTxs);
-        mocks.tonClient.mockImplementation(function (this: any) {
-          this.getTransactions = mockGetTx;
-        });
+        (getCachedTonClient as Mock).mockResolvedValue({ getTransactions: mockGetTx });
         mocks.formatTransactions.mockReturnValue(mockTxs);
 
         const result = await sdk.getTransactions(VALID_ADDRESS, 5);
@@ -306,9 +306,7 @@ describe("createTonSDK", () => {
 
       it("caps limit at 50", async () => {
         const mockGetTx = vi.fn().mockResolvedValue([]);
-        mocks.tonClient.mockImplementation(function (this: any) {
-          this.getTransactions = mockGetTx;
-        });
+        (getCachedTonClient as Mock).mockResolvedValue({ getTransactions: mockGetTx });
         mocks.formatTransactions.mockReturnValue([]);
 
         await sdk.getTransactions(VALID_ADDRESS, 999);
@@ -320,9 +318,7 @@ describe("createTonSDK", () => {
 
       it("defaults limit to 10 when not specified", async () => {
         const mockGetTx = vi.fn().mockResolvedValue([]);
-        mocks.tonClient.mockImplementation(function (this: any) {
-          this.getTransactions = mockGetTx;
-        });
+        (getCachedTonClient as Mock).mockResolvedValue({ getTransactions: mockGetTx });
         mocks.formatTransactions.mockReturnValue([]);
 
         await sdk.getTransactions(VALID_ADDRESS);
@@ -333,9 +329,7 @@ describe("createTonSDK", () => {
       });
 
       it("returns empty array on error", async () => {
-        mocks.tonClient.mockImplementation(function () {
-          throw new Error("connection failed");
-        });
+        (getCachedTonClient as Mock).mockRejectedValue(new Error("connection failed"));
 
         const result = await sdk.getTransactions(VALID_ADDRESS);
         expect(result).toEqual([]);
@@ -601,6 +595,7 @@ describe("createTonSDK", () => {
           storeCoins: vi.fn().mockReturnThis(),
           storeAddress: vi.fn().mockReturnThis(),
           storeBit: vi.fn().mockReturnThis(),
+          storeRef: vi.fn().mockReturnThis(),
           storeMaybeRef: vi.fn().mockReturnThis(),
           storeStringTail: vi.fn().mockReturnThis(),
           endCell: vi.fn().mockReturnValue(cellMock),
@@ -613,13 +608,13 @@ describe("createTonSDK", () => {
         // Mock toNano (used in TEP-74 transfer body)
         mocks.toNano.mockReturnValue(BigInt(1));
 
-        // Mock TonClient (must use regular function for `new` constructor)
+        // Mock getCachedTonClient — returns a client with an open() method
         const mockWalletContract = {
           getSeqno: vi.fn().mockResolvedValue(42),
           sendTransfer: vi.fn().mockResolvedValue(undefined),
         };
-        mocks.tonClient.mockImplementation(function (this: any) {
-          this.open = vi.fn().mockReturnValue(mockWalletContract);
+        (getCachedTonClient as Mock).mockResolvedValue({
+          open: vi.fn().mockReturnValue(mockWalletContract),
         });
       });
 
@@ -963,57 +958,73 @@ describe("createTonSDK", () => {
   // UTILITY METHODS
   // ═══════════════════════════════════════════════════════════════
 
-  // Note: toNano/fromNano/validateAddress use require() at runtime,
-  // which loads the real @ton/ton and @ton/core modules (not mocked).
-  // We test them against the real implementations.
+  // These now use top-level ESM imports (mocked by vi.mock).
+  // We configure the mock return values to match the real behaviour.
   describe("Utility methods", () => {
     describe("toNano()", () => {
       it("converts a number to nanoTON", () => {
+        mocks.toNano.mockReturnValue(BigInt("1500000000"));
         const result = sdk.toNano(1.5);
+        expect(mocks.toNano).toHaveBeenCalledWith("1.5");
         expect(result).toBe(BigInt("1500000000"));
       });
 
       it("converts a string to nanoTON", () => {
+        mocks.toNano.mockReturnValue(BigInt("2000000000"));
         const result = sdk.toNano("2");
+        expect(mocks.toNano).toHaveBeenCalledWith("2");
         expect(result).toBe(BigInt("2000000000"));
       });
 
       it("converts zero", () => {
+        mocks.toNano.mockReturnValue(BigInt(0));
         expect(sdk.toNano(0)).toBe(BigInt(0));
       });
 
       it("throws PluginSDKError on invalid input", () => {
+        mocks.toNano.mockImplementation(() => {
+          throw new Error("Invalid number");
+        });
         expect(() => sdk.toNano("not_a_number")).toThrow(PluginSDKError);
       });
     });
 
     describe("fromNano()", () => {
       it("converts nanoTON bigint to string", () => {
+        mocks.fromNano.mockReturnValue("1.5");
         const result = sdk.fromNano(BigInt("1500000000"));
         expect(result).toBe("1.5");
       });
 
       it("converts nanoTON string to string", () => {
+        mocks.fromNano.mockReturnValue("3");
         const result = sdk.fromNano("3000000000");
         expect(result).toBe("3");
       });
 
       it("converts zero", () => {
+        mocks.fromNano.mockReturnValue("0");
         expect(sdk.fromNano(BigInt(0))).toBe("0");
       });
     });
 
     describe("validateAddress()", () => {
       it("returns true for a valid TON address", () => {
-        // Use the real @ton/core Address.parse
+        mocks.addressParse.mockReturnValue({});
         expect(sdk.validateAddress(VALID_ADDRESS)).toBe(true);
       });
 
       it("returns false for an invalid address", () => {
+        mocks.addressParse.mockImplementation(() => {
+          throw new Error("Invalid");
+        });
         expect(sdk.validateAddress("not-an-address")).toBe(false);
       });
 
       it("returns false for empty string", () => {
+        mocks.addressParse.mockImplementation(() => {
+          throw new Error("Invalid");
+        });
         expect(sdk.validateAddress("")).toBe(false);
       });
     });

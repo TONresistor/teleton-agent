@@ -20,18 +20,8 @@ interface SetGiftStatusParams {
  */
 export const telegramSetGiftStatusTool: Tool = {
   name: "telegram_set_gift_status",
-  description: `Set a Collectible Gift as your Emoji Status (the icon next to your name).
-
-USAGE:
-- Set status: telegram_set_gift_status({ collectibleId: "123456789" })
-- Clear status: telegram_set_gift_status({ clear: true })
-
-IMPORTANT:
-- Only COLLECTIBLE gifts (isCollectible: true) can be used as emoji status
-- Use the "collectibleId" field from telegram_get_my_gifts (NOT the slug!)
-- collectibleId is a numeric string like "6219780841349758977"
-
-The emoji status appears next to your name in chats and your profile.`,
+  description:
+    "Set a collectible gift as your emoji status (icon next to your name). Use collectibleId from telegram_get_my_gifts (not slug). Set clear=true to remove.",
   parameters: Type.Object({
     collectibleId: Type.Optional(
       Type.String({

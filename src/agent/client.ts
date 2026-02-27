@@ -17,11 +17,15 @@ import { getProviderMetadata, type SupportedProvider } from "../config/providers
 import { sanitizeToolsForGemini } from "./schema-sanitizer.js";
 import { createLogger } from "../utils/logger.js";
 import { fetchWithTimeout } from "../utils/fetch.js";
+import {
+  getClaudeCodeApiKey,
+  refreshClaudeCodeApiKey,
+} from "../providers/claude-code-credentials.js";
 
 const log = createLogger("LLM");
 
 export function isOAuthToken(apiKey: string, provider?: string): boolean {
-  if (provider && provider !== "anthropic") return false;
+  if (provider && provider !== "anthropic" && provider !== "claude-code") return false;
   return apiKey.startsWith("sk-ant-oat01-");
 }
 
@@ -29,6 +33,7 @@ export function isOAuthToken(apiKey: string, provider?: string): boolean {
 export function getEffectiveApiKey(provider: string, rawKey: string): string {
   if (provider === "local") return "local";
   if (provider === "cocoon") return "";
+  if (provider === "claude-code") return getClaudeCodeApiKey(rawKey);
   return rawKey;
 }
 
@@ -292,7 +297,23 @@ export async function chatWithContext(
     completeOptions.onPayload = stripCocoonPayload;
   }
 
-  const response = await complete(model, context, completeOptions as ProviderStreamOptions);
+  let response = await complete(model, context, completeOptions as ProviderStreamOptions);
+
+  // Claude Code provider: retry once on 401/Unauthorized by refreshing credentials
+  if (
+    provider === "claude-code" &&
+    response.stopReason === "error" &&
+    response.errorMessage &&
+    (response.errorMessage.includes("401") ||
+      response.errorMessage.toLowerCase().includes("unauthorized"))
+  ) {
+    log.warn("Claude Code token rejected (401), refreshing credentials and retrying...");
+    const refreshedKey = refreshClaudeCodeApiKey();
+    if (refreshedKey) {
+      completeOptions.apiKey = refreshedKey;
+      response = await complete(model, context, completeOptions as ProviderStreamOptions);
+    }
+  }
 
   // Cocoon: parse <tool_call> from text response
   if (isCocoon) {

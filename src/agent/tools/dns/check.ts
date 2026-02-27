@@ -10,8 +10,7 @@ interface DnsCheckParams {
 }
 export const dnsCheckTool: Tool = {
   name: "dns_check",
-  description:
-    "Check if a .ton domain is available, in auction, or already owned. Returns status with relevant details (price estimates, current bids, owner info).",
+  description: "Check .ton domain status: available, in auction, or owned.",
   category: "data-bearing",
   parameters: Type.Object({
     domain: Type.String({

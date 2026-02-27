@@ -25,7 +25,7 @@ interface ReplyKeyboardParams {
 export const telegramReplyKeyboardTool: Tool = {
   name: "telegram_reply_keyboard",
   description:
-    "Send a message with a custom reply keyboard that replaces the user's regular keyboard. Users can tap buttons to quickly send predefined responses. Each button sends its text as a message. Use this to create menus, quick replies, or guided conversations. Buttons are arranged in rows. Example: [['Yes', 'No'], ['Maybe']] creates 2 rows.",
+    "Send a message with a custom reply keyboard. Buttons are arranged in rows; each button sends its label as a message.",
   parameters: Type.Object({
     chatId: Type.String({
       description: "The chat ID to send the message with keyboard to",

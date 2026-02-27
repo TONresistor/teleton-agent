@@ -9,6 +9,7 @@ import {
   CONTEXT_MAX_RELEVANT_CHUNKS,
   CONTEXT_OVERFLOW_SUMMARY_MESSAGES,
   RATE_LIMIT_MAX_RETRIES,
+  SERVER_ERROR_MAX_RETRIES,
 } from "../constants/limits.js";
 import { TELEGRAM_SEND_TOOLS } from "../constants/tools.js";
 import {
@@ -75,7 +76,8 @@ function isContextOverflowError(errorMessage?: string): boolean {
 
 function isTrivialMessage(text: string): boolean {
   const stripped = text.trim();
-  if (stripped.length > 0 && !/[a-zA-Z0-9а-яА-ЯёЁ]/.test(stripped)) return true;
+  if (!stripped) return true;
+  if (!/[a-zA-Z0-9а-яА-ЯёЁ]/.test(stripped)) return true;
   const trivial =
     /^(ok|okay|k|oui|non|yes|no|yep|nope|sure|thanks|merci|thx|ty|lol|haha|cool|nice|wow|bravo|top|parfait|d'accord|alright|fine|got it|np|gg)\.?!?$/i;
   return trivial.test(stripped);
@@ -176,7 +178,8 @@ export class AgentRuntime {
     senderUsername?: string,
     hasMedia?: boolean,
     mediaType?: string,
-    messageId?: number
+    messageId?: number,
+    replyContext?: { senderName?: string; text: string; isAgent?: boolean }
   ): Promise<AgentResponse> {
     try {
       let session = getOrCreateSession(chatId);
@@ -231,6 +234,7 @@ export class AgentRuntime {
         hasMedia,
         mediaType,
         messageId,
+        replyContext,
       });
 
       if (pendingContext) {
@@ -324,7 +328,7 @@ export class AgentRuntime {
       const preemptiveCompaction = await this.compactionManager.checkAndCompact(
         session.sessionId,
         context,
-        this.config.agent.api_key,
+        getEffectiveApiKey(this.config.agent.provider, this.config.agent.api_key),
         chatId,
         this.config.agent.provider as SupportedProvider,
         this.config.agent.utility_model
@@ -380,6 +384,7 @@ export class AgentRuntime {
       let iteration = 0;
       let overflowResets = 0;
       let rateLimitRetries = 0;
+      let serverErrorRetries = 0;
       let finalResponse: ChatResponse | null = null;
       const totalToolCalls: Array<{ name: string; input: Record<string, unknown> }> = [];
       const accumulatedTexts: string[] = [];
@@ -452,6 +457,26 @@ export class AgentRuntime {
             log.error(`🚫 Rate limited after ${RATE_LIMIT_MAX_RETRIES} retries: ${errorMsg}`);
             throw new Error(
               `API rate limited after ${RATE_LIMIT_MAX_RETRIES} retries. Please try again later.`
+            );
+          } else if (
+            errorMsg.includes("500") ||
+            errorMsg.includes("502") ||
+            errorMsg.includes("503") ||
+            errorMsg.includes("529")
+          ) {
+            serverErrorRetries++;
+            if (serverErrorRetries <= SERVER_ERROR_MAX_RETRIES) {
+              const delay = 2000 * Math.pow(2, serverErrorRetries - 1);
+              log.warn(
+                `🔄 Server error, retrying in ${delay}ms (attempt ${serverErrorRetries}/${SERVER_ERROR_MAX_RETRIES})...`
+              );
+              await new Promise((r) => setTimeout(r, delay));
+              iteration--;
+              continue;
+            }
+            log.error(`🚨 Server error after ${SERVER_ERROR_MAX_RETRIES} retries: ${errorMsg}`);
+            throw new Error(
+              `API server error after ${SERVER_ERROR_MAX_RETRIES} retries. The provider may be experiencing issues.`
             );
           } else {
             log.error(`🚨 API error: ${errorMsg}`);
@@ -594,7 +619,7 @@ export class AgentRuntime {
       const newSessionId = await this.compactionManager.checkAndCompact(
         session.sessionId,
         context,
-        this.config.agent.api_key,
+        getEffectiveApiKey(this.config.agent.provider, this.config.agent.api_key),
         chatId,
         this.config.agent.provider as SupportedProvider,
         this.config.agent.utility_model

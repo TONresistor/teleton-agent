@@ -26,6 +26,13 @@ export interface SetupProvider {
   keyPrefix: string | null;
   consoleUrl: string | null;
   requiresApiKey: boolean;
+  autoDetectsKey?: boolean;
+}
+
+export interface ClaudeCodeKeyDetection {
+  found: boolean;
+  maskedKey: string | null;
+  valid: boolean;
 }
 
 export interface SetupModelOption {
@@ -54,7 +61,9 @@ export interface WalletResult {
 
 export interface AuthCodeResult {
   authSessionId: string;
-  codeViaApp: boolean;
+  codeDelivery: "app" | "sms" | "fragment";
+  fragmentUrl?: string;
+  codeLength?: number;
   expiresAt: number;
 }
 
@@ -79,8 +88,9 @@ export interface SetupConfig {
     bot_username?: string;
   };
   cocoon?: { port: number };
-  deals?: { buy_max_floor_percent?: number; sell_min_floor_percent?: number };
+  deals?: { enabled?: boolean; buy_max_floor_percent?: number; sell_min_floor_percent?: number };
   tonapi_key?: string;
+  toncenter_api_key?: string;
   tavily_api_key?: string;
   webui?: { enabled: boolean };
 }
@@ -109,6 +119,21 @@ export interface SearchResult {
   score: number;
   vectorScore?: number;
   keywordScore?: number;
+}
+
+export interface MemorySourceFile {
+  source: string;
+  entryCount: number;
+  lastUpdated: number;
+}
+
+export interface MemoryChunk {
+  id: string;
+  text: string;
+  source: string;
+  startLine: number | null;
+  endLine: number | null;
+  updatedAt: number;
 }
 
 export interface ToolInfo {
@@ -185,7 +210,7 @@ export interface ToolRagStatus {
 
 export interface McpServerInfo {
   name: string;
-  type: 'stdio' | 'sse';
+  type: 'stdio' | 'sse' | 'streamable-http';
   target: string;
   scope: string;
   enabled: boolean;
@@ -197,11 +222,15 @@ export interface McpServerInfo {
 
 export interface ConfigKeyData {
   key: string;
+  label: string;
   set: boolean;
   value: string | null;
   sensitive: boolean;
-  type: 'string' | 'number' | 'boolean' | 'enum';
+  type: 'string' | 'number' | 'boolean' | 'enum' | 'array';
+  hotReload: 'instant' | 'restart';
+  itemType?: 'string' | 'number';
   options?: string[];
+  optionLabels?: Record<string, string>;
   category: string;
   description: string;
 }
@@ -338,6 +367,14 @@ export const api = {
     return fetchAPI<APIResponse<SearchResult[]>>(`/memory/search?q=${encodeURIComponent(query)}&limit=${limit}`);
   },
 
+  async getMemorySources() {
+    return fetchAPI<APIResponse<MemorySourceFile[]>>('/memory/sources');
+  },
+
+  async getSourceChunks(sourceKey: string) {
+    return fetchAPI<APIResponse<MemoryChunk[]>>(`/memory/sources/${encodeURIComponent(sourceKey)}`);
+  },
+
   async getSoulFile(filename: string) {
     return fetchAPI<APIResponse<{ content: string }>>(`/soul/${filename}`);
   },
@@ -357,7 +394,7 @@ export const api = {
     return fetchAPI<APIResponse<ToolRagStatus>>('/tools/rag');
   },
 
-  async updateToolRag(config: { enabled?: boolean; topK?: number }) {
+  async updateToolRag(config: { enabled?: boolean; topK?: number; alwaysInclude?: string[]; skipUnlimitedProviders?: boolean }) {
     return fetchAPI<APIResponse<ToolRagStatus>>('/tools/rag', {
       method: 'PUT',
       body: JSON.stringify(config),
@@ -391,10 +428,10 @@ export const api = {
     });
   },
 
-  async workspaceList(path = '', recursive = false) {
+  async workspaceList(_path = '', _recursive = false) {
     const params = new URLSearchParams();
-    if (path) params.set('path', path);
-    if (recursive) params.set('recursive', 'true');
+    if (_path) params.set('path', _path);
+    if (_recursive) params.set('recursive', 'true');
     const qs = params.toString();
     return fetchAPI<APIResponse<FileEntry[]>>(`/workspace${qs ? `?${qs}` : ''}`);
   },
@@ -435,8 +472,12 @@ export const api = {
     return fetchAPI<APIResponse<WorkspaceInfo>>('/workspace/info');
   },
 
-  async tasksList(status?: string) {
-    const qs = status ? `?status=${status}` : '';
+  workspaceRawUrl(path: string): string {
+    return `/api/workspace/raw?path=${encodeURIComponent(path)}`;
+  },
+
+  async tasksList(_status?: string) {
+    const qs = _status ? `?status=${_status}` : '';
     return fetchAPI<APIResponse<TaskData[]>>(`/tasks${qs}`);
   },
 
@@ -444,12 +485,19 @@ export const api = {
     return fetchAPI<APIResponse<TaskData>>(`/tasks/${id}`);
   },
 
-  async tasksDelete(id: string) {
-    return fetchAPI<APIResponse<{ message: string }>>(`/tasks/${id}`, { method: 'DELETE' });
+  async tasksDelete(_id: string) {
+    return fetchAPI<APIResponse<{ message: string }>>(`/tasks/${_id}`, { method: 'DELETE' });
   },
 
-  async tasksCancel(id: string) {
-    return fetchAPI<APIResponse<TaskData>>(`/tasks/${id}/cancel`, { method: 'POST' });
+  async tasksCancel(_id: string) {
+    return fetchAPI<APIResponse<TaskData>>(`/tasks/${_id}/cancel`, { method: 'POST' });
+  },
+
+  async tasksClean(status: string) {
+    return fetchAPI<APIResponse<{ deleted: number }>>('/tasks/clean', {
+      method: 'POST',
+      body: JSON.stringify({ status }),
+    });
   },
 
   async tasksCleanDone() {
@@ -460,7 +508,7 @@ export const api = {
     return fetchAPI<APIResponse<ConfigKeyData[]>>('/config');
   },
 
-  async setConfigKey(key: string, value: string) {
+  async setConfigKey(key: string, value: string | string[]) {
     return fetchAPI<APIResponse<ConfigKeyData>>(`/config/${key}`, {
       method: 'PUT',
       body: JSON.stringify({ value }),
@@ -473,8 +521,23 @@ export const api = {
     });
   },
 
-  async getMarketplace(refresh = false) {
-    const qs = refresh ? '?refresh=true' : '';
+  async getModelsForProvider(provider: string) {
+    return fetchAPI<APIResponse<Array<{ value: string; name: string; description: string }>>>(`/config/models/${encodeURIComponent(provider)}`);
+  },
+
+  async getProviderMeta(provider: string) {
+    return fetchAPI<APIResponse<{ needsKey: boolean; keyHint: string; keyPrefix: string | null; consoleUrl: string; displayName: string }>>(`/config/provider-meta/${encodeURIComponent(provider)}`);
+  },
+
+  async validateApiKey(provider: string, apiKey: string) {
+    return fetchAPI<APIResponse<{ valid: boolean; error: string | null }>>('/config/validate-api-key', {
+      method: 'POST',
+      body: JSON.stringify({ provider, apiKey }),
+    });
+  },
+
+  async getMarketplace(_refresh = false) {
+    const qs = _refresh ? '?refresh=true' : '';
     return fetchAPI<APIResponse<MarketplacePlugin[]>>(`/marketplace${qs}`);
   },
 
@@ -517,9 +580,7 @@ export const api = {
   },
 
   connectLogs(onLog: (entry: LogEntry) => void, onError?: (error: Event) => void) {
-    // No token needed — HttpOnly cookie is sent automatically by the browser
     const url = `${API_BASE}/logs/stream`;
-
     const eventSource = new EventSource(url);
 
     eventSource.addEventListener('log', (event) => {
@@ -548,14 +609,17 @@ export const setup = {
   getProviders: () =>
     fetchSetupAPI<SetupProvider[]>('/setup/providers'),
 
-  getModels: (provider: string) =>
-    fetchSetupAPI<SetupModelOption[]>(`/setup/models/${encodeURIComponent(provider)}`),
+  getModels: (_provider: string) =>
+    fetchSetupAPI<SetupModelOption[]>(`/setup/models/${encodeURIComponent(_provider)}`),
 
   validateApiKey: (provider: string, apiKey: string) =>
     fetchSetupAPI<{ valid: boolean; error?: string }>('/setup/validate/api-key', {
       method: 'POST',
       body: JSON.stringify({ provider, apiKey }),
     }),
+
+  detectClaudeCodeKey: () =>
+    fetchSetupAPI<ClaudeCodeKeyDetection>('/setup/detect-claude-code-key'),
 
   validateBotToken: (token: string) =>
     fetchSetupAPI<BotValidation>('/setup/validate/bot-token', {
@@ -600,7 +664,7 @@ export const setup = {
     }),
 
   resendCode: (authSessionId: string) =>
-    fetchSetupAPI<{ codeViaApp: boolean }>('/setup/telegram/resend-code', {
+    fetchSetupAPI<{ codeDelivery: "app" | "sms" | "fragment"; fragmentUrl?: string; codeLength?: number }>('/setup/telegram/resend-code', {
       method: 'POST',
       body: JSON.stringify({ authSessionId }),
     }),

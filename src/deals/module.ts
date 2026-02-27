@@ -1,8 +1,10 @@
+import { join } from "path";
 import type { PluginModule } from "../agent/tools/types.js";
 import { initDealsConfig, DEALS_CONFIG } from "./config.js";
 import { DealBot, VerificationPoller } from "../bot/index.js";
 import { createLogger } from "../utils/logger.js";
 import { openDealsDb, closeDealsDb, getDealsDb } from "./db.js";
+import { TELETON_ROOT } from "../workspace/paths.js";
 
 const log = createLogger("Deal");
 import { createDbWrapper } from "../utils/module-db.js";
@@ -74,6 +76,7 @@ const dealsModule: PluginModule = {
             username: botUsername || "deals_bot",
             apiId: config.telegram.api_id,
             apiHash: config.telegram.api_hash,
+            gramjsSessionPath: join(TELETON_ROOT, "gramjs_bot_session.txt"),
           },
           dealsDb
         );

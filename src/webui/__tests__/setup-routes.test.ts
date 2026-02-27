@@ -51,8 +51,8 @@ vi.mock("../../config/providers.js", () => ({
     {
       id: "anthropic",
       displayName: "Anthropic (Claude)",
-      defaultModel: "claude-opus-4-5-20251101",
-      utilityModel: "claude-3-5-haiku-20241022",
+      defaultModel: "claude-opus-4-6",
+      utilityModel: "claude-haiku-4-5-20251001",
       toolLimit: null,
       keyPrefix: "sk-ant-",
       consoleUrl: "https://console.anthropic.com/",
@@ -70,7 +70,7 @@ vi.mock("../../config/providers.js", () => ({
   getProviderMetadata: vi.fn(() => ({
     id: "anthropic",
     displayName: "Anthropic (Claude)",
-    defaultModel: "claude-opus-4-5-20251101",
+    defaultModel: "claude-opus-4-6",
   })),
   validateApiKeyFormat: vi.fn(),
 }));
@@ -175,8 +175,8 @@ describe("Setup API Routes", () => {
       {
         id: "anthropic",
         displayName: "Anthropic (Claude)",
-        defaultModel: "claude-opus-4-5-20251101",
-        utilityModel: "claude-3-5-haiku-20241022",
+        defaultModel: "claude-opus-4-6",
+        utilityModel: "claude-haiku-4-5-20251001",
         toolLimit: null,
         keyPrefix: "sk-ant-",
         consoleUrl: "https://console.anthropic.com/",
@@ -194,7 +194,7 @@ describe("Setup API Routes", () => {
     (getProviderMetadata as Mock).mockReturnValue({
       id: "anthropic",
       displayName: "Anthropic (Claude)",
-      defaultModel: "claude-opus-4-5-20251101",
+      defaultModel: "claude-opus-4-6",
     });
     (validateApiKeyFormat as Mock).mockReturnValue(undefined);
     (ConfigSchema.parse as Mock).mockImplementation((v: unknown) => v);
@@ -612,6 +612,47 @@ describe("Setup API Routes", () => {
       const data = await res.json();
       expect(data.error).toBe("PHONE_NUMBER_INVALID");
     });
+
+    it("returns codeDelivery: fragment with fragmentUrl for +888 numbers", async () => {
+      mockAuthManager.sendCode.mockResolvedValue({
+        authSessionId: "sess-frag-1",
+        codeDelivery: "fragment",
+        fragmentUrl: "https://fragment.com/number/88812345678",
+        codeLength: 5,
+        expiresAt: Date.now() + 300000,
+      });
+
+      const res = await post(app, "/telegram/send-code", {
+        apiId: 12345,
+        apiHash: "abcdef",
+        phone: "+88812345678",
+      });
+      expect(res.status).toBe(200);
+      const data = await res.json();
+      expect(data.success).toBe(true);
+      expect(data.data.codeDelivery).toBe("fragment");
+      expect(data.data.fragmentUrl).toBe("https://fragment.com/number/88812345678");
+      expect(data.data.authSessionId).toBe("sess-frag-1");
+    });
+
+    it("returns codeDelivery: app for Telegram app delivery", async () => {
+      mockAuthManager.sendCode.mockResolvedValue({
+        authSessionId: "sess-app-1",
+        codeDelivery: "app",
+        codeLength: 5,
+        expiresAt: Date.now() + 300000,
+      });
+
+      const res = await post(app, "/telegram/send-code", {
+        apiId: 12345,
+        apiHash: "abcdef",
+        phone: "+1234567890",
+      });
+      expect(res.status).toBe(200);
+      const data = await res.json();
+      expect(data.data.codeDelivery).toBe("app");
+      expect(data.data.fragmentUrl).toBeUndefined();
+    });
   });
 
   // ── POST /telegram/verify-code ──────────────────────────────────────────
@@ -760,6 +801,23 @@ describe("Setup API Routes", () => {
       });
       expect(res.status).toBe(429);
     });
+
+    it("returns codeDelivery: fragment with fragmentUrl on resend", async () => {
+      mockAuthManager.resendCode.mockResolvedValue({
+        codeDelivery: "fragment",
+        fragmentUrl: "https://fragment.com/number/88812345678",
+        codeLength: 5,
+      });
+
+      const res = await post(app, "/telegram/resend-code", {
+        authSessionId: "sess-frag-1",
+      });
+      expect(res.status).toBe(200);
+      const data = await res.json();
+      expect(data.success).toBe(true);
+      expect(data.data.codeDelivery).toBe("fragment");
+      expect(data.data.fragmentUrl).toBe("https://fragment.com/number/88812345678");
+    });
   });
 
   // ── DELETE /telegram/session ────────────────────────────────────────────
@@ -803,7 +861,7 @@ describe("Setup API Routes", () => {
       agent: {
         provider: "anthropic",
         api_key: "sk-ant-api03-test",
-        model: "claude-opus-4-5-20251101",
+        model: "claude-opus-4-6",
         max_agentic_iterations: 5,
       },
       telegram: {
@@ -874,7 +932,7 @@ describe("Setup API Routes", () => {
 
       const writeCall = (writeFileSync as Mock).mock.calls[0];
       // The model should fall back to providerMeta.defaultModel
-      expect(writeCall[1]).toContain("claude-opus-4-5-20251101");
+      expect(writeCall[1]).toContain("claude-opus-4-6");
     });
 
     it("writes config with restricted permissions (0o600)", async () => {

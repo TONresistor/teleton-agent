@@ -20,19 +20,7 @@ interface EditChannelInfoParams {
  */
 export const telegramEditChannelInfoTool: Tool = {
   name: "telegram_edit_channel_info",
-  description: `Edit a channel or group's information.
-
-USAGE:
-- Pass the channelId and any fields to update
-- You must be an admin with the appropriate rights
-
-FIELDS:
-- title: Channel/group name (1-255 characters)
-- about: Description/bio (0-255 characters)
-
-NOTE: To change the photo, use a separate photo upload tool.
-
-Example: Update your channel @my_channel with a new description.`,
+  description: "Edit a channel or group's title and/or description. Requires admin rights.",
   parameters: Type.Object({
     channelId: Type.String({
       description: "Channel or group ID to edit",

@@ -14,7 +14,10 @@ import { TelegramClient, Api } from "telegram";
 import { StringSession } from "telegram/sessions/index.js";
 import { Logger, LogLevel } from "telegram/extensions/Logger.js";
 import bigInt from "big-integer";
-import { GRAMJS_RETRY_DELAY_MS } from "../constants/timeouts.js";
+import { existsSync, readFileSync, writeFileSync, mkdirSync } from "fs";
+import { dirname } from "path";
+import { GRAMJS_RETRY_DELAY_MS, GRAMJS_CONNECT_RETRY_DELAY_MS } from "../constants/timeouts.js";
+import { TELEGRAM_CONNECTION_RETRIES } from "../constants/limits.js";
 import { withFloodRetry } from "../telegram/flood-retry.js";
 import { createLogger } from "../utils/logger.js";
 
@@ -51,10 +54,13 @@ export function decodeInlineMessageId(encoded: string): Api.TypeInputBotInlineMe
 export class GramJSBotClient {
   private client: TelegramClient;
   private connected = false;
+  private sessionPath: string | undefined;
 
-  constructor(apiId: number, apiHash: string) {
+  constructor(apiId: number, apiHash: string, sessionPath?: string) {
+    this.sessionPath = sessionPath;
+    const sessionString = this.loadSession();
     const logger = new Logger(LogLevel.NONE);
-    this.client = new TelegramClient(new StringSession(""), apiId, apiHash, {
+    this.client = new TelegramClient(new StringSession(sessionString), apiId, apiHash, {
       connectionRetries: 3,
       retryDelay: GRAMJS_RETRY_DELAY_MS,
       autoReconnect: true,
@@ -62,17 +68,58 @@ export class GramJSBotClient {
     });
   }
 
+  private loadSession(): string {
+    if (!this.sessionPath) return "";
+    try {
+      if (existsSync(this.sessionPath)) {
+        return readFileSync(this.sessionPath, "utf-8").trim();
+      }
+    } catch (error) {
+      log.warn({ err: error }, "[GramJS Bot] Failed to load session");
+    }
+    return "";
+  }
+
+  private saveSession(): void {
+    if (!this.sessionPath) return;
+    try {
+      const sessionString = this.client.session.save() as string | undefined;
+      if (typeof sessionString !== "string" || !sessionString) return;
+      const dir = dirname(this.sessionPath);
+      if (!existsSync(dir)) {
+        mkdirSync(dir, { recursive: true });
+      }
+      writeFileSync(this.sessionPath, sessionString, { encoding: "utf-8", mode: 0o600 });
+      log.debug("[GramJS Bot] Session saved");
+    } catch (error) {
+      log.error({ err: error }, "[GramJS Bot] Failed to save session");
+    }
+  }
+
   /**
-   * Connect and authenticate as bot via MTProto
+   * Connect and authenticate as bot via MTProto.
+   * Retries on transient -500 "No workers running" errors (DC overload).
    */
   async connect(botToken: string): Promise<void> {
-    try {
-      await this.client.start({ botAuthToken: botToken });
-      this.connected = true;
-      // Styled buttons ready (MTProto connected)
-    } catch (error) {
-      log.error({ err: error }, "[GramJS Bot] Connection failed");
-      throw error;
+    for (let attempt = 1; attempt <= TELEGRAM_CONNECTION_RETRIES; attempt++) {
+      try {
+        await this.client.start({ botAuthToken: botToken });
+        this.connected = true;
+        this.saveSession();
+        return;
+      } catch (error: any) {
+        const isTransient = error?.code === -500;
+        if (isTransient && attempt < TELEGRAM_CONNECTION_RETRIES) {
+          const delay = GRAMJS_CONNECT_RETRY_DELAY_MS * attempt;
+          log.warn(
+            `[GramJS Bot] Transient -500 error, retrying in ${delay / 1000}s (attempt ${attempt}/${TELEGRAM_CONNECTION_RETRIES})`
+          );
+          await new Promise((r) => setTimeout(r, delay));
+          continue;
+        }
+        log.error({ err: error }, "[GramJS Bot] Connection failed");
+        throw error;
+      }
     }
   }
 
@@ -88,7 +135,7 @@ export class GramJSBotClient {
     results: Api.TypeInputBotInlineResult[];
     cacheTime?: number;
   }): Promise<void> {
-    if (!this.connected) throw new Error("GramJS bot not connected");
+    if (!this.isConnected()) throw new Error("GramJS bot not connected");
 
     await withFloodRetry(() =>
       this.client.invoke(
@@ -111,7 +158,7 @@ export class GramJSBotClient {
     entities?: Api.TypeMessageEntity[];
     replyMarkup?: Api.TypeReplyMarkup;
   }): Promise<void> {
-    if (!this.connected) throw new Error("GramJS bot not connected");
+    if (!this.isConnected()) throw new Error("GramJS bot not connected");
 
     const id = decodeInlineMessageId(params.inlineMessageId);
     const dcId = "dcId" in id ? (id.dcId as number) : undefined;

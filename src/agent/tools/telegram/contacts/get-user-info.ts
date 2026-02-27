@@ -19,20 +19,8 @@ interface GetUserInfoParams {
  */
 export const telegramGetUserInfoTool: Tool = {
   name: "telegram_get_user_info",
-  description: `Get detailed information about a Telegram user.
-
-USAGE:
-- By username: pass username (with or without @)
-- By ID: pass userId
-
-RETURNS:
-- Basic info: id, username, firstName, lastName, phone (if visible)
-- Status: isBot, isPremium, isVerified, isScam, isFake
-- Bio/about (if public)
-- Photo info (if available)
-- Common chats count
-
-Use this to learn about traders, verify users, or gather intel.`,
+  description:
+    "Get detailed info about a Telegram user by username or userId. Returns profile, status, bio, and common chats.",
   category: "data-bearing",
   parameters: Type.Object({
     userId: Type.Optional(

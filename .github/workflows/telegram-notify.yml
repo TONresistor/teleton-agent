@@ -1,0 +1,81 @@
+name: Telegram Notify
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+
+jobs:
+  # ---- Commit notification ----
+  commit:
+    if: startsWith(github.ref, 'refs/heads/')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Split commit message
+        id: msg
+        run: |
+          FULL="${{ github.event.head_commit.message }}"
+          TITLE=$(echo "$FULL" | head -1)
+          BODY=$(echo "$FULL" | tail -n +3)
+          echo "title=$TITLE" >> "$GITHUB_OUTPUT"
+          {
+            echo "body<<EOF"
+            echo "$BODY"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Build message
+        id: fmt
+        run: |
+          BODY="${{ steps.msg.outputs.body }}"
+          if [ -n "$BODY" ]; then
+            MSG="<b>${{ steps.msg.outputs.title }}</b>
+
+          $BODY
+
+          <a href=\"${{ github.event.head_commit.url }}\">View commit</a>"
+          else
+            MSG="<b>${{ steps.msg.outputs.title }}</b>
+
+          <a href=\"${{ github.event.head_commit.url }}\">View commit</a>"
+          fi
+          {
+            echo "text<<EOF"
+            echo "$MSG"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Send commit to Telegram
+        uses: appleboy/telegram-action@master
+        with:
+          to: ${{ secrets.TELEGRAM_CHAT_ID }}
+          token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          format: html
+          disable_web_page_preview: true
+          message: ${{ steps.fmt.outputs.text }}
+
+  # ---- Release notification ----
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Extract version
+        id: ver
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Send release to Telegram
+        uses: appleboy/telegram-action@master
+        with:
+          to: ${{ secrets.TELEGRAM_CHAT_ID }}
+          token: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          format: html
+          disable_web_page_preview: true
+          message: |
+            🚀 <b>New Release ${{ github.ref_name }}</b>
+
+            Teleton ${{ steps.ver.outputs.version }} is now available on npm.
+            Update your agents:
+
+            <code>npm i -g teleton@latest</code>
+
+            <a href="https://github.com/${{ github.repository }}/releases/tag/${{ github.ref_name }}">View release</a>

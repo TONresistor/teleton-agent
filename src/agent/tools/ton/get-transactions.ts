@@ -1,8 +1,7 @@
 import { Type } from "@sinclair/typebox";
 import type { Tool, ToolExecutor, ToolResult } from "../types.js";
-import { TonClient } from "@ton/ton";
+import { getCachedTonClient } from "../../../ton/wallet-service.js";
 import { Address } from "@ton/core";
-import { getCachedHttpEndpoint } from "../../../ton/endpoint.js";
 import { formatTransactions } from "../../../ton/format-transactions.js";
 import { getErrorMessage } from "../../../utils/errors.js";
 import { createLogger } from "../../../utils/logger.js";
@@ -14,8 +13,7 @@ interface GetTransactionsParams {
 }
 export const tonGetTransactionsTool: Tool = {
   name: "ton_get_transactions",
-  description:
-    "Get transaction history for any TON address. Returns transactions with type (ton_received, ton_sent, jetton_received, jetton_sent, nft_received, nft_sent, gas_refund), amount, counterparty, and explorer link.",
+  description: "Get transaction history for any TON address.",
   category: "data-bearing",
   parameters: Type.Object({
     address: Type.String({
@@ -47,8 +45,7 @@ export const tonGetTransactionsExecutor: ToolExecutor<GetTransactionsParams> = a
       };
     }
 
-    const endpoint = await getCachedHttpEndpoint();
-    const client = new TonClient({ endpoint });
+    const client = await getCachedTonClient();
 
     const transactions = await client.getTransactions(addressObj, {
       limit: Math.min(limit, 50),

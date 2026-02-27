@@ -28,7 +28,7 @@ interface DownloadMediaParams {
 export const telegramDownloadMediaTool: Tool = {
   name: "telegram_download_media",
   description:
-    "Download media (photo, video, document, voice, sticker, etc.) from a Telegram message. The file will be saved to ~/.teleton/downloads/. Use this to retrieve images, documents, or other files sent in conversations. Returns the local file path after download.",
+    "Download media from a Telegram message to ~/.teleton/downloads/. Returns the local file path.",
   parameters: Type.Object({
     chatId: Type.String({
       description: "The chat ID where the message with media is located",

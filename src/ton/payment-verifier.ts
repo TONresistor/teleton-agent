@@ -1,7 +1,7 @@
 import type Database from "better-sqlite3";
-import { TonClient, fromNano } from "@ton/ton";
+import { fromNano } from "@ton/ton";
 import { Address } from "@ton/core";
-import { getCachedHttpEndpoint } from "./endpoint.js";
+import { getCachedTonClient } from "./wallet-service.js";
 import { withBlockchainRetry } from "../utils/retry.js";
 import { PAYMENT_TOLERANCE_RATIO } from "../constants/limits.js";
 import { getErrorMessage } from "../utils/errors.js";
@@ -71,8 +71,7 @@ export async function verifyPayment(
       maxPaymentAgeMinutes = DEFAULT_MAX_PAYMENT_AGE_MINUTES,
     } = params;
 
-    const endpoint = await getCachedHttpEndpoint();
-    const client = new TonClient({ endpoint });
+    const client = await getCachedTonClient();
     const botAddress = Address.parse(botWalletAddress);
 
     const transactions = await withBlockchainRetry(

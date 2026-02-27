@@ -7,7 +7,7 @@ import { createLogger } from "../../../utils/logger.js";
 const log = createLogger("Tools");
 export const tonGetBalanceTool: Tool = {
   name: "ton_get_balance",
-  description: "Get your current TON wallet balance. Returns the balance in TON and nanoTON.",
+  description: "Get your current TON wallet balance.",
   parameters: Type.Object({}),
   category: "data-bearing",
 };

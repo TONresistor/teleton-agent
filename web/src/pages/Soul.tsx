@@ -62,18 +62,18 @@ export function Soul() {
   }, [activeTab, loadFile]);
 
   return (
-    <div>
-      <div className="header">
+    <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100vh - 64px)', overflow: 'hidden' }}>
+      <div className="header" style={{ marginBottom: '16px' }}>
         <h1>Soul Editor</h1>
         <p>Edit system prompt files</p>
       </div>
 
       {message && (
-        <div className={`alert ${message.type}`}>{message.text}</div>
+        <div className={`alert ${message.type}`} style={{ marginBottom: '8px' }}>{message.text}</div>
       )}
 
-      <div className="card">
-        <div className="tabs">
+      <div className="card" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', padding: '12px' }}>
+        <div className="tabs" style={{ marginBottom: '8px' }}>
           {SOUL_FILES.map((file) => (
             <button
               key={file}
@@ -93,8 +93,9 @@ export function Soul() {
               value={content}
               onChange={(e) => setContent(e.target.value)}
               placeholder={`Edit ${activeTab}...`}
+              style={{ flex: 1, minHeight: '200px' }}
             />
-            <div style={{ marginTop: '14px', display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <div style={{ marginTop: '8px', display: 'flex', alignItems: 'center', gap: '10px' }}>
               <button onClick={saveFile} disabled={saving || !dirty}>
                 {saving ? 'Saving...' : 'Save'}
               </button>

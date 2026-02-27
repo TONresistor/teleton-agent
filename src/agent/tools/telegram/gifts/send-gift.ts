@@ -23,7 +23,7 @@ interface SendGiftParams {
 export const telegramSendGiftTool: Tool = {
   name: "telegram_send_gift",
   description:
-    "Send a Star Gift to another user. First use telegram_get_available_gifts to see available gifts and their IDs. Limited gifts are rare and can become collectibles. The gift will appear on the recipient's profile unless they hide it. Costs Stars from your balance.",
+    "Send a Star Gift to a user. Costs Stars. Requires a verified deal (use deal_propose first).",
   parameters: Type.Object({
     userId: Type.String({
       description: "User ID or @username to send the gift to",

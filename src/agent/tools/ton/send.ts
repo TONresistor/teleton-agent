@@ -1,9 +1,8 @@
 import { Type } from "@sinclair/typebox";
+import { Address } from "@ton/core";
 import type { Tool, ToolExecutor, ToolResult } from "../types.js";
-import { loadWallet, getKeyPair } from "../../../ton/wallet-service.js";
-import { WalletContractV5R1, TonClient, toNano, internal } from "@ton/ton";
-import { Address, SendMode } from "@ton/core";
-import { getCachedHttpEndpoint } from "../../../ton/endpoint.js";
+import { loadWallet } from "../../../ton/wallet-service.js";
+import { sendTon } from "../../../ton/transfer.js";
 import { getErrorMessage } from "../../../utils/errors.js";
 import { createLogger } from "../../../utils/logger.js";
 
@@ -16,10 +15,11 @@ interface SendParams {
 export const tonSendTool: Tool = {
   name: "ton_send",
   description:
-    "Send TON cryptocurrency to an address. Requires wallet to be initialized. Amount is in TON (not nanoTON). Example: amount 1.5 = 1.5 TON. Always confirm the transaction details before sending.",
+    "Send TON to an address. Amount in TON (not nanoTON). Use a REAL address from the user or from ton_address_book — never guess addresses. Confirm details before sending.",
   parameters: Type.Object({
     to: Type.String({
-      description: "Recipient TON address (EQ... or UQ... format)",
+      description:
+        "Recipient TON address (EQ... or UQ... format). Must be a real, valid address — do not fabricate.",
     }),
     amount: Type.Number({
       description: "Amount to send in TON (e.g., 1.5 for 1.5 TON)",
@@ -34,10 +34,20 @@ export const tonSendTool: Tool = {
 };
 export const tonSendExecutor: ToolExecutor<SendParams> = async (
   params,
-  context
+  _context
 ): Promise<ToolResult> => {
   try {
     const { to, amount, comment } = params;
+
+    // Validate address format before attempting transfer
+    try {
+      Address.parse(to);
+    } catch {
+      return {
+        success: false,
+        error: `Invalid recipient address: ${to}. TON addresses must have a valid checksum. Ask the user for the correct address.`,
+      };
+    }
 
     const walletData = loadWallet();
     if (!walletData) {
@@ -47,46 +57,14 @@ export const tonSendExecutor: ToolExecutor<SendParams> = async (
       };
     }
 
-    try {
-      Address.parse(to);
-    } catch (e) {
+    const txRef = await sendTon({ toAddress: to, amount, comment });
+
+    if (!txRef) {
       return {
         success: false,
-        error: `Invalid recipient address: ${to}`,
+        error: "TON transfer failed — check blockchain node connectivity.",
       };
     }
-
-    const keyPair = await getKeyPair();
-    if (!keyPair) {
-      return { success: false, error: "Wallet key derivation failed." };
-    }
-
-    const wallet = WalletContractV5R1.create({
-      workchain: 0,
-      publicKey: keyPair.publicKey,
-    });
-
-    // Get decentralized endpoint from orbs network (no rate limits)
-    const endpoint = await getCachedHttpEndpoint();
-    const client = new TonClient({ endpoint });
-
-    const contract = client.open(wallet);
-
-    const seqno = await contract.getSeqno();
-
-    await contract.sendTransfer({
-      seqno,
-      secretKey: keyPair.secretKey,
-      sendMode: SendMode.PAY_GAS_SEPARATELY,
-      messages: [
-        internal({
-          to: Address.parse(to),
-          value: toNano(amount),
-          body: comment || "",
-          bounce: false,
-        }),
-      ],
-    });
 
     return {
       success: true,

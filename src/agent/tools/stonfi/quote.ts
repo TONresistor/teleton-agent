@@ -16,15 +16,16 @@ interface JettonQuoteParams {
 }
 export const stonfiQuoteTool: Tool = {
   name: "stonfi_quote",
-  description:
-    "Get a price quote for a token swap WITHOUT executing it. Shows expected output, minimum output, price impact, and fees. Use this to preview a swap before committing. Use 'ton' as from_asset for TON, or jetton master address.",
+  description: "Get a swap price quote on STON.fi without executing. Use stonfi_swap to execute.",
   category: "data-bearing",
   parameters: Type.Object({
     from_asset: Type.String({
-      description: "Source asset: 'ton' for TON, or jetton master address (EQ... format)",
+      description:
+        "Source asset: 'ton' for native TON, or jetton master address (EQ... format). Always pass 'ton' as a string, never an address.",
     }),
     to_asset: Type.String({
-      description: "Destination jetton master address (EQ... format)",
+      description:
+        "Destination asset: 'ton' for native TON, or jetton master address (EQ... format). Always pass 'ton' as a string, never an address.",
     }),
     amount: Type.Number({
       description: "Amount to swap in human-readable units",
@@ -47,9 +48,10 @@ export const stonfiQuoteExecutor: ToolExecutor<JettonQuoteParams> = async (
     const { from_asset, to_asset, amount, slippage = 0.01 } = params;
 
     // STON.fi API requires the native TON address, not the string "ton"
-    const isTonInput = from_asset.toLowerCase() === "ton";
+    const isTonInput = from_asset.toLowerCase() === "ton" || from_asset === NATIVE_TON_ADDRESS;
+    const isTonOutput = to_asset.toLowerCase() === "ton" || to_asset === NATIVE_TON_ADDRESS;
     const fromAddress = isTonInput ? NATIVE_TON_ADDRESS : from_asset;
-    const toAddress = to_asset;
+    const toAddress = isTonOutput ? NATIVE_TON_ADDRESS : to_asset;
 
     // Initialize STON.fi API client
     const stonApiClient = new StonApiClient();
@@ -95,7 +97,7 @@ export const stonfiQuoteExecutor: ToolExecutor<JettonQuoteParams> = async (
 
     // Get asset names if possible
     const fromSymbol = isTonInput ? "TON" : "Token";
-    const toSymbol = "Token";
+    const toSymbol = isTonOutput ? "TON" : "Token";
 
     // Build quote response
     const quote = {

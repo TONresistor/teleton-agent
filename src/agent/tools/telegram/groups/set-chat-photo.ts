@@ -21,7 +21,7 @@ interface SetChatPhotoParams {
 
 export const telegramSetChatPhotoTool: Tool = {
   name: "telegram_set_chat_photo",
-  description: `Set or delete a group/channel profile photo. You need admin rights with change info permission. Provide a local image path to set, or use delete_photo to remove.`,
+  description: `Set or delete a group/channel profile photo. Requires admin rights with change-info permission.`,
   parameters: Type.Object({
     chat_id: Type.String({
       description: "Group/channel ID or username",

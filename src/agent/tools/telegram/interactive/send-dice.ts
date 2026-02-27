@@ -19,17 +19,7 @@ interface SendDiceParams {
 
 export const telegramSendDiceTool: Tool = {
   name: "telegram_send_dice",
-  description: `Send an animated dice/game message. The result is random and determined by Telegram servers.
-
-Available games:
-- 🎲 Dice (1-6)
-- 🎯 Darts (1-6, 6 = bullseye)
-- 🏀 Basketball (1-5, 4-5 = score)
-- ⚽ Football (1-5, 4-5 = goal)
-- 🎰 Slot machine (1-64, 64 = jackpot 777)
-- 🎳 Bowling (1-6, 6 = strike)
-
-Use for games, decisions, or fun interactions.`,
+  description: `Send an animated dice/game message. Result is random, determined by Telegram servers.`,
 
   parameters: Type.Object({
     chat_id: Type.String({

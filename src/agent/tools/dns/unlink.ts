@@ -1,12 +1,12 @@
 import { Type } from "@sinclair/typebox";
 import type { Tool, ToolExecutor, ToolResult } from "../types.js";
-import { loadWallet, getKeyPair } from "../../../ton/wallet-service.js";
-import { WalletContractV5R1, TonClient, toNano, internal, beginCell } from "@ton/ton";
+import { loadWallet, getKeyPair, getCachedTonClient } from "../../../ton/wallet-service.js";
+import { WalletContractV5R1, toNano, internal, beginCell } from "@ton/ton";
 import { Address, SendMode } from "@ton/core";
-import { getCachedHttpEndpoint } from "../../../ton/endpoint.js";
 import { tonapiFetch } from "../../../constants/api-endpoints.js";
 import { getErrorMessage } from "../../../utils/errors.js";
 import { createLogger } from "../../../utils/logger.js";
+import { withTxLock } from "../../../ton/tx-lock.js";
 
 const log = createLogger("Tools");
 
@@ -22,8 +22,7 @@ interface DnsUnlinkParams {
 }
 export const dnsUnlinkTool: Tool = {
   name: "dns_unlink",
-  description:
-    "Remove the wallet link from a .ton domain you own. This deletes the wallet record so the domain no longer resolves to any address.",
+  description: "Remove the wallet link from a .ton domain you own.",
   parameters: Type.Object({
     domain: Type.String({
       description: "Domain name (with or without .ton extension)",
@@ -107,34 +106,35 @@ export const dnsUnlinkExecutor: ToolExecutor<DnsUnlinkParams> = async (
       publicKey: keyPair.publicKey,
     });
 
-    const endpoint = await getCachedHttpEndpoint();
-    const client = new TonClient({ endpoint });
+    const client = await getCachedTonClient();
     const contract = client.open(wallet);
 
-    const seqno = await contract.getSeqno();
+    await withTxLock(async () => {
+      const seqno = await contract.getSeqno();
 
-    // Build change_dns_record message body WITHOUT value cell (triggers deletion)
-    // Contract checks: if (slice_refs() > 0) set record, else delete record
-    const body = beginCell()
-      .storeUint(DNS_CHANGE_RECORD_OP, 32) // op = change_dns_record
-      .storeUint(0, 64) // query_id
-      .storeUint(WALLET_RECORD_KEY, 256) // key = sha256("wallet")
-      // NO storeRef() - absence of value cell triggers deletion
-      .endCell();
+      // Build change_dns_record message body WITHOUT value cell (triggers deletion)
+      // Contract checks: if (slice_refs() > 0) set record, else delete record
+      const body = beginCell()
+        .storeUint(DNS_CHANGE_RECORD_OP, 32) // op = change_dns_record
+        .storeUint(0, 64) // query_id
+        .storeUint(WALLET_RECORD_KEY, 256) // key = sha256("wallet")
+        // NO storeRef() - absence of value cell triggers deletion
+        .endCell();
 
-    // Send transaction to NFT address
-    await contract.sendTransfer({
-      seqno,
-      secretKey: keyPair.secretKey,
-      sendMode: SendMode.PAY_GAS_SEPARATELY + SendMode.IGNORE_ERRORS,
-      messages: [
-        internal({
-          to: Address.parse(nftAddress),
-          value: toNano("0.05"), // Gas for DNS record update
-          body,
-          bounce: true,
-        }),
-      ],
+      // Send transaction to NFT address
+      await contract.sendTransfer({
+        seqno,
+        secretKey: keyPair.secretKey,
+        sendMode: SendMode.PAY_GAS_SEPARATELY,
+        messages: [
+          internal({
+            to: Address.parse(nftAddress),
+            value: toNano("0.05"), // Gas for DNS record update
+            body,
+            bounce: true,
+          }),
+        ],
+      });
     });
 
     return {

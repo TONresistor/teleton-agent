@@ -1,12 +1,10 @@
-import { useState, useEffect } from 'react';
-import { setup, SetupModelOption, BotValidation } from '../../lib/api';
+import { useState } from 'react';
+import { setup, BotValidation } from '../../lib/api';
 import { Select } from '../Select';
+import { PasswordInput } from './PasswordInput';
 import type { StepProps } from '../../pages/Setup';
 
 export function ConfigStep({ data, onChange }: StepProps) {
-  const [models, setModels] = useState<SetupModelOption[]>([]);
-  const [loadingModels, setLoadingModels] = useState(false);
-
   const [botLoading, setBotLoading] = useState(false);
   const [botValid, setBotValid] = useState<boolean | null>(null);
   const [botNetworkError, setBotNetworkError] = useState(false);
@@ -36,21 +34,6 @@ export function ConfigStep({ data, onChange }: StepProps) {
     }
   };
 
-  // Always load models (no quick/advanced gate)
-  useEffect(() => {
-    if (data.provider === 'cocoon' || data.provider === 'local' || !data.provider) return;
-    setLoadingModels(true);
-    setup.getModels(data.provider)
-      .then((m) => {
-        setModels(m);
-        if (!data.model && m.length > 0) {
-          onChange({ ...data, model: m[0].value });
-        }
-      })
-      .catch(() => setModels([]))
-      .finally(() => setLoadingModels(false));
-  }, [data.provider]);
-
   const policyOptions = ['open', 'allowlist', 'disabled'];
   const policyLabels = ['Open', 'Allowlist', 'Disabled'];
 
@@ -70,39 +53,23 @@ export function ConfigStep({ data, onChange }: StepProps) {
     <div className="step-content">
       <h2 className="step-title">Configuration</h2>
       <p className="step-description">
-        Configure your agent's model and behavior. Defaults are pre-filled — adjust what you need.
+        Configure your agent's behavior policies. Defaults are pre-filled — adjust what you need.
       </p>
 
-      {(data.provider === 'cocoon' || data.provider === 'local') ? (
-        <div className="info-panel">
-          Model is auto-discovered from the {data.provider === 'local' ? 'local server' : 'Cocoon proxy'} at startup.
+      <div className="form-group">
+        <label>Admin User ID</label>
+        <input
+          type="number"
+          value={data.userId || ''}
+          onChange={(e) => onChange({ ...data, userId: parseInt(e.target.value) || 0 })}
+          placeholder="123456789"
+          className="w-full"
+        />
+        <div className="helper-text">
+          This account will have admin control over the agent in DMs and groups.
+          Get your ID from <a href="https://t.me/userinfobot" target="_blank" rel="noopener noreferrer">@userinfobot</a> on Telegram.
         </div>
-      ) : (
-        <div className="form-group">
-          <label>Model</label>
-          {loadingModels ? (
-            <div className="text-muted"><span className="spinner sm" /> Loading models...</div>
-          ) : (
-            <Select
-              value={data.model}
-              options={models.map((m) => m.value)}
-              labels={models.map((m) => m.isCustom ? 'Custom...' : `${m.name} - ${m.description}`)}
-              onChange={(v) => onChange({ ...data, model: v })}
-              style={{ width: '100%' }}
-            />
-          )}
-          {data.model === '__custom__' && (
-            <input
-              type="text"
-              value={data.customModel}
-              onChange={(e) => onChange({ ...data, customModel: e.target.value })}
-              placeholder="Enter custom model ID"
-              className="w-full"
-              style={{ marginTop: '8px' }}
-            />
-          )}
-        </div>
-      )}
+      </div>
 
       <div className="form-group">
         <label>DM Policy</label>
@@ -163,19 +130,21 @@ export function ConfigStep({ data, onChange }: StepProps) {
 
       {/* ── Optional Integrations ── */}
       <h3 style={{ fontSize: '14px', fontWeight: 600, marginTop: '24px', marginBottom: '12px' }}>
-        Optional Integrations
+        Optional API Keys
       </h3>
 
       <div className="module-list">
-        {/* Bot Token — inline field like TonAPI/Tavily */}
+        {/* Bot Token */}
         <div className="module-item">
-          <div className="form-row" style={{ gap: '12px', alignItems: 'center' }}>
-            <div style={{ flex: 1 }}>
-              <strong style={{ fontSize: 'var(--font-md)' }}>Bot Token</strong>
-              <span className="module-desc" style={{ marginLeft: '8px' }}>(optional)</span>
-            </div>
-            <input
-              type="password"
+          <div style={{ marginBottom: '8px' }}>
+            <strong style={{ fontSize: 'var(--font-md)' }}>Bot Token</strong>
+            <span className="module-desc" style={{ marginLeft: '8px' }}>(recommended)</span>
+          </div>
+          <p style={{ fontSize: 'var(--font-sm)', margin: '0 0 8px' }}>
+            Inline buttons and deals module.
+          </p>
+          <div className="form-row" style={{ gap: '8px' }}>
+            <PasswordInput
               value={data.botToken}
               onChange={(e) => {
                 onChange({ ...data, botToken: e.target.value, botUsername: '' });
@@ -198,16 +167,14 @@ export function ConfigStep({ data, onChange }: StepProps) {
               <div className="info-box">
                 Could not reach Telegram API. Enter the bot username manually.
               </div>
-              <div className="form-row" style={{ gap: '12px', alignItems: 'center', marginTop: '8px' }}>
-                <div style={{ flex: 1 }}>
-                  <strong style={{ fontSize: 'var(--font-md)' }}>Bot Username</strong>
-                </div>
+              <div className="form-group" style={{ marginTop: '8px', marginBottom: 0 }}>
+                <label>Bot Username</label>
                 <input
                   type="text"
                   value={data.botUsername}
                   onChange={(e) => onChange({ ...data, botUsername: e.target.value })}
                   placeholder="my_bot"
-                  style={{ flex: 1 }}
+                  className="w-full"
                 />
               </div>
             </>
@@ -216,47 +183,67 @@ export function ConfigStep({ data, onChange }: StepProps) {
             <div className="alert error">{botError}</div>
           )}
           <div className="helper-text">
-            Inline buttons and rich interactions. Create via <a href="https://t.me/BotFather" target="_blank" rel="noopener noreferrer">@BotFather</a>.
+            Create a bot via <a href="https://t.me/BotFather" target="_blank" rel="noopener noreferrer">@BotFather</a> on Telegram.
           </div>
         </div>
 
-        {/* TonAPI Key — simple field, no toggle */}
+        {/* TonAPI Key */}
         <div className="module-item">
-          <div className="form-row" style={{ gap: '12px', alignItems: 'center' }}>
-            <div style={{ flex: 1 }}>
-              <strong style={{ fontSize: 'var(--font-md)' }}>TonAPI Key</strong>
-              <span className="module-desc" style={{ marginLeft: '8px' }}>(optional)</span>
-            </div>
-            <input
-              type="text"
-              value={data.tonapiKey}
-              onChange={(e) => onChange({ ...data, tonapiKey: e.target.value })}
-              placeholder="Your TonAPI key"
-              style={{ flex: 1 }}
-            />
+          <div style={{ marginBottom: '8px' }}>
+            <strong style={{ fontSize: 'var(--font-md)' }}>TonAPI Key</strong>
+            <span className="module-desc" style={{ marginLeft: '8px' }}>(recommended)</span>
           </div>
+          <p style={{ fontSize: 'var(--font-sm)', margin: '0 0 8px' }}>
+            Blockchain data — jettons, NFTs, prices, transaction history. Free key: 5 req/s (vs 1).
+          </p>
+          <PasswordInput
+            value={data.tonapiKey}
+            onChange={(e) => onChange({ ...data, tonapiKey: e.target.value })}
+            placeholder="Your TonAPI key"
+            className="w-full"
+          />
           <div className="helper-text">
-            Enhanced blockchain queries. Free key from <a href="https://t.me/tonapibot" target="_blank" rel="noopener noreferrer">@tonapibot</a>.
+            Open <a href="https://t.me/tonapibot" target="_blank" rel="noopener noreferrer">@tonapibot</a> on Telegram → mini app → generate server key.
           </div>
         </div>
 
-        {/* Tavily Key — simple field, no toggle */}
+        {/* TonCenter API Key */}
         <div className="module-item">
-          <div className="form-row" style={{ gap: '12px', alignItems: 'center' }}>
-            <div style={{ flex: 1 }}>
-              <strong style={{ fontSize: 'var(--font-md)' }}>Web Search</strong>
-              <span className="module-desc" style={{ marginLeft: '8px' }}>(optional)</span>
-            </div>
-            <input
-              type="text"
-              value={data.tavilyKey}
-              onChange={(e) => onChange({ ...data, tavilyKey: e.target.value })}
-              placeholder="tvly-..."
-              style={{ flex: 1 }}
-            />
+          <div style={{ marginBottom: '8px' }}>
+            <strong style={{ fontSize: 'var(--font-md)' }}>TonCenter API Key</strong>
+            <span className="module-desc" style={{ marginLeft: '8px' }}>(optional)</span>
           </div>
+          <p style={{ fontSize: 'var(--font-sm)', margin: '0 0 8px' }}>
+            Blockchain RPC — send transactions, check balances. Dedicated endpoint (vs ORBS fallback).
+          </p>
+          <PasswordInput
+            value={data.toncenterKey}
+            onChange={(e) => onChange({ ...data, toncenterKey: e.target.value })}
+            placeholder="Your TonCenter API key"
+            className="w-full"
+          />
           <div className="helper-text">
-            Tavily web search. Free plan at <a href="https://tavily.com" target="_blank" rel="noopener noreferrer">tavily.com</a>.
+            Get a free key at <a href="https://toncenter.com" target="_blank" rel="noopener noreferrer">toncenter.com</a> (instant, no signup).
+          </div>
+        </div>
+
+        {/* Tavily Key */}
+        <div className="module-item">
+          <div style={{ marginBottom: '8px' }}>
+            <strong style={{ fontSize: 'var(--font-md)' }}>Web Search</strong>
+            <span className="module-desc" style={{ marginLeft: '8px' }}>(optional)</span>
+          </div>
+          <p style={{ fontSize: 'var(--font-sm)', margin: '0 0 8px' }}>
+            Web search for real-time info. Free tier: 1,000 req/month.
+          </p>
+          <PasswordInput
+            value={data.tavilyKey}
+            onChange={(e) => onChange({ ...data, tavilyKey: e.target.value })}
+            placeholder="tvly-..."
+            className="w-full"
+          />
+          <div className="helper-text">
+            Get a free key at <a href="https://tavily.com" target="_blank" rel="noopener noreferrer">tavily.com</a>.
           </div>
         </div>
       </div>

@@ -20,7 +20,7 @@ interface SetCollectiblePriceParams {
 export const telegramSetCollectiblePriceTool: Tool = {
   name: "telegram_set_collectible_price",
   description:
-    "List or unlist a collectible gift for sale on the Telegram marketplace. Set a price in Stars to list it for sale. Omit price or set to 0 to remove from sale. Only works with upgraded collectible gifts you own.",
+    "List/unlist a collectible for sale. Set price in Stars to list, omit or 0 to unlist. Collectibles only.",
   parameters: Type.Object({
     odayId: Type.String({
       description: "The odayId of the collectible to list/unlist (from telegram_get_my_gifts)",

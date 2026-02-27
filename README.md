@@ -1,4 +1,6 @@
-<h1 align="center">Teleton Agent</h1>
+<p align="center">
+  <img src="./logo_dark.png" alt="Teleton Agent" width="700" />
+</p>
 
 <p align="center"><b>Autonomous AI agent platform for Telegram with native TON blockchain integration</b></p>
 
@@ -7,21 +9,27 @@
   <a href="https://nodejs.org/"><img src="https://img.shields.io/badge/node-%3E%3D20.0.0-brightgreen" alt="Node.js"></a>
   <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-5.7-blue" alt="TypeScript"></a>
   <a href="https://teletonagent.dev"><img src="https://img.shields.io/badge/Website-teletonagent.dev-ff6600" alt="Website"></a>
-  <a href="https://deepwiki.com/TONresistor/teleton-agent"><img src="https://deepwiki.com/badge.svg" alt="Ask DeepWiki"></a>
+  <a href="https://docs.teletonagent.dev"><img src="https://img.shields.io/badge/docs-Teleton%20Agents-blue" alt="Documentation"></a>
+  <a href="https://ton.org"><img src="https://img.shields.io/badge/Built_on-TON-0098EA?logo=ton&logoColor=white" alt="Built on TON"></a>
 </p>
 
 ---
 
-<p align="center">Teleton is an autonomous AI agent platform that operates as a real Telegram user account (not a bot). It thinks through an agentic loop with tool calling, remembers conversations across sessions with hybrid RAG, and natively integrates the TON blockchain: send crypto, swap on DEXs, bid on domains, verify payments - all from a chat message. It can schedule tasks to run autonomously at any time. It ships with 114 built-in tools, supports 6 LLM providers, and exposes a Plugin SDK so you can build your own tools on top of the platform.</p>
+<p align="center">Teleton is an autonomous AI agent platform that operates as a real Telegram user account (not a bot). It thinks through an agentic loop with tool calling, remembers conversations across sessions with hybrid RAG, and natively integrates the TON blockchain: send crypto, swap on DEXs, bid on domains, verify payments - all from a chat message. It can schedule tasks to run autonomously at any time. It ships with 100+ built-in tools, supports 10 LLM providers, and exposes a Plugin SDK so you can build your own tools on top of the platform.</p>
+
+### GroypFi Perps & Groypad Integration (MCP)
+
+See [docs/groypfi-mcp.md](docs/groypfi-mcp.md) for full setup instructions.
+AI agents can now trade perpetuals and launch tokens on Groypad via the official GroypFi MCP server.
 
 ### Key Highlights
 
 - **Full Telegram access** - Operates as a real user via MTProto (GramJS), not a limited bot
 - **Agentic loop** - Up to 5 iterations of tool calling per message, the agent thinks, acts, observes, and repeats
-- **Multi-Provider LLM** - Anthropic, OpenAI, Google Gemini, xAI Grok, Groq, OpenRouter
+- **Multi-Provider LLM** - Anthropic, Claude Code, OpenAI, Google Gemini, xAI Grok, Groq, OpenRouter, Moonshot, Mistral, Cocoon, Local (11 providers)
 - **TON Blockchain** - Built-in W5R1 wallet, send/receive TON & jettons, swap on STON.fi and DeDust, NFTs, DNS domains
 - **Persistent memory** - Hybrid RAG (sqlite-vec + FTS5), auto-compaction with AI summarization, daily logs
-- **114 built-in tools** - Messaging, media, blockchain, DEX trading, deals, DNS, journaling, and more
+- **100+ built-in tools** - Messaging, media, blockchain, DEX trading, deals, DNS, journaling, and more
 - **Plugin SDK** - Extend the agent with custom tools, frozen SDK with isolated databases, secrets management, lifecycle hooks
 - **MCP Client** - Connect external tool servers (stdio/SSE) with 2 lines of YAML, no code, no rebuild
 - **Secure by design** - Prompt injection defense, sandboxed workspace, plugin isolation, wallet encryption
@@ -34,7 +42,7 @@
 
 | Category      | Tools | Description                                                                                                        |
 | ------------- | ----- | ------------------------------------------------------------------------------------------------------------------ |
-| Telegram      | 66    | Messaging, media, chats, groups, polls, stickers, gifts, stars, stories, contacts, folders, profile, memory, tasks |
+| Telegram      | 73    | Messaging, media, chats, groups, polls, stickers, gifts, stars, stories, contacts, folders, profile, memory, tasks, voice transcription, scheduled messages |
 | TON & Jettons | 15    | W5R1 wallet, send/receive TON & jettons, balances, prices, holders, history, charts, NFTs, smart DEX router        |
 | STON.fi DEX   | 5     | Swap, quote, search, trending tokens, liquidity pools                                                              |
 | DeDust DEX    | 5     | Swap, quote, pools, prices, token analytics (holders, top traders, buy/sell tax)                                   |
@@ -48,7 +56,7 @@
 
 | Capability              | Description                                                                                                                 |
 | ----------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| **Multi-Provider LLM**  | Switch between Anthropic, OpenAI, Google, xAI, Groq, OpenRouter with one config change                                      |
+| **Multi-Provider LLM**  | Switch between Anthropic, Claude Code, OpenAI, Google, xAI, Groq, OpenRouter, Moonshot, Mistral, Cocoon, or Local — Dashboard validates API key before switching |
 | **RAG + Hybrid Search** | Local ONNX embeddings (384d) or Voyage AI (512d/1024d) with FTS5 keyword + sqlite-vec cosine similarity, fused via RRF      |
 | **Auto-Compaction**     | AI-summarized context management prevents overflow, preserves key information in `memory/*.md` files                        |
 | **Observation Masking** | Compresses old tool results to one-line summaries, saving ~90% context window                                               |
@@ -68,7 +76,7 @@
 ## Prerequisites
 
 - **Node.js 20.0.0+** - [Download](https://nodejs.org/)
-- **LLM API Key** - One of: [Anthropic](https://console.anthropic.com/) (recommended), [OpenAI](https://platform.openai.com/), [Google](https://aistudio.google.com/), [xAI](https://console.x.ai/), [Groq](https://console.groq.com/), [OpenRouter](https://openrouter.ai/)
+- **LLM API Key** - One of: [Anthropic](https://console.anthropic.com/) (recommended), [OpenAI](https://platform.openai.com/), [Google](https://aistudio.google.com/), [xAI](https://console.x.ai/), [Groq](https://console.groq.com/), [OpenRouter](https://openrouter.ai/), [Moonshot](https://platform.moonshot.ai/), [Mistral](https://console.mistral.ai/) — or keyless: Claude Code (auto-detect), Cocoon (TON), Local (Ollama/vLLM)
 - **Telegram Account** - Dedicated account recommended for security
 - **Telegram API Credentials** - From [my.telegram.org/apps](https://my.telegram.org/apps)
 - **Your Telegram User ID** - Message [@userinfobot](https://t.me/userinfobot)
@@ -106,7 +114,7 @@ teleton setup
 ```
 
 The wizard will configure:
-- LLM provider selection (Anthropic, OpenAI, Google, xAI, Groq, OpenRouter)
+- LLM provider selection (11 providers: Anthropic, Claude Code, OpenAI, Google, xAI, Groq, OpenRouter, Moonshot, Mistral, Cocoon, Local)
 - Telegram authentication (API credentials, phone, login code)
 - Access policies (DM/group response rules)
 - Admin user ID
@@ -149,10 +157,10 @@ The `teleton setup` wizard generates a fully configured `~/.teleton/config.yaml`
 
 ```yaml
 agent:
-  provider: "anthropic"              # anthropic | openai | google | xai | groq | openrouter
+  provider: "anthropic"              # anthropic | claude-code | openai | google | xai | groq | openrouter | moonshot | mistral | cocoon | local
   api_key: "sk-ant-api03-..."
-  model: "claude-opus-4-5-20251101"
-  utility_model: "claude-3-5-haiku-20241022"  # for summarization, compaction, vision
+  model: "claude-opus-4-6"
+  utility_model: "claude-haiku-4-5-20251001"  # for summarization, compaction, vision
   max_agentic_iterations: 5
 
 telegram:
@@ -179,6 +187,24 @@ webui:                       # Optional: Web dashboard
   host: "127.0.0.1"          # Localhost only (security)
   # auth_token: "..."        # Auto-generated if omitted
 ```
+
+### Supported Models
+
+All models are defined in `src/config/model-catalog.ts` and shared across the CLI setup, WebUI setup wizard, and Dashboard. To add a model, add it there — it will appear everywhere automatically.
+
+| Provider | Models |
+|----------|--------|
+| **Anthropic** | Claude Opus 4.6, Claude Opus 4.5, Claude Sonnet 4.6, Claude Haiku 4.5 |
+| **Claude Code** | Same as Anthropic (auto-detected credentials) |
+| **OpenAI** | GPT-5, GPT-5 Pro, GPT-5 Mini, GPT-5.1, GPT-4o, GPT-4.1, GPT-4.1 Mini, o4 Mini, o3, Codex Mini |
+| **Google** | Gemini 3 Pro (preview), Gemini 3 Flash (preview), Gemini 2.5 Pro, Gemini 2.5 Flash, Gemini 2.5 Flash Lite, Gemini 2.0 Flash |
+| **xAI** | Grok 4.1 Fast, Grok 4 Fast, Grok 4, Grok Code, Grok 3 |
+| **Groq** | Llama 4 Maverick, Qwen3 32B, DeepSeek R1 70B, Llama 3.3 70B |
+| **OpenRouter** | Claude Opus/Sonnet, GPT-5, Gemini, DeepSeek R1/V3, Qwen3 Coder/Max/235B, Nemotron, Sonar Pro, MiniMax, Grok 4 |
+| **Moonshot** | Kimi K2.5, Kimi K2 Thinking |
+| **Mistral** | Devstral Small/Medium, Mistral Large, Magistral Small |
+| **Cocoon** | Qwen/Qwen3-32B (decentralized, pays in TON) |
+| **Local** | Auto-detected (Ollama, vLLM, LM Studio) |
 
 ### MCP Servers
 
@@ -280,7 +306,7 @@ Teleton includes an **optional web dashboard** for monitoring and configuration.
 
 ### Features
 
-- **Dashboard**: System status, uptime, model info, session count, memory stats
+- **Dashboard**: System status, uptime, model info, session count, memory stats, provider switching with API key validation
 - **Tools Management**: View all tools grouped by module, toggle enable/disable, change scope per tool
 - **Plugin Marketplace**: Install, update, and manage plugins from registry with secrets management
 - **Soul Editor**: Edit SOUL.md, SECURITY.md, STRATEGY.md, MEMORY.md with unsaved changes warning
@@ -383,7 +409,7 @@ All admin commands support `/`, `!`, or `.` prefix:
 
 | Layer | Technology |
 |-------|------------|
-| LLM | Multi-provider via [pi-ai](https://github.com/mariozechner/pi-ai) (Anthropic, OpenAI, Google, xAI, Groq, OpenRouter) |
+| LLM | Multi-provider via [pi-ai](https://github.com/mariozechner/pi-ai) (11 providers: Anthropic, Claude Code, OpenAI, Google, xAI, Groq, OpenRouter, Moonshot, Mistral, Cocoon, Local) |
 | Telegram Userbot | [GramJS](https://gram.js.org/) (MTProto) |
 | Inline Bot | [Grammy](https://grammy.dev/) (Bot API, for deals) |
 | Blockchain | [TON SDK](https://github.com/ton-org/ton) (W5R1 wallet) |
@@ -405,13 +431,13 @@ src/
 ├── agent/                  # Core agent runtime
 │   ├── runtime.ts          # Agentic loop (5 iterations, tool calling, masking, compaction)
 │   ├── client.ts           # Multi-provider LLM client
-│   └── tools/              # 114 built-in tools
+│   └── tools/              # 100+ built-in tools
 │       ├── register-all.ts # Central tool registration (8 categories, 109 tools)
 │       ├── registry.ts     # Tool registry, scope filtering, provider limits
 │       ├── module-loader.ts    # Built-in module loading (deals → +5 tools)
 │       ├── plugin-loader.ts    # External plugin discovery, validation, hot-reload
 │       ├── mcp-loader.ts       # MCP client (stdio/SSE), tool discovery, lifecycle
-│       ├── telegram/       # Telegram operations (66 tools)
+│       ├── telegram/       # Telegram operations (73 tools)
 │       ├── ton/            # TON blockchain + jettons + DEX router (15 tools)
 │       ├── stonfi/         # STON.fi DEX (5 tools)
 │       ├── dedust/         # DeDust DEX (5 tools)
@@ -460,7 +486,8 @@ src/
 │   └── loader.ts           # 10 sections: soul + security + strategy + memory + context + ...
 ├── config/                 # Configuration
 │   ├── schema.ts           # Zod schemas + validation
-│   └── providers.ts        # Multi-provider LLM registry (6 providers)
+│   ├── providers.ts        # Multi-provider LLM registry (11 providers)
+│   └── model-catalog.ts    # Shared model catalog (60+ models across all providers)
 ├── webui/                  # Optional web dashboard
 │   ├── server.ts           # Hono server, auth middleware, static serving
 │   └── routes/             # 11 API route groups (status, tools, logs, memory, soul, plugins, mcp, tasks, workspace, config, marketplace)

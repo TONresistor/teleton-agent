@@ -25,7 +25,7 @@ function makeData(overrides: Partial<WizardData> = {}): WizardData {
     tonapiKey: "",
     tavilyKey: "",
     customizeThresholds: false,
-    buyMaxFloor: 100,
+    buyMaxFloor: 95,
     sellMinFloor: 105,
     walletAction: "generate",
     mnemonic: "",
@@ -101,100 +101,88 @@ describe("validateStep", () => {
     });
   });
 
-  // ── Step 2: Telegram ─────────────────────────────────────────────
-  describe("step 2 — Telegram", () => {
-    const validTelegram = {
-      apiId: 123456,
-      apiHash: "abcdef1234",
-      phone: "+33612345678",
-      userId: 456,
-    };
-
-    it("returns true with all valid Telegram fields", () => {
-      expect(validateStep(2, makeData(validTelegram))).toBe(true);
-    });
-
-    it("returns false when apiId is 0", () => {
-      expect(validateStep(2, makeData({ ...validTelegram, apiId: 0 }))).toBe(false);
-    });
-
-    it("returns false when apiHash is too short", () => {
-      expect(validateStep(2, makeData({ ...validTelegram, apiHash: "short" }))).toBe(false);
-    });
-
-    it("returns true when apiHash is exactly 10 characters", () => {
-      expect(validateStep(2, makeData({ ...validTelegram, apiHash: "1234567890" }))).toBe(true);
-    });
-
-    it("returns false when phone does not start with +", () => {
-      expect(validateStep(2, makeData({ ...validTelegram, phone: "33612345678" }))).toBe(false);
-    });
-
-    it("returns false when userId is 0", () => {
-      expect(validateStep(2, makeData({ ...validTelegram, userId: 0 }))).toBe(false);
-    });
-  });
-
-  // ── Step 3: Config ───────────────────────────────────────────────
-  describe("step 3 — Config", () => {
-    it("returns true with a model selected", () => {
-      expect(validateStep(3, makeData({ provider: "anthropic", model: "claude-sonnet" }))).toBe(
-        true
-      );
+  // ── Step 2: Config ───────────────────────────────────────────────
+  describe("step 2 — Config", () => {
+    it("returns true with a model and userId", () => {
+      expect(
+        validateStep(2, makeData({ provider: "anthropic", model: "claude-sonnet", userId: 123 }))
+      ).toBe(true);
     });
 
     it("returns false with no model for standard provider", () => {
-      expect(validateStep(3, makeData({ provider: "anthropic", model: "" }))).toBe(false);
+      expect(validateStep(2, makeData({ provider: "anthropic", model: "", userId: 123 }))).toBe(
+        false
+      );
     });
 
     it("returns true with __custom__ and customModel set", () => {
       expect(
         validateStep(
-          3,
-          makeData({ provider: "anthropic", model: "__custom__", customModel: "my-model" })
+          2,
+          makeData({
+            provider: "anthropic",
+            model: "__custom__",
+            customModel: "my-model",
+            userId: 123,
+          })
         )
       ).toBe(true);
     });
 
     it("returns false with __custom__ but empty customModel", () => {
       expect(
-        validateStep(3, makeData({ provider: "anthropic", model: "__custom__", customModel: "" }))
+        validateStep(
+          2,
+          makeData({ provider: "anthropic", model: "__custom__", customModel: "", userId: 123 })
+        )
       ).toBe(false);
     });
 
     it("returns true for cocoon without model (skips model check)", () => {
-      expect(validateStep(3, makeData({ provider: "cocoon", model: "" }))).toBe(true);
+      expect(validateStep(2, makeData({ provider: "cocoon", model: "", userId: 123 }))).toBe(true);
     });
 
     it("returns true for local without model (skips model check)", () => {
-      expect(validateStep(3, makeData({ provider: "local", model: "" }))).toBe(true);
+      expect(validateStep(2, makeData({ provider: "local", model: "", userId: 123 }))).toBe(true);
+    });
+
+    it("returns false when userId is 0", () => {
+      expect(validateStep(2, makeData({ provider: "cocoon", userId: 0 }))).toBe(false);
     });
 
     it("returns false when maxIterations is 0", () => {
-      expect(validateStep(3, makeData({ provider: "cocoon", maxIterations: 0 }))).toBe(false);
+      expect(validateStep(2, makeData({ provider: "cocoon", userId: 123, maxIterations: 0 }))).toBe(
+        false
+      );
     });
 
     it("returns false when maxIterations exceeds 50", () => {
-      expect(validateStep(3, makeData({ provider: "cocoon", maxIterations: 51 }))).toBe(false);
+      expect(
+        validateStep(2, makeData({ provider: "cocoon", userId: 123, maxIterations: 51 }))
+      ).toBe(false);
     });
 
     it("returns true when maxIterations is 1 (lower bound)", () => {
-      expect(validateStep(3, makeData({ provider: "cocoon", maxIterations: 1 }))).toBe(true);
+      expect(validateStep(2, makeData({ provider: "cocoon", userId: 123, maxIterations: 1 }))).toBe(
+        true
+      );
     });
 
     it("returns true when maxIterations is 50 (upper bound)", () => {
-      expect(validateStep(3, makeData({ provider: "cocoon", maxIterations: 50 }))).toBe(true);
+      expect(
+        validateStep(2, makeData({ provider: "cocoon", userId: 123, maxIterations: 50 }))
+      ).toBe(true);
     });
   });
 
-  // ── Step 4: Wallet ───────────────────────────────────────────────
-  describe("step 4 — Wallet", () => {
+  // ── Step 3: Wallet ───────────────────────────────────────────────
+  describe("step 3 — Wallet", () => {
     it("returns true when walletAction is keep", () => {
-      expect(validateStep(4, makeData({ walletAction: "keep" }))).toBe(true);
+      expect(validateStep(3, makeData({ walletAction: "keep" }))).toBe(true);
     });
 
     it("returns false when no walletAddress after generate", () => {
-      expect(validateStep(4, makeData({ walletAction: "generate", walletAddress: "" }))).toBe(
+      expect(validateStep(3, makeData({ walletAction: "generate", walletAddress: "" }))).toBe(
         false
       );
     });
@@ -202,7 +190,7 @@ describe("validateStep", () => {
     it("returns false when walletAddress set but mnemonicSaved is false", () => {
       expect(
         validateStep(
-          4,
+          3,
           makeData({ walletAction: "generate", walletAddress: "EQ...", mnemonicSaved: false })
         )
       ).toBe(false);
@@ -211,7 +199,7 @@ describe("validateStep", () => {
     it("returns true when walletAddress set and mnemonicSaved is true", () => {
       expect(
         validateStep(
-          4,
+          3,
           makeData({ walletAction: "generate", walletAddress: "EQ...", mnemonicSaved: true })
         )
       ).toBe(true);
@@ -220,10 +208,43 @@ describe("validateStep", () => {
     it("returns true for import with address and mnemonicSaved", () => {
       expect(
         validateStep(
-          4,
+          3,
           makeData({ walletAction: "import", walletAddress: "EQ...", mnemonicSaved: true })
         )
       ).toBe(true);
+    });
+  });
+
+  // ── Step 4: Telegram ─────────────────────────────────────────────
+  describe("step 4 — Telegram", () => {
+    const validTelegram = {
+      apiId: 123456,
+      apiHash: "abcdef1234",
+      phone: "+33612345678",
+    };
+
+    it("returns true with all valid Telegram fields", () => {
+      expect(validateStep(4, makeData(validTelegram))).toBe(true);
+    });
+
+    it("returns false when apiId is 0", () => {
+      expect(validateStep(4, makeData({ ...validTelegram, apiId: 0 }))).toBe(false);
+    });
+
+    it("returns false when apiHash is too short", () => {
+      expect(validateStep(4, makeData({ ...validTelegram, apiHash: "short" }))).toBe(false);
+    });
+
+    it("returns true when apiHash is exactly 10 characters", () => {
+      expect(validateStep(4, makeData({ ...validTelegram, apiHash: "1234567890" }))).toBe(true);
+    });
+
+    it("returns false when phone does not start with +", () => {
+      expect(validateStep(4, makeData({ ...validTelegram, phone: "33612345678" }))).toBe(false);
+    });
+
+    it("returns true for +888 anonymous number", () => {
+      expect(validateStep(4, makeData({ ...validTelegram, phone: "+88812345678" }))).toBe(true);
     });
   });
 

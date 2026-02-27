@@ -18,8 +18,7 @@ interface AddStickerSetParams {
  */
 export const telegramAddStickerSetTool: Tool = {
   name: "telegram_add_sticker_set",
-  description:
-    "Add/install a sticker pack to your account by its short name. Once added, you can use the stickers from this pack in conversations. The short name is the part after t.me/addstickers/ in a sticker pack link, or can be found via telegram_search_stickers. Use this to build your sticker collection.",
+  description: "Install a sticker pack to your account by its short name.",
   parameters: Type.Object({
     shortName: Type.String({
       description:

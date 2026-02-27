@@ -54,7 +54,7 @@ export class DealBot {
     this.bot = new Bot(config.token);
 
     if (config.apiId && config.apiHash) {
-      this.gramjsBot = new GramJSBotClient(config.apiId, config.apiHash);
+      this.gramjsBot = new GramJSBotClient(config.apiId, config.apiHash, config.gramjsSessionPath);
     }
 
     this.setupHandlers();

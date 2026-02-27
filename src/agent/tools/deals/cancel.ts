@@ -13,19 +13,7 @@ interface DealCancelParams {
 
 export const dealCancelTool: Tool = {
   name: "deal_cancel",
-  description: `Cancel an active deal (proposed or accepted status only).
-
-IMPORTANT: Cannot cancel deals that are:
-- Already verified (payment received)
-- Already completed
-- Already declined, expired, or failed
-
-Use this when:
-- User explicitly asks to cancel
-- Deal terms change before verification
-- External circumstances make deal impossible
-
-The deal status will be set to 'cancelled' and cannot be resumed.`,
+  description: "Cancel a deal. Only works for 'proposed' or 'accepted' status. Irreversible.",
   parameters: Type.Object({
     dealId: Type.String({ description: "Deal ID to cancel" }),
     reason: Type.Optional(Type.String({ description: "Reason for cancellation (optional)" })),

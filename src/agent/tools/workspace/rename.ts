@@ -16,19 +16,7 @@ interface WorkspaceRenameParams {
 
 export const workspaceRenameTool: Tool = {
   name: "workspace_rename",
-  description: `Rename or move a file within your workspace.
-
-Use this to:
-- Give meaningful names to downloaded files
-- Organize files into subdirectories
-- Rename Telegram downloads (default names like "123_456_789.jpg" are hard to track)
-
-Examples:
-- Rename: from="downloads/123_456_789.jpg", to="downloads/alice_profile.jpg"
-- Move: from="downloads/photo.jpg", to="uploads/photo.jpg"
-- Organize: from="downloads/doc.pdf", to="downloads/contracts/2026/lease.pdf"
-
-CANNOT move/rename files outside workspace or to protected locations.`,
+  description: "Rename or move a file within workspace. Creates parent directories as needed.",
 
   parameters: Type.Object({
     from: Type.String({

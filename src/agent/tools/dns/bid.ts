@@ -1,12 +1,12 @@
 import { Type } from "@sinclair/typebox";
 import type { Tool, ToolExecutor, ToolResult } from "../types.js";
-import { loadWallet, getKeyPair } from "../../../ton/wallet-service.js";
-import { WalletContractV5R1, TonClient, toNano, internal } from "@ton/ton";
+import { loadWallet, getKeyPair, getCachedTonClient } from "../../../ton/wallet-service.js";
+import { WalletContractV5R1, toNano, fromNano, internal } from "@ton/ton";
 import { Address, SendMode } from "@ton/core";
-import { getCachedHttpEndpoint } from "../../../ton/endpoint.js";
 import { tonapiFetch } from "../../../constants/api-endpoints.js";
 import { getErrorMessage } from "../../../utils/errors.js";
 import { createLogger } from "../../../utils/logger.js";
+import { withTxLock } from "../../../ton/tx-lock.js";
 
 const log = createLogger("Tools");
 interface DnsBidParams {
@@ -16,7 +16,7 @@ interface DnsBidParams {
 export const dnsBidTool: Tool = {
   name: "dns_bid",
   description:
-    "Place a bid on an existing .ton domain auction. Bid must be at least 5% higher than current bid. The domain must already be in auction (use dns_check first to verify status and get current bid).",
+    "Place a bid on a .ton domain auction. Bid must be >= 105% of current bid. Use dns_check first.",
   parameters: Type.Object({
     domain: Type.String({
       description: "Domain name (with or without .ton extension)",
@@ -81,7 +81,7 @@ export const dnsBidExecutor: ToolExecutor<DnsBidParams> = async (
       const auction = auctions.data?.find((a: any) => a.domain === fullDomain);
 
       if (auction) {
-        const currentBid = Number(BigInt(auction.price) / BigInt(1_000_000_000));
+        const currentBid = parseFloat(fromNano(auction.price));
         const minBid = currentBid * 1.05;
 
         if (amount < minBid) {
@@ -111,25 +111,26 @@ export const dnsBidExecutor: ToolExecutor<DnsBidParams> = async (
       publicKey: keyPair.publicKey,
     });
 
-    const endpoint = await getCachedHttpEndpoint();
-    const client = new TonClient({ endpoint });
+    const client = await getCachedTonClient();
     const contract = client.open(wallet);
 
-    const seqno = await contract.getSeqno();
+    await withTxLock(async () => {
+      const seqno = await contract.getSeqno();
 
-    // Send bid (just TON, no body needed for bids - op=0 is implicit)
-    await contract.sendTransfer({
-      seqno,
-      secretKey: keyPair.secretKey,
-      sendMode: SendMode.PAY_GAS_SEPARATELY + SendMode.IGNORE_ERRORS,
-      messages: [
-        internal({
-          to: Address.parse(nftAddress),
-          value: toNano(amount),
-          body: "", // Empty body for bid
-          bounce: true,
-        }),
-      ],
+      // Send bid (just TON, no body needed for bids - op=0 is implicit)
+      await contract.sendTransfer({
+        seqno,
+        secretKey: keyPair.secretKey,
+        sendMode: SendMode.PAY_GAS_SEPARATELY,
+        messages: [
+          internal({
+            to: Address.parse(nftAddress),
+            value: toNano(amount),
+            body: "", // Empty body for bid
+            bounce: true,
+          }),
+        ],
+      });
     });
 
     return {

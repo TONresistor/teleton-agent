@@ -38,7 +38,7 @@ agent:
   provider: anthropic
   api_key: sk-ant-api03-fulltest456
   model: claude-opus-4-5-20251101
-  utility_model: claude-3-5-haiku-20241022
+  utility_model: claude-haiku-4-5-20251001
   max_tokens: 8192
   temperature: 0.8
   system_prompt: "Custom system prompt"
@@ -75,7 +75,6 @@ telegram:
 
 storage:
   sessions_file: "~/custom_sessions.json"
-  pairing_file: "~/custom_pairing.json"
   memory_file: "~/custom_memory.json"
   history_limit: 50
 
@@ -281,7 +280,7 @@ describe("Config Loader", () => {
 
       // Agent
       expect(config.agent.model).toBe("claude-opus-4-5-20251101");
-      expect(config.agent.utility_model).toBe("claude-3-5-haiku-20241022");
+      expect(config.agent.utility_model).toBe("claude-haiku-4-5-20251001");
       expect(config.agent.max_tokens).toBe(8192);
       expect(config.agent.temperature).toBe(0.8);
       expect(config.agent.max_agentic_iterations).toBe(10);
@@ -350,7 +349,7 @@ describe("Config Loader", () => {
       const config = loadConfig(TEST_CONFIG_PATH);
 
       // Agent defaults
-      expect(config.agent.model).toBe("claude-opus-4-5-20251101");
+      expect(config.agent.model).toBe("claude-opus-4-6");
       expect(config.agent.max_tokens).toBe(4096);
       expect(config.agent.temperature).toBe(0.7);
       expect(config.agent.max_agentic_iterations).toBe(5);
@@ -361,7 +360,7 @@ describe("Config Loader", () => {
 
       // Telegram defaults
       expect(config.telegram.session_name).toBe("teleton_session");
-      expect(config.telegram.dm_policy).toBe("pairing");
+      expect(config.telegram.dm_policy).toBe("allowlist");
       expect(config.telegram.group_policy).toBe("open");
       expect(config.telegram.require_mention).toBe(true);
       expect(config.telegram.typing_simulation).toBe(true);
@@ -526,7 +525,6 @@ telegram:
       const config = loadConfig(TEST_CONFIG_PATH);
 
       expect(config.storage.sessions_file).toBe(join(homedir(), ".teleton/sessions.json"));
-      expect(config.storage.pairing_file).toBe(join(homedir(), ".teleton/pairing.json"));
       expect(config.storage.memory_file).toBe(join(homedir(), ".teleton/memory.json"));
     });
 
@@ -542,7 +540,6 @@ telegram:
   session_path: "~/custom/session"
 storage:
   sessions_file: "~/custom/sessions.json"
-  pairing_file: "~/custom/pairing.json"
   memory_file: "~/custom/memory.json"
 `;
       writeTestConfig(customPathConfig);

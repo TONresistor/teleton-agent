@@ -1,4 +1,4 @@
-import { sanitizeForPrompt } from "../utils/sanitize.js";
+import { sanitizeForPrompt, sanitizeForContext } from "../utils/sanitize.js";
 
 export interface EnvelopeParams {
   channel: string;
@@ -14,6 +14,11 @@ export interface EnvelopeParams {
   hasMedia?: boolean;
   mediaType?: string;
   messageId?: number; // For media download reference
+  replyContext?: {
+    senderName?: string;
+    text: string;
+    isAgent?: boolean;
+  };
 }
 
 function formatElapsed(elapsedMs: number): string {
@@ -117,6 +122,14 @@ export function formatMessageEnvelope(params: EnvelopeParams): string {
     body = `[${mediaEmoji} ${params.mediaType}${msgIdHint}] ${body}`;
   }
 
+  if (params.replyContext) {
+    const sender = params.replyContext.isAgent
+      ? "agent"
+      : sanitizeForPrompt(params.replyContext.senderName ?? "unknown");
+    let quotedText = sanitizeForContext(params.replyContext.text);
+    if (quotedText.length > 200) quotedText = quotedText.slice(0, 200) + "...";
+    return `${header}\n[↩ reply to ${sender}: "${quotedText}"]\n${body}`;
+  }
   return `${header} ${body}`;
 }
 

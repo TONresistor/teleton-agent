@@ -20,7 +20,7 @@ interface GetAvailableGiftsParams {
 export const telegramGetAvailableGiftsTool: Tool = {
   name: "telegram_get_available_gifts",
   description:
-    "Get all Star Gifts available for purchase. There are two types: LIMITED gifts (rare, can become collectibles, may sell out) and UNLIMITED gifts (always available). Use filter to see specific types. Returns gift ID, name, stars cost, and availability. Use the gift ID with telegram_send_gift to send one.",
+    "Get Star Gifts available for purchase. Filterable by limited/unlimited. Use gift ID with telegram_send_gift.",
   category: "data-bearing",
   parameters: Type.Object({
     filter: Type.Optional(

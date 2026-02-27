@@ -37,30 +37,8 @@ interface SendVoiceParams {
 
 export const telegramSendVoiceTool: Tool = {
   name: "telegram_send_voice",
-  description: `Send a voice message to a Telegram chat.
-
-**Two modes:**
-1. **File mode**: Provide \`voicePath\` to send an existing audio file
-2. **TTS mode**: Provide \`text\` to generate speech and send as voice note
-
-**TTS Providers:**
-- \`piper\` (default): Offline neural TTS with Trump voice
-- \`edge\`: Free Microsoft Edge TTS - cloud, many voices
-- \`openai\`: OpenAI TTS API (requires OPENAI_API_KEY)
-- \`elevenlabs\`: ElevenLabs API (requires ELEVENLABS_API_KEY)
-
-**Piper voices (default):**
-- \`trump\`: Trump voice (default, en-US)
-- \`dmitri\` / \`ru-ru\`: Russian male
-
-**Edge voices (fallback):**
-- English: en-us-male, en-us-female, en-gb-male
-- Russian: ru-ru-male, ru-ru-female
-
-**Examples:**
-- Default Trump voice: text="This is tremendous, believe me!"
-- Russian: text="Привет!", voice="dmitri", ttsProvider="piper"
-- Edge fallback: text="Hello!", ttsProvider="edge"`,
+  description:
+    "Send a voice message. Either provide voicePath for an existing file, or text for TTS generation. Default TTS: piper (Trump voice). Available providers: piper, edge, openai, elevenlabs.",
 
   parameters: Type.Object({
     chatId: Type.String({

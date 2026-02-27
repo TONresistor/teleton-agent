@@ -43,24 +43,8 @@ interface GetMyGiftsParams {
  */
 export const telegramGetMyGiftsTool: Tool = {
   name: "telegram_get_my_gifts",
-  description: `Get Star Gifts you or another user has received.
-
-USAGE:
-- To view YOUR OWN gifts: omit both userId and viewSender
-- To view the SENDER's gifts (when user says "show me MY gifts"): set viewSender=true
-- To view a specific user's gifts: pass their userId
-
-PRESENTATION GUIDE:
-- For collectibles: Use "title + model" as display name (e.g., "Hypno Lollipop Telegram")
-- NFT link: t.me/nft/{slug} (e.g., t.me/nft/HypnoLollipop-63414)
-- Respond concisely: "You have a Hypno Lollipop Telegram 🍭"
-- Only give details (rarity, backdrop, pattern) when specifically asked
-- attributes.model.name = model, attributes.pattern.name = pattern, attributes.backdrop.name = backdrop
-- rarityPermille: divide by 10 to get percentage (7 = 0.7%)
-
-TRANSFER: Use msgId (for your own gifts) to transfer collectibles via telegram_transfer_collectible.
-
-NEVER dump all raw data. Keep responses natural and concise.`,
+  description:
+    "Get Star Gifts received by you or another user. Set viewSender=true when sender says 'show MY gifts'. For collectibles: display as 'title + model', link as t.me/nft/{slug}. rarityPermille / 10 = %. Use msgId for transfers.",
   parameters: Type.Object({
     userId: Type.Optional(
       Type.String({

@@ -9,6 +9,7 @@ import { MessageDebouncer } from "./telegram/debounce.js";
 import { getDatabase, closeDatabase, initializeMemory, type MemorySystem } from "./memory/index.js";
 import { getWalletAddress } from "./ton/wallet-service.js";
 import { setTonapiKey } from "./constants/api-endpoints.js";
+import { setToncenterApiKey } from "./ton/endpoint.js";
 import { TELETON_ROOT } from "./workspace/paths.js";
 import { TELEGRAM_CONNECTION_RETRIES, TELEGRAM_FLOOD_SLEEP_THRESHOLD } from "./constants/limits.js";
 import { join } from "path";
@@ -31,6 +32,7 @@ import {
 } from "./agent/tools/mcp-loader.js";
 import { getErrorMessage } from "./utils/errors.js";
 import { createLogger, initLoggerFromConfig } from "./utils/logger.js";
+import { AgentLifecycle } from "./agent/lifecycle.js";
 
 const log = createLogger("App");
 
@@ -51,6 +53,7 @@ export class TeletonApp {
   private pluginWatcher: PluginWatcher | null = null;
   private mcpConnections: McpConnection[] = [];
   private callbackHandlerRegistered = false;
+  private lifecycle = new AgentLifecycle();
 
   private configPath: string;
 
@@ -63,6 +66,9 @@ export class TeletonApp {
 
     if (this.config.tonapi_key) {
       setTonapiKey(this.config.tonapi_key);
+    }
+    if (this.config.toncenter_api_key) {
+      setToncenterApiKey(this.config.toncenter_api_key);
     }
 
     const soul = loadSoul();
@@ -127,6 +133,13 @@ export class TeletonApp {
   }
 
   /**
+   * Get the lifecycle state machine for WebUI integration
+   */
+  getLifecycle(): AgentLifecycle {
+    return this.lifecycle;
+  }
+
+  /**
    * Start the agent
    */
   async start(): Promise<void> {
@@ -145,6 +158,88 @@ ${blue}  ┌──────────────────────�
   └────────────────────────────────────────────────────────────────── DEV: ZKPROOF.T.ME ──┘${reset}
 `);
 
+    // Register lifecycle callbacks so WebUI routes can call start()/stop() without args
+    this.lifecycle.registerCallbacks(
+      () => this.startAgent(),
+      () => this.stopAgent()
+    );
+
+    // Start WebUI server if enabled (before agent — survives agent stop/restart)
+    if (this.config.webui.enabled) {
+      try {
+        const { WebUIServer } = await import("./webui/server.js");
+        // Build MCP server info getter for WebUI (live status, not a snapshot)
+        const mcpServers = () =>
+          Object.entries(this.config.mcp.servers).map(([name, serverConfig]) => {
+            const type = serverConfig.command
+              ? ("stdio" as const)
+              : serverConfig.url
+                ? ("streamable-http" as const)
+                : ("sse" as const);
+            const target = serverConfig.command ?? serverConfig.url ?? "";
+            const connected = this.mcpConnections.some((c) => c.serverName === name);
+            const moduleName = `mcp_${name}`;
+            const moduleTools = this.toolRegistry.getModuleTools(moduleName);
+            return {
+              name,
+              type,
+              target,
+              scope: serverConfig.scope ?? "always",
+              enabled: serverConfig.enabled ?? true,
+              connected,
+              toolCount: moduleTools.length,
+              tools: moduleTools.map((t) => t.name),
+              envKeys: Object.keys(serverConfig.env ?? {}),
+            };
+          });
+
+        const builtinNames = this.modules.map((m) => m.name);
+        const pluginContext: PluginContext = {
+          bridge: this.bridge,
+          db: getDatabase().getDb(),
+          config: this.config,
+        };
+
+        this.webuiServer = new WebUIServer({
+          agent: this.agent,
+          bridge: this.bridge,
+          memory: this.memory,
+          toolRegistry: this.toolRegistry,
+          plugins: this.modules
+            .filter((m) => this.toolRegistry.isPluginModule(m.name))
+            .map((m) => ({ name: m.name, version: m.version ?? "0.0.0" })),
+          mcpServers,
+          config: this.config.webui,
+          configPath: this.configPath,
+          lifecycle: this.lifecycle,
+          marketplace: {
+            modules: this.modules,
+            config: this.config,
+            sdkDeps: this.sdkDeps,
+            pluginContext,
+            loadedModuleNames: builtinNames,
+            rewireHooks: () => this.wirePluginEventHooks(),
+          },
+        });
+        await this.webuiServer.start();
+      } catch (error) {
+        log.error({ err: error }, "❌ Failed to start WebUI server");
+        log.warn("⚠️ Continuing without WebUI...");
+      }
+    }
+
+    // Start agent subsystems via lifecycle
+    await this.lifecycle.start(() => this.startAgent());
+
+    // Keep process alive
+    await new Promise(() => {});
+  }
+
+  /**
+   * Start agent subsystems (Telegram, plugins, MCP, modules, debouncer, handler).
+   * Called by lifecycle.start() — do NOT call directly.
+   */
+  private async startAgent(): Promise<void> {
     // Load modules
     const moduleNames = this.modules
       .filter((m) => m.tools(this.config).length > 0)
@@ -275,14 +370,15 @@ ${blue}  ┌──────────────────────�
           `Cocoon Network unavailable on port ${this.config.cocoon?.port ?? 10000}: ${getErrorMessage(err)}`
         );
         log.error("Start the Cocoon client first: cocoon start");
-        process.exit(1);
+        throw new Error(`Cocoon Network unavailable: ${getErrorMessage(err)}`);
       }
     }
 
     // Local LLM — register models from OpenAI-compatible server
     if (this.config.agent.provider === "local" && !this.config.agent.base_url) {
-      log.error("Local provider requires base_url in config (e.g. http://localhost:11434/v1)");
-      process.exit(1);
+      throw new Error(
+        "Local provider requires base_url in config (e.g. http://localhost:11434/v1)"
+      );
     }
     if (this.config.agent.provider === "local" && this.config.agent.base_url) {
       try {
@@ -302,7 +398,7 @@ ${blue}  ┌──────────────────────�
           `Local LLM server unavailable at ${this.config.agent.base_url}: ${getErrorMessage(err)}`
         );
         log.error("Start the LLM server first (e.g. ollama serve)");
-        process.exit(1);
+        throw new Error(`Local LLM server unavailable: ${getErrorMessage(err)}`);
       }
     }
 
@@ -310,8 +406,7 @@ ${blue}  ┌──────────────────────�
     await this.bridge.connect();
 
     if (!this.bridge.isAvailable()) {
-      log.error("❌ Failed to connect to Telegram");
-      process.exit(1);
+      throw new Error("Failed to connect to Telegram");
     }
 
     // Resolve owner name/username from Telegram if not already set
@@ -385,57 +480,6 @@ ${blue}  ┌──────────────────────�
 
     log.info("Teleton Agent is running! Press Ctrl+C to stop.");
 
-    // Start WebUI server if enabled
-    if (this.config.webui.enabled) {
-      try {
-        const { WebUIServer } = await import("./webui/server.js");
-        // Build MCP server info for WebUI
-        const mcpServers = Object.entries(this.config.mcp.servers).map(([name, serverConfig]) => {
-          const type = serverConfig.command ? ("stdio" as const) : ("sse" as const);
-          const target = serverConfig.command ?? serverConfig.url ?? "";
-          const connected = this.mcpConnections.some((c) => c.serverName === name);
-          const moduleName = `mcp_${name}`;
-          const moduleTools = this.toolRegistry.getModuleTools(moduleName);
-          return {
-            name,
-            type,
-            target,
-            scope: serverConfig.scope ?? "always",
-            enabled: serverConfig.enabled ?? true,
-            connected,
-            toolCount: moduleTools.length,
-            tools: moduleTools.map((t) => t.name),
-            envKeys: Object.keys(serverConfig.env ?? {}),
-          };
-        });
-
-        this.webuiServer = new WebUIServer({
-          agent: this.agent,
-          bridge: this.bridge,
-          memory: this.memory,
-          toolRegistry: this.toolRegistry,
-          plugins: this.modules
-            .filter((m) => this.toolRegistry.isPluginModule(m.name))
-            .map((m) => ({ name: m.name, version: m.version ?? "0.0.0" })),
-          mcpServers,
-          config: this.config.webui,
-          configPath: this.configPath,
-          marketplace: {
-            modules: this.modules,
-            config: this.config,
-            sdkDeps: this.sdkDeps,
-            pluginContext,
-            loadedModuleNames: builtinNames,
-            rewireHooks: () => this.wirePluginEventHooks(),
-          },
-        });
-        await this.webuiServer.start();
-      } catch (error) {
-        log.error({ err: error }, "❌ Failed to start WebUI server");
-        log.warn("⚠️ Continuing without WebUI...");
-      }
-    }
-
     // Initialize message debouncer with bypass logic
     this.debouncer = new MessageDebouncer(
       {
@@ -474,9 +518,6 @@ ${blue}  ┌──────────────────────�
         log.error({ err: error }, "Error enqueueing message");
       }
     });
-
-    // Keep process alive
-    await new Promise(() => {});
   }
 
   /**
@@ -859,7 +900,10 @@ ${blue}  ┌──────────────────────�
   async stop(): Promise<void> {
     log.info("👋 Stopping Teleton AI...");
 
-    // Stop WebUI server first (if running)
+    // Stop agent subsystems via lifecycle
+    await this.lifecycle.stop(() => this.stopAgent());
+
+    // Stop WebUI server (if running)
     if (this.webuiServer) {
       try {
         await this.webuiServer.stop();
@@ -868,6 +912,19 @@ ${blue}  ┌──────────────────────�
       }
     }
 
+    // Close database last (shared with WebUI)
+    try {
+      closeDatabase();
+    } catch (e) {
+      log.error({ err: e }, "⚠️ Database close failed");
+    }
+  }
+
+  /**
+   * Stop agent subsystems (watcher, MCP, debouncer, handler, modules, bridge).
+   * Called by lifecycle.stop() — do NOT call directly.
+   */
+  private async stopAgent(): Promise<void> {
     // Stop plugin watcher first
     if (this.pluginWatcher) {
       try {
@@ -914,12 +971,6 @@ ${blue}  ┌──────────────────────�
       await this.bridge.disconnect();
     } catch (e) {
       log.error({ err: e }, "⚠️ Bridge disconnect failed");
-    }
-
-    try {
-      closeDatabase();
-    } catch (e) {
-      log.error({ err: e }, "⚠️ Database close failed");
     }
   }
 }

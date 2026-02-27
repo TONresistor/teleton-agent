@@ -2,7 +2,7 @@ import { mnemonicNew, mnemonicToPrivateKey, mnemonicValidate } from "@ton/crypto
 import { WalletContractV5R1, TonClient, fromNano } from "@ton/ton";
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from "fs";
 import { join, dirname } from "path";
-import { getCachedHttpEndpoint } from "./endpoint.js";
+import { getCachedHttpEndpoint, invalidateEndpointCache, getToncenterApiKey } from "./endpoint.js";
 import { fetchWithTimeout } from "../utils/fetch.js";
 import { TELETON_ROOT } from "../workspace/paths.js";
 import { tonapiFetch, COINGECKO_API_URL } from "../constants/api-endpoints.js";
@@ -18,6 +18,9 @@ let _walletCache: WalletData | null | undefined; // undefined = not yet loaded
 
 /** Cached key pair derived from mnemonic */
 let _keyPairCache: { publicKey: Buffer; secretKey: Buffer } | null = null;
+
+/** Cached TonClient — invalidated when endpoint rotates */
+let _tonClientCache: { client: TonClient; endpoint: string } | null = null;
 
 export interface WalletData {
   version: "w5r1";
@@ -139,6 +142,30 @@ export function getWalletAddress(): string | null {
 }
 
 /**
+ * Get (or create) a cached TonClient.
+ * Re-creates only when the endpoint URL rotates (60s TTL on endpoint).
+ */
+export async function getCachedTonClient(): Promise<TonClient> {
+  const endpoint = await getCachedHttpEndpoint();
+  if (_tonClientCache && _tonClientCache.endpoint === endpoint) {
+    return _tonClientCache.client;
+  }
+  const apiKey = getToncenterApiKey();
+  const client = new TonClient({ endpoint, ...(apiKey && { apiKey }) });
+  _tonClientCache = { client, endpoint };
+  return client;
+}
+
+/**
+ * Invalidate the TonClient cache and the endpoint cache.
+ * Call this when a node returns a 5xx error so the next call picks a fresh node.
+ */
+export function invalidateTonClientCache(): void {
+  _tonClientCache = null;
+  invalidateEndpointCache();
+}
+
+/**
  * Get cached KeyPair (derives from mnemonic once, then reuses).
  * Returns null if no wallet is configured.
  */
@@ -160,10 +187,7 @@ export async function getWalletBalance(address: string): Promise<{
   balanceNano: string;
 } | null> {
   try {
-    // Get decentralized endpoint from orbs network (no rate limits)
-    const endpoint = await getCachedHttpEndpoint();
-
-    const client = new TonClient({ endpoint });
+    const client = await getCachedTonClient();
 
     // Import Address from @ton/core
     const { Address } = await import("@ton/core");

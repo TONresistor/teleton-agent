@@ -22,7 +22,7 @@ interface GetRepliesParams {
 export const telegramGetRepliesTool: Tool = {
   name: "telegram_get_replies",
   description:
-    "Get all replies to a specific message (reply thread/chain). Useful for reading conversation threads, forum discussions, or comment sections under channel posts. Returns messages sorted from oldest to newest.",
+    "Get all replies to a specific message (thread/chain). Returns messages oldest-first.",
   category: "data-bearing",
   parameters: Type.Object({
     chatId: Type.String({

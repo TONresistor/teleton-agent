@@ -25,7 +25,7 @@ interface SendStickerParams {
 export const telegramSendStickerTool: Tool = {
   name: "telegram_send_sticker",
   description:
-    "Send a sticker to a Telegram chat. You can either provide a sticker set's short name + index (position in the pack, starting from 0), or a local path to a WEBP/TGS file. To find sticker sets, use telegram_search_stickers first to get the shortName, then choose which sticker (by index 0-N) to send.",
+    "Send a sticker via stickerSetShortName+stickerIndex (from telegram_search_stickers) or a local WEBP/TGS file path.",
   parameters: Type.Object({
     chatId: Type.String({
       description: "The chat ID to send the sticker to",

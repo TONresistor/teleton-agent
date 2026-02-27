@@ -212,7 +212,7 @@ body {
   letter-spacing: -0.2px;
 }
 
-/* ---- Stats Grid ---- */
+/* ---- Stats Grid (legacy, used in Config) ---- */
 
 .stats {
   display: grid;
@@ -243,6 +243,95 @@ body {
   font-size: 24px;
   font-weight: 600;
   letter-spacing: -0.5px;
+}
+
+/* ---- Dashboard status bar ---- */
+
+.status-bar {
+  padding: 14px 18px !important;
+}
+
+.status-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+
+.status-divider {
+  height: 1px;
+  background: var(--separator);
+  margin: 10px 0;
+}
+
+.metric {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.metric-label {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+}
+
+.metric-value {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.metric-value.mono {
+  font-size: 13px;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+}
+
+/* ---- Dashboard layout ---- */
+
+.dashboard-root {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 64px);
+  min-height: 0;
+}
+
+.dashboard-settings {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+@media (max-width: 640px) {
+  .dashboard-settings {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ---- Dashboard logs ---- */
+
+.dashboard-logs {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  margin-bottom: 0 !important;
+}
+
+.dashboard-logs-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 10px;
+}
+
+.dashboard-logs-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 /* ---- Buttons ---- */
@@ -297,11 +386,6 @@ select {
 
 .custom-select {
   position: relative;
-  z-index: 1;
-}
-
-.custom-select:has(.custom-select-menu) {
-  z-index: 200;
 }
 
 .custom-select-trigger {
@@ -335,15 +419,11 @@ select {
 }
 
 .custom-select-menu {
-  position: absolute;
-  top: calc(100% + 4px);
-  left: 0;
-  right: 0;
   background: var(--bg);
   border: 1px solid var(--glass-border-strong);
   border-radius: var(--radius-sm);
   padding: 4px;
-  z-index: 50;
+  z-index: 10000;
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
   max-height: 200px;
   overflow-y: auto;
@@ -365,17 +445,22 @@ select {
 }
 
 .custom-select-option.active {
-  background: var(--accent-dim);
-  color: var(--accent);
+  background: var(--surface-hover);
+  color: var(--text);
 }
 
 .custom-select-option.active.focused {
-  background: var(--accent-dim);
-  color: var(--accent);
+  background: var(--surface-active);
+  color: var(--text);
 }
 
 input:focus, textarea:focus, select:focus {
   border-color: var(--accent);
+}
+
+input:focus-visible, textarea:focus-visible, select:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
 }
 
 input::placeholder, textarea::placeholder {
@@ -478,8 +563,8 @@ a:hover {
 }
 
 .tab.active .tab-count {
-  background: var(--accent-dim);
-  color: var(--accent);
+  background: var(--surface-active);
+  color: var(--text);
 }
 
 /* ---- Button variants ---- */
@@ -497,13 +582,13 @@ button.btn-ghost:hover {
 }
 
 button.btn-danger {
-  background: var(--red-dim);
-  color: var(--red);
-  border: 1px solid rgba(255, 69, 58, 0.15);
+  background: var(--surface);
+  color: var(--text);
+  border: 1px solid var(--glass-border);
 }
 
 button.btn-danger:hover {
-  background: rgba(255, 69, 58, 0.2);
+  background: var(--surface-hover);
   opacity: 1;
 }
 
@@ -536,9 +621,9 @@ button.btn-sm {
 }
 
 .tag-pill.active {
-  background: var(--accent-dim);
-  color: var(--accent);
-  border-color: rgba(10, 132, 255, 0.3);
+  background: var(--surface-hover);
+  color: var(--text);
+  border-color: var(--glass-border-strong);
 }
 
 /* ---- Form ---- */
@@ -565,15 +650,15 @@ button.btn-sm {
 }
 
 .alert.success {
-  background: var(--green-dim);
-  color: var(--green);
-  border: 1px solid rgba(48, 209, 88, 0.2);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-secondary);
+  border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .alert.error {
-  background: var(--red-dim);
-  color: var(--red);
-  border: 1px solid rgba(255, 69, 58, 0.2);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-secondary);
+  border: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 /* ---- File rows (table rows in Workspace, Tasks) ---- */
@@ -751,7 +836,7 @@ button.btn-sm {
 .section-title {
   font-size: 13px;
   font-weight: 600;
-  color: var(--text-secondary);
+  color: var(--text);
   text-transform: uppercase;
   letter-spacing: 0.5px;
   margin-bottom: 12px;
@@ -864,7 +949,7 @@ button.btn-sm {
 }
 
 .toggle input:checked + .toggle-track {
-  background: var(--green);
+  background: var(--accent);
 }
 
 .toggle-thumb {
@@ -1003,9 +1088,9 @@ button.btn-sm {
 }
 
 .step-dot.active {
-  background: var(--accent);
-  color: var(--text-on-accent);
-  border-color: var(--accent);
+  background: var(--surface-active);
+  color: var(--text);
+  border-color: var(--glass-border-strong);
 }
 
 .step-dot.completed {
@@ -1079,8 +1164,8 @@ button.btn-sm {
 }
 
 .provider-card.selected {
-  border-color: var(--accent);
-  background: var(--accent-dim);
+  border-color: rgba(255, 255, 255, 0.3);
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .provider-card h3 {
@@ -1207,9 +1292,13 @@ button.btn-sm {
   margin-bottom: 16px;
   font-size: 13px;
   line-height: 1.6;
-  background: var(--red-dim);
-  color: var(--red);
-  border: 1px solid rgba(255, 69, 58, 0.2);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-secondary);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.warning-card strong {
+  color: var(--text);
 }
 
 /* ---- Info Panel ---- */
@@ -1266,6 +1355,29 @@ button.btn-sm {
   display: flex;
   align-items: center;
   gap: var(--space-sm);
+}
+
+.password-wrapper {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.eye-toggle {
+  position: absolute;
+  right: 8px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  opacity: 0.4;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  color: var(--text);
+}
+
+.eye-toggle:hover {
+  opacity: 0.8;
 }
 
 .label-inline {
@@ -1471,6 +1583,16 @@ button.btn-lg {
   to { opacity: 1; }
 }
 
+/* ---- Provider Switch Zone ---- */
+
+.provider-switch-zone {
+  padding: 14px 16px;
+  background: var(--surface);
+  border: 1px solid var(--glass-border-strong);
+  border-radius: var(--radius-sm);
+  animation: step-fade-in 150ms ease-out;
+}
+
 /* ---- Loading spinner ---- */
 
 .spinner {
@@ -1564,4 +1686,40 @@ button.btn-lg {
     min-height: 44px;
     font-size: 16px; /* prevents iOS zoom */
   }
+}
+
+/* ── Pill Bar ── */
+
+.pill-bar {
+  display: inline-flex;
+  gap: var(--space-sm);
+  padding: var(--space-xs);
+  background: var(--surface);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-md);
+  margin-bottom: var(--space-xl);
+  overflow-x: auto;
+}
+
+.pill-bar button {
+  padding: var(--space-sm) var(--space-lg);
+  border-radius: var(--radius-sm);
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: var(--font-md);
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.15s ease;
+}
+
+.pill-bar button:hover {
+  color: var(--text);
+  background: var(--surface-hover);
+}
+
+.pill-bar button.active {
+  background: var(--accent);
+  color: var(--text-on-accent);
 }

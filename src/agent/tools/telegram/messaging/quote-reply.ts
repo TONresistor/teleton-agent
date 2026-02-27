@@ -24,7 +24,7 @@ interface QuoteReplyParams {
 export const telegramQuoteReplyTool: Tool = {
   name: "telegram_quote_reply",
   description:
-    "Reply to a message while quoting a specific part of it. The quoted text will be highlighted in the reply. Use this when you want to respond to a specific part of someone's message.",
+    "Reply to a message while quoting a specific part of it. quoteText must match the original exactly.",
   parameters: Type.Object({
     chatId: Type.String({
       description: "The chat ID where the message is",

@@ -36,6 +36,7 @@ import { TELETON_ROOT } from "../../workspace/paths.js";
 import { TelegramUserClient } from "../../telegram/client.js";
 import YAML from "yaml";
 import { type Config, DealsConfigSchema } from "../../config/schema.js";
+import { getModelsForProvider } from "../../config/model-catalog.js";
 import {
   generateWallet,
   importWallet,
@@ -52,6 +53,10 @@ import {
 import { TELEGRAM_MAX_MESSAGE_LENGTH } from "../../constants/limits.js";
 import { fetchWithTimeout } from "../../utils/fetch.js";
 import ora from "ora";
+import {
+  getClaudeCodeApiKey,
+  isClaudeCodeTokenValid,
+} from "../../providers/claude-code-credentials.js";
 
 export interface OnboardOptions {
   workspace?: string;
@@ -71,12 +76,12 @@ export interface OnboardOptions {
 // ── Progress steps ────────────────────────────────────────────────────
 
 const STEPS: StepDef[] = [
-  { label: "Agent", desc: "Name & mode" },
-  { label: "Provider", desc: "LLM & API key" },
-  { label: "Telegram", desc: "Credentials" },
-  { label: "Config", desc: "Model & policies" },
-  { label: "Modules", desc: "Optional features" },
+  { label: "Agent", desc: "Name" },
+  { label: "Provider", desc: "LLM, key & model" },
+  { label: "Config", desc: "Policies" },
+  { label: "Modules", desc: "Optional API keys" },
   { label: "Wallet", desc: "TON blockchain" },
+  { label: "Telegram", desc: "Credentials" },
   { label: "Connect", desc: "Telegram auth" },
 ];
 
@@ -93,108 +98,7 @@ function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-// ── Model catalogs (per provider) ─────────────────────────────────────
-
-const MODEL_OPTIONS: Record<string, Array<{ value: string; name: string; description: string }>> = {
-  anthropic: [
-    {
-      value: "claude-opus-4-5-20251101",
-      name: "Claude Opus 4.5",
-      description: "Most capable, $5/M",
-    },
-    { value: "claude-sonnet-4-0", name: "Claude Sonnet 4", description: "Balanced, $3/M" },
-    {
-      value: "claude-haiku-4-5-20251001",
-      name: "Claude Haiku 4.5",
-      description: "Fast & cheap, $1/M",
-    },
-    {
-      value: "claude-3-5-haiku-20241022",
-      name: "Claude 3.5 Haiku",
-      description: "Cheapest, $0.80/M",
-    },
-  ],
-  openai: [
-    { value: "gpt-5", name: "GPT-5", description: "Most capable, 400K ctx, $1.25/M" },
-    { value: "gpt-4o", name: "GPT-4o", description: "Balanced, 128K ctx, $2.50/M" },
-    { value: "gpt-4.1", name: "GPT-4.1", description: "1M ctx, $2/M" },
-    { value: "gpt-4.1-mini", name: "GPT-4.1 Mini", description: "1M ctx, cheap, $0.40/M" },
-    { value: "o3", name: "o3", description: "Reasoning, 200K ctx, $2/M" },
-  ],
-  google: [
-    { value: "gemini-2.5-flash", name: "Gemini 2.5 Flash", description: "Fast, 1M ctx, $0.30/M" },
-    {
-      value: "gemini-2.5-pro",
-      name: "Gemini 2.5 Pro",
-      description: "Most capable, 1M ctx, $1.25/M",
-    },
-    { value: "gemini-2.0-flash", name: "Gemini 2.0 Flash", description: "Cheap, 1M ctx, $0.10/M" },
-  ],
-  xai: [
-    { value: "grok-4-fast", name: "Grok 4 Fast", description: "Vision, 2M ctx, $0.20/M" },
-    { value: "grok-4", name: "Grok 4", description: "Reasoning, 256K ctx, $3/M" },
-    { value: "grok-3", name: "Grok 3", description: "Stable, 131K ctx, $3/M" },
-  ],
-  groq: [
-    {
-      value: "meta-llama/llama-4-maverick-17b-128e-instruct",
-      name: "Llama 4 Maverick",
-      description: "Vision, 131K ctx, $0.20/M",
-    },
-    { value: "qwen/qwen3-32b", name: "Qwen3 32B", description: "Reasoning, 131K ctx, $0.29/M" },
-    {
-      value: "deepseek-r1-distill-llama-70b",
-      name: "DeepSeek R1 70B",
-      description: "Reasoning, 131K ctx, $0.75/M",
-    },
-    {
-      value: "llama-3.3-70b-versatile",
-      name: "Llama 3.3 70B",
-      description: "General purpose, 131K ctx, $0.59/M",
-    },
-  ],
-  openrouter: [
-    { value: "anthropic/claude-opus-4.5", name: "Claude Opus 4.5", description: "200K ctx, $5/M" },
-    { value: "openai/gpt-5", name: "GPT-5", description: "400K ctx, $1.25/M" },
-    { value: "google/gemini-2.5-flash", name: "Gemini 2.5 Flash", description: "1M ctx, $0.30/M" },
-    {
-      value: "deepseek/deepseek-r1",
-      name: "DeepSeek R1",
-      description: "Reasoning, 64K ctx, $0.70/M",
-    },
-    { value: "x-ai/grok-4", name: "Grok 4", description: "256K ctx, $3/M" },
-  ],
-  moonshot: [
-    { value: "kimi-k2.5", name: "Kimi K2.5", description: "Free, 256K ctx, multimodal" },
-    {
-      value: "kimi-k2-thinking",
-      name: "Kimi K2 Thinking",
-      description: "Free, 256K ctx, reasoning",
-    },
-  ],
-  mistral: [
-    {
-      value: "devstral-small-2507",
-      name: "Devstral Small",
-      description: "Coding, 128K ctx, $0.10/M",
-    },
-    {
-      value: "devstral-medium-latest",
-      name: "Devstral Medium",
-      description: "Coding, 262K ctx, $0.40/M",
-    },
-    {
-      value: "mistral-large-latest",
-      name: "Mistral Large",
-      description: "General, 128K ctx, $2/M",
-    },
-    {
-      value: "magistral-small",
-      name: "Magistral Small",
-      description: "Reasoning, 128K ctx, $0.50/M",
-    },
-  ],
-};
+// Model catalog imported from shared source (see src/config/model-catalog.ts)
 
 /**
  * Main onboard command
@@ -274,9 +178,7 @@ async function runInteractiveOnboarding(
   prompter: ReturnType<typeof createPrompter>
 ): Promise<void> {
   // ── Shared state ──
-  let selectedFlow: "quick" | "advanced" = "quick";
   let selectedProvider: SupportedProvider = "anthropic";
-  const dealsEnabled = true;
   let selectedModel = "";
   let apiKey = "";
   let apiId = 0;
@@ -284,16 +186,15 @@ async function runInteractiveOnboarding(
   let phone = "";
   let userId = 0;
   let tonapiKey: string | undefined;
+  let toncenterApiKey: string | undefined;
   let tavilyApiKey: string | undefined;
   let botToken: string | undefined;
   let botUsername: string | undefined;
-  let dmPolicy: "open" | "allowlist" | "pairing" | "disabled" = "open";
+  let dmPolicy: "open" | "allowlist" | "disabled" = "open";
   let groupPolicy: "open" | "allowlist" | "disabled" = "open";
   let requireMention = true;
   let maxAgenticIterations = "5";
   let cocoonInstance = 10000;
-  let buyMaxFloorPercent = 100;
-  let sellMinFloorPercent = 105;
 
   // Intro
   console.clear();
@@ -338,6 +239,7 @@ async function runInteractiveOnboarding(
   const workspace = await ensureWorkspace({
     workspaceDir: options.workspace,
     ensureTemplates: true,
+    silent: true,
   });
   const isNew = isNewWorkspace(workspace);
   spinner.succeed(DIM(`Workspace: ${workspace.root}`));
@@ -368,22 +270,7 @@ async function runInteractiveOnboarding(
     writeFileSync(workspace.identityPath, updated, "utf-8");
   }
 
-  // Installation mode
-  selectedFlow = await select({
-    message: "Installation mode",
-    default: "quick",
-    theme,
-    choices: [
-      {
-        value: "quick" as const,
-        name: "⚡ QuickStart",
-        description: "Minimal configuration (recommended)",
-      },
-      { value: "advanced" as const, name: "⚙  Advanced", description: "Detailed configuration" },
-    ],
-  });
-
-  STEPS[0].value = `${agentName} (${selectedFlow})`;
+  STEPS[0].value = agentName;
 
   // ════════════════════════════════════════════════════════════════════
   // Step 1: Provider — select + tool limit warning + API key
@@ -469,6 +356,58 @@ async function runInteractiveOnboarding(
     );
 
     STEPS[1].value = `${providerMeta.displayName}  ${DIM(localBaseUrl)}`;
+  } else if (selectedProvider === "claude-code") {
+    // Claude Code — auto-detect credentials, fallback to manual key
+    let detected = false;
+    try {
+      const key = getClaudeCodeApiKey();
+      const valid = isClaudeCodeTokenValid();
+      apiKey = ""; // Don't store in config — auto-detected at runtime
+      detected = true;
+      const masked = key.length > 16 ? key.slice(0, 12) + "..." + key.slice(-4) : "***";
+      noteBox(
+        `Credentials auto-detected from Claude Code\n` +
+          `Key: ${masked}\n` +
+          `Status: ${valid ? GREEN("valid ✓") : "expired (will refresh on use)"}\n` +
+          `Token will auto-refresh when it expires.`,
+        "Claude Code",
+        TON
+      );
+      await confirm({
+        message: "Continue with auto-detected credentials?",
+        default: true,
+        theme,
+      });
+    } catch (err) {
+      if (err instanceof CancelledError) throw err;
+      prompter.warn(
+        "Claude Code credentials not found. Make sure Claude Code is installed and authenticated (claude login)."
+      );
+      const useFallback = await confirm({
+        message: "Enter an API key manually instead?",
+        default: true,
+        theme,
+      });
+      if (useFallback) {
+        apiKey = await password({
+          message: `Anthropic API Key (fallback)`,
+          theme,
+          validate: (value = "") => {
+            if (!value || value.trim().length === 0) return "API key is required";
+            return true;
+          },
+        });
+      } else {
+        throw new CancelledError();
+      }
+    }
+
+    if (detected) {
+      STEPS[1].value = `${providerMeta.displayName}  ${DIM("auto-detected ✓")}`;
+    } else {
+      const maskedKey = apiKey.length > 10 ? apiKey.slice(0, 6) + "..." + apiKey.slice(-4) : "***";
+      STEPS[1].value = `${providerMeta.displayName}  ${DIM(maskedKey)}`;
+    }
   } else {
     // Standard providers — API key required
     const envApiKey = process.env.TELETON_API_KEY;
@@ -504,96 +443,11 @@ async function runInteractiveOnboarding(
     STEPS[1].value = `${providerMeta.displayName}  ${DIM(maskedKey)}`;
   }
 
-  // ════════════════════════════════════════════════════════════════════
-  // Step 2: Telegram — credentials
-  // ════════════════════════════════════════════════════════════════════
-  redraw(2);
-
-  noteBox(
-    "You need Telegram credentials from https://my.telegram.org/apps\n" +
-      "Create an application and note the API ID and API Hash",
-    "Telegram",
-    TON
-  );
-
-  const envApiId = process.env.TELETON_TG_API_ID;
-  const envApiHash = process.env.TELETON_TG_API_HASH;
-  const envPhone = process.env.TELETON_TG_PHONE;
-
-  const apiIdStr = options.apiId
-    ? options.apiId.toString()
-    : await input({
-        message: envApiId ? "API ID (from env)" : "API ID (from my.telegram.org)",
-        default: envApiId,
-        theme,
-        validate: (value) => {
-          if (!value || isNaN(parseInt(value))) return "Invalid API ID (must be a number)";
-          return true;
-        },
-      });
-  apiId = parseInt(apiIdStr);
-
-  apiHash = options.apiHash
-    ? options.apiHash
-    : await input({
-        message: envApiHash ? "API Hash (from env)" : "API Hash (from my.telegram.org)",
-        default: envApiHash,
-        theme,
-        validate: (value) => {
-          if (!value || value.length < 10) return "Invalid API Hash";
-          return true;
-        },
-      });
-
-  phone = options.phone
-    ? options.phone
-    : await input({
-        message: envPhone ? "Phone number (from env)" : "Phone number (international format)",
-        default: envPhone,
-        theme,
-        validate: (value) => {
-          if (!value || !value.startsWith("+")) return "Must start with +";
-          return true;
-        },
-      });
-
-  // User ID
-  noteBox(
-    "To get your Telegram User ID:\n" +
-      "1. Open @userinfobot on Telegram\n" +
-      "2. Send /start\n" +
-      "3. Note the ID displayed",
-    "User ID",
-    TON
-  );
-
-  const userIdStr = options.userId
-    ? options.userId.toString()
-    : await input({
-        message: "Your Telegram User ID (for admin rights)",
-        theme,
-        validate: (value) => {
-          if (!value || isNaN(parseInt(value))) return "Invalid User ID";
-          return true;
-        },
-      });
-  userId = parseInt(userIdStr);
-
-  STEPS[2].value = `${phone} (ID: ${userId})`;
-
-  // ════════════════════════════════════════════════════════════════════
-  // Step 3: Config — model + policies (advanced only)
-  // ════════════════════════════════════════════════════════════════════
-  redraw(3);
-
+  // Model selection (advanced mode only, after provider + API key)
   selectedModel = providerMeta.defaultModel;
 
-  if (
-    selectedFlow === "advanced" &&
-    selectedProvider !== "cocoon" &&
-    selectedProvider !== "local"
-  ) {
-    const providerModels = MODEL_OPTIONS[selectedProvider] || [];
+  if (selectedProvider !== "cocoon" && selectedProvider !== "local") {
+    const providerModels = getModelsForProvider(selectedProvider);
     const modelChoices = [
       ...providerModels,
       { value: "__custom__", name: "Custom", description: "Enter a model ID manually" },
@@ -617,96 +471,98 @@ async function runInteractiveOnboarding(
       selectedModel = modelChoice;
     }
 
-    dmPolicy = await select({
-      message: "DM policy (private messages)",
-      default: "open",
-      theme,
-      choices: [
-        { value: "open" as const, name: "Open", description: "Reply to everyone" },
-        { value: "allowlist" as const, name: "Allowlist", description: "Only specific users" },
-        { value: "disabled" as const, name: "Disabled", description: "No DM replies" },
-      ],
-    });
-
-    groupPolicy = await select({
-      message: "Group policy",
-      default: "open",
-      theme,
-      choices: [
-        { value: "open" as const, name: "Open", description: "Reply in all groups" },
-        { value: "allowlist" as const, name: "Allowlist", description: "Only specific groups" },
-        { value: "disabled" as const, name: "Disabled", description: "No group replies" },
-      ],
-    });
-
-    requireMention = await confirm({
-      message: "Require @mention in groups?",
-      default: true,
-      theme,
-    });
-
-    maxAgenticIterations = await input({
-      message: "Max agentic iterations (tool call loops per message)",
-      default: "5",
-      theme,
-      validate: (v) => {
-        const n = parseInt(v, 10);
-        return !isNaN(n) && n >= 1 && n <= 50 ? true : "Must be 1–50";
-      },
-    });
-
     const modelLabel = providerModels.find((m) => m.value === selectedModel)?.name ?? selectedModel;
-    STEPS[3].value = `${modelLabel}, ${dmPolicy}/${groupPolicy}`;
-  } else {
-    STEPS[3].value = `${selectedModel} (defaults)`;
+    STEPS[1].value = `${STEPS[1].value ?? providerMeta.displayName}, ${modelLabel}`;
   }
 
   // ════════════════════════════════════════════════════════════════════
-  // Step 4: Modules — deals bot + TonAPI + Tavily
+  // Step 2: Config — admin + policies
   // ════════════════════════════════════════════════════════════════════
-  redraw(4);
+  redraw(2);
+
+  // Admin User ID
+  noteBox(
+    "To get your Telegram User ID:\n" +
+      "1. Open @userinfobot on Telegram\n" +
+      "2. Send /start\n" +
+      "3. Note the ID displayed",
+    "User ID",
+    TON
+  );
+
+  const userIdStr = options.userId
+    ? options.userId.toString()
+    : await input({
+        message: "Your Telegram User ID (for admin rights)",
+        theme,
+        validate: (value) => {
+          if (!value || isNaN(parseInt(value))) return "Invalid User ID";
+          return true;
+        },
+      });
+  userId = parseInt(userIdStr);
+
+  dmPolicy = await select({
+    message: "DM policy (private messages)",
+    default: "open",
+    theme,
+    choices: [
+      { value: "open" as const, name: "Open", description: "Reply to everyone" },
+      { value: "allowlist" as const, name: "Allowlist", description: "Only specific users" },
+      { value: "disabled" as const, name: "Disabled", description: "No DM replies" },
+    ],
+  });
+
+  groupPolicy = await select({
+    message: "Group policy",
+    default: "open",
+    theme,
+    choices: [
+      { value: "open" as const, name: "Open", description: "Reply in all groups" },
+      { value: "allowlist" as const, name: "Allowlist", description: "Only specific groups" },
+      { value: "disabled" as const, name: "Disabled", description: "No group replies" },
+    ],
+  });
+
+  requireMention = await confirm({
+    message: "Require @mention in groups?",
+    default: true,
+    theme,
+  });
+
+  maxAgenticIterations = await input({
+    message: "Max agentic iterations (tool call loops per message)",
+    default: "5",
+    theme,
+    validate: (v) => {
+      const n = parseInt(v, 10);
+      return !isNaN(n) && n >= 1 && n <= 50 ? true : "Must be 1–50";
+    },
+  });
+
+  STEPS[2].value = `${dmPolicy}/${groupPolicy}`;
+
+  // ════════════════════════════════════════════════════════════════════
+  // Step 3: Modules — optional API keys
+  // ════════════════════════════════════════════════════════════════════
+  redraw(3);
 
   const extras: string[] = [];
 
-  if (dealsEnabled) {
-    // Trading thresholds
-    const customizeStrategy = await confirm({
-      message: `Customize trading thresholds? ${DIM("(default: buy ≤ floor, sell ≥ floor +5%)")}`,
-      default: false,
-      theme,
-    });
+  // Bot token (recommended — required for deals module)
+  const setupBot = await confirm({
+    message: `Add a Telegram bot token? ${DIM("(recommended — enables deals & inline buttons)")}`,
+    default: true,
+    theme,
+  });
 
-    if (customizeStrategy) {
-      const buyInput = await input({
-        message: "Max buy price (% of floor price)",
-        default: "100",
-        theme,
-        validate: (v) => {
-          const n = parseInt(v, 10);
-          return !isNaN(n) && n >= 50 && n <= 150 ? true : "Must be 50–150";
-        },
-      });
-      buyMaxFloorPercent = parseInt(buyInput, 10);
-
-      const sellInput = await input({
-        message: "Min sell price (% of floor price)",
-        default: "105",
-        theme,
-        validate: (v) => {
-          const n = parseInt(v, 10);
-          return !isNaN(n) && n >= 100 && n <= 200 ? true : "Must be 100–200";
-        },
-      });
-      sellMinFloorPercent = parseInt(sellInput, 10);
-    }
-
-    // Bot setup
+  if (setupBot) {
     noteBox(
       "Create a bot with @BotFather on Telegram:\n" +
         "1. Send /newbot and follow the instructions\n" +
         "2. Copy the bot token\n" +
         "3. Enable inline mode: /setinline on the bot",
-      "Deals Bot",
+      "Bot Token",
       TON
     );
 
@@ -730,6 +586,7 @@ async function runInteractiveOnboarding(
         botToken = tokenInput;
         botUsername = data.result.username;
         spinner.succeed(DIM(`Bot verified: @${botUsername}`));
+        extras.push("Bot");
       }
     } catch {
       spinner.warn(DIM("Could not validate bot token (network error) — saving anyway"));
@@ -743,24 +600,24 @@ async function runInteractiveOnboarding(
         },
       });
       botUsername = usernameInput;
+      extras.push("Bot");
     }
-
-    extras.push("Deals");
   }
 
   // TonAPI key
   const setupTonapi = await confirm({
-    message: `Add a TonAPI key? ${DIM("(optional, recommended for 10x rate limits)")}`,
+    message: `Add a TonAPI key? ${DIM("(strongly recommended for TON features)")}`,
     default: false,
     theme,
   });
 
   if (setupTonapi) {
     noteBox(
-      "Without key: 1 req/s (you will hit rate limits)\n" +
-        "With free key: 10 req/s (recommended)\n" +
+      "Blockchain data — jettons, NFTs, prices, transaction history.\n" +
+        "Without key: 1 req/s (you WILL hit rate limits)\n" +
+        "With free key: 5 req/s\n" +
         "\n" +
-        "Open @tonapibot on Telegram → tap the mini app → generate a server key",
+        "Open @tonapibot on Telegram → mini app → generate a server key",
       "TonAPI",
       TON
     );
@@ -774,6 +631,35 @@ async function runInteractiveOnboarding(
     });
     tonapiKey = keyInput;
     extras.push("TonAPI");
+  }
+
+  // TonCenter key
+  const setupToncenter = await confirm({
+    message: `Add a TonCenter API key? ${DIM("(optional, dedicated RPC endpoint)")}`,
+    default: false,
+    theme,
+  });
+
+  if (setupToncenter) {
+    noteBox(
+      "Blockchain RPC — send transactions, check balances.\n" +
+        "Without key: falls back to ORBS network (decentralized, slower)\n" +
+        "With free key: dedicated RPC endpoint\n" +
+        "\n" +
+        "Go to https://toncenter.com → get a free API key (instant, no signup)",
+      "TonCenter",
+      TON
+    );
+    const keyInput = await input({
+      message: "TonCenter API key",
+      theme,
+      validate: (v) => {
+        if (!v || v.length < 10) return "Key too short";
+        return true;
+      },
+    });
+    toncenterApiKey = keyInput;
+    extras.push("TonCenter");
   }
 
   // Tavily key
@@ -810,12 +696,12 @@ async function runInteractiveOnboarding(
     extras.push("Tavily");
   }
 
-  STEPS[4].value = extras.length ? extras.join(", ") : "defaults";
+  STEPS[3].value = extras.length ? extras.join(", ") : "defaults";
 
   // ════════════════════════════════════════════════════════════════════
-  // Step 5: Wallet — generate / import / keep
+  // Step 4: Wallet — generate / import / keep
   // ════════════════════════════════════════════════════════════════════
-  redraw(5);
+  redraw(4);
 
   let wallet;
   const existingWallet = walletExists() ? loadWallet() : null;
@@ -860,10 +746,39 @@ async function runInteractiveOnboarding(
       spinner.succeed(DIM("New TON wallet generated"));
     }
   } else {
-    spinner.start(DIM("Generating TON wallet..."));
-    wallet = await generateWallet();
-    saveWallet(wallet);
-    spinner.succeed(DIM("TON wallet generated"));
+    const walletAction = await select({
+      message: "TON Wallet",
+      default: "generate",
+      theme,
+      choices: [
+        {
+          value: "generate",
+          name: "Generate new wallet",
+          description: "Create a fresh TON wallet",
+        },
+        { value: "import", name: "Import from mnemonic", description: "Restore from 24-word seed" },
+      ],
+    });
+
+    if (walletAction === "import") {
+      const mnemonicInput = await input({
+        message: "Enter your 24-word mnemonic (space-separated)",
+        theme,
+        validate: (value = "") => {
+          const words = value.trim().split(/\s+/);
+          return words.length === 24 ? true : `Expected 24 words, got ${words.length}`;
+        },
+      });
+      spinner.start(DIM("Importing wallet..."));
+      wallet = await importWallet(mnemonicInput.trim().split(/\s+/));
+      saveWallet(wallet);
+      spinner.succeed(DIM(`Wallet imported: ${wallet.address}`));
+    } else {
+      spinner.start(DIM("Generating TON wallet..."));
+      wallet = await generateWallet();
+      saveWallet(wallet);
+      spinner.succeed(DIM("TON wallet generated"));
+    }
   }
 
   // Display mnemonic for new/regenerated wallets
@@ -909,9 +824,77 @@ async function runInteractiveOnboarding(
     console.log(RED("  │") + " ".repeat(W) + RED("│"));
     console.log(RED(`  └${"─".repeat(W)}┘`));
     console.log();
+
+    await confirm({
+      message: "I have written down my seed phrase",
+      default: true,
+      theme,
+    });
   }
 
-  STEPS[5].value = `${wallet.address.slice(0, 8)}...${wallet.address.slice(-4)}`;
+  STEPS[4].value = `${wallet.address.slice(0, 8)}...${wallet.address.slice(-4)}`;
+
+  // ════════════════════════════════════════════════════════════════════
+  // Step 5: Telegram — credentials
+  // ════════════════════════════════════════════════════════════════════
+  redraw(5);
+
+  noteBox(
+    "To get your API credentials:\n" +
+      "\n" +
+      "  1. Go to https://my.telegram.org/apps\n" +
+      "  2. Log in with your phone number\n" +
+      '  3. Click "API development tools"\n' +
+      "  4. Create an application (any name/short name works)\n" +
+      "  5. Copy the API ID (number) and API Hash (hex string)\n" +
+      "\n" +
+      "⚠ Do NOT use a VPN — Telegram will block the login page.",
+    "Telegram",
+    TON
+  );
+
+  const envApiId = process.env.TELETON_TG_API_ID;
+  const envApiHash = process.env.TELETON_TG_API_HASH;
+  const envPhone = process.env.TELETON_TG_PHONE;
+
+  const apiIdStr = options.apiId
+    ? options.apiId.toString()
+    : await input({
+        message: envApiId ? "API ID (from env)" : "API ID (from my.telegram.org)",
+        default: envApiId,
+        theme,
+        validate: (value) => {
+          if (!value || isNaN(parseInt(value))) return "Invalid API ID (must be a number)";
+          return true;
+        },
+      });
+  apiId = parseInt(apiIdStr);
+
+  apiHash = options.apiHash
+    ? options.apiHash
+    : await input({
+        message: envApiHash ? "API Hash (from env)" : "API Hash (from my.telegram.org)",
+        default: envApiHash,
+        theme,
+        validate: (value) => {
+          if (!value || value.length < 10) return "Invalid API Hash";
+          return true;
+        },
+      });
+
+  phone = options.phone
+    ? options.phone
+    : await input({
+        message: envPhone ? "Phone number (from env)" : "Phone number (international format)",
+        default: envPhone,
+        theme,
+        validate: (value) => {
+          if (!value || !value.startsWith("+")) return "Must start with +";
+          return true;
+        },
+      });
+
+  STEPS[5].value = phone;
 
   // ════════════════════════════════════════════════════════════════════
   // Step 6: Connect — save config + Telegram auth
@@ -965,16 +948,11 @@ async function runInteractiveOnboarding(
     },
     storage: {
       sessions_file: `${workspace.root}/sessions.json`,
-      pairing_file: `${workspace.root}/pairing.json`,
       memory_file: `${workspace.root}/memory.json`,
       history_limit: 100,
     },
     embedding: { provider: "local" },
-    deals: DealsConfigSchema.parse({
-      enabled: dealsEnabled,
-      buy_max_floor_percent: buyMaxFloorPercent,
-      sell_min_floor_percent: sellMinFloorPercent,
-    }),
+    deals: DealsConfigSchema.parse({ enabled: !!botToken }),
     webui: {
       enabled: false,
       port: 7777,
@@ -1002,6 +980,7 @@ async function runInteractiveOnboarding(
     plugins: {},
     ...(selectedProvider === "cocoon" ? { cocoon: { port: cocoonInstance } } : {}),
     tonapi_key: tonapiKey,
+    toncenter_api_key: toncenterApiKey,
     tavily_api_key: tavilyApiKey,
   };
 
@@ -1140,7 +1119,6 @@ async function runNonInteractiveOnboarding(
     },
     storage: {
       sessions_file: `${workspace.root}/sessions.json`,
-      pairing_file: `${workspace.root}/pairing.json`,
       memory_file: `${workspace.root}/memory.json`,
       history_limit: 100,
     },

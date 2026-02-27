@@ -21,7 +21,7 @@ interface SearchMessagesParams {
 export const telegramSearchMessagesTool: Tool = {
   name: "telegram_search_messages",
   description:
-    "Search for messages in a Telegram chat by text query. Use this to find past conversations, retrieve specific information, or locate messages containing keywords. Returns matching messages with their content and metadata.",
+    "Search for messages in a chat by text query. Returns matching messages with content and metadata.",
   category: "data-bearing",
   parameters: Type.Object({
     chatId: Type.String({

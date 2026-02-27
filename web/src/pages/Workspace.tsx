@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { api, FileEntry, WorkspaceInfo } from '../lib/api';
 
 function formatSize(bytes: number): string {
@@ -13,6 +13,19 @@ function formatDate(iso: string): string {
   return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
+const IMAGE_EXTENSIONS = new Set(['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp', 'ico']);
+const BINARY_EXTENSIONS = new Set(['zip', 'tar', 'gz', 'bin', 'exe', 'dll', 'so', 'db', 'sqlite', 'wasm', 'pdf']);
+
+function getExtension(path: string): string {
+  return path.split('/').pop()?.split('.').pop()?.toLowerCase() ?? '';
+}
+function isImageFile(path: string): boolean {
+  return IMAGE_EXTENSIONS.has(getExtension(path));
+}
+function isBinaryFile(path: string): boolean {
+  return BINARY_EXTENSIONS.has(getExtension(path));
+}
+
 export function Workspace() {
   const [currentPath, setCurrentPath] = useState('');
   const [entries, setEntries] = useState<FileEntry[]>([]);
@@ -25,6 +38,7 @@ export function Workspace() {
   const [editContent, setEditContent] = useState('');
   const [editDirty, setEditDirty] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [fileMode, setFileMode] = useState<'text' | 'image' | 'binary'>('text');
 
   // Dialog state
   const [dialog, setDialog] = useState<{ type: 'newFile' | 'newFolder' | 'rename'; target?: string } | null>(null);
@@ -58,6 +72,14 @@ export function Workspace() {
     loadInfo();
   }, [loadDir, loadInfo]);
 
+  // Warn on tab close when dirty
+  useEffect(() => {
+    if (!editDirty) return;
+    const handler = (e: BeforeUnloadEvent) => { e.preventDefault(); };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, [editDirty]);
+
   const navigateTo = (path: string) => {
     if (!closeEditor()) return;
     loadDir(path);
@@ -70,21 +92,44 @@ export function Workspace() {
   const openFile = async (path: string) => {
     try {
       setError(null);
-      const res = await api.workspaceRead(path);
-      setEditingFile(path);
-      setEditContent(res.data?.content ?? '');
-      setEditDirty(false);
+      if (isImageFile(path)) {
+        setEditingFile(path);
+        setFileMode('image');
+        setEditContent('');
+        setEditDirty(false);
+      } else if (isBinaryFile(path)) {
+        setEditingFile(path);
+        setFileMode('binary');
+        setEditContent('');
+        setEditDirty(false);
+      } else {
+        const res = await api.workspaceRead(path);
+        setEditingFile(path);
+        setFileMode('text');
+        setEditContent(res.data?.content ?? '');
+        setEditDirty(false);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
   };
 
   const closeEditor = (): boolean => {
-    if (editDirty && !confirm('You have unsaved changes. Discard?')) return false;
+    if (fileMode === 'text' && editDirty && !confirm('You have unsaved changes. Discard?')) return false;
     setEditingFile(null);
     setEditContent('');
     setEditDirty(false);
+    setFileMode('text');
     return true;
+  };
+
+  const handleFileClick = (path: string) => {
+    if (editingFile === path) {
+      closeEditor();
+    } else {
+      if (!closeEditor()) return;
+      openFile(path);
+    }
   };
 
   const saveFile = async () => {
@@ -271,6 +316,9 @@ export function Workspace() {
                     parts.pop();
                     navigateTo(parts.join('/'));
                   }}
+                  onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); const parts = currentPath.split('/'); parts.pop(); navigateTo(parts.join('/')); } }}
+                  tabIndex={0}
+                  role="button"
                   style={{ cursor: 'pointer', borderBottom: '1px solid var(--separator)' }}
                   className="file-row"
                 >
@@ -282,96 +330,134 @@ export function Workspace() {
                   <td />
                 </tr>
               )}
-              {entries.map((entry) => (
-                <tr
-                  key={entry.path}
-                  onClick={() => entry.isDirectory ? navigateTo(entry.path) : openFile(entry.path)}
-                  style={{ cursor: 'pointer', borderBottom: '1px solid var(--separator)' }}
-                  className="file-row"
-                >
-                  <td style={{ padding: '6px 14px' }}>
-                    <span style={{ marginRight: '8px' }}>{entry.isDirectory ? '\u{1F4C2}' : '\u{1F4C4}'}</span>
-                    {entry.name}
-                  </td>
-                  <td style={{ textAlign: 'right', padding: '6px 14px', color: 'var(--text-secondary)' }}>
-                    {entry.isDirectory ? '' : formatSize(entry.size)}
-                  </td>
-                  <td style={{ textAlign: 'right', padding: '6px 14px', color: 'var(--text-secondary)' }}>
-                    {formatDate(entry.mtime)}
-                  </td>
-                  <td style={{ textAlign: 'right', padding: '6px 14px', whiteSpace: 'nowrap' }} onClick={(e) => e.stopPropagation()}>
-                    <button
-                      className="icon-button"
-                      onClick={() => { setDialog({ type: 'rename', target: entry.path }); setDialogInput(entry.name); }}
-                      title="Rename"
+              {entries.map((entry) => {
+                const isExpanded = !entry.isDirectory && editingFile === entry.path;
+                return (
+                  <React.Fragment key={entry.path}>
+                    <tr
+                      onClick={() => entry.isDirectory ? navigateTo(entry.path) : handleFileClick(entry.path)}
+                      onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); entry.isDirectory ? navigateTo(entry.path) : handleFileClick(entry.path); } }}
+                      tabIndex={0}
+                      role="button"
+                      style={{
+                        cursor: 'pointer',
+                        borderBottom: isExpanded ? 'none' : '1px solid var(--separator)',
+                        backgroundColor: isExpanded ? 'rgba(255,255,255,0.03)' : undefined,
+                      }}
+                      className="file-row"
                     >
-                      &#9998;
-                    </button>
-                    <button
-                      className="icon-button"
-                      onClick={() => deleteEntry(entry)}
-                      title="Delete"
-                    >
-                      &#128465;
-                    </button>
-                  </td>
-                </tr>
-              ))}
+                      <td style={{ padding: '6px 14px' }}>
+                        {entry.isDirectory ? (
+                          <span style={{ marginRight: '8px' }}>{'\u{1F4C2}'}</span>
+                        ) : (
+                          <span style={{ display: 'inline-block', width: '14px', fontSize: '10px', color: 'var(--text-secondary)', marginRight: '8px' }}>
+                            {isExpanded ? '\u25BC' : '\u25B6'}
+                          </span>
+                        )}
+                        {entry.name}
+                      </td>
+                      <td style={{ textAlign: 'right', padding: '6px 14px', color: 'var(--text-secondary)' }}>
+                        {entry.isDirectory ? '' : formatSize(entry.size)}
+                      </td>
+                      <td style={{ textAlign: 'right', padding: '6px 14px', color: 'var(--text-secondary)' }}>
+                        {formatDate(entry.mtime)}
+                      </td>
+                      <td style={{ textAlign: 'right', padding: '6px 14px', whiteSpace: 'nowrap' }} onClick={(e) => e.stopPropagation()}>
+                        <button
+                          className="icon-button"
+                          onClick={() => { setDialog({ type: 'rename', target: entry.path }); setDialogInput(entry.name); }}
+                          title="Rename"
+                        >
+                          &#9998;
+                        </button>
+                        <button
+                          className="icon-button"
+                          onClick={() => deleteEntry(entry)}
+                          title="Delete"
+                        >
+                          &#128465;
+                        </button>
+                      </td>
+                    </tr>
+                    {isExpanded && (
+                      <tr style={{ backgroundColor: 'rgba(255,255,255,0.03)', borderBottom: '1px solid var(--separator)' }}>
+                        <td colSpan={4} style={{ padding: '0 14px 14px 14px' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0' }}>
+                            <span style={{ fontSize: '13px', fontWeight: 600 }}>
+                              {editingFile}
+                              {fileMode === 'text' && editDirty && <span style={{ color: 'var(--accent)', marginLeft: '6px' }}>*</span>}
+                            </span>
+                            <div style={{ display: 'flex', gap: '6px' }}>
+                              {fileMode === 'text' && (
+                                <button
+                                  style={{ padding: '4px 12px', fontSize: '12px' }}
+                                  onClick={saveFile}
+                                  disabled={saving || !editDirty}
+                                >
+                                  {saving ? 'Saving...' : 'Save'}
+                                </button>
+                              )}
+                              <button
+                                style={{ padding: '4px 12px', fontSize: '12px', opacity: 0.7 }}
+                                onClick={() => closeEditor()}
+                              >
+                                Close
+                              </button>
+                            </div>
+                          </div>
+                          {fileMode === 'text' && (
+                            <textarea
+                              value={editContent}
+                              onChange={(e) => { setEditContent(e.target.value); setEditDirty(true); }}
+                              onKeyDown={(e) => {
+                                if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+                                  e.preventDefault();
+                                  saveFile();
+                                }
+                              }}
+                              style={{
+                                width: '100%',
+                                minHeight: '300px',
+                                maxHeight: '500px',
+                                fontFamily: 'monospace',
+                                fontSize: '13px',
+                                padding: '10px',
+                                border: '1px solid var(--separator)',
+                                borderRadius: '4px',
+                                backgroundColor: 'var(--surface)',
+                                color: 'var(--text)',
+                                resize: 'vertical',
+                                tabSize: 2,
+                              }}
+                              spellCheck={false}
+                            />
+                          )}
+                          {fileMode === 'image' && editingFile && (
+                            <div style={{ display: 'flex', justifyContent: 'center', padding: '20px 0' }}>
+                              <img
+                                src={api.workspaceRawUrl(editingFile)}
+                                alt={editingFile}
+                                style={{ maxWidth: '100%', maxHeight: '60vh', objectFit: 'contain', borderRadius: '8px' }}
+                                onError={(e) => { (e.target as HTMLImageElement).alt = 'Failed to load image'; }}
+                              />
+                            </div>
+                          )}
+                          {fileMode === 'binary' && (
+                            <div style={{ padding: '20px 0', textAlign: 'center', color: 'var(--text-secondary)', fontSize: '13px' }}>
+                              Binary file — preview not available
+                            </div>
+                          )}
+                        </td>
+                      </tr>
+                    )}
+                  </React.Fragment>
+                );
+              })}
             </tbody>
           </table>
         )}
       </div>
 
-      {/* File editor */}
-      {editingFile && (
-        <div className="card" style={{ marginTop: '14px' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '10px' }}>
-            <h2 style={{ margin: 0, fontSize: '14px' }}>
-              {editingFile}
-              {editDirty && <span style={{ color: 'var(--accent)', marginLeft: '6px' }}>*</span>}
-            </h2>
-            <div style={{ display: 'flex', gap: '6px' }}>
-              <button
-                style={{ padding: '4px 12px', fontSize: '12px' }}
-                onClick={saveFile}
-                disabled={saving || !editDirty}
-              >
-                {saving ? 'Saving...' : 'Save'}
-              </button>
-              <button
-                style={{ padding: '4px 12px', fontSize: '12px', opacity: 0.7 }}
-                onClick={closeEditor}
-              >
-                Close
-              </button>
-            </div>
-          </div>
-          <textarea
-            value={editContent}
-            onChange={(e) => { setEditContent(e.target.value); setEditDirty(true); }}
-            onKeyDown={(e) => {
-              if ((e.ctrlKey || e.metaKey) && e.key === 's') {
-                e.preventDefault();
-                saveFile();
-              }
-            }}
-            style={{
-              width: '100%',
-              minHeight: '300px',
-              fontFamily: 'monospace',
-              fontSize: '13px',
-              padding: '10px',
-              border: '1px solid var(--separator)',
-              borderRadius: '4px',
-              backgroundColor: 'var(--surface)',
-              color: 'var(--text)',
-              resize: 'vertical',
-              tabSize: 2,
-            }}
-            spellCheck={false}
-          />
-        </div>
-      )}
     </div>
   );
 }

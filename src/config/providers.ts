@@ -1,5 +1,6 @@
 export type SupportedProvider =
   | "anthropic"
+  | "claude-code"
   | "openai"
   | "google"
   | "xai"
@@ -31,8 +32,20 @@ const PROVIDER_REGISTRY: Record<SupportedProvider, ProviderMetadata> = {
     keyPrefix: "sk-ant-",
     keyHint: "sk-ant-api03-...",
     consoleUrl: "https://console.anthropic.com/",
-    defaultModel: "claude-opus-4-5-20251101",
-    utilityModel: "claude-3-5-haiku-20241022",
+    defaultModel: "claude-opus-4-6",
+    utilityModel: "claude-haiku-4-5-20251001",
+    toolLimit: null,
+    piAiProvider: "anthropic",
+  },
+  "claude-code": {
+    id: "claude-code",
+    displayName: "Claude Code (Auto)",
+    envVar: "ANTHROPIC_API_KEY",
+    keyPrefix: "sk-ant-",
+    keyHint: "Auto-detected from Claude Code",
+    consoleUrl: "https://console.anthropic.com/",
+    defaultModel: "claude-opus-4-6",
+    utilityModel: "claude-haiku-4-5-20251001",
     toolLimit: null,
     piAiProvider: "anthropic",
   },
@@ -161,7 +174,7 @@ export function getSupportedProviders(): ProviderMetadata[] {
 export function validateApiKeyFormat(provider: SupportedProvider, key: string): string | undefined {
   const meta = PROVIDER_REGISTRY[provider];
   if (!meta) return `Unknown provider: ${provider}`;
-  if (provider === "cocoon" || provider === "local") return undefined; // No API key needed
+  if (provider === "cocoon" || provider === "local" || provider === "claude-code") return undefined; // No API key needed (claude-code auto-detects)
   if (!key || key.trim().length === 0) return "API key is required";
   if (meta.keyPrefix && !key.startsWith(meta.keyPrefix)) {
     return `Invalid format (should start with ${meta.keyPrefix})`;

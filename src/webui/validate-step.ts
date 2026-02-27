@@ -52,23 +52,26 @@ export function validateStep(step: number, data: WizardData): boolean {
           return false;
         }
       }
+      if (data.provider === "claude-code") {
+        return true; // credentials auto-detected at runtime
+      }
       return data.apiKey.length > 0;
-    case 2:
-      return (
-        data.apiId > 0 && data.apiHash.length >= 10 && data.phone.startsWith("+") && data.userId > 0
-      );
-    case 3: {
+    case 2: {
+      // Config
       if (data.provider !== "cocoon" && data.provider !== "local") {
         const modelValue = data.model === "__custom__" ? data.customModel : data.model;
         if (!modelValue) return false;
       }
-      return data.maxIterations >= 1 && data.maxIterations <= 50;
+      return data.userId > 0 && data.maxIterations >= 1 && data.maxIterations <= 50;
     }
-    case 4:
+    case 3:
       // Wallet: if generated/imported, must confirm mnemonic saved
       if (data.walletAction === "keep") return true;
       if (!data.walletAddress) return false;
       return data.mnemonicSaved;
+    case 4:
+      // Telegram
+      return data.apiId > 0 && data.apiHash.length >= 10 && data.phone.startsWith("+");
     case 5:
       return data.telegramUser !== null || data.skipConnect;
     default:

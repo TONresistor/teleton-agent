@@ -33,7 +33,7 @@ interface VisionAnalyzeParams {
 export const visionAnalyzeTool: Tool = {
   name: "vision_analyze",
   description:
-    "Analyze an image using Claude's vision capabilities. Can analyze images from Telegram messages OR from local workspace files. Use this when a user sends an image and asks you to describe, analyze, or understand its content. Returns Claude's analysis of the image.",
+    "Analyze an image using vision LLM. Provide chatId+messageId for Telegram images or filePath for local files.",
   category: "data-bearing",
   parameters: Type.Object({
     chatId: Type.Optional(

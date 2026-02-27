@@ -21,7 +21,7 @@ interface SendMessageParams {
 export const telegramSendMessageTool: Tool = {
   name: "telegram_send_message",
   description:
-    "Send a text message to a Telegram chat. Supports up to 4096 characters. Use this for standard text responses in DMs or groups. For messages with custom keyboards, use telegram_reply_keyboard. For media, use specific media tools (telegram_send_photo, etc.).",
+    "Send a text message to a Telegram chat. For custom keyboards use telegram_reply_keyboard; for media use telegram_send_photo/gif/sticker.",
   parameters: Type.Object({
     chatId: Type.String({
       description: "The chat ID to send the message to",

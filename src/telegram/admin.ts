@@ -2,6 +2,7 @@ import type { TelegramConfig } from "../config/schema.js";
 import type { AgentRuntime } from "../agent/runtime.js";
 import { TelegramBridge } from "./bridge.js";
 import { getWalletAddress, getWalletBalance } from "../ton/wallet-service.js";
+import { Address } from "@ton/core";
 import { getProviderMetadata, type SupportedProvider } from "../config/providers.js";
 import { DEALS_CONFIG } from "../deals/config.js";
 import { loadTemplate } from "../workspace/manager.js";
@@ -20,7 +21,7 @@ export interface AdminCommand {
   senderId: number;
 }
 
-const VALID_DM_POLICIES = ["open", "allowlist", "pairing", "disabled"] as const;
+const VALID_DM_POLICIES = ["open", "allowlist", "disabled"] as const;
 const VALID_GROUP_POLICIES = ["open", "allowlist", "disabled"] as const;
 const VALID_MODULE_LEVELS = ["open", "admin", "disabled"] as const;
 
@@ -269,7 +270,8 @@ export class AdminHandler {
     const result = await getWalletBalance(address);
     if (!result) return "❌ Failed to fetch balance.";
 
-    return `💎 **${result.balance} TON**\n📍 \`${address}\``;
+    const friendly = Address.parse(address).toString({ bounceable: false });
+    return `💎 **${result.balance} TON**\n📍 \`${friendly}\``;
   }
 
   getBootstrapContent(): string | null {

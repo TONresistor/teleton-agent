@@ -30,28 +30,8 @@ interface DealProposeParams {
 
 export const dealProposeTool: Tool = {
   name: "deal_propose",
-  description: `Create a trade deal proposal with interactive Accept/Decline buttons.
-
-Automatically sends an inline bot message with buttons in the chat.
-The user can Accept or Decline directly from the message.
-
-IMPORTANT - MESSAGE FLOW:
-- Send your message BEFORE calling this tool (e.g. "I'll create a deal for you")
-- Do NOT send any message after this tool returns — the deal card already contains all info
-- The inline bot message IS the proposal, no need to repeat deal details
-
-CRITICAL - STRATEGY.md ENFORCEMENT:
-- When BUYING (you buy their gift): Pay max 80% of floor price
-- When SELLING (you sell your gift): Charge min 115% of floor price
-- Gift swaps: Must receive equal or more value
-- User ALWAYS sends first (TON or gift)
-
-BEFORE proposing:
-1. Check gift floor price if market plugin is available
-2. Calculate values in TON
-3. This tool will REJECT deals that violate strategy
-
-Deal expires in 2 minutes if not accepted.`,
+  description:
+    "Create a trade deal with Accept/Decline buttons. Sends an inline bot message — do NOT send another message after. Strategy compliance is enforced automatically (will reject bad deals). User always sends first. Expires in 2 minutes.",
   parameters: Type.Object({
     chatId: Type.String({ description: "Chat ID where to send proposal" }),
     userId: Type.Number({ description: "Telegram user ID" }),

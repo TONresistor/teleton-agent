@@ -13,15 +13,8 @@ interface DealStatusParams {
 
 export const dealStatusTool: Tool = {
   name: "deal_status",
-  description: `Check the status and details of a deal by ID.
-
-Shows:
-- Deal parties (user, agent)
-- What each side gives/receives
-- Current status (proposed, accepted, verified, completed, etc.)
-- Timestamps (created, expires, verified, completed)
-- Payment/transfer tracking info (TX hashes, msgIds)
-- Profit calculation`,
+  description:
+    "Get full details of a deal by ID: status, parties, assets, payment tracking, profit.",
   category: "data-bearing",
   parameters: Type.Object({
     dealId: Type.String({ description: "Deal ID to check status for" }),

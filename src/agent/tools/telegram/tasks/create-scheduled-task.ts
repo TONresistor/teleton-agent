@@ -51,7 +51,7 @@ interface CreateScheduledTaskParams {
 export const telegramCreateScheduledTaskTool: Tool = {
   name: "telegram_create_scheduled_task",
   description:
-    "Create a scheduled task that will be executed at a specific time. The task will be stored in the database and a reminder message will be scheduled in Saved Messages. When the time comes, you'll receive the task context and can execute it with full agent capabilities. Supports both simple tool calls and complex multi-step tasks.",
+    "Schedule a task for future execution. Stores in DB and schedules a reminder in Saved Messages. Supports tool_call, agent_task payloads, or simple reminders. Can depend on other tasks.",
   parameters: Type.Object({
     description: Type.String({
       description: "What the task is about (e.g., 'Check TON price and alert if > $5')",

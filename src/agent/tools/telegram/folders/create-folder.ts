@@ -25,7 +25,7 @@ interface CreateFolderParams {
 export const telegramCreateFolderTool: Tool = {
   name: "telegram_create_folder",
   description:
-    "Create a new chat folder to organize your conversations. Folders can auto-include chat types (contacts, groups, bots, etc.) or specific chats added later with telegram_add_chat_to_folder. Use this to categorize chats by topic, importance, or type. Examples: 'Work', 'Family', 'Projects', 'Crypto'.",
+    "Create a new chat folder. Can auto-include chat types or add specific chats later with telegram_add_chat_to_folder.",
   parameters: Type.Object({
     title: Type.String({
       description: "Name of the folder (e.g., 'Work', 'Family', 'Projects'). Max 12 characters.",

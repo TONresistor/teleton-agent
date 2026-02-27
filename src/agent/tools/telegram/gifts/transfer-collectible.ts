@@ -20,13 +20,8 @@ interface TransferCollectibleParams {
  */
 export const telegramTransferCollectibleTool: Tool = {
   name: "telegram_transfer_collectible",
-  description: `Transfer a collectible gift you own to another user. Only works with upgraded collectible gifts (starGiftUnique), not regular gifts. The recipient will become the new owner.
-
-IMPORTANT: Some collectibles require a Star fee to transfer (shown as transferStars in telegram_get_my_gifts).
-- If transferStars is null/0: Transfer is FREE
-- If transferStars has a value: That amount of Stars will be deducted from your balance
-
-Use telegram_get_my_gifts to find your collectibles and their msgId.`,
+  description:
+    "Transfer a collectible gift to another user. Requires verified deal. May cost Stars (see transferStars in telegram_get_my_gifts). Collectibles only.",
   parameters: Type.Object({
     msgId: Type.Number({
       description:

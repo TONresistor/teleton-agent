@@ -13,6 +13,18 @@ import {
   telegramInviteToChannelTool,
   telegramInviteToChannelExecutor,
 } from "./invite-to-channel.js";
+import {
+  telegramGetAdminedChannelsTool,
+  telegramGetAdminedChannelsExecutor,
+} from "./get-admined-channels.js";
+import {
+  telegramCheckChannelUsernameTool,
+  telegramCheckChannelUsernameExecutor,
+} from "./check-channel-username.js";
+import {
+  telegramSetChannelUsernameTool,
+  telegramSetChannelUsernameExecutor,
+} from "./set-channel-username.js";
 import type { ToolEntry } from "../../types.js";
 
 export { telegramGetDialogsTool, telegramGetDialogsExecutor };
@@ -24,6 +36,9 @@ export { telegramLeaveChannelTool, telegramLeaveChannelExecutor };
 export { telegramCreateChannelTool, telegramCreateChannelExecutor };
 export { telegramEditChannelInfoTool, telegramEditChannelInfoExecutor };
 export { telegramInviteToChannelTool, telegramInviteToChannelExecutor };
+export { telegramGetAdminedChannelsTool, telegramGetAdminedChannelsExecutor };
+export { telegramCheckChannelUsernameTool, telegramCheckChannelUsernameExecutor };
+export { telegramSetChannelUsernameTool, telegramSetChannelUsernameExecutor };
 
 export const tools: ToolEntry[] = [
   { tool: telegramGetDialogsTool, executor: telegramGetDialogsExecutor },
@@ -41,6 +56,21 @@ export const tools: ToolEntry[] = [
   {
     tool: telegramInviteToChannelTool,
     executor: telegramInviteToChannelExecutor,
+    scope: "dm-only",
+  },
+  {
+    tool: telegramGetAdminedChannelsTool,
+    executor: telegramGetAdminedChannelsExecutor,
+    scope: "dm-only",
+  },
+  {
+    tool: telegramCheckChannelUsernameTool,
+    executor: telegramCheckChannelUsernameExecutor,
+    scope: "dm-only",
+  },
+  {
+    tool: telegramSetChannelUsernameTool,
+    executor: telegramSetChannelUsernameExecutor,
     scope: "dm-only",
   },
 ];

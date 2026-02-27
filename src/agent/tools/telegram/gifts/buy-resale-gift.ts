@@ -19,7 +19,7 @@ interface BuyResaleGiftParams {
 export const telegramBuyResaleGiftTool: Tool = {
   name: "telegram_buy_resale_gift",
   description:
-    "Purchase a collectible gift from the resale marketplace. Uses Stars from your balance to buy at the listed price. After purchase, the collectible becomes yours. Use telegram_get_resale_gifts to browse available listings and find odayId.",
+    "Buy a collectible from the resale marketplace using Stars. Get odayId from telegram_get_resale_gifts.",
   parameters: Type.Object({
     odayId: Type.String({
       description: "The odayId of the listing to purchase (from telegram_get_resale_gifts)",

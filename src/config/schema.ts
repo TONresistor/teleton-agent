@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { TELEGRAM_MAX_MESSAGE_LENGTH } from "../constants/limits.js";
 
-export const DMPolicy = z.enum(["pairing", "allowlist", "open", "disabled"]);
+export const DMPolicy = z.enum(["allowlist", "open", "disabled"]);
 export const GroupPolicy = z.enum(["open", "allowlist", "disabled"]);
 
 export const SessionResetPolicySchema = z.object({
@@ -23,6 +23,7 @@ export const AgentConfigSchema = z.object({
   provider: z
     .enum([
       "anthropic",
+      "claude-code",
       "openai",
       "google",
       "xai",
@@ -40,7 +41,7 @@ export const AgentConfigSchema = z.object({
     .url()
     .optional()
     .describe("Base URL for local LLM server (e.g. http://localhost:11434/v1)"),
-  model: z.string().default("claude-opus-4-5-20251101"),
+  model: z.string().default("claude-opus-4-6"),
   utility_model: z
     .string()
     .optional()
@@ -61,7 +62,7 @@ export const TelegramConfigSchema = z.object({
   phone: z.string(),
   session_name: z.string().default("teleton_session"),
   session_path: z.string().default("~/.teleton"),
-  dm_policy: DMPolicy.default("pairing"),
+  dm_policy: DMPolicy.default("allowlist"),
   allow_from: z.array(z.number()).default([]),
   group_policy: GroupPolicy.default("open"),
   group_allow_from: z.array(z.number()).default([]),
@@ -91,7 +92,6 @@ export const TelegramConfigSchema = z.object({
 
 export const StorageConfigSchema = z.object({
   sessions_file: z.string().default("~/.teleton/sessions.json"),
-  pairing_file: z.string().default("~/.teleton/pairing.json"),
   memory_file: z.string().default("~/.teleton/memory.json"),
   history_limit: z.number().default(100),
 });
@@ -106,7 +106,7 @@ export const MetaConfigSchema = z.object({
 const _DealsObject = z.object({
   enabled: z.boolean().default(true),
   expiry_seconds: z.number().default(120),
-  buy_max_floor_percent: z.number().default(100),
+  buy_max_floor_percent: z.number().default(95),
   sell_min_floor_percent: z.number().default(105),
   poll_interval_ms: z.number().default(5000),
   max_verification_retries: z.number().default(12),
@@ -245,6 +245,10 @@ export const ConfigSchema = z.object({
     .string()
     .optional()
     .describe("TonAPI key for higher rate limits (from @tonapi_bot)"),
+  toncenter_api_key: z
+    .string()
+    .optional()
+    .describe("TonCenter API key for dedicated RPC endpoint (free at https://toncenter.com)"),
   tavily_api_key: z
     .string()
     .optional()

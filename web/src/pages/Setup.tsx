@@ -13,14 +13,14 @@ export type { WizardData, StepProps } from '../components/setup/SetupContext';
 const STEP_COMPONENTS = [
   WelcomeStep,
   ProviderStep,
-  TelegramStep,
   ConfigStep,
   WalletStep,
+  TelegramStep,
   ConnectStep,
 ];
 
 export function Setup() {
-  const { step, data, loading, error, saved, canAdvance, setData, next, prev, handleSave } =
+  const { step, data, loading, error, saved, canAdvance, setData, next, prev } =
     useSetup();
 
   if (saved) {

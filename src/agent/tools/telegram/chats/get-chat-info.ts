@@ -19,7 +19,7 @@ interface GetChatInfoParams {
 export const telegramGetChatInfoTool: Tool = {
   name: "telegram_get_chat_info",
   description:
-    "Get detailed information about a Telegram chat, group, or channel. Returns title, description, member count, and other metadata. Use this to understand the context of a conversation.",
+    "Get detailed info about a chat, group, channel, or user. Returns title, description, member count, and metadata.",
   category: "data-bearing",
   parameters: Type.Object({
     chatId: Type.String({

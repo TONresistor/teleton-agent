@@ -8,6 +8,7 @@
 import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
+import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { sanitizeForContext } from "../../utils/sanitize.js";
 import type { Tool, ToolExecutor, ToolResult, ToolScope } from "./types.js";
 import type { ToolRegistry } from "./registry.js";
@@ -95,24 +96,53 @@ export async function loadMcpServers(config: McpConfig): Promise<McpConnection[]
           stderr: "pipe",
         });
       } else if (serverConfig.url) {
-        transport = new SSEClientTransport(new URL(serverConfig.url));
+        transport = new StreamableHTTPClientTransport(new URL(serverConfig.url));
       } else {
         throw new Error(`MCP server "${name}": needs 'command' or 'url'`);
       }
 
       const client = new Client({ name: `teleton-${name}`, version: "1.0.0" });
 
-      // Connect with timeout
+      // Connect with timeout; for URL servers, try Streamable HTTP then fall back to SSE
       let timeoutHandle: ReturnType<typeof setTimeout>;
-      await Promise.race([
-        client.connect(transport),
-        new Promise<never>((_, reject) => {
-          timeoutHandle = setTimeout(
-            () => reject(new Error(`Connection timed out after ${MCP_CONNECT_TIMEOUT_MS / 1000}s`)),
-            MCP_CONNECT_TIMEOUT_MS
-          );
-        }),
-      ]).finally(() => clearTimeout(timeoutHandle));
+      try {
+        await Promise.race([
+          client.connect(transport),
+          new Promise<never>((_, reject) => {
+            timeoutHandle = setTimeout(
+              () =>
+                reject(new Error(`Connection timed out after ${MCP_CONNECT_TIMEOUT_MS / 1000}s`)),
+              MCP_CONNECT_TIMEOUT_MS
+            );
+          }),
+        ]).finally(() => clearTimeout(timeoutHandle));
+      } catch (err) {
+        // If Streamable HTTP failed on a URL server, retry with SSE
+        if (serverConfig.url && transport instanceof StreamableHTTPClientTransport) {
+          await client.close().catch(() => {});
+          log.info({ server: name }, "Streamable HTTP failed, falling back to SSE");
+          transport = new SSEClientTransport(new URL(serverConfig.url));
+          const fallbackClient = new Client({ name: `teleton-${name}`, version: "1.0.0" });
+          await Promise.race([
+            fallbackClient.connect(transport),
+            new Promise<never>((_, reject) => {
+              timeoutHandle = setTimeout(
+                () =>
+                  reject(
+                    new Error(`SSE fallback timed out after ${MCP_CONNECT_TIMEOUT_MS / 1000}s`)
+                  ),
+                MCP_CONNECT_TIMEOUT_MS
+              );
+            }),
+          ]).finally(() => clearTimeout(timeoutHandle));
+          return {
+            serverName: name,
+            client: fallbackClient,
+            scope: serverConfig.scope ?? "always",
+          };
+        }
+        throw err;
+      }
 
       return { serverName: name, client, scope: serverConfig.scope ?? "always" };
     })
@@ -125,9 +155,11 @@ export async function loadMcpServers(config: McpConfig): Promise<McpConnection[]
     if (result.status === "fulfilled") {
       connections.push(result.value);
     } else {
-      log.warn(
-        `MCP server "${name}" failed to connect: ${result.reason instanceof Error ? result.reason.message : result.reason}`
-      );
+      const reason =
+        result.reason instanceof Error
+          ? (result.reason.stack ?? result.reason.message)
+          : result.reason;
+      log.warn({ server: name, reason }, `MCP server "${name}" failed to connect`);
     }
   }
 

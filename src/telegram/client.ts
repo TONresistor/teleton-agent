@@ -106,15 +106,80 @@ export class TelegramUserClient {
         await this.client.connect();
       } else {
         log.info("Starting authentication flow...");
-        await this.client.start({
-          phoneNumber: async () => this.config.phone || (await promptInput("Phone number: ")),
-          phoneCode: async () => await promptInput("Verification code: "),
-          password: async () => await promptInput("2FA password (if enabled): "),
-          onError: (err) => log.error({ err }, "Auth error"),
-        });
-        log.info("Authenticated");
+        const phone = this.config.phone || (await promptInput("Phone number: "));
 
-        this.saveSession();
+        await this.client.connect();
+
+        const sendResult = await this.client.invoke(
+          new Api.auth.SendCode({
+            phoneNumber: phone,
+            apiId: this.config.apiId,
+            apiHash: this.config.apiHash,
+            settings: new Api.CodeSettings({}),
+          })
+        );
+
+        // SentCodeSuccess means we're already authorized (e.g. session migration)
+        if (sendResult instanceof Api.auth.SentCodeSuccess) {
+          log.info("Authenticated (SentCodeSuccess)");
+          this.saveSession();
+        } else {
+          const phoneCodeHash = sendResult.phoneCodeHash;
+
+          // Detect Fragment SMS for anonymous numbers (+888)
+          if (sendResult.type instanceof Api.auth.SentCodeTypeFragmentSms) {
+            const url = (sendResult.type as any).url;
+            if (url) {
+              console.log(`\n  Anonymous number — open this URL to get your code:\n  ${url}\n`);
+            }
+          }
+
+          let authenticated = false;
+          const maxAttempts = 3;
+
+          for (let attempt = 0; attempt < maxAttempts; attempt++) {
+            const code = await promptInput("Verification code: ");
+
+            try {
+              await this.client.invoke(
+                new Api.auth.SignIn({
+                  phoneNumber: phone,
+                  phoneCodeHash,
+                  phoneCode: code,
+                })
+              );
+              authenticated = true;
+              break;
+            } catch (err: any) {
+              if (err.errorMessage === "PHONE_CODE_INVALID") {
+                const remaining = maxAttempts - attempt - 1;
+                if (remaining > 0) {
+                  console.log(`Invalid code. ${remaining} attempt(s) remaining.`);
+                } else {
+                  throw new Error("Authentication failed: too many invalid code attempts");
+                }
+              } else if (err.errorMessage === "SESSION_PASSWORD_NEEDED") {
+                // 2FA required
+                const pwd = await promptInput("2FA password: ");
+                const { computeCheck } = await import("telegram/Password.js");
+                const srpResult = await this.client.invoke(new Api.account.GetPassword());
+                const srpCheck = await computeCheck(srpResult, pwd);
+                await this.client.invoke(new Api.auth.CheckPassword({ password: srpCheck }));
+                authenticated = true;
+                break;
+              } else {
+                throw err;
+              }
+            }
+          }
+
+          if (!authenticated) {
+            throw new Error("Authentication failed");
+          }
+
+          log.info("Authenticated");
+          this.saveSession();
+        }
       }
 
       const me = (await this.client.getMe()) as Api.User;

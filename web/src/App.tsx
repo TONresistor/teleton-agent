@@ -7,7 +7,6 @@ import { Tools } from './pages/Tools';
 import { Plugins } from './pages/Plugins';
 import { Soul } from './pages/Soul';
 import { Memory } from './pages/Memory';
-import { Logs } from './pages/Logs';
 import { Workspace } from './pages/Workspace';
 import { Tasks } from './pages/Tasks';
 import { Mcp } from './pages/Mcp';
@@ -134,7 +133,6 @@ function AuthenticatedApp() {
             <Route path="plugins" element={<Plugins />} />
             <Route path="soul" element={<Soul />} />
             <Route path="memory" element={<Memory />} />
-            <Route path="logs" element={<Logs />} />
             <Route path="workspace" element={<Workspace />} />
             <Route path="tasks" element={<Tasks />} />
             <Route path="mcp" element={<Mcp />} />

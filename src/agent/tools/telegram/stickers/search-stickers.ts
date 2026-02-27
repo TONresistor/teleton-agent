@@ -20,7 +20,7 @@ interface SearchStickersParams {
 export const telegramSearchStickersTool: Tool = {
   name: "telegram_search_stickers",
   description:
-    "Search for sticker packs globally in Telegram's catalog by keyword or emoji. Returns both installed and uninstalled packs with their installation status. Use this to discover new packs or find specific ones. For a focused view of ONLY your installed packs, use telegram_get_my_stickers instead. Results include shortName and count. To send: telegram_send_sticker(chatId, stickerSetShortName, stickerIndex 0 to count-1).",
+    "Search sticker packs globally by keyword or emoji. Returns packs with shortName, count, and install status. For installed-only, use telegram_get_my_stickers.",
   parameters: Type.Object({
     query: Type.String({
       description:
