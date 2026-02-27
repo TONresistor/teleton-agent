@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **GramJS Layer 222 fork**: Switch from npm `telegram` to TONresistor/gramjs fork — native Layer 222 constructors, no more TL schema patching
+- **4 NFT marketplace tools** (73 → 77): `get-unique-gift`, `get-unique-gift-value`, `send-gift-offer`, `resolve-gift-offer`
+- **Gift service messages**: Real-time handling of gift offers received/declined and gifts received — agent can react automatically
+- **TON balance query**: `telegram_get_stars_balance` now supports `ton=true` for internal TON ledger balance
+- **Live token usage tracking**: WebUI dashboard displays real-time token consumption with cache hit rates
+- **Channel username tools** (70 → 73): `check-channel-username`, `set-channel-username`, `create-channel-username`
+- **Toncenter API key**: Centralized TonClient caching with optional Toncenter API key for higher rate limits
+
+### Changed
+- **Gift catalog rework**: `get-available-gifts` now supports pagination, sorting (price, resale count), search by title, and resale filter
+- **Resale identifiers**: `buy-resale-gift` migrated from `odayId` to `slug`, `set-collectible-price` from `odayId` to `msgId`
+- **Resale error handling**: `STARGIFT_RESELL_TOO_EARLY` parsed with human-readable wait time, `STARGIFT_INVALID` with guidance
+- **Styled keyboard**: Native Layer 222 constructors for `KeyboardButtonStyle`, `KeyboardButtonCopy`, `KeyboardButtonCallback` — no more `(Api as any)` casts
+- **WebUI dashboard**: Redesigned with provider switch, tools & plugins panels
+- **WebUI config page**: Harmonized UX across all settings panels
+- **Ston.fi DEX**: Migrated to SDK v2 with hardened SendMode and transaction locking
+
+### Fixed
+- **Typing indicator**: Persistent typing during agent processing with retry and dedup hardening
+- **Auth flow**: Guard `SentCodePaymentRequired` type (Layer 222 narrowing) in both CLI and WebUI auth
+- **send-gift**: Use `getInputEntity()` instead of `getEntity()` for correct InputPeer type
+
+### Removed
+- **Postinstall patch system**: `scripts/patch-gramjs.sh` and `scripts/postinstall.mjs` — no longer needed with Layer 222 fork
+
 ## [0.7.4] - 2026-02-25
 
 ### Added
