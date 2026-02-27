@@ -10,7 +10,7 @@ const log = createLogger("Tools");
  * Parameters for buying a resale gift
  */
 interface BuyResaleGiftParams {
-  odayId: string;
+  slug: string;
 }
 
 /**
@@ -19,10 +19,10 @@ interface BuyResaleGiftParams {
 export const telegramBuyResaleGiftTool: Tool = {
   name: "telegram_buy_resale_gift",
   description:
-    "Buy a collectible from the resale marketplace using Stars. Get odayId from telegram_get_resale_gifts.",
+    "Buy a collectible from the resale marketplace using Stars. Get slug from telegram_get_resale_gifts.",
   parameters: Type.Object({
-    odayId: Type.String({
-      description: "The odayId of the listing to purchase (from telegram_get_resale_gifts)",
+    slug: Type.String({
+      description: "The slug of the listing to purchase (from telegram_get_resale_gifts)",
     }),
   }),
 };
@@ -35,44 +35,31 @@ export const telegramBuyResaleGiftExecutor: ToolExecutor<BuyResaleGiftParams> = 
   context
 ): Promise<ToolResult> => {
   try {
-    const { odayId } = params;
+    const { slug } = params;
     const gramJsClient = context.bridge.getClient().getClient();
 
-    if (!(Api as any).InputInvoiceStarGiftResale) {
-      return {
-        success: false,
-        error:
-          "Resale gift purchasing is not supported in the current Telegram API layer. A GramJS update is required.",
-      };
-    }
+    // Buy for self
+    const toId = new Api.InputPeerSelf();
 
-    // Get payment form for the resale gift
-    const stargiftInput = new (Api as any).InputSavedStarGiftUser({
-      odayId: BigInt(odayId),
+    const invoice = new Api.InputInvoiceStarGiftResale({
+      slug,
+      toId,
     });
 
-    const invoiceData = {
-      stargift: stargiftInput,
-    };
-
-    const form: any = await gramJsClient.invoke(
-      new Api.payments.GetPaymentForm({
-        invoice: new (Api as any).InputInvoiceStarGiftResale(invoiceData),
-      })
-    );
+    const form: any = await gramJsClient.invoke(new Api.payments.GetPaymentForm({ invoice }));
 
     // Complete the purchase
     await gramJsClient.invoke(
       new Api.payments.SendStarsForm({
         formId: form.formId,
-        invoice: new (Api as any).InputInvoiceStarGiftResale(invoiceData),
+        invoice,
       })
     );
 
     return {
       success: true,
       data: {
-        odayId,
+        slug,
         purchased: true,
         message: "Collectible purchased successfully! It's now in your collection.",
       },

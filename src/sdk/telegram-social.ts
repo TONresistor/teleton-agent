@@ -499,11 +499,11 @@ export function createTelegramSocialSDK(bridge: TelegramBridge, log: PluginLogge
         const client = getClient();
         const { Api } = await import("telegram");
 
-        const user = await client.getEntity(userId.toString());
+        const user = await client.getInputEntity(userId.toString());
 
         const invoiceData = {
           peer: user,
-          giftId: BigInt(giftId),
+          giftId: BigInt(giftId) as any,
           hideName: opts?.anonymous ?? false,
           message: opts?.message
             ? new Api.TextWithEntities({ text: opts.message, entities: [] })
@@ -512,14 +512,14 @@ export function createTelegramSocialSDK(bridge: TelegramBridge, log: PluginLogge
 
         const form: any = await client.invoke(
           new Api.payments.GetPaymentForm({
-            invoice: new (Api as any).InputInvoiceStarGift(invoiceData),
+            invoice: new Api.InputInvoiceStarGift(invoiceData),
           })
         );
 
         await client.invoke(
           new Api.payments.SendStarsForm({
             formId: form.formId,
-            invoice: new (Api as any).InputInvoiceStarGift(invoiceData),
+            invoice: new Api.InputInvoiceStarGift(invoiceData),
           })
         );
       } catch (err) {
@@ -604,15 +604,8 @@ export function createTelegramSocialSDK(bridge: TelegramBridge, log: PluginLogge
         const client = getClient();
         const { Api } = await import("telegram");
 
-        if (!(Api.payments as any).GetResaleStarGifts) {
-          throw new PluginSDKError(
-            "Resale gift marketplace is not supported in the current Telegram API layer.",
-            "OPERATION_FAILED"
-          );
-        }
-
         const result: any = await client.invoke(
-          new (Api.payments as any).GetResaleStarGifts({
+          new Api.payments.GetResaleStarGifts({
             offset: "",
             limit: limit ?? 50,
           })
@@ -637,29 +630,18 @@ export function createTelegramSocialSDK(bridge: TelegramBridge, log: PluginLogge
         const client = getClient();
         const { Api } = await import("telegram");
 
-        if (!(Api as any).InputInvoiceStarGiftResale) {
-          throw new PluginSDKError(
-            "Resale gift purchasing is not supported in the current Telegram API layer.",
-            "OPERATION_FAILED"
-          );
-        }
-
-        const stargiftInput = new (Api as any).InputSavedStarGiftUser({
-          odayId: BigInt(giftId),
+        const toId = new Api.InputPeerSelf();
+        const invoice = new Api.InputInvoiceStarGiftResale({
+          slug: giftId,
+          toId,
         });
 
-        const invoiceData = { stargift: stargiftInput };
-
-        const form: any = await client.invoke(
-          new Api.payments.GetPaymentForm({
-            invoice: new (Api as any).InputInvoiceStarGiftResale(invoiceData),
-          })
-        );
+        const form: any = await client.invoke(new Api.payments.GetPaymentForm({ invoice }));
 
         await client.invoke(
           new Api.payments.SendStarsForm({
             formId: form.formId,
-            invoice: new (Api as any).InputInvoiceStarGiftResale(invoiceData),
+            invoice,
           })
         );
       } catch (err) {

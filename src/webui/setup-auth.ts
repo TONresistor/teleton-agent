@@ -81,6 +81,11 @@ export class TelegramAuthManager {
       throw new Error("Account already authenticated (SentCodeSuccess)");
     }
 
+    if (!(result instanceof Api.auth.SentCode)) {
+      await client.disconnect();
+      throw new Error("Unexpected auth response (payment required or unknown)");
+    }
+
     // Detect code delivery method
     let codeDelivery: "app" | "sms" | "fragment" = "sms";
     let fragmentUrl: string | undefined;

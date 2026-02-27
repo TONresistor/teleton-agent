@@ -27,10 +27,9 @@ export interface DealMessage {
 
 /**
  * Convert styled button definitions to GramJS TL markup (with colors + copy buttons)
- * Requires patched GramJS TL schema (scripts/patch-gramjs.sh)
+ * Uses native Layer 222 constructors (KeyboardButtonStyle, KeyboardButtonCopy)
  */
 export function toTLMarkup(buttons: StyledButtonDef[][]): Api.ReplyInlineMarkup {
-  const ApiAny = Api as any;
   return new Api.ReplyInlineMarkup({
     rows: buttons
       .filter((row) => row.length > 0)
@@ -40,7 +39,7 @@ export function toTLMarkup(buttons: StyledButtonDef[][]): Api.ReplyInlineMarkup 
             buttons: row.map((btn) => {
               // Copy button: native click-to-clipboard (no callback needed)
               if (btn.copyText) {
-                return new ApiAny.KeyboardButtonCopy({
+                return new Api.KeyboardButtonCopy({
                   text: btn.text,
                   copyText: btn.copyText,
                 });
@@ -48,13 +47,13 @@ export function toTLMarkup(buttons: StyledButtonDef[][]): Api.ReplyInlineMarkup 
 
               // Callback button: with optional color style
               const style = btn.style
-                ? new ApiAny.KeyboardButtonStyle({
+                ? new Api.KeyboardButtonStyle({
                     bgSuccess: btn.style === "success",
                     bgDanger: btn.style === "danger",
                     bgPrimary: btn.style === "primary",
                   })
                 : undefined;
-              return new ApiAny.KeyboardButtonCallback({
+              return new Api.KeyboardButtonCallback({
                 text: btn.text,
                 data: Buffer.from(btn.callbackData),
                 style,

@@ -257,6 +257,15 @@ export class TelegramBridge {
     );
   }
 
+  onServiceMessage(handler: (message: TelegramMessage) => void | Promise<void>): void {
+    this.client.addServiceMessageHandler(async (msg: Api.MessageService) => {
+      const message = await this.parseServiceMessage(msg);
+      if (message) {
+        await handler(message);
+      }
+    });
+  }
+
   private async parseMessage(msg: Api.Message): Promise<TelegramMessage> {
     const chatId = msg.chatId?.toString() ?? msg.peerId?.toString() ?? "unknown";
     const senderIdBig = msg.senderId ? BigInt(msg.senderId.toString()) : BigInt(0);
@@ -357,6 +366,136 @@ export class TelegramBridge {
       mediaType,
       replyToId: replyToMsgId,
       _rawMessage: hasMedia || !!replyToMsgId ? msg : undefined,
+    };
+  }
+
+  private async parseServiceMessage(msg: Api.MessageService): Promise<TelegramMessage | null> {
+    const action = msg.action;
+    if (!action) return null;
+
+    // Only handle gift-related actions
+    const isGiftAction =
+      action instanceof Api.MessageActionStarGiftPurchaseOffer ||
+      action instanceof Api.MessageActionStarGiftPurchaseOfferDeclined ||
+      action instanceof Api.MessageActionStarGift;
+    if (!isGiftAction) return null;
+
+    // Skip our own outgoing actions
+    if (msg.out) return null;
+
+    const chatId = msg.chatId?.toString() ?? msg.peerId?.toString() ?? "unknown";
+    const senderIdBig = msg.senderId ? BigInt(msg.senderId.toString()) : BigInt(0);
+    const senderId = Number(senderIdBig);
+
+    // Resolve sender info (same pattern as parseMessage, 5s timeout)
+    let senderUsername: string | undefined;
+    let senderFirstName: string | undefined;
+    let isBot = false;
+    try {
+      const sender = await Promise.race([
+        msg.getSender(),
+        new Promise<undefined>((resolve) => setTimeout(() => resolve(undefined), 5000)),
+      ]);
+      if (sender && "username" in sender) {
+        senderUsername = sender.username ?? undefined;
+      }
+      if (sender && "firstName" in sender) {
+        senderFirstName = sender.firstName ?? undefined;
+      }
+      if (sender instanceof Api.User) {
+        isBot = sender.bot ?? false;
+      }
+    } catch {
+      // getSender() can fail — non-critical
+    }
+
+    let text = "";
+
+    if (action instanceof Api.MessageActionStarGiftPurchaseOffer) {
+      const gift = action.gift as any;
+      const price = action.price as any;
+      const isUnique = gift.className === "StarGiftUnique";
+      const title = gift.title || "Unknown Gift";
+      const slug = isUnique ? gift.slug : undefined;
+      const num = isUnique ? gift.num : undefined;
+      const priceStars = price?.amount?.toString() || "?";
+      const status = action.accepted ? "accepted" : action.declined ? "declined" : "pending";
+      const expires = action.expiresAt
+        ? new Date(action.expiresAt * 1000).toISOString()
+        : "unknown";
+
+      text = `[Gift Offer Received]\n`;
+      text += `Offer: ${priceStars} Stars for your NFT "${title}"${num ? ` #${num}` : ""}${slug ? ` (slug: ${slug})` : ""}\n`;
+      text += `From: ${senderUsername ? `@${senderUsername}` : senderFirstName || `user:${senderId}`}\n`;
+      text += `Expires: ${expires}\n`;
+      text += `Status: ${status}\n`;
+      text += `Message ID: ${msg.id} — use telegram_resolve_gift_offer(offerMsgId=${msg.id}) to accept or telegram_resolve_gift_offer(offerMsgId=${msg.id}, decline=true) to decline.`;
+
+      log.info(
+        `Gift offer received: ${priceStars} Stars for "${title}" from ${senderUsername || senderId}`
+      );
+    } else if (action instanceof Api.MessageActionStarGiftPurchaseOfferDeclined) {
+      const gift = action.gift as any;
+      const price = action.price as any;
+      const isUnique = gift.className === "StarGiftUnique";
+      const title = gift.title || "Unknown Gift";
+      const slug = isUnique ? gift.slug : undefined;
+      const num = isUnique ? gift.num : undefined;
+      const priceStars = price?.amount?.toString() || "?";
+      const reason = action.expired ? "expired" : "declined";
+
+      text = `[Gift Offer ${action.expired ? "Expired" : "Declined"}]\n`;
+      text += `Your offer of ${priceStars} Stars for NFT "${title}"${num ? ` #${num}` : ""}${slug ? ` (slug: ${slug})` : ""} was ${reason}.`;
+
+      log.info(`Gift offer ${reason}: ${priceStars} Stars for "${title}"`);
+    } else if (action instanceof Api.MessageActionStarGift) {
+      const gift = action.gift as any;
+      const title = gift.title || "Unknown Gift";
+      const stars = gift.stars?.toString() || "?";
+      const giftMessage = (action.message as any)?.text || "";
+      const fromAnonymous = action.nameHidden;
+
+      text = `[Gift Received]\n`;
+      text += `Gift: "${title}" (${stars} Stars)${action.upgraded ? " [Upgraded to Collectible]" : ""}\n`;
+      text += `From: ${fromAnonymous ? "Anonymous" : senderUsername ? `@${senderUsername}` : senderFirstName || `user:${senderId}`}\n`;
+      if (giftMessage) text += `Message: "${giftMessage}"\n`;
+      if (action.canUpgrade && action.upgradeStars) {
+        text += `This gift can be upgraded to a collectible for ${action.upgradeStars.toString()} Stars.\n`;
+      }
+      if (action.convertStars) {
+        text += `Can be converted to ${action.convertStars.toString()} Stars.`;
+      }
+
+      log.info(
+        `Gift received: "${title}" (${stars} Stars) from ${fromAnonymous ? "Anonymous" : senderUsername || senderId}`
+      );
+    }
+
+    if (!text) return null;
+
+    // Cache peer
+    if (msg.peerId) {
+      this.peerCache.set(chatId, msg.peerId);
+      if (this.peerCache.size > 5000) {
+        const oldest = this.peerCache.keys().next().value;
+        if (oldest !== undefined) this.peerCache.delete(oldest);
+      }
+    }
+
+    return {
+      id: msg.id,
+      chatId,
+      senderId,
+      senderUsername,
+      senderFirstName,
+      text: text.trim(),
+      isGroup: false,
+      isChannel: false,
+      isBot,
+      mentionsMe: true,
+      timestamp: new Date(msg.date * 1000),
+      hasMedia: false,
+      _rawPeer: msg.peerId,
     };
   }
 

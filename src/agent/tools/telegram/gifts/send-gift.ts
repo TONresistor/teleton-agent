@@ -64,25 +64,25 @@ export const telegramSendGiftExecutor: ToolExecutor<SendGiftParams> = async (
 
     const gramJsClient = context.bridge.getClient().getClient();
 
-    const user = await gramJsClient.getEntity(userId);
+    const user = await gramJsClient.getInputEntity(userId);
 
     const invoiceData = {
       peer: user,
-      giftId: BigInt(giftId),
+      giftId: BigInt(giftId) as any,
       hideName: anonymous,
       message: message ? new Api.TextWithEntities({ text: message, entities: [] }) : undefined,
     };
 
     const form: any = await gramJsClient.invoke(
       new Api.payments.GetPaymentForm({
-        invoice: new (Api as any).InputInvoiceStarGift(invoiceData),
+        invoice: new Api.InputInvoiceStarGift(invoiceData),
       })
     );
 
     await gramJsClient.invoke(
       new Api.payments.SendStarsForm({
         formId: form.formId,
-        invoice: new (Api as any).InputInvoiceStarGift(invoiceData),
+        invoice: new Api.InputInvoiceStarGift(invoiceData),
       })
     );
 

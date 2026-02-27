@@ -123,7 +123,7 @@ export class TelegramUserClient {
         if (sendResult instanceof Api.auth.SentCodeSuccess) {
           log.info("Authenticated (SentCodeSuccess)");
           this.saveSession();
-        } else {
+        } else if (sendResult instanceof Api.auth.SentCode) {
           const phoneCodeHash = sendResult.phoneCodeHash;
 
           // Detect Fragment SMS for anonymous numbers (+888)
@@ -179,6 +179,8 @@ export class TelegramUserClient {
 
           log.info("Authenticated");
           this.saveSession();
+        } else {
+          throw new Error("Unexpected auth response: payment required or unknown type");
         }
       }
 
@@ -244,6 +246,17 @@ export class TelegramUserClient {
       await handler(event);
     };
     this.client.addEventHandler(wrappedHandler, new NewMessage(filters ?? {}));
+  }
+
+  addServiceMessageHandler(handler: (msg: Api.MessageService) => Promise<void>): void {
+    this.client.addEventHandler(async (update) => {
+      if (
+        (update instanceof Api.UpdateNewMessage || update instanceof Api.UpdateNewChannelMessage) &&
+        (update as any).message instanceof Api.MessageService
+      ) {
+        await handler((update as any).message as Api.MessageService);
+      }
+    });
   }
 
   addCallbackQueryHandler(handler: (event: any) => Promise<void>): void {

@@ -518,6 +518,15 @@ ${blue}  ┌──────────────────────�
         log.error({ err: error }, "Error enqueueing message");
       }
     });
+
+    // Register event handler for gift service messages (offers, gifts received)
+    this.bridge.onServiceMessage(async (message) => {
+      try {
+        await this.debouncer!.enqueue(message);
+      } catch (error) {
+        log.error({ err: error }, "Error enqueueing service message");
+      }
+    });
   }
 
   /**

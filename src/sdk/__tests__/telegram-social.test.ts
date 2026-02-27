@@ -929,22 +929,20 @@ describe("createTelegramSocialSDK", () => {
 
   // ─── getResaleGifts ─────────────────────────────────────────
   describe("getResaleGifts()", () => {
-    it("throws when API not available", async () => {
-      // The mock doesn't have GetResaleStarGifts on payments
+    it("throws on invoke error", async () => {
+      // Layer 222 has GetResaleStarGifts natively — test invoke failure path
       await expect(sdk.getResaleGifts()).rejects.toMatchObject({
         code: "OPERATION_FAILED",
-        message: expect.stringContaining("not supported"),
       });
     });
   });
 
   // ─── buyResaleGift ──────────────────────────────────────────
   describe("buyResaleGift()", () => {
-    it("throws when API not available", async () => {
-      // The mock doesn't have InputInvoiceStarGiftResale on Api
+    it("throws on invoke error", async () => {
+      // Layer 222 has InputInvoiceStarGiftResale natively — test invoke failure path
       await expect(sdk.buyResaleGift("gift1")).rejects.toMatchObject({
         code: "OPERATION_FAILED",
-        message: expect.stringContaining("not supported"),
       });
     });
   });

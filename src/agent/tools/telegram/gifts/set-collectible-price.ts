@@ -10,7 +10,7 @@ const log = createLogger("Tools");
  * Parameters for setting collectible price
  */
 interface SetCollectiblePriceParams {
-  odayId: string;
+  msgId: number;
   price?: number;
 }
 
@@ -22,8 +22,8 @@ export const telegramSetCollectiblePriceTool: Tool = {
   description:
     "List/unlist a collectible for sale. Set price in Stars to list, omit or 0 to unlist. Collectibles only.",
   parameters: Type.Object({
-    odayId: Type.String({
-      description: "The odayId of the collectible to list/unlist (from telegram_get_my_gifts)",
+    msgId: Type.Number({
+      description: "The msgId of the collectible to list/unlist (from telegram_get_my_gifts)",
     }),
     price: Type.Optional(
       Type.Number({
@@ -42,32 +42,25 @@ export const telegramSetCollectiblePriceExecutor: ToolExecutor<SetCollectiblePri
   context
 ): Promise<ToolResult> => {
   try {
-    const { odayId, price } = params;
+    const { msgId, price } = params;
     const gramJsClient = context.bridge.getClient().getClient();
-
-    if (!(Api.payments as any).UpdateStarGiftPrice) {
-      return {
-        success: false,
-        error:
-          "Setting collectible prices is not supported in the current Telegram API layer. A GramJS update is required.",
-      };
-    }
 
     const isListing = price !== undefined && price > 0;
 
     await gramJsClient.invoke(
-      new (Api.payments as any).UpdateStarGiftPrice({
-        stargift: new (Api as any).InputSavedStarGiftUser({
-          odayId: BigInt(odayId),
+      new Api.payments.UpdateStarGiftPrice({
+        stargift: new Api.InputSavedStarGiftUser({ msgId }),
+        resellAmount: new Api.StarsAmount({
+          amount: BigInt(isListing ? price : 0) as any,
+          nanos: 0,
         }),
-        resellStars: isListing ? BigInt(price) : undefined,
       })
     );
 
     return {
       success: true,
       data: {
-        odayId,
+        msgId,
         action: isListing ? "listed" : "unlisted",
         price: isListing ? price : null,
       },
@@ -80,6 +73,18 @@ export const telegramSetCollectiblePriceExecutor: ToolExecutor<SetCollectiblePri
       return {
         success: false,
         error: "Collectible not found. Make sure you own it.",
+      };
+    }
+
+    const resellMatch = errorMsg.match(/STARGIFT_RESELL_TOO_EARLY_(\d+)/);
+    if (resellMatch) {
+      const seconds = parseInt(resellMatch[1], 10);
+      const hours = Math.floor(seconds / 3600);
+      const mins = Math.floor((seconds % 3600) / 60);
+      const wait = hours > 0 ? `${hours}h${mins > 0 ? `${mins}m` : ""}` : `${mins}m`;
+      return {
+        success: false,
+        error: `Cannot list yet — Telegram requires waiting ${wait} before reselling. Try again later.`,
       };
     }
 

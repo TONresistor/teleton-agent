@@ -19,6 +19,16 @@ import {
   telegramGetCollectibleInfoTool,
   telegramGetCollectibleInfoExecutor,
 } from "./get-collectible-info.js";
+import { telegramGetUniqueGiftTool, telegramGetUniqueGiftExecutor } from "./get-unique-gift.js";
+import {
+  telegramGetUniqueGiftValueTool,
+  telegramGetUniqueGiftValueExecutor,
+} from "./get-unique-gift-value.js";
+import { telegramSendGiftOfferTool, telegramSendGiftOfferExecutor } from "./send-gift-offer.js";
+import {
+  telegramResolveGiftOfferTool,
+  telegramResolveGiftOfferExecutor,
+} from "./resolve-gift-offer.js";
 import type { ToolEntry } from "../../types.js";
 
 export { telegramGetAvailableGiftsTool, telegramGetAvailableGiftsExecutor };
@@ -30,6 +40,10 @@ export { telegramGetResaleGiftsTool, telegramGetResaleGiftsExecutor };
 export { telegramBuyResaleGiftTool, telegramBuyResaleGiftExecutor };
 export { telegramSetGiftStatusTool, telegramSetGiftStatusExecutor };
 export { telegramGetCollectibleInfoTool, telegramGetCollectibleInfoExecutor };
+export { telegramGetUniqueGiftTool, telegramGetUniqueGiftExecutor };
+export { telegramGetUniqueGiftValueTool, telegramGetUniqueGiftValueExecutor };
+export { telegramSendGiftOfferTool, telegramSendGiftOfferExecutor };
+export { telegramResolveGiftOfferTool, telegramResolveGiftOfferExecutor };
 
 export const tools: ToolEntry[] = [
   { tool: telegramGetAvailableGiftsTool, executor: telegramGetAvailableGiftsExecutor },
@@ -49,4 +63,12 @@ export const tools: ToolEntry[] = [
   { tool: telegramBuyResaleGiftTool, executor: telegramBuyResaleGiftExecutor, scope: "dm-only" },
   { tool: telegramSetGiftStatusTool, executor: telegramSetGiftStatusExecutor, scope: "dm-only" },
   { tool: telegramGetCollectibleInfoTool, executor: telegramGetCollectibleInfoExecutor },
+  { tool: telegramGetUniqueGiftTool, executor: telegramGetUniqueGiftExecutor },
+  { tool: telegramGetUniqueGiftValueTool, executor: telegramGetUniqueGiftValueExecutor },
+  { tool: telegramSendGiftOfferTool, executor: telegramSendGiftOfferExecutor, scope: "dm-only" },
+  {
+    tool: telegramResolveGiftOfferTool,
+    executor: telegramResolveGiftOfferExecutor,
+    scope: "dm-only",
+  },
 ];
