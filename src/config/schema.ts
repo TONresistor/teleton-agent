@@ -209,7 +209,7 @@ const _ToolRagObject = z.object({
     .describe("Tool name patterns always included (prefix glob with *)"),
   skip_unlimited_providers: z
     .boolean()
-    .default(false)
+    .default(true)
     .describe("Skip Tool RAG for providers with no tool limit (e.g. Anthropic)"),
 });
 export const ToolRagConfigSchema = _ToolRagObject.default(_ToolRagObject.parse({}));

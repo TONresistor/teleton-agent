@@ -103,6 +103,7 @@ export interface StatusData {
   provider: string;
   sessionCount: number;
   toolCount: number;
+  tokenUsage?: { totalTokens: number; totalCost: number };
 }
 
 export interface MemoryStats {

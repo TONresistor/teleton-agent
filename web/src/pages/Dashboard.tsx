@@ -1,8 +1,9 @@
-import { useEffect, useRef, useSyncExternalStore } from 'react';
+import { useEffect, useRef, useSyncExternalStore, useState } from 'react';
 import { useConfigState } from '../hooks/useConfigState';
 import { AgentSettingsPanel } from '../components/AgentSettingsPanel';
 import { TelegramSettingsPanel } from '../components/TelegramSettingsPanel';
 import { logStore } from '../lib/log-store';
+import { api, StatusData } from '../lib/api';
 
 function Metric({ label, value, mono }: { label: string; value: string | number; mono?: boolean }) {
   return (
@@ -22,6 +23,19 @@ export function Dashboard() {
     pendingValidating, pendingError, setPendingError,
     handleProviderChange, handleProviderConfirm, handleProviderCancel,
   } = useConfigState();
+
+  // Poll /api/status every 10s for live metrics (tokens, uptime)
+  const [liveStatus, setLiveStatus] = useState<StatusData | null>(null);
+  useEffect(() => {
+    let active = true;
+    const poll = () => {
+      api.getStatus().then((res) => { if (active) setLiveStatus(res.data); }).catch(() => {});
+    };
+    const id = setInterval(poll, 10_000);
+    return () => { active = false; clearInterval(id); };
+  }, []);
+
+  const currentStatus = liveStatus ?? status;
 
   const logs = useSyncExternalStore(
     (cb) => logStore.subscribe(cb),
@@ -44,9 +58,10 @@ export function Dashboard() {
   if (loading) return <div className="loading">Loading...</div>;
   if (!status || !stats) return <div className="alert error">Failed to load dashboard data</div>;
 
-  const uptime = status.uptime < 3600
-    ? `${Math.floor(status.uptime / 60)}m`
-    : `${Math.floor(status.uptime / 3600)}h ${Math.floor((status.uptime % 3600) / 60)}m`;
+  const s = currentStatus ?? status;
+  const uptime = s.uptime < 3600
+    ? `${Math.floor(s.uptime / 60)}m`
+    : `${Math.floor(s.uptime / 3600)}h ${Math.floor((s.uptime % 3600) / 60)}m`;
 
   return (
     <div className="dashboard-root">
@@ -72,11 +87,13 @@ export function Dashboard() {
       <div className="card status-bar">
         <div className="status-row">
           <Metric label="Uptime" value={uptime} />
-          <Metric label="Sessions" value={status.sessionCount} />
-          <Metric label="Tools" value={status.toolCount} />
+          <Metric label="Sessions" value={s.sessionCount} />
+          <Metric label="Tools" value={s.toolCount} />
           <Metric label="Knowledge" value={stats.knowledge} />
           <Metric label="Messages" value={stats.messages.toLocaleString()} />
           <Metric label="Chats" value={stats.chats} />
+          <Metric label="Tokens" value={s.tokenUsage ? `${(s.tokenUsage.totalTokens / 1000).toFixed(1)}K` : '0'} mono />
+          <Metric label="Cost" value={s.tokenUsage ? `$${s.tokenUsage.totalCost.toFixed(3)}` : '$0.000'} mono />
         </div>
       </div>
 

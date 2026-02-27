@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import type { WebUIServerDeps, StatusResponse, APIResponse } from "../types.js";
 import { getErrorMessage } from "../../utils/errors.js";
+import { getTokenUsage } from "../../agent/runtime.js";
 
 export function createStatusRoutes(deps: WebUIServerDeps) {
   const app = new Hono();
@@ -20,6 +21,7 @@ export function createStatusRoutes(deps: WebUIServerDeps) {
         provider: config.agent.provider,
         sessionCount: sessionCountRow?.count ?? 0,
         toolCount: deps.toolRegistry.getAll().length,
+        tokenUsage: getTokenUsage(),
       };
 
       const response: APIResponse<StatusResponse> = {

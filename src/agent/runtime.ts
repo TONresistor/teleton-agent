@@ -60,6 +60,13 @@ import { createLogger } from "../utils/logger.js";
 
 const log = createLogger("Agent");
 
+// ── Global token usage accumulator (in-memory, resets on restart) ───
+const globalTokenUsage = { totalTokens: 0, totalCost: 0 };
+
+export function getTokenUsage() {
+  return { ...globalTokenUsage };
+}
+
 function isContextOverflowError(errorMessage?: string): boolean {
   if (!errorMessage) return false;
   const lower = errorMessage.toLowerCase();
@@ -650,6 +657,9 @@ export class AgentRuntime {
         if (u.cacheWrite) cacheParts.push(`${(u.cacheWrite / 1000).toFixed(1)}K new`);
         const cacheInfo = cacheParts.length > 0 ? ` (${cacheParts.join(", ")})` : "";
         log.info(`💰 ${inK}K in${cacheInfo}, ${u.output} out | $${u.totalCost.toFixed(3)}`);
+
+        globalTokenUsage.totalTokens += u.input + u.output + u.cacheRead + u.cacheWrite;
+        globalTokenUsage.totalCost += u.totalCost;
       }
 
       let content = accumulatedTexts.join("\n").trim() || response.text;

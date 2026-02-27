@@ -291,6 +291,7 @@ export async function chatWithContext(
     maxTokens: options.maxTokens ?? config.max_tokens,
     temperature,
     sessionId: options.sessionId,
+    cacheRetention: "long",
   };
   if (isCocoon) {
     const { stripCocoonPayload } = await import("../cocoon/tool-adapter.js");
