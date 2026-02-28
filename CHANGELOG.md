@@ -8,6 +8,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **YOLO Mode** (Coding Agent): 4 new exec tools for full system access on Linux — `exec_run` (bash commands), `exec_install` (apt/pip/npm/docker), `exec_service` (systemd management), `exec_status` (server health). Disabled by default (`mode: off`), requires explicit `mode: yolo` opt-in. Admin-only scope, configurable timeout (120s), output limit (50KB), full audit trail in SQLite
+- **`admin-only` access policy**: New DM and group policy option — only Telegram admins can interact with the agent. Now the default for new installations (previously `open`)
+- **DNS set-site tool**: `dns_set_site` links a `.ton` domain to a TON Site via ADNL address for decentralized website hosting
 - **GramJS Layer 222 fork**: Switch from npm `telegram` to TONresistor/gramjs fork — native Layer 222 constructors, no more TL schema patching
 - **4 NFT marketplace tools** (73 → 77): `get-unique-gift`, `get-unique-gift-value`, `send-gift-offer`, `resolve-gift-offer`
 - **Gift service messages**: Real-time handling of gift offers received/declined and gifts received — agent can react automatically
@@ -15,8 +18,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Live token usage tracking**: WebUI dashboard displays real-time token consumption with cache hit rates
 - **Channel username tools** (70 → 73): `check-channel-username`, `set-channel-username`, `create-channel-username`
 - **Toncenter API key**: Centralized TonClient caching with optional Toncenter API key for higher rate limits
+- **DB migration 1.12.0**: `exec_audit` table for command execution history (indexed by timestamp, user)
+- **DB migration 1.13.0**: Per-session token usage tracking (input/output tokens accumulated per chat)
+- **Session auto-pruning**: Sessions older than 30 days are automatically cleaned up at startup
 
 ### Changed
+- **Tool RAG enabled by default**: Semantic tool selection now active for all providers, reducing ~120 tools to ~25 per LLM call
+- **35+ tool descriptions enriched**: Cross-references and clearer context for better RAG matching accuracy
+- **Default access policy**: DM and group policies default to `admin-only` instead of `open` — secure by default
+- **CLI wizard**: New "Coding Agent" setup question, policy choices reordered (Admin Only first)
+- **WebUI wizard**: New "System Execution" select with YOLO mode + VPS warning
+- **Dashboard**: Policy selects updated with `admin-only` option and clearer labels
 - **Gift catalog rework**: `get-available-gifts` now supports pagination, sorting (price, resale count), search by title, and resale filter
 - **Resale identifiers**: `buy-resale-gift` migrated from `odayId` to `slug`, `set-collectible-price` from `odayId` to `msgId`
 - **Resale error handling**: `STARGIFT_RESELL_TOO_EARLY` parsed with human-readable wait time, `STARGIFT_INVALID` with guidance

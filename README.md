@@ -15,7 +15,7 @@
 
 ---
 
-<p align="center">Teleton is an autonomous AI agent platform that operates as a real Telegram user account (not a bot). It thinks through an agentic loop with tool calling, remembers conversations across sessions with hybrid RAG, and natively integrates the TON blockchain: send crypto, swap on DEXs, bid on domains, verify payments - all from a chat message. It can schedule tasks to run autonomously at any time. It ships with 100+ built-in tools, supports 10 LLM providers, and exposes a Plugin SDK so you can build your own tools on top of the platform.</p>
+<p align="center">Teleton is an autonomous AI agent platform that operates as a real Telegram user account (not a bot). It thinks through an agentic loop with tool calling, remembers conversations across sessions with hybrid RAG, and natively integrates the TON blockchain: send crypto, swap on DEXs, bid on domains, verify payments - all from a chat message. It can schedule tasks to run autonomously at any time. It ships with 125+ built-in tools, supports 11 LLM providers, and exposes a Plugin SDK so you can build your own tools on top of the platform.</p>
 
 ### Key Highlights
 
@@ -24,9 +24,9 @@
 - **Multi-Provider LLM** - Anthropic, Claude Code, OpenAI, Google Gemini, xAI Grok, Groq, OpenRouter, Moonshot, Mistral, Cocoon, Local (11 providers)
 - **TON Blockchain** - Built-in W5R1 wallet, send/receive TON & jettons, swap on STON.fi and DeDust, NFTs, DNS domains
 - **Persistent memory** - Hybrid RAG (sqlite-vec + FTS5), auto-compaction with AI summarization, daily logs
-- **100+ built-in tools** - Messaging, media, blockchain, DEX trading, deals, DNS, journaling, and more
+- **125+ built-in tools** - Messaging, media, blockchain, DEX trading, deals, DNS, exec, journaling, and more
 - **Plugin SDK** - Extend the agent with custom tools, frozen SDK with isolated databases, secrets management, lifecycle hooks
-- **MCP Client** - Connect external tool servers (stdio/SSE) with 2 lines of YAML, no code, no rebuild
+- **MCP Client** - Connect external tool servers (stdio/SSE/Streamable HTTP) with 2 lines of YAML, no code, no rebuild
 - **Secure by design** - Prompt injection defense, sandboxed workspace, plugin isolation, wallet encryption
 
 ---
@@ -37,15 +37,16 @@
 
 | Category      | Tools | Description                                                                                                        |
 | ------------- | ----- | ------------------------------------------------------------------------------------------------------------------ |
-| Telegram      | 73    | Messaging, media, chats, groups, polls, stickers, gifts, stars, stories, contacts, folders, profile, memory, tasks, voice transcription, scheduled messages |
+| Telegram      | 77    | Messaging, media, chats, groups, polls, stickers, gifts, stars, stories, contacts, folders, profile, memory, tasks, voice transcription, scheduled messages |
 | TON & Jettons | 15    | W5R1 wallet, send/receive TON & jettons, balances, prices, holders, history, charts, NFTs, smart DEX router        |
 | STON.fi DEX   | 5     | Swap, quote, search, trending tokens, liquidity pools                                                              |
 | DeDust DEX    | 5     | Swap, quote, pools, prices, token analytics (holders, top traders, buy/sell tax)                                   |
-| TON DNS       | 7     | Domain auctions, bidding, linking/unlinking, resolution, availability checks                                       |
+| TON DNS       | 8     | Domain auctions, bidding, linking/unlinking, TON Site hosting, resolution, availability checks                      |
 | Deals         | 5     | P2P escrow with inline buttons, on-chain payment verification, anti double-spend                                   |
 | Journal       | 3     | Trade/operation logging with P&L tracking and natural language queries                                             |
 | Web           | 2     | Web search and page extraction via Tavily (search, fetch/extract)                                                  |
 | Workspace     | 6     | Sandboxed file operations with path traversal protection                                                           |
+| Exec          | 4     | System execution (YOLO mode) — shell commands, file read/write, process management (off by default, admin-only)    |
 
 ### Advanced Capabilities
 
@@ -61,9 +62,10 @@
 | **Scheduled Tasks**     | Time-based task execution with DAG dependency resolution                                                                    |
 | **Message Debouncing**  | Intelligent batching of rapid group messages (DMs are always instant)                                                       |
 | **Daily Logs**          | Automatic session summaries preserved across resets                                                                         |
-| **Multi-Policy Access** | Configurable DM/group policies (open, allowlist, pairing, disabled) with per-group module permissions                       |
-| **Tool RAG**            | Semantic tool selection - sends only the top-K most relevant tools per message (hybrid vector + FTS5, configurable `top_k`, `always_include` patterns) |
-| **MCP Client**          | Connect external MCP tool servers (stdio or SSE) - auto-discovery, namespaced tools, managed via CLI or WebUI               |
+| **Multi-Policy Access** | Configurable DM/group policies (open, allowlist, admin-only, disabled) with per-group module permissions                    |
+| **Tool RAG**            | Semantic tool selection (enabled by default) - sends only the top-K most relevant tools per message (hybrid vector + FTS5, configurable `top_k`, `always_include` patterns) |
+| **MCP Client**          | Connect external MCP tool servers (stdio, SSE, or Streamable HTTP) - auto-discovery, namespaced tools, managed via CLI or WebUI |
+| **System Execution**    | YOLO mode — 4 system tools (shell, file read/write, process list) with audit logging, configurable timeout, admin-only scope (off by default) |
 | **Sandboxed Workspace** | Secure file system with recursive URL decoding, symlink detection, and immutable config files                               |
 
 ---
@@ -159,8 +161,8 @@ agent:
   max_agentic_iterations: 5
 
 telegram:
-  dm_policy: "open"         # open | allowlist | pairing | disabled
-  group_policy: "open"      # open | allowlist | disabled
+  dm_policy: "admin-only"   # open | allowlist | admin-only | disabled
+  group_policy: "open"      # open | allowlist | admin-only | disabled
   require_mention: true
   admin_ids: [123456789]
   owner_name: "Your Name"
@@ -181,6 +183,11 @@ webui:                       # Optional: Web dashboard
   port: 7777                 # HTTP server port
   host: "127.0.0.1"          # Localhost only (security)
   # auth_token: "..."        # Auto-generated if omitted
+
+# capabilities:                # System execution (YOLO mode, off by default)
+#   exec:
+#     mode: "off"              # off | yolo
+#     scope: "admin-only"      # admin-only | allowlist | all
 ```
 
 ### Supported Models
@@ -301,7 +308,7 @@ Teleton includes an **optional web dashboard** for monitoring and configuration.
 
 ### Features
 
-- **Dashboard**: System status, uptime, model info, session count, memory stats, provider switching with API key validation
+- **Dashboard**: System status, uptime, model info, session count, memory stats, live token usage tracking, provider switching with API key validation
 - **Tools Management**: View all tools grouped by module, toggle enable/disable, change scope per tool
 - **Plugin Marketplace**: Install, update, and manage plugins from registry with secrets management
 - **Soul Editor**: Edit SOUL.md, SECURITY.md, STRATEGY.md, MEMORY.md with unsaved changes warning
@@ -405,7 +412,7 @@ All admin commands support `/`, `!`, or `.` prefix:
 | Layer | Technology |
 |-------|------------|
 | LLM | Multi-provider via [pi-ai](https://github.com/mariozechner/pi-ai) (11 providers: Anthropic, Claude Code, OpenAI, Google, xAI, Groq, OpenRouter, Moonshot, Mistral, Cocoon, Local) |
-| Telegram Userbot | [GramJS](https://gram.js.org/) (MTProto) |
+| Telegram Userbot | [GramJS](https://gram.js.org/) Layer 222 fork (MTProto) |
 | Inline Bot | [Grammy](https://grammy.dev/) (Bot API, for deals) |
 | Blockchain | [TON SDK](https://github.com/ton-org/ton) (W5R1 wallet) |
 | DeFi | STON.fi SDK, DeDust SDK |
@@ -414,7 +421,7 @@ All admin commands support `/`, `!`, or `.` prefix:
 | Full-Text Search | SQLite FTS5 (BM25 ranking) |
 | Embeddings | [@huggingface/transformers](https://www.npmjs.com/package/@huggingface/transformers) (local ONNX) or Voyage AI |
 | Token Counting | [js-tiktoken](https://github.com/dqbd/tiktoken) |
-| MCP Client | [@modelcontextprotocol/sdk](https://modelcontextprotocol.io/) (stdio + SSE transports) |
+| MCP Client | [@modelcontextprotocol/sdk](https://modelcontextprotocol.io/) (stdio + SSE + Streamable HTTP) |
 | WebUI | [Hono](https://hono.dev/) (API) + React + Vite (frontend) |
 | Language | TypeScript 5.7, Node.js 20+ |
 
@@ -422,21 +429,22 @@ All admin commands support `/`, `!`, or `.` prefix:
 
 ```
 src/
-├── index.ts                # Entry point, TonnetApp lifecycle, graceful shutdown
+├── index.ts                # Entry point, TeletonApp lifecycle, graceful shutdown
 ├── agent/                  # Core agent runtime
 │   ├── runtime.ts          # Agentic loop (5 iterations, tool calling, masking, compaction)
 │   ├── client.ts           # Multi-provider LLM client
-│   └── tools/              # 100+ built-in tools
-│       ├── register-all.ts # Central tool registration (8 categories, 109 tools)
+│   └── tools/              # 125+ built-in tools
+│       ├── register-all.ts # Central tool registration (8 categories, 121 tools)
 │       ├── registry.ts     # Tool registry, scope filtering, provider limits
-│       ├── module-loader.ts    # Built-in module loading (deals → +5 tools)
+│       ├── module-loader.ts    # Built-in module loading (deals + exec)
 │       ├── plugin-loader.ts    # External plugin discovery, validation, hot-reload
 │       ├── mcp-loader.ts       # MCP client (stdio/SSE), tool discovery, lifecycle
-│       ├── telegram/       # Telegram operations (73 tools)
+│       ├── telegram/       # Telegram operations (77 tools)
 │       ├── ton/            # TON blockchain + jettons + DEX router (15 tools)
 │       ├── stonfi/         # STON.fi DEX (5 tools)
 │       ├── dedust/         # DeDust DEX (5 tools)
-│       ├── dns/            # TON DNS (7 tools)
+│       ├── dns/            # TON DNS (8 tools)
+│       ├── exec/           # System execution — YOLO mode (4 tools)
 │       ├── journal/        # Business journal (3 tools)
 │       └── workspace/      # File operations (6 tools)
 ├── deals/                  # Deals module (5 tools, loaded via module-loader)
@@ -457,7 +465,7 @@ src/
 │   ├── task-dependency-resolver.ts  # DAG-based task chains
 │   └── callbacks/          # Inline button routing
 ├── memory/                 # Storage and knowledge
-│   ├── schema.ts           # 10 tables, 25 indexes, FTS5, vec0, semver migrations
+│   ├── schema.ts           # 16 tables, 42 indexes/triggers, FTS5, vec0, semver migrations
 │   ├── database.ts         # SQLite + WAL + sqlite-vec
 │   ├── search/             # RAG system (hybrid vector + BM25 fusion via RRF)
 │   ├── embeddings/         # Local ONNX + Voyage AI + caching provider
@@ -511,7 +519,9 @@ packages/sdk/               # Published @teleton-agent/sdk
 | **Wallet protection** | File permissions `0o600`, KeyPair cached (single PBKDF2), mnemonic never exposed to plugins |
 | **Memory protection** | Memory writes blocked in group chats to prevent poisoning |
 | **Payment security** | `INSERT OR IGNORE` on tx hashes prevents double-spend, atomic status transitions prevent race conditions |
-| **Tool scoping** | Financial tools DM-only, moderation group-only, per-chat permissions configurable at runtime |
+| **Exec audit** | All YOLO mode commands logged to `exec_audit` table with user, command, output, and timestamps |
+| **Pino redaction** | Structured logging with automatic redaction of apiKey, password, secret, token, mnemonic fields |
+| **Tool scoping** | Financial tools DM-only, moderation group-only, admin-only policies, per-chat permissions configurable at runtime |
 
 ### Reporting Vulnerabilities
 
@@ -521,7 +531,7 @@ Do not open public issues for security vulnerabilities. Contact maintainers (t.m
 
 1. Use a dedicated Telegram account
 2. Backup your 24-word mnemonic securely offline
-3. Start with restrictive policies (`allowlist`)
+3. Start with restrictive policies (`admin-only` or `allowlist`)
 4. Set file permissions: `chmod 600 ~/.teleton/wallet.json`
 5. Never commit `config.yaml` to version control
 6. Review `SECURITY.md` and customize for your use case
@@ -671,10 +681,10 @@ Full documentation is available in the [`docs/`](docs/) directory:
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the full guide.
 
 1. Fork the repository
-2. Create a feature branch from `dev`
+2. Create a feature branch from `main`
 3. Make your changes
 4. Verify: `npm run typecheck && npm run lint && npm test`
-5. Open a Pull Request against `dev`
+5. Open a Pull Request against `main`
 
 ---
 
@@ -711,6 +721,6 @@ MIT License - See [LICENSE](LICENSE) for details.
 ## Support
 
 - **Issues**: [GitHub Issues](https://github.com/TONresistor/teleton-agent/issues)
-- **Channel**: [@ResistanceTools](https://t.me/ResistanceTools)
-- **Group Chat**: [@ResistanceForum](https://t.me/ResistanceForum)
+- **Channel**: [@teletonagents](https://t.me/teletonagents)
+- **Group Chat**: [@teletonagentHQ](https://t.me/teletonagentHQ)
 - **Contact**: [@zkproof](https://t.me/zkproof)
