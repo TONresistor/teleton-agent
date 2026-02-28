@@ -34,19 +34,21 @@ export function ConfigStep({ data, onChange }: StepProps) {
     }
   };
 
-  const policyOptions = ['open', 'allowlist', 'disabled'];
-  const policyLabels = ['Open', 'Allowlist', 'Disabled'];
+  const policyOptions = ['admin-only', 'allowlist', 'open', 'disabled'];
+  const policyLabels = ['Admin Only', 'Allowlist', 'Open', 'Disabled'];
 
   const dmPolicyHelp: Record<string, string> = {
+    'admin-only': 'Only admins can DM the agent.',
+    allowlist: 'Only users in the allowlist (+ admins) can DM the agent.',
     open: 'Anyone can message the agent in DMs.',
-    allowlist: 'Only admin users can DM the agent.',
-    disabled: 'Agent ignores all DMs.',
+    disabled: 'All DMs are ignored.',
   };
 
   const groupPolicyHelp: Record<string, string> = {
-    open: 'Agent responds in any group it\'s added to.',
+    'admin-only': 'Only admins can trigger the agent in groups.',
     allowlist: 'Agent only responds in groups explicitly allowed by admins.',
-    disabled: 'Agent ignores all group messages.',
+    open: 'Agent responds in any group it\'s added to.',
+    disabled: 'All group messages are ignored.',
   };
 
   return (
@@ -125,6 +127,27 @@ export function ConfigStep({ data, onChange }: StepProps) {
         />
         <div className="helper-text">
           Maximum tool-call loops per message (1-50). Higher values allow more complex tasks.
+        </div>
+      </div>
+
+      {/* ── Coding Agent ── */}
+      <h3 style={{ fontSize: '14px', fontWeight: 600, marginTop: '24px', marginBottom: '12px' }}>
+        Coding Agent
+      </h3>
+
+      <div className="form-group">
+        <label>System Execution</label>
+        <Select
+          value={data.execMode}
+          options={['off', 'yolo']}
+          labels={{ off: 'Disabled', yolo: 'YOLO Mode' }}
+          onChange={(v) => onChange({ ...data, execMode: v as 'off' | 'yolo' })}
+          style={{ width: '100%' }}
+        />
+        <div className="helper-text">
+          {data.execMode === 'yolo'
+            ? '⚠️ Gives the agent full system access. STRONGLY RECOMMENDED to use a dedicated VPS.'
+            : 'No system execution capability.'}
         </div>
       </div>
 

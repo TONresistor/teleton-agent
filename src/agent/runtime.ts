@@ -631,22 +631,23 @@ export class AgentRuntime {
         this.config.agent.provider as SupportedProvider,
         this.config.agent.utility_model
       );
+
+      const sessionUpdate: Parameters<typeof updateSession>[1] = {
+        updatedAt: Date.now(),
+        messageCount: session.messageCount + 1,
+        model: this.config.agent.model,
+        provider: this.config.agent.provider,
+        inputTokens:
+          (session.inputTokens ?? 0) +
+          accumulatedUsage.input +
+          accumulatedUsage.cacheRead +
+          accumulatedUsage.cacheWrite,
+        outputTokens: (session.outputTokens ?? 0) + accumulatedUsage.output,
+      };
       if (newSessionId) {
-        updateSession(chatId, {
-          sessionId: newSessionId,
-          updatedAt: Date.now(),
-          messageCount: session.messageCount + 1,
-          model: this.config.agent.model,
-          provider: this.config.agent.provider,
-        });
-      } else {
-        updateSession(chatId, {
-          updatedAt: Date.now(),
-          messageCount: session.messageCount + 1,
-          model: this.config.agent.model,
-          provider: this.config.agent.provider,
-        });
+        sessionUpdate.sessionId = newSessionId;
       }
+      updateSession(chatId, sessionUpdate);
 
       if (accumulatedUsage.input > 0 || accumulatedUsage.output > 0) {
         const u = accumulatedUsage;

@@ -21,8 +21,8 @@ export interface AdminCommand {
   senderId: number;
 }
 
-const VALID_DM_POLICIES = ["open", "allowlist", "disabled"] as const;
-const VALID_GROUP_POLICIES = ["open", "allowlist", "disabled"] as const;
+const VALID_DM_POLICIES = ["open", "allowlist", "admin-only", "disabled"] as const;
+const VALID_GROUP_POLICIES = ["open", "allowlist", "admin-only", "disabled"] as const;
 const VALID_MODULE_LEVELS = ["open", "admin", "disabled"] as const;
 
 export class AdminHandler {

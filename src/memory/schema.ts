@@ -102,7 +102,9 @@ export function ensureSchema(db: Database.Database): void {
       context_tokens INTEGER,            -- Current context size
       model TEXT,                        -- Model used (claude-opus-4-5-20251101)
       provider TEXT,                     -- Provider (anthropic)
-      last_reset_date TEXT               -- YYYY-MM-DD of last daily reset
+      last_reset_date TEXT,              -- YYYY-MM-DD of last daily reset
+      input_tokens INTEGER DEFAULT 0,    -- Accumulated input tokens
+      output_tokens INTEGER DEFAULT 0    -- Accumulated output tokens
     );
 
     CREATE INDEX IF NOT EXISTS idx_sessions_chat ON sessions(chat_id);
@@ -255,6 +257,30 @@ export function ensureSchema(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_embedding_cache_accessed ON embedding_cache(accessed_at);
 
     -- =====================================================
+    -- EXEC AUDIT (Command Execution History)
+    -- =====================================================
+
+    CREATE TABLE IF NOT EXISTS exec_audit (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      timestamp INTEGER NOT NULL DEFAULT (unixepoch()),
+      user_id INTEGER NOT NULL,
+      username TEXT,
+      tool TEXT NOT NULL,
+      command TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'running'
+        CHECK(status IN ('running', 'success', 'failed', 'timeout', 'killed')),
+      exit_code INTEGER,
+      signal TEXT,
+      duration_ms INTEGER,
+      stdout TEXT,
+      stderr TEXT,
+      truncated INTEGER NOT NULL DEFAULT 0
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_exec_audit_timestamp ON exec_audit(timestamp DESC);
+    CREATE INDEX IF NOT EXISTS idx_exec_audit_user ON exec_audit(user_id);
+
+    -- =====================================================
     -- JOURNAL (Trading & Business Operations)
     -- =====================================================
     ${JOURNAL_SCHEMA}
@@ -306,7 +332,7 @@ export function setSchemaVersion(db: Database.Database, version: string): void {
   ).run(version);
 }
 
-export const CURRENT_SCHEMA_VERSION = "1.11.0";
+export const CURRENT_SCHEMA_VERSION = "1.13.0";
 
 export function runMigrations(db: Database.Database): void {
   const currentVersion = getSchemaVersion(db);
@@ -510,6 +536,59 @@ export function runMigrations(db: Database.Database): void {
       log.info("Migration 1.11.0 complete: tool_index tables created");
     } catch (error) {
       log.error({ err: error }, "Migration 1.11.0 failed");
+      throw error;
+    }
+  }
+
+  if (!currentVersion || versionLessThan(currentVersion, "1.12.0")) {
+    log.info("Running migration 1.12.0: Add exec_audit table");
+    try {
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS exec_audit (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          timestamp INTEGER NOT NULL DEFAULT (unixepoch()),
+          user_id INTEGER NOT NULL,
+          username TEXT,
+          tool TEXT NOT NULL,
+          command TEXT NOT NULL,
+          status TEXT NOT NULL DEFAULT 'pending',
+          exit_code INTEGER,
+          signal TEXT,
+          duration_ms INTEGER,
+          stdout TEXT,
+          stderr TEXT,
+          truncated INTEGER NOT NULL DEFAULT 0
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_exec_audit_timestamp ON exec_audit(timestamp DESC);
+        CREATE INDEX IF NOT EXISTS idx_exec_audit_user ON exec_audit(user_id);
+      `);
+      log.info("Migration 1.12.0 complete: exec_audit table created");
+    } catch (error) {
+      log.error({ err: error }, "Migration 1.12.0 failed");
+      throw error;
+    }
+  }
+
+  if (!currentVersion || versionLessThan(currentVersion, "1.13.0")) {
+    log.info("Running migration 1.13.0: Add token usage columns to sessions");
+    try {
+      const addColumnIfNotExists = (table: string, column: string, type: string) => {
+        try {
+          db.exec(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`);
+        } catch (e: any) {
+          if (!e.message.includes("duplicate column name")) {
+            throw e;
+          }
+        }
+      };
+
+      addColumnIfNotExists("sessions", "input_tokens", "INTEGER DEFAULT 0");
+      addColumnIfNotExists("sessions", "output_tokens", "INTEGER DEFAULT 0");
+
+      log.info("Migration 1.13.0 complete: Token usage columns added to sessions");
+    } catch (error) {
+      log.error({ err: error }, "Migration 1.13.0 failed");
       throw error;
     }
   }

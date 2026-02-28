@@ -121,6 +121,8 @@ describe("Memory Schema", () => {
       expect(columnNames).toContain("model");
       expect(columnNames).toContain("provider");
       expect(columnNames).toContain("last_reset_date");
+      expect(columnNames).toContain("input_tokens");
+      expect(columnNames).toContain("output_tokens");
     });
 
     it("creates tasks table with correct schema", () => {
@@ -948,6 +950,26 @@ describe("Memory Schema", () => {
       expect(row.message_count).toBe(0);
     });
 
+    it("sessions.input_tokens defaults to 0", () => {
+      ensureSchema(db);
+
+      db.prepare(
+        `
+        INSERT INTO sessions (id, chat_id, started_at, updated_at)
+        VALUES ('s1', 'telegram:123', 1234567890000, 1234567890000)
+      `
+      ).run();
+
+      const row = db
+        .prepare(`SELECT input_tokens, output_tokens FROM sessions WHERE id='s1'`)
+        .get() as {
+        input_tokens: number;
+        output_tokens: number;
+      };
+      expect(row.input_tokens).toBe(0);
+      expect(row.output_tokens).toBe(0);
+    });
+
     it("tg_chats.is_monitored defaults to 1", () => {
       ensureSchema(db);
 
@@ -1059,7 +1081,7 @@ describe("Memory Schema", () => {
     });
 
     it("CURRENT_SCHEMA_VERSION is set to expected value", () => {
-      expect(CURRENT_SCHEMA_VERSION).toBe("1.11.0");
+      expect(CURRENT_SCHEMA_VERSION).toBe("1.13.0");
     });
   });
 
@@ -1127,6 +1149,21 @@ describe("Memory Schema", () => {
       expect(columnNames).toContain("model");
       expect(columnNames).toContain("provider");
       expect(columnNames).toContain("last_reset_date");
+    });
+
+    it("runMigrations from version 1.12.0 adds token usage columns to sessions", () => {
+      ensureSchema(db);
+      setSchemaVersion(db, "1.12.0");
+
+      runMigrations(db);
+
+      const info = db.prepare("PRAGMA table_info(sessions)").all() as Array<{
+        name: string;
+      }>;
+      const columnNames = info.map((c) => c.name);
+
+      expect(columnNames).toContain("input_tokens");
+      expect(columnNames).toContain("output_tokens");
     });
 
     it("runMigrations is idempotent (can run multiple times)", () => {

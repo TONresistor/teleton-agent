@@ -332,6 +332,10 @@ ${blue}  ┌──────────────────────�
     const { cleanupOldTranscripts } = await import("./session/transcript.js");
     cleanupOldTranscripts(30);
 
+    // Prune old sessions (>30 days)
+    const { pruneOldSessions } = await import("./session/store.js");
+    pruneOldSessions(30);
+
     // Warmup embedding model (pre-download at startup, not on first message)
     if (this.memory.embedder.warmup) {
       await this.memory.embedder.warmup();

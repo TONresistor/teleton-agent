@@ -198,6 +198,16 @@ export class MessageHandler {
             shouldRespond: false,
             reason: "DMs disabled",
           };
+        case "admin-only":
+          if (!isAdmin) {
+            return {
+              message,
+              isAdmin,
+              shouldRespond: false,
+              reason: "DMs restricted to admins",
+            };
+          }
+          break;
         case "allowlist":
           if (!this.config.allow_from.includes(message.senderId) && !isAdmin) {
             return {
@@ -224,6 +234,16 @@ export class MessageHandler {
             shouldRespond: false,
             reason: "Groups disabled",
           };
+        case "admin-only":
+          if (!isAdmin) {
+            return {
+              message,
+              isAdmin,
+              shouldRespond: false,
+              reason: "Groups restricted to admins",
+            };
+          }
+          break;
         case "allowlist":
           if (!this.config.group_allow_from.includes(parseInt(message.chatId))) {
             return {

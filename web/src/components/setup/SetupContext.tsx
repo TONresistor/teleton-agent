@@ -48,6 +48,7 @@ export interface WizardData {
   telegramUser: { id: number; firstName: string; username: string } | null;
   skipConnect: boolean;
   webuiEnabled: boolean;
+  execMode: 'off' | 'yolo';
 }
 
 export interface StepProps {
@@ -69,8 +70,8 @@ const DEFAULTS: WizardData = {
   mode: 'quick',
   model: '',
   customModel: '',
-  dmPolicy: 'open',
-  groupPolicy: 'allowlist',
+  dmPolicy: 'admin-only',
+  groupPolicy: 'admin-only',
   requireMention: true,
   maxIterations: 5,
   botToken: '',
@@ -89,6 +90,7 @@ const DEFAULTS: WizardData = {
   telegramUser: null,
   skipConnect: false,
   webuiEnabled: false,
+  execMode: 'off',
 };
 
 // ── Validation ──────────────────────────────────────────────────────

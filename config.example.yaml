@@ -69,13 +69,14 @@ webui:
     - "http://localhost:7777"         # Production server
   log_requests: false                 # Log HTTP requests
 
-# Tool RAG: semantic tool selection per message
-# Reduces tool definitions sent to the LLM from 114+ to ~25 most relevant.
-# Essential for non-Anthropic providers with 128-tool limits.
+# Tool RAG: semantic tool selection per message (ENABLED by default)
+# Reduces tool definitions sent to the LLM from 120+ to ~25 most relevant.
+# Uses local ONNX embeddings (zero-config) + FTS5 hybrid search.
+# Set enabled: false to disable and send all tools to the LLM.
 # tool_rag:
-#   enabled: true                      # Enable semantic tool retrieval
+#   enabled: true                      # Enabled by default — disable with false
 #   top_k: 25                          # Max tools to retrieve per LLM call
-#   skip_unlimited_providers: false    # Apply Tool RAG even for Anthropic (saves tokens)
+#   skip_unlimited_providers: false    # RAG applies to ALL providers (including Anthropic)
 #   always_include:                    # Tools always included regardless of query
 #     - telegram_send_message
 #     - telegram_reply_message

@@ -502,6 +502,15 @@ export function createSetupRoutes(): Hono {
           ],
           skip_unlimited_providers: false,
         },
+        capabilities: {
+          exec: {
+            mode: input.capabilities?.exec?.mode ?? "off",
+            scope: "admin-only",
+            allowlist: [],
+            limits: { timeout: 120, max_output: 50000 },
+            audit: { log_commands: true },
+          },
+        },
         mcp: { servers: {} },
         plugins: {},
         ...(input.cocoon ? { cocoon: input.cocoon } : {}),

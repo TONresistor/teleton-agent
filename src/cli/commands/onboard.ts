@@ -190,10 +190,11 @@ async function runInteractiveOnboarding(
   let tavilyApiKey: string | undefined;
   let botToken: string | undefined;
   let botUsername: string | undefined;
-  let dmPolicy: "open" | "allowlist" | "disabled" = "open";
-  let groupPolicy: "open" | "allowlist" | "disabled" = "open";
+  let dmPolicy: "open" | "allowlist" | "admin-only" | "disabled" = "admin-only";
+  let groupPolicy: "open" | "allowlist" | "admin-only" | "disabled" = "admin-only";
   let requireMention = true;
   let maxAgenticIterations = "5";
+  let execMode: "off" | "yolo" = "off";
   let cocoonInstance = 10000;
 
   // Intro
@@ -504,23 +505,33 @@ async function runInteractiveOnboarding(
 
   dmPolicy = await select({
     message: "DM policy (private messages)",
-    default: "open",
+    default: "admin-only",
     theme,
     choices: [
-      { value: "open" as const, name: "Open", description: "Reply to everyone" },
+      {
+        value: "admin-only" as const,
+        name: "Admin Only",
+        description: "Only admins can DM the agent",
+      },
       { value: "allowlist" as const, name: "Allowlist", description: "Only specific users" },
-      { value: "disabled" as const, name: "Disabled", description: "No DM replies" },
+      { value: "open" as const, name: "Open", description: "Reply to everyone" },
+      { value: "disabled" as const, name: "Disabled", description: "Ignore all DMs" },
     ],
   });
 
   groupPolicy = await select({
     message: "Group policy",
-    default: "open",
+    default: "admin-only",
     theme,
     choices: [
-      { value: "open" as const, name: "Open", description: "Reply in all groups" },
+      {
+        value: "admin-only" as const,
+        name: "Admin Only",
+        description: "Only admins can trigger the agent",
+      },
       { value: "allowlist" as const, name: "Allowlist", description: "Only specific groups" },
-      { value: "disabled" as const, name: "Disabled", description: "No group replies" },
+      { value: "open" as const, name: "Open", description: "Reply in all groups" },
+      { value: "disabled" as const, name: "Disabled", description: "Ignore all group messages" },
     ],
   });
 
@@ -538,6 +549,20 @@ async function runInteractiveOnboarding(
       const n = parseInt(v, 10);
       return !isNaN(n) && n >= 1 && n <= 50 ? true : "Must be 1–50";
     },
+  });
+
+  execMode = await select({
+    message: "Coding Agent (system execution)",
+    choices: [
+      { value: "off" as const, name: "Disabled", description: "No system execution capability" },
+      {
+        value: "yolo" as const,
+        name: "YOLO Mode",
+        description: "Full system access — STRONGLY RECOMMENDED to use a dedicated VPS",
+      },
+    ],
+    default: "off",
+    theme,
   });
 
   STEPS[2].value = `${dmPolicy}/${groupPolicy}`;
@@ -977,6 +1002,15 @@ async function runInteractiveOnboarding(
     },
     logging: { level: "info", pretty: true },
     mcp: { servers: {} },
+    capabilities: {
+      exec: {
+        mode: execMode,
+        scope: "admin-only",
+        allowlist: [],
+        limits: { timeout: 120, max_output: 50000 },
+        audit: { log_commands: true },
+      },
+    },
     plugins: {},
     ...(selectedProvider === "cocoon" ? { cocoon: { port: cocoonInstance } } : {}),
     tonapi_key: tonapiKey,
@@ -1101,9 +1135,9 @@ async function runNonInteractiveOnboarding(
       phone: options.phone,
       session_name: "teleton_session",
       session_path: workspace.sessionPath,
-      dm_policy: "open",
+      dm_policy: "admin-only",
       allow_from: [],
-      group_policy: "open",
+      group_policy: "admin-only",
       group_allow_from: [],
       require_mention: true,
       max_message_length: TELEGRAM_MAX_MESSAGE_LENGTH,
@@ -1147,6 +1181,15 @@ async function runNonInteractiveOnboarding(
       skip_unlimited_providers: false,
     },
     logging: { level: "info", pretty: true },
+    capabilities: {
+      exec: {
+        mode: "off",
+        scope: "admin-only",
+        allowlist: [],
+        limits: { timeout: 120, max_output: 50000 },
+        audit: { log_commands: true },
+      },
+    },
     mcp: { servers: {} },
     plugins: {},
     tavily_api_key: options.tavilyApiKey,

@@ -97,8 +97,8 @@ export function TelegramSettingsPanel({
             </label>
             <Select
               value={getLocal('telegram.dm_policy')}
-              options={['open', 'allowlist', 'disabled']}
-              labels={['Open', 'Allow Users', 'Admin Only']}
+              options={['admin-only', 'allowlist', 'open', 'disabled']}
+              labels={['Admin Only', 'Allow Users', 'Open', 'Disabled']}
               onChange={(v) => saveConfig('telegram.dm_policy', v)}
             />
           </div>
@@ -111,8 +111,8 @@ export function TelegramSettingsPanel({
             </label>
             <Select
               value={getLocal('telegram.group_policy')}
-              options={['open', 'allowlist', 'disabled']}
-              labels={['Open', 'Allow Groups', 'Disabled']}
+              options={['admin-only', 'allowlist', 'open', 'disabled']}
+              labels={['Admin Only', 'Allow Groups', 'Open', 'Disabled']}
               onChange={(v) => saveConfig('telegram.group_policy', v)}
             />
           </div>

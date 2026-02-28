@@ -19,6 +19,8 @@ export interface SessionEntry {
   model?: string;
   provider?: string;
   lastResetDate?: string; // YYYY-MM-DD of last daily reset
+  inputTokens?: number;
+  outputTokens?: number;
 }
 
 export type SessionStore = Record<string, SessionEntry>;
@@ -39,6 +41,8 @@ interface SessionRow {
   model: string | null;
   provider: string | null;
   last_reset_date: string | null;
+  input_tokens: number | null;
+  output_tokens: number | null;
 }
 
 function getDb(): Database.Database {
@@ -58,6 +62,8 @@ function rowToSession(row: SessionRow): SessionEntry {
     model: row.model ?? undefined,
     provider: row.provider ?? undefined,
     lastResetDate: row.last_reset_date ?? undefined,
+    inputTokens: row.input_tokens ?? undefined,
+    outputTokens: row.output_tokens ?? undefined,
   };
 }
 export function loadSessionStore(): SessionStore {
@@ -85,8 +91,8 @@ export function saveSessionStore(store: SessionStore): void {
       INSERT INTO sessions (
         id, chat_id, started_at, updated_at, message_count,
         last_message_id, last_channel, last_to, context_tokens,
-        model, provider, last_reset_date
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        model, provider, last_reset_date, input_tokens, output_tokens
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
 
     db.transaction(() => {
@@ -105,7 +111,9 @@ export function saveSessionStore(store: SessionStore): void {
           session.contextTokens,
           session.model,
           session.provider,
-          session.lastResetDate
+          session.lastResetDate,
+          session.inputTokens ?? 0,
+          session.outputTokens ?? 0
         );
       }
     })();
@@ -209,6 +217,14 @@ export function updateSession(
   if (update.lastResetDate !== undefined) {
     updates.push("last_reset_date = ?");
     values.push(update.lastResetDate);
+  }
+  if (update.inputTokens !== undefined) {
+    updates.push("input_tokens = ?");
+    values.push(update.inputTokens);
+  }
+  if (update.outputTokens !== undefined) {
+    updates.push("output_tokens = ?");
+    values.push(update.outputTokens);
   }
 
   updates.push("updated_at = ?");
@@ -331,4 +347,23 @@ export function resetSessionWithPolicy(chatId: string, policy: SessionResetPolic
   return updateSession(chatId, {
     lastResetDate: today,
   });
+}
+export function pruneOldSessions(maxAgeDays: number = 30): number {
+  try {
+    const db = getDb();
+    const cutoffMs = Date.now() - maxAgeDays * 24 * 60 * 60 * 1000;
+
+    const result = db
+      .prepare(`DELETE FROM sessions WHERE updated_at < ? AND updated_at > 0`)
+      .run(cutoffMs);
+
+    const pruned = result.changes;
+    if (pruned > 0) {
+      log.info(`🗑️ Pruned ${pruned} session(s) older than ${maxAgeDays} days`);
+    }
+    return pruned;
+  } catch (error) {
+    log.warn({ err: error }, "Failed to prune old sessions");
+    return 0;
+  }
 }

@@ -1,8 +1,8 @@
 import { z } from "zod";
 import { TELEGRAM_MAX_MESSAGE_LENGTH } from "../constants/limits.js";
 
-export const DMPolicy = z.enum(["allowlist", "open", "disabled"]);
-export const GroupPolicy = z.enum(["open", "allowlist", "disabled"]);
+export const DMPolicy = z.enum(["allowlist", "open", "admin-only", "disabled"]);
+export const GroupPolicy = z.enum(["open", "allowlist", "admin-only", "disabled"]);
 
 export const SessionResetPolicySchema = z.object({
   daily_reset_enabled: z.boolean().default(true).describe("Enable daily session reset"),
@@ -193,7 +193,7 @@ const _McpObject = z.object({
 export const McpConfigSchema = _McpObject.default(_McpObject.parse({}));
 
 const _ToolRagObject = z.object({
-  enabled: z.boolean().default(false).describe("Enable semantic tool retrieval (Tool RAG)"),
+  enabled: z.boolean().default(true).describe("Enable semantic tool retrieval (Tool RAG)"),
   top_k: z.number().default(25).describe("Max tools to retrieve per LLM call"),
   always_include: z
     .array(z.string())
@@ -209,10 +209,46 @@ const _ToolRagObject = z.object({
     .describe("Tool name patterns always included (prefix glob with *)"),
   skip_unlimited_providers: z
     .boolean()
-    .default(true)
+    .default(false)
     .describe("Skip Tool RAG for providers with no tool limit (e.g. Anthropic)"),
 });
 export const ToolRagConfigSchema = _ToolRagObject.default(_ToolRagObject.parse({}));
+
+const _ExecLimitsObject = z.object({
+  timeout: z.number().min(1).max(3600).default(120).describe("Max seconds per command execution"),
+  max_output: z
+    .number()
+    .min(1000)
+    .max(500000)
+    .default(50000)
+    .describe("Max chars of stdout/stderr captured per command"),
+});
+
+const _ExecAuditObject = z.object({
+  log_commands: z.boolean().default(true).describe("Log every command to SQLite audit table"),
+});
+
+const _ExecObject = z.object({
+  mode: z
+    .enum(["off", "yolo"])
+    .default("off")
+    .describe("Exec mode: off (disabled) or yolo (full system access)"),
+  scope: z
+    .enum(["admin-only", "allowlist", "all"])
+    .default("admin-only")
+    .describe("Who can trigger exec tools"),
+  allowlist: z
+    .array(z.number())
+    .default([])
+    .describe("Telegram user IDs allowed to use exec (when scope = allowlist)"),
+  limits: _ExecLimitsObject.default(_ExecLimitsObject.parse({})),
+  audit: _ExecAuditObject.default(_ExecAuditObject.parse({})),
+});
+
+const _CapabilitiesObject = z.object({
+  exec: _ExecObject.default(_ExecObject.parse({})),
+});
+export const CapabilitiesConfigSchema = _CapabilitiesObject.default(_CapabilitiesObject.parse({}));
 
 export const ConfigSchema = z.object({
   meta: MetaConfigSchema.default(MetaConfigSchema.parse({})),
@@ -225,6 +261,7 @@ export const ConfigSchema = z.object({
   logging: LoggingConfigSchema,
   dev: DevConfigSchema,
   tool_rag: ToolRagConfigSchema,
+  capabilities: CapabilitiesConfigSchema,
   mcp: McpConfigSchema,
   plugins: z
     .record(z.string(), z.unknown())
@@ -268,3 +305,5 @@ export type DevConfig = z.infer<typeof DevConfigSchema>;
 export type McpConfig = z.infer<typeof McpConfigSchema>;
 export type ToolRagConfig = z.infer<typeof ToolRagConfigSchema>;
 export type McpServerConfig = z.infer<typeof McpServerSchema>;
+export type CapabilitiesConfig = z.infer<typeof CapabilitiesConfigSchema>;
+export type ExecConfig = z.infer<typeof _ExecObject>;
