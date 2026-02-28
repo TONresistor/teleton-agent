@@ -12,7 +12,6 @@ RUN apt-get update && apt-get install -y \
 
 # Copy dependency files and SDK workspace (needed for workspace resolution)
 COPY package.json package-lock.json ./
-COPY scripts/ scripts/
 COPY packages/sdk/package.json packages/sdk/
 
 # Install all deps (including devDependencies for build + SDK workspace)
@@ -44,9 +43,7 @@ RUN apt-get update && apt-get install -y \
 
 # Copy package files and install production deps only
 COPY package.json package-lock.json ./
-COPY scripts/ scripts/
 RUN npm ci --omit=dev \
-    && bash scripts/patch-gramjs.sh || true \
     && npm cache clean --force
 
 # Remove build tools (no longer needed after native compilation)
