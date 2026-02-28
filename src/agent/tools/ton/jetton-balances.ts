@@ -27,7 +27,8 @@ interface JettonBalance {
 }
 export const jettonBalancesTool: Tool = {
   name: "jetton_balances",
-  description: "Get all jetton balances owned by the agent. Filters out blacklisted tokens.",
+  description:
+    "List all jetton token balances in your wallet. Returns address, symbol, and balance for each token. Filters out blacklisted/scam tokens. For TON balance, use ton_get_balance.",
   parameters: Type.Object({}),
   category: "data-bearing",
 };

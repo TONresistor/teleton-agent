@@ -7,7 +7,8 @@ import { createLogger } from "../../../utils/logger.js";
 const log = createLogger("Tools");
 export const tonPriceTool: Tool = {
   name: "ton_price",
-  description: "Get current TON price in USD.",
+  description:
+    "Fetch the current TON/USD market price. For jetton token prices, use jetton_price. For historical price charts, use ton_chart.",
   category: "data-bearing",
   parameters: Type.Object({}),
 };

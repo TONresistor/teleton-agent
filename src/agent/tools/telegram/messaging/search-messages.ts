@@ -21,7 +21,7 @@ interface SearchMessagesParams {
 export const telegramSearchMessagesTool: Tool = {
   name: "telegram_search_messages",
   description:
-    "Search for messages in a chat by text query. Returns matching messages with content and metadata.",
+    "Search for messages in a chat by text query. Pass chatId as numeric ID or @username (never display names). Returns matching messages with content, sender, and timestamps. When NOT to use: for reading recent history without a query, use telegram_get_history instead.",
   category: "data-bearing",
   parameters: Type.Object({
     chatId: Type.String({

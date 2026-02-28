@@ -19,7 +19,7 @@ interface CheckUsernameParams {
 export const telegramCheckUsernameTool: Tool = {
   name: "telegram_check_username",
   description:
-    "Check if a username exists and get basic info (type, ID). Also reveals if a username is available.",
+    "Resolve an @username to its entity (user, bot, channel, or group) with type and ID. Also reveals whether an unclaimed username is available.",
   category: "data-bearing",
   parameters: Type.Object({
     username: Type.String({

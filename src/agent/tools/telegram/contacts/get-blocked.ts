@@ -18,7 +18,8 @@ interface GetBlockedParams {
  */
 export const telegramGetBlockedTool: Tool = {
   name: "telegram_get_blocked",
-  description: "Get your list of blocked users.",
+  description:
+    "List blocked users with their IDs, names, and usernames. Paginated via limit parameter.",
   category: "data-bearing",
   parameters: Type.Object({
     limit: Type.Optional(

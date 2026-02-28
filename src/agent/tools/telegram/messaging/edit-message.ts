@@ -21,7 +21,8 @@ interface EditMessageParams {
  */
 export const telegramEditMessageTool: Tool = {
   name: "telegram_edit_message",
-  description: "Edit a previously sent message. Only your own messages can be edited, within 48h.",
+  description:
+    "Modify a previously sent message in-place. Requires chatId + messageId. Only your own messages can be edited, within 48h. Supports Markdown formatting.",
   parameters: Type.Object({
     chatId: Type.String({
       description: "The chat ID where the message was sent",

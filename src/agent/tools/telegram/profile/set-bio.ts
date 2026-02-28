@@ -18,8 +18,7 @@ interface SetBioParams {
  */
 export const telegramSetBioTool: Tool = {
   name: "telegram_set_bio",
-  description:
-    "Set or update your Telegram bio (About section). Max 70 chars. Empty string to remove.",
+  description: "Set or update your bio (About section). Max 70 chars. Empty string to remove.",
   parameters: Type.Object({
     bio: Type.String({
       description:

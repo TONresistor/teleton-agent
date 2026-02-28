@@ -16,7 +16,7 @@ interface GetStarsBalanceParams {
 export const telegramGetStarsBalanceTool: Tool = {
   name: "telegram_get_stars_balance",
   description:
-    "Get your current Telegram Stars balance, or TON balance (Telegram internal ledger) with ton=true.",
+    "Retrieve your current Stars balance, or TON balance (internal ledger) with ton=true.",
   category: "data-bearing",
   parameters: Type.Object({
     ton: Type.Optional(

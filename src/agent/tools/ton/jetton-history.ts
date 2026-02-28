@@ -13,7 +13,8 @@ interface JettonHistoryParams {
 
 export const jettonHistoryTool: Tool = {
   name: "jetton_history",
-  description: "Get jetton price history: 24h/7d/30d changes, volume, FDV, and holder count.",
+  description:
+    "Fetch jetton market analytics: price changes (24h/7d/30d), trading volume, fully diluted valuation (FDV), and holder count. For spot price only, use jetton_price.",
   category: "data-bearing",
   parameters: Type.Object({
     jetton_address: Type.String({

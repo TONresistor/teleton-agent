@@ -35,7 +35,7 @@ interface DexQuoteResult {
 export const dexQuoteTool: Tool = {
   name: "dex_quote",
   description:
-    "Compare swap quotes from STON.fi and DeDust to find the best price. Does not execute.",
+    "Compare DEX swap quotes from STON.fi and DeDust side-by-side to find the best rate. Preview only — does not execute. Use stonfi_swap or dedust_swap to execute the trade.",
   category: "data-bearing",
   parameters: Type.Object({
     from_asset: Type.String({

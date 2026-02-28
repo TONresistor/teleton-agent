@@ -13,7 +13,7 @@ interface GetUniqueGiftValueParams {
 export const telegramGetUniqueGiftValueTool: Tool = {
   name: "telegram_get_unique_gift_value",
   description:
-    "Get market valuation data for a unique collectible NFT gift. Returns sale history, floor price, average price, and Fragment listing info.",
+    "Appraise a unique collectible NFT gift by its slug (from t.me/nft/<slug>). Returns sale history, floor price, average price, and Fragment listing info. Use telegram_get_unique_gift for ownership and attributes instead.",
   category: "data-bearing",
   parameters: Type.Object({
     slug: Type.String({

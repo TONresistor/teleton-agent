@@ -13,7 +13,8 @@ interface GetTransactionsParams {
 }
 export const tonGetTransactionsTool: Tool = {
   name: "ton_get_transactions",
-  description: "Get transaction history for any TON address.",
+  description:
+    "Fetch transaction history for a specific TON address. Requires the address as parameter (EQ/UQ format). For your own wallet, use ton_my_transactions instead.",
   category: "data-bearing",
   parameters: Type.Object({
     address: Type.String({

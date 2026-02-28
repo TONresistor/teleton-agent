@@ -13,7 +13,7 @@ interface SetPersonalChannelParams {
 export const telegramSetPersonalChannelTool: Tool = {
   name: "telegram_set_personal_channel",
   description:
-    "Set or remove the personal channel displayed on your Telegram profile. Provide a channel ID to set, or omit to remove.",
+    "Set or remove the personal channel displayed on your profile. Provide a channel ID to set, or omit to remove.",
   parameters: Type.Object({
     channelId: Type.Optional(
       Type.String({

@@ -15,7 +15,7 @@ interface SendParams {
 export const tonSendTool: Tool = {
   name: "ton_send",
   description:
-    "Send TON to an address. Amount in TON (not nanoTON). Use a REAL address from the user or from ton_address_book — never guess addresses. Confirm details before sending.",
+    "Transfer TON to a recipient address. Amount in TON (not nanoTON). Always use a verified address from the user — never guess. Confirm amount and destination before executing. For sending jetton tokens, use jetton_send.",
   parameters: Type.Object({
     to: Type.String({
       description:

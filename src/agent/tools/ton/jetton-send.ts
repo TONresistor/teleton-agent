@@ -21,7 +21,7 @@ interface JettonSendParams {
 export const jettonSendTool: Tool = {
   name: "jetton_send",
   description:
-    "Send jettons to another address. Amount in human-readable units. Use jetton_balances first to find addresses.",
+    "Transfer jetton tokens to a recipient. Amount in human-readable units (e.g. 10 for 10 tokens). Requires jetton master address — use jetton_balances first to find it. For sending TON, use ton_send.",
   parameters: Type.Object({
     jetton_address: Type.String({
       description: "Jetton master contract address (EQ... or 0:... format)",

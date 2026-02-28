@@ -20,7 +20,7 @@ interface SetCollectiblePriceParams {
 export const telegramSetCollectiblePriceTool: Tool = {
   name: "telegram_set_collectible_price",
   description:
-    "List/unlist a collectible for sale. Set price in Stars to list, omit or 0 to unlist. Collectibles only.",
+    "Price a collectible NFT gift on the resale marketplace. Set price in Stars to list, omit or 0 to unlist. Get msgId from telegram_get_my_gifts. Collectibles only — NOT for transferring ownership (use telegram_transfer_collectible).",
   parameters: Type.Object({
     msgId: Type.Number({
       description: "The msgId of the collectible to list/unlist (from telegram_get_my_gifts)",

@@ -26,7 +26,7 @@ interface SearchResult {
 export const stonfiSearchTool: Tool = {
   name: "stonfi_search",
   description:
-    "Search for jettons by name or symbol. Returns addresses for use in swap/price tools.",
+    "Search for jettons by name or symbol on STON.fi DEX. Returns addresses for use in swap/price tools.",
   category: "data-bearing",
   parameters: Type.Object({
     query: Type.String({

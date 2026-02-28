@@ -16,7 +16,7 @@ interface CheckChannelUsernameParams {
 export const telegramCheckChannelUsernameTool: Tool = {
   name: "telegram_check_channel_username",
   description:
-    "Check if a username is available for a specific channel/group you admin. Verifies the username can be assigned to that channel.",
+    "Verify whether a username is available for a specific channel/group you admin. Returns availability status; use telegram_set_channel_username to apply.",
   parameters: Type.Object({
     channelId: Type.String({
       description: "Channel or group ID to check availability for",

@@ -14,7 +14,7 @@ interface TranscribeAudioParams {
 export const telegramTranscribeAudioTool: Tool = {
   name: "telegram_transcribe_audio",
   description:
-    "Transcribe a voice or audio message to text using Telegram's native transcription. Requires the message to be a voice/audio type. May require Telegram Premium.",
+    "Transcribe a voice or audio message to text using native server-side speech recognition. Target message must be a voice or audio type. May require Telegram Premium. Polls automatically until transcription completes.",
   category: "data-bearing",
   parameters: Type.Object({
     chatId: Type.String({

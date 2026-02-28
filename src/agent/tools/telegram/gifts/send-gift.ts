@@ -23,7 +23,7 @@ interface SendGiftParams {
 export const telegramSendGiftTool: Tool = {
   name: "telegram_send_gift",
   description:
-    "Send a Star Gift to a user. Costs Stars. Requires a verified deal (use deal_propose first).",
+    "Purchase and deliver a Star Gift to a user. Costs Stars. Browse the catalog with telegram_get_available_gifts first to get giftId. Requires a verified deal (use deal_propose first). NOT for resale marketplace items — use telegram_buy_resale_gift for those.",
   parameters: Type.Object({
     userId: Type.String({
       description: "User ID or @username to send the gift to",

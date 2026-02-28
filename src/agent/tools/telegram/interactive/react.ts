@@ -19,7 +19,8 @@ interface ReactParams {
  */
 export const telegramReactTool: Tool = {
   name: "telegram_react",
-  description: "Add an emoji reaction to a message.",
+  description:
+    "Attach an emoji reaction to a message. Requires chatId and messageId. Use a single unicode emoji such as \ud83d\udc4d, \u2764\ufe0f, \ud83d\udd25, \ud83d\ude02, \ud83c\udf89, \ud83d\udc40, \ud83d\udcaf, or \ud83d\ude4f.",
   parameters: Type.Object({
     chatId: Type.String({
       description: "The chat ID where the message is located",

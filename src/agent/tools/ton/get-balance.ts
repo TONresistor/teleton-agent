@@ -7,7 +7,8 @@ import { createLogger } from "../../../utils/logger.js";
 const log = createLogger("Tools");
 export const tonGetBalanceTool: Tool = {
   name: "ton_get_balance",
-  description: "Get your current TON wallet balance.",
+  description:
+    "Check your current TON balance in TON units. Returns spendable funds. For jetton token balances, use jetton_balances instead.",
   parameters: Type.Object({}),
   category: "data-bearing",
 };

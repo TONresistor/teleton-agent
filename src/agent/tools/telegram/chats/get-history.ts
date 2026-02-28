@@ -21,7 +21,7 @@ interface GetHistoryParams {
 export const telegramGetHistoryTool: Tool = {
   name: "telegram_get_history",
   description:
-    "Retrieve message history from a Telegram chat. Use this to read past messages and understand conversation context.",
+    "Retrieve message history from a chat by ID or @username. Returns sender, text, and timestamp per message. Defaults to 50 messages; set limit (max 100) and offsetId for pagination.",
   category: "data-bearing",
   parameters: Type.Object({
     chatId: Type.String({

@@ -11,7 +11,8 @@ interface JettonHoldersParams {
 }
 export const jettonHoldersTool: Tool = {
   name: "jetton_holders",
-  description: "Get top holders of a jetton with their balances.",
+  description:
+    "List top holders of a jetton ranked by balance. Returns wallet addresses and amounts. Useful for whale analysis and token distribution checks.",
   category: "data-bearing",
   parameters: Type.Object({
     jetton_address: Type.String({

@@ -20,7 +20,7 @@ interface GetUserInfoParams {
 export const telegramGetUserInfoTool: Tool = {
   name: "telegram_get_user_info",
   description:
-    "Get detailed info about a Telegram user by username or userId. Returns profile, status, bio, and common chats.",
+    "Inspect a user profile by username or userId. Returns name, bio, online status, premium/verified flags, and common chats count.",
   category: "data-bearing",
   parameters: Type.Object({
     userId: Type.Optional(

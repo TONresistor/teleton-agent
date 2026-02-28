@@ -14,7 +14,8 @@ interface MyTransactionsParams {
 
 export const tonMyTransactionsTool: Tool = {
   name: "ton_my_transactions",
-  description: "Get your own wallet's transaction history.",
+  description:
+    "List your recent wallet transactions. No address needed — uses your configured wallet. For other addresses, use ton_get_transactions.",
   category: "data-bearing",
   parameters: Type.Object({
     limit: Type.Optional(

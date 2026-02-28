@@ -23,7 +23,7 @@ interface ScheduleMessageParams {
 export const telegramScheduleMessageTool: Tool = {
   name: "telegram_schedule_message",
   description:
-    "Schedule a message to be sent at a future time. scheduleDate must be in the future.",
+    "Queue a message for delayed delivery at a specific date/time. Pass scheduleDate as ISO 8601 string or Unix timestamp (must be in the future). When NOT to use: for recurring or cron-style tasks, use telegram_create_scheduled_task instead. Manage pending messages with telegram_get_scheduled_messages.",
   parameters: Type.Object({
     chatId: Type.String({
       description: "The chat ID to send the scheduled message to",

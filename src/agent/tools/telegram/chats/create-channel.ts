@@ -24,7 +24,7 @@ interface CreateChannelParams {
 export const telegramCreateChannelTool: Tool = {
   name: "telegram_create_channel",
   description:
-    "Create a new Telegram channel (broadcast) or megagroup (chat). Set megagroup=true for group mode.",
+    "Create a new channel (broadcast) or megagroup (chat). Set megagroup=true for group mode. Optionally assign a public username on creation.",
   parameters: Type.Object({
     title: Type.String({
       description: "Name of the channel/megagroup (max 128 characters)",

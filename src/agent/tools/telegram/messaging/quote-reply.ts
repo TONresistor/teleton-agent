@@ -24,7 +24,7 @@ interface QuoteReplyParams {
 export const telegramQuoteReplyTool: Tool = {
   name: "telegram_quote_reply",
   description:
-    "Reply to a message while quoting a specific part of it. quoteText must match the original exactly.",
+    "Highlight and reply to a specific excerpt within a message. Pass chatId + messageId of the target, and quoteText matching the exact substring to quote. When NOT to use: for full-message replies, use telegram_send_message with replyToId instead.",
   parameters: Type.Object({
     chatId: Type.String({
       description: "The chat ID where the message is",

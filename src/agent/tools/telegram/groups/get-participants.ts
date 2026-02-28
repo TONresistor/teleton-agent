@@ -22,7 +22,7 @@ interface GetParticipantsParams {
 export const telegramGetParticipantsTool: Tool = {
   name: "telegram_get_participants",
   description:
-    "Get participants of a group or channel. Filterable by all, admins, banned, or bots.",
+    "Enumerate participants of a group or channel. Filterable by all, admins, banned, or bots. Returns user IDs, names, usernames, and roles.",
   category: "data-bearing",
   parameters: Type.Object({
     chatId: Type.String({

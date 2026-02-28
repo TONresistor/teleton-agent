@@ -17,7 +17,7 @@ interface KickUserParams {
 
 export const telegramKickUserTool: Tool = {
   name: "telegram_kick_user",
-  description: `Kick a user from a group or channel. The user can rejoin unless banned. You need admin rights with ban permission.`,
+  description: `Kick a user from a group or channel. The user can rejoin unless banned. Requires admin rights with ban permission.`,
   parameters: Type.Object({
     chat_id: Type.String({
       description: "Group/channel ID or username",
@@ -103,7 +103,7 @@ interface BanUserParams {
 
 export const telegramBanUserTool: Tool = {
   name: "telegram_ban_user",
-  description: `Ban a user from a group or channel. Banned users cannot rejoin until unbanned. You need admin rights with ban permission.`,
+  description: `Ban a user from a group or channel. Banned users cannot rejoin until unbanned. Requires admin rights with ban permission.`,
   parameters: Type.Object({
     chat_id: Type.String({
       description: "Group/channel ID or username",
@@ -208,7 +208,7 @@ interface UnbanUserParams {
 
 export const telegramUnbanUserTool: Tool = {
   name: "telegram_unban_user",
-  description: `Unban a user from a group or channel, allowing them to rejoin. You need admin rights with ban permission.`,
+  description: `Unban a user from a group or channel, allowing them to rejoin. Requires admin rights with ban permission.`,
   parameters: Type.Object({
     chat_id: Type.String({
       description: "Group/channel ID or username",

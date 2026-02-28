@@ -17,7 +17,7 @@ interface CreateGroupParams {
 
 export const telegramCreateGroupTool: Tool = {
   name: "telegram_create_group",
-  description: `Create a new group chat with specified users. You will be the admin of the created group.`,
+  description: `Create a new group chat with specified users. Creator becomes admin of the group.`,
   parameters: Type.Object({
     title: Type.String({
       description: "Name/title of the group",

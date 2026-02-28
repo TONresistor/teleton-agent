@@ -33,7 +33,7 @@ interface VisionAnalyzeParams {
 export const visionAnalyzeTool: Tool = {
   name: "vision_analyze",
   description:
-    "Analyze an image using vision LLM. Provide chatId+messageId for Telegram images or filePath for local files.",
+    "Inspect an image using the configured vision LLM. Provide chatId+messageId for chat images or filePath for local workspace files. Accepts an optional prompt to ask specific questions. Supports JPG, PNG, GIF, WEBP up to 5 MB.",
   category: "data-bearing",
   parameters: Type.Object({
     chatId: Type.Optional(

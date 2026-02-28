@@ -13,7 +13,8 @@ interface ChartParams {
 
 export const tonChartTool: Tool = {
   name: "ton_chart",
-  description: "Get price history chart for TON or any jetton over a configurable time period.",
+  description:
+    "Display price chart for TON or any jetton. Periods: 1h, 24h, 7d, 30d, 90d, 1y. Pass jetton master address for token charts. For current spot price, use ton_price or jetton_price instead.",
   parameters: Type.Object({
     token: Type.Optional(
       Type.String({

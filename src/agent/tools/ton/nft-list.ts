@@ -16,11 +16,11 @@ interface NftListParams {
 export const nftListTool: Tool = {
   name: "nft_list",
   description:
-    "List NFTs owned by a TON wallet. Defaults to the agent's own wallet. Can filter by collection address.",
+    "Browse NFTs owned by a TON wallet. Defaults to your own wallet. Optionally filter by collection address. Returns name, preview image, and collection metadata per NFT.",
   parameters: Type.Object({
     address: Type.Optional(
       Type.String({
-        description: "TON wallet address to query. Defaults to the agent's wallet.",
+        description: "TON wallet address to query. Defaults to your wallet.",
       })
     ),
     collection: Type.Optional(
