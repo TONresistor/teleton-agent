@@ -42,10 +42,7 @@ export function markdownToTelegramHtml(markdown: string): string {
     const content = escapeHtml(match)
       .replace(/\|\|([^|]+)\|\|/g, "<tg-spoiler>$1</tg-spoiler>")
       .replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>")
-      .replace(/__([^_]+)__/g, "<b>$1</b>")
       .replace(/~~([^~]+)~~/g, "<s>$1</s>")
-      .replace(/(?<!\*)\*([^*]+)\*(?!\*)/g, "<i>$1</i>")
-      .replace(/(?<!_)_([^_]+)_(?!_)/g, "<i>$1</i>")
       .replace(
         /\[([^\]]+)\]\(([^)]+)\)/g,
         (_, text, url) => `<a href="${sanitizeUrl(url)}">${text}</a>`
@@ -70,10 +67,7 @@ export function markdownToTelegramHtml(markdown: string): string {
     content = content
       .replace(/\|\|([^|]+)\|\|/g, "<tg-spoiler>$1</tg-spoiler>")
       .replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>")
-      .replace(/__([^_]+)__/g, "<b>$1</b>")
       .replace(/~~([^~]+)~~/g, "<s>$1</s>")
-      .replace(/(?<!\*)\*([^*]+)\*(?!\*)/g, "<i>$1</i>")
-      .replace(/(?<!_)_([^_]+)_(?!_)/g, "<i>$1</i>")
       .replace(
         /\[([^\]]+)\]\(([^)]+)\)/g,
         (_, text, url) => `<a href="${sanitizeUrl(url)}">${text}</a>`
@@ -89,12 +83,7 @@ export function markdownToTelegramHtml(markdown: string): string {
   html = html.replace(/\|\|([^|]+)\|\|/g, "<tg-spoiler>$1</tg-spoiler>");
 
   html = html.replace(/\*\*([^*]+)\*\*/g, "<b>$1</b>");
-  html = html.replace(/__([^_]+)__/g, "<b>$1</b>");
-
   html = html.replace(/~~([^~]+)~~/g, "<s>$1</s>");
-
-  html = html.replace(/(?<!\*)\*([^*]+)\*(?!\*)/g, "<i>$1</i>");
-  html = html.replace(/(?<!_)_([^_]+)_(?!_)/g, "<i>$1</i>");
 
   html = html.replace(
     /\[([^\]]+)\]\(([^)]+)\)/g,

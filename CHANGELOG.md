@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.5] - 2026-02-28
+
 ### Added
 - **YOLO Mode** (Coding Agent): 4 new exec tools for full system access on Linux — `exec_run` (bash commands), `exec_install` (apt/pip/npm/docker), `exec_service` (systemd management), `exec_status` (server health). Disabled by default (`mode: off`), requires explicit `mode: yolo` opt-in. Admin-only scope, configurable timeout (120s), output limit (50KB), full audit trail in SQLite
 - **`admin-only` access policy**: New DM and group policy option — only Telegram admins can interact with the agent. Now the default for new installations (previously `open`)
@@ -363,7 +365,8 @@ Git history rewritten to fix commit attribution (email update from `tonresistor@
 - Professional distribution (npm, Docker, CI/CD)
 - Pre-commit hooks and linting infrastructure
 
-[Unreleased]: https://github.com/TONresistor/teleton-agent/compare/v0.7.4...HEAD
+[Unreleased]: https://github.com/TONresistor/teleton-agent/compare/v0.7.5...HEAD
+[0.7.5]: https://github.com/TONresistor/teleton-agent/compare/v0.7.4...v0.7.5
 [0.7.4]: https://github.com/TONresistor/teleton-agent/compare/v0.7.3...v0.7.4
 [0.7.3]: https://github.com/TONresistor/teleton-agent/compare/v0.7.2...v0.7.3
 [0.7.2]: https://github.com/TONresistor/teleton-agent/compare/v0.7.1...v0.7.2
