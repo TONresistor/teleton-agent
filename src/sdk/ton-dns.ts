@@ -21,6 +21,12 @@ const DNS_ROOT_COLLECTION = "EQC3dNlesgVD8YbAazcauIrXBPfiVhMMr5YYk2in0Mtsz0Bz";
 /** SHA256 of "wallet" — the DNS record key for wallet address */
 const DNS_WALLET_KEY = BigInt("0x" + createHash("sha256").update("wallet").digest("hex"));
 
+/** SHA256 of "site" — the DNS record key for ADNL site address */
+const DNS_SITE_KEY = BigInt("0x" + createHash("sha256").update("site").digest("hex"));
+
+/** dns_adnl_address prefix (#ad01) */
+const DNS_ADNL_PREFIX = 0xad01;
+
 /** Opcode for change_dns_record on TON DNS NFT */
 const CHANGE_DNS_RECORD_OP = 0x4eb1f0f9;
 
@@ -271,6 +277,53 @@ export function createDnsSDK(log: PluginLogger): DnsSDK {
         if (err instanceof PluginSDKError) throw err;
         throw new PluginSDKError(
           `Failed to unlink domain: ${err instanceof Error ? err.message : String(err)}`,
+          "OPERATION_FAILED"
+        );
+      }
+    },
+
+    async setSiteRecord(domain: string, adnlAddress: string): Promise<void> {
+      const normalized = normalizeDomain(domain);
+
+      // Validate ADNL address: 64 hex chars (256-bit)
+      const adnl = adnlAddress.toLowerCase().replace(/^0x/, "");
+      if (!/^[0-9a-f]{64}$/.test(adnl)) {
+        throw new PluginSDKError(
+          "Invalid ADNL address: must be exactly 64 hex characters (256-bit)",
+          "OPERATION_FAILED"
+        );
+      }
+
+      const walletData = loadWallet();
+      if (!walletData) {
+        throw new PluginSDKError("Wallet not initialized", "WALLET_NOT_INITIALIZED");
+      }
+
+      const resolveResult = await this.resolve(normalized);
+      if (!resolveResult?.nftAddress) {
+        throw new PluginSDKError(`Domain ${normalized} not found or not owned`, "OPERATION_FAILED");
+      }
+
+      // Build ADNL record value cell: dns_adnl_address#ad01 + adnl_addr:bits256 + flags:uint8
+      const valueCell = beginCell()
+        .storeUint(DNS_ADNL_PREFIX, 16)
+        .storeBuffer(Buffer.from(adnl, "hex"), 32)
+        .storeUint(0, 8)
+        .endCell();
+
+      const body = beginCell()
+        .storeUint(CHANGE_DNS_RECORD_OP, 32)
+        .storeUint(0, 64)
+        .storeUint(DNS_SITE_KEY, 256)
+        .storeRef(valueCell)
+        .endCell();
+
+      try {
+        await sendWalletMessage(Address.parse(resolveResult.nftAddress), toNano("0.05"), body);
+      } catch (err) {
+        if (err instanceof PluginSDKError) throw err;
+        throw new PluginSDKError(
+          `Failed to set site record: ${err instanceof Error ? err.message : String(err)}`,
           "OPERATION_FAILED"
         );
       }

@@ -459,6 +459,7 @@ Manage .ton domains: check availability, resolve addresses, participate in aucti
 | `bid(domain, amount)` | `Promise<DnsBidResult>` | Place bid on active auction |
 | `link(domain, address)` | `Promise<void>` | Link domain to wallet address |
 | `unlink(domain)` | `Promise<void>` | Remove wallet link |
+| `setSiteRecord(domain, adnlAddress)` | `Promise<void>` | Set TON Site (ADNL) record on a domain |
 
 ```typescript
 // Check if a domain is available
@@ -475,6 +476,9 @@ const resolved = await sdk.ton.dns.resolve("alice.ton");
 if (resolved) {
   await sdk.ton.sendTON(resolved.walletAddress!, 1, "Hello from plugin");
 }
+
+// Set a TON Site ADNL record
+await sdk.ton.dns.setSiteRecord("mysite.ton", "aabbccdd...64hex");
 ```
 
 #### `DnsCheckResult`

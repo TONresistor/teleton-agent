@@ -28,6 +28,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `startAuction(domain)` — Initiate auction for available domain
 - `bid(domain, amount)` — Place bid on active auction
 - `link(domain, address)` / `unlink(domain)` — Manage domain-wallet links
+- `setSiteRecord(domain, adnlAddress)` — Set TON Site (ADNL) record on a .ton domain
 - Types: `DnsSDK`, `DnsCheckResult`, `DnsResolveResult`, `DnsAuction`, `DnsAuctionResult`, `DnsBidResult`
 
 #### Telegram — Scheduled Messages

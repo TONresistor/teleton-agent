@@ -628,7 +628,7 @@ When `tools` is a function, the SDK provides namespaced access to core services:
 | | **Analytics**: `getJettonPrice()`, `getJettonHolders()`, `getJettonHistory()` |
 | | **NFT**: `getNftItems()`, `getNftInfo()` |
 | | **DEX** (`sdk.ton.dex`): `quote()`, `swap()`, `quoteSTONfi()`, `quoteDeDust()`, `swapSTONfi()`, `swapDeDust()` |
-| | **DNS** (`sdk.ton.dns`): `check()`, `resolve()`, `getAuctions()`, `startAuction()`, `bid()`, `link()`, `unlink()` |
+| | **DNS** (`sdk.ton.dns`): `check()`, `resolve()`, `getAuctions()`, `startAuction()`, `bid()`, `link()`, `unlink()`, `setSiteRecord()` |
 | | **Utils**: `toNano()`, `fromNano()`, `validateAddress()` |
 | `sdk.telegram` | **Messages**: `sendMessage()`, `editMessage()`, `deleteMessage()`, `forwardMessage()`, `pinMessage()`, `searchMessages()`, `scheduleMessage()`, `getScheduledMessages()`, `deleteScheduledMessage()`, `sendScheduledNow()`, `getReplies()` |
 | | **Media**: `sendPhoto()`, `sendVideo()`, `sendVoice()`, `sendFile()`, `sendGif()`, `sendSticker()`, `downloadMedia()` |

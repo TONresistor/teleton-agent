@@ -376,6 +376,8 @@ export interface DnsSDK {
   link(domain: string, address: string): Promise<void>;
   /** Unlink a domain (clear wallet record) */
   unlink(domain: string): Promise<void>;
+  /** Set or update the TON Site (ADNL) record for a .ton domain you own */
+  setSiteRecord(domain: string, adnlAddress: string): Promise<void>;
 }
 
 // ─── Telegram Extension Types ───────────────────────────────────
