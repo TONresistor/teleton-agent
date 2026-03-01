@@ -22,7 +22,7 @@ export const tools: ToolEntry[] = [
   { tool: dnsBidTool, executor: dnsBidExecutor, scope: "dm-only" },
   { tool: dnsLinkTool, executor: dnsLinkExecutor, scope: "dm-only" },
   { tool: dnsUnlinkTool, executor: dnsUnlinkExecutor, scope: "dm-only" },
-  { tool: dnsSetSiteTool, executor: dnsSetSiteExecutor },
+  { tool: dnsSetSiteTool, executor: dnsSetSiteExecutor, scope: "dm-only" },
   { tool: dnsCheckTool, executor: dnsCheckExecutor },
   { tool: dnsAuctionsTool, executor: dnsAuctionsExecutor },
   { tool: dnsResolveTool, executor: dnsResolveExecutor },

@@ -31,6 +31,10 @@ export const AgentConfigSchema = z.object({
       "openrouter",
       "moonshot",
       "mistral",
+      "cerebras",
+      "zai",
+      "minimax",
+      "huggingface",
       "cocoon",
       "local",
     ])

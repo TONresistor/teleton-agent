@@ -129,11 +129,11 @@ export const MODEL_OPTIONS: Record<string, ModelOption[]> = {
     { value: "x-ai/grok-4", name: "Grok 4", description: "256K ctx, $3/M" },
   ],
   moonshot: [
-    { value: "kimi-k2.5", name: "Kimi K2.5", description: "Free, 256K ctx, multimodal" },
+    { value: "k2p5", name: "Kimi K2.5", description: "Free, 262K ctx, multimodal" },
     {
       value: "kimi-k2-thinking",
       name: "Kimi K2 Thinking",
-      description: "Free, 256K ctx, reasoning",
+      description: "Free, 262K ctx, reasoning",
     },
   ],
   mistral: [
@@ -157,6 +157,72 @@ export const MODEL_OPTIONS: Record<string, ModelOption[]> = {
       name: "Magistral Small",
       description: "Reasoning, 128K ctx, $0.50/M",
     },
+  ],
+  cerebras: [
+    {
+      value: "qwen-3-235b-a22b-instruct-2507",
+      name: "Qwen 3 235B",
+      description: "131K ctx, $0.60/$1.20",
+    },
+    { value: "gpt-oss-120b", name: "GPT OSS 120B", description: "Reasoning, 131K ctx, $0.25/M" },
+    { value: "zai-glm-4.7", name: "ZAI GLM-4.7", description: "131K ctx, $2.25/M" },
+    { value: "llama3.1-8b", name: "Llama 3.1 8B", description: "Fast & cheap, 32K ctx, $0.10/M" },
+  ],
+  zai: [
+    { value: "glm-4.7", name: "GLM-4.7", description: "204K ctx, $0.60/$2.20" },
+    { value: "glm-5", name: "GLM-5", description: "Best quality, 204K ctx, $1.00/$3.20" },
+    { value: "glm-4.6", name: "GLM-4.6", description: "204K ctx, $0.60/$2.20" },
+    { value: "glm-4.7-flash", name: "GLM-4.7 Flash", description: "FREE, 200K ctx" },
+    { value: "glm-4.5-flash", name: "GLM-4.5 Flash", description: "FREE, 131K ctx" },
+    { value: "glm-4.5v", name: "GLM-4.5V", description: "Vision, 64K ctx, $0.60/$1.80" },
+  ],
+  minimax: [
+    { value: "MiniMax-M2.5", name: "MiniMax M2.5", description: "204K ctx, $0.30/$1.20" },
+    {
+      value: "MiniMax-M2.5-highspeed",
+      name: "MiniMax M2.5 Fast",
+      description: "204K ctx, $0.60/$2.40",
+    },
+    { value: "MiniMax-M2.1", name: "MiniMax M2.1", description: "204K ctx, $0.30/$1.20" },
+    { value: "MiniMax-M2", name: "MiniMax M2", description: "196K ctx, $0.30/$1.20" },
+  ],
+  huggingface: [
+    {
+      value: "deepseek-ai/DeepSeek-V3.2",
+      name: "DeepSeek V3.2",
+      description: "163K ctx, $0.28/$0.40",
+    },
+    {
+      value: "deepseek-ai/DeepSeek-R1-0528",
+      name: "DeepSeek R1",
+      description: "Reasoning, 163K ctx, $3/$5",
+    },
+    {
+      value: "Qwen/Qwen3-235B-A22B-Thinking-2507",
+      name: "Qwen3 235B",
+      description: "Reasoning, 262K ctx, $0.30/$3",
+    },
+    {
+      value: "Qwen/Qwen3-Coder-480B-A35B-Instruct",
+      name: "Qwen3 Coder 480B",
+      description: "Coding, 262K ctx, $2/$2",
+    },
+    {
+      value: "Qwen/Qwen3-Next-80B-A3B-Instruct",
+      name: "Qwen3 Next 80B",
+      description: "262K ctx, $0.25/$1",
+    },
+    {
+      value: "moonshotai/Kimi-K2.5",
+      name: "Kimi K2.5",
+      description: "262K ctx, $0.60/$3",
+    },
+    {
+      value: "zai-org/GLM-4.7-Flash",
+      name: "GLM-4.7 Flash",
+      description: "FREE, 200K ctx",
+    },
+    { value: "zai-org/GLM-5", name: "GLM-5", description: "202K ctx, $1/$3.20" },
   ],
 };
 

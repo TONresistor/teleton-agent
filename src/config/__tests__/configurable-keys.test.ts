@@ -254,8 +254,8 @@ describe("existing keys unchanged", () => {
     expect(meta.validate("long-enough-key-here")).toBeUndefined();
   });
 
-  it("agent.provider still has all 11 options", () => {
+  it("agent.provider still has all 15 options", () => {
     const meta = CONFIGURABLE_KEYS["agent.provider"];
-    expect(meta.options).toHaveLength(11);
+    expect(meta.options).toHaveLength(15);
   });
 });

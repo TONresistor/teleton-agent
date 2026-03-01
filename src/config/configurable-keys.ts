@@ -2,6 +2,7 @@ import { readFileSync, writeFileSync, existsSync } from "fs";
 import { parse, stringify } from "yaml";
 import { expandPath } from "./loader.js";
 import { ConfigSchema } from "./schema.js";
+import { getSupportedProviders } from "./providers.js";
 
 // ── Types ──────────────────────────────────────────────────────────────
 
@@ -132,32 +133,8 @@ export const CONFIGURABLE_KEYS: Record<string, ConfigKeyMeta> = {
     description: "LLM provider",
     sensitive: false,
     hotReload: "instant",
-    options: [
-      "anthropic",
-      "claude-code",
-      "openai",
-      "google",
-      "xai",
-      "groq",
-      "openrouter",
-      "moonshot",
-      "mistral",
-      "cocoon",
-      "local",
-    ],
-    validate: enumValidator([
-      "anthropic",
-      "claude-code",
-      "openai",
-      "google",
-      "xai",
-      "groq",
-      "openrouter",
-      "moonshot",
-      "mistral",
-      "cocoon",
-      "local",
-    ]),
+    options: getSupportedProviders().map((p) => p.id),
+    validate: enumValidator(getSupportedProviders().map((p) => p.id)),
     mask: identity,
     parse: identity,
   },

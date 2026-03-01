@@ -130,31 +130,9 @@ export async function registerLocalModels(baseUrl: string): Promise<string[]> {
   }
 }
 
-const MOONSHOT_MODELS: Record<string, Model<"openai-completions">> = {
-  "kimi-k2.5": {
-    id: "kimi-k2.5",
-    name: "Kimi K2.5",
-    api: "openai-completions",
-    provider: "moonshot",
-    baseUrl: "https://api.moonshot.ai/v1",
-    reasoning: false,
-    input: ["text", "image"],
-    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-    contextWindow: 256000,
-    maxTokens: 8192,
-  },
-  "kimi-k2-thinking": {
-    id: "kimi-k2-thinking",
-    name: "Kimi K2 Thinking",
-    api: "openai-completions",
-    provider: "moonshot",
-    baseUrl: "https://api.moonshot.ai/v1",
-    reasoning: true,
-    input: ["text"],
-    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
-    contextWindow: 256000,
-    maxTokens: 8192,
-  },
+/** Moonshot backward-compat: old model IDs → kimi-coding IDs */
+const MOONSHOT_MODEL_ALIASES: Record<string, string> = {
+  "kimi-k2.5": "k2p5",
 };
 
 export function getProviderModel(provider: SupportedProvider, modelId: string): Model<Api> {
@@ -190,12 +168,9 @@ export function getProviderModel(provider: SupportedProvider, modelId: string): 
     throw new Error("No local models available. Is the LLM server running?");
   }
 
-  if (meta.piAiProvider === "moonshot") {
-    const model = MOONSHOT_MODELS[modelId] ?? MOONSHOT_MODELS[meta.defaultModel];
-    if (model) {
-      modelCache.set(cacheKey, model);
-      return model;
-    }
+  // Moonshot backward-compat: remap old model IDs to kimi-coding IDs
+  if (provider === "moonshot" && MOONSHOT_MODEL_ALIASES[modelId]) {
+    modelId = MOONSHOT_MODEL_ALIASES[modelId];
   }
 
   try {
@@ -282,9 +257,7 @@ export async function chatWithContext(
     tools,
   };
 
-  // Cocoon: strip unsupported fields from the request body
-  // Moonshot Kimi K2.5 only accepts temperature=1
-  const temperature = provider === "moonshot" ? 1 : (options.temperature ?? config.temperature);
+  const temperature = options.temperature ?? config.temperature;
 
   const completeOptions: Record<string, unknown> = {
     apiKey: getEffectiveApiKey(provider, config.api_key),

@@ -8,6 +8,10 @@ export type SupportedProvider =
   | "openrouter"
   | "moonshot"
   | "mistral"
+  | "cerebras"
+  | "zai"
+  | "minimax"
+  | "huggingface"
   | "cocoon"
   | "local";
 
@@ -116,10 +120,10 @@ const PROVIDER_REGISTRY: Record<SupportedProvider, ProviderMetadata> = {
     keyPrefix: "sk-",
     keyHint: "sk-...",
     consoleUrl: "https://platform.moonshot.ai/",
-    defaultModel: "kimi-k2.5",
-    utilityModel: "kimi-k2.5",
+    defaultModel: "k2p5",
+    utilityModel: "k2p5",
     toolLimit: 128,
-    piAiProvider: "moonshot",
+    piAiProvider: "kimi-coding",
   },
   mistral: {
     id: "mistral",
@@ -132,6 +136,54 @@ const PROVIDER_REGISTRY: Record<SupportedProvider, ProviderMetadata> = {
     utilityModel: "ministral-8b-latest",
     toolLimit: 128,
     piAiProvider: "mistral",
+  },
+  cerebras: {
+    id: "cerebras",
+    displayName: "Cerebras",
+    envVar: "CEREBRAS_API_KEY",
+    keyPrefix: "csk-",
+    keyHint: "csk-...",
+    consoleUrl: "https://cloud.cerebras.ai/",
+    defaultModel: "qwen-3-235b-a22b-instruct-2507",
+    utilityModel: "llama3.1-8b",
+    toolLimit: 128,
+    piAiProvider: "cerebras",
+  },
+  zai: {
+    id: "zai",
+    displayName: "ZAI (Zhipu)",
+    envVar: "ZAI_API_KEY",
+    keyPrefix: null,
+    keyHint: "...",
+    consoleUrl: "https://z.ai/manage-apikey/apikey-list",
+    defaultModel: "glm-4.7",
+    utilityModel: "glm-4.7-flash",
+    toolLimit: 128,
+    piAiProvider: "zai",
+  },
+  minimax: {
+    id: "minimax",
+    displayName: "MiniMax",
+    envVar: "MINIMAX_API_KEY",
+    keyPrefix: null,
+    keyHint: "Save your key — shown only once!",
+    consoleUrl: "https://platform.minimax.io/",
+    defaultModel: "MiniMax-M2.5",
+    utilityModel: "MiniMax-M2",
+    toolLimit: 128,
+    piAiProvider: "minimax",
+  },
+  huggingface: {
+    id: "huggingface",
+    displayName: "HuggingFace",
+    envVar: "HF_TOKEN",
+    keyPrefix: "hf_",
+    keyHint: "hf_...",
+    consoleUrl: "https://huggingface.co/settings/tokens",
+    defaultModel: "deepseek-ai/DeepSeek-V3.2",
+    utilityModel: "Qwen/Qwen3-Next-80B-A3B-Instruct",
+    toolLimit: 128,
+    piAiProvider: "huggingface",
   },
   cocoon: {
     id: "cocoon",

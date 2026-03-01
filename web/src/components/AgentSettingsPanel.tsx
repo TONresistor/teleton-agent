@@ -40,8 +40,8 @@ export function AgentSettingsPanel({
           <label>Provider <InfoTip text="LLM provider" /></label>
           <Select
             value={pendingProvider ?? getLocal('agent.provider')}
-            options={['claude-code', 'anthropic', 'openai', 'google', 'xai', 'groq', 'openrouter', 'moonshot', 'mistral', 'cocoon', 'local']}
-            labels={['Claude Code', 'Anthropic', 'OpenAI', 'Google', 'xAI', 'Groq', 'OpenRouter', 'Moonshot', 'Mistral', 'Cocoon', 'Local']}
+            options={['claude-code', 'anthropic', 'openai', 'google', 'xai', 'groq', 'openrouter', 'moonshot', 'mistral', 'cerebras', 'zai', 'minimax', 'huggingface', 'cocoon', 'local']}
+            labels={['Claude Code', 'Anthropic', 'OpenAI', 'Google', 'xAI', 'Groq', 'OpenRouter', 'Moonshot', 'Mistral', 'Cerebras', 'ZAI (Zhipu)', 'MiniMax', 'HuggingFace', 'Cocoon', 'Local']}
             onChange={handleProviderChange}
           />
         </div>
