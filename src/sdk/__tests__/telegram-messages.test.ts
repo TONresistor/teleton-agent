@@ -40,38 +40,8 @@ vi.mock("big-integer", () => ({
 }));
 
 // ─── Mocks ──────────────────────────────────────────────────────
-const mockGramJsClient = {
-  invoke: vi.fn(),
-  sendMessage: vi.fn(),
-  sendFile: vi.fn(),
-  getEntity: vi.fn(),
-  getInputEntity: vi.fn(),
-  getMessages: vi.fn(),
-  downloadMedia: vi.fn(),
-  uploadFile: vi.fn(),
-};
-
-const mockBridgeClient = {
-  getClient: () => mockGramJsClient,
-  getMe: vi.fn(),
-};
-
-const mockBridge = {
-  isAvailable: vi.fn(() => true),
-  getClient: () => mockBridgeClient,
-  sendMessage: vi.fn(),
-  editMessage: vi.fn(),
-  sendReaction: vi.fn(),
-  setTyping: vi.fn(),
-  getMessages: vi.fn(),
-} as any;
-
-const mockLog = {
-  info: vi.fn(),
-  warn: vi.fn(),
-  error: vi.fn(),
-  debug: vi.fn(),
-};
+import { createMocks } from "./__fixtures__/mocks.js";
+const { mockGramJsClient, mockBridge, mockLog } = createMocks();
 
 describe("createTelegramMessagesSDK", () => {
   let sdk: ReturnType<typeof createTelegramMessagesSDK>;
@@ -182,7 +152,7 @@ describe("createTelegramMessagesSDK", () => {
       expect(result).toBe(88);
     });
 
-    it("returns 0 when no matching update found", async () => {
+    it("returns null when no matching update found", async () => {
       mockGramJsClient.invoke.mockResolvedValue(
         new Api.Updates({
           updates: [{ className: "UpdateReadHistoryOutbox" }],
@@ -190,21 +160,21 @@ describe("createTelegramMessagesSDK", () => {
       );
 
       const result = await sdk.forwardMessage("from", "to", 10);
-      expect(result).toBe(0);
+      expect(result).toBeNull();
     });
 
-    it("returns 0 when updates is empty", async () => {
+    it("returns null when updates is empty", async () => {
       mockGramJsClient.invoke.mockResolvedValue(new Api.Updates({ updates: [] }));
 
       const result = await sdk.forwardMessage("from", "to", 10);
-      expect(result).toBe(0);
+      expect(result).toBeNull();
     });
 
-    it("returns 0 when no updates key", async () => {
+    it("returns null when no updates key", async () => {
       mockGramJsClient.invoke.mockResolvedValue({});
 
       const result = await sdk.forwardMessage("from", "to", 10);
-      expect(result).toBe(0);
+      expect(result).toBeNull();
     });
 
     it("wraps errors", async () => {
@@ -329,11 +299,11 @@ describe("createTelegramMessagesSDK", () => {
       expect(result).toBe(55);
     });
 
-    it("returns 0 when result has no id", async () => {
+    it("returns null when result has no id", async () => {
       mockGramJsClient.sendMessage.mockResolvedValue({});
 
       const result = await sdk.scheduleMessage("chat1", "later", 1700000000);
-      expect(result).toBe(0);
+      expect(result).toBeNull();
     });
 
     it("wraps errors", async () => {

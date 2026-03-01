@@ -7,7 +7,6 @@
  */
 
 import { Api } from "telegram";
-import bigInt from "big-integer";
 
 export interface ParsedMessage {
   text: string;
@@ -75,7 +74,7 @@ export function parseHtml(html: string): ParsedMessage {
                       new Api.MessageEntityCustomEmoji({
                         offset: open.offset,
                         length,
-                        documentId: bigInt(open.emojiId),
+                        documentId: BigInt(open.emojiId) as any,
                       })
                     );
                   }

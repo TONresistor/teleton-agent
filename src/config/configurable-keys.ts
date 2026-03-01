@@ -15,6 +15,7 @@ export type ConfigCategory =
   | "Embedding"
   | "WebUI"
   | "Deals"
+  | "Coding Agent"
   | "Developer";
 
 export interface ConfigKeyMeta {
@@ -574,6 +575,34 @@ export const CONFIGURABLE_KEYS: Record<string, ConfigKeyMeta> = {
     parse: (v) => Number(v),
   },
 
+  // ─── Capabilities ──────────────────────────────────────────────────
+  "capabilities.exec.mode": {
+    type: "enum",
+    category: "Coding Agent",
+    label: "Exec Mode",
+    description: "System execution: off (disabled) or yolo (full system access)",
+    sensitive: false,
+    hotReload: "restart",
+    options: ["off", "yolo"],
+    optionLabels: { off: "Disabled", yolo: "YOLO" },
+    validate: enumValidator(["off", "yolo"]),
+    mask: identity,
+    parse: identity,
+  },
+  "capabilities.exec.scope": {
+    type: "enum",
+    category: "Coding Agent",
+    label: "Exec Scope",
+    description: "Who can trigger exec tools",
+    sensitive: false,
+    hotReload: "restart",
+    options: ["admin-only", "allowlist", "all"],
+    optionLabels: { "admin-only": "Admin Only", allowlist: "Allowlist", all: "Everyone" },
+    validate: enumValidator(["admin-only", "allowlist", "all"]),
+    mask: identity,
+    parse: identity,
+  },
+
   // ─── Developer ─────────────────────────────────────────────────────
   "dev.hot_reload": {
     type: "boolean",
@@ -598,6 +627,7 @@ export const CATEGORY_ORDER: ConfigCategory[] = [
   "Embedding",
   "WebUI",
   "Deals",
+  "Coding Agent",
   "Developer",
 ];
 

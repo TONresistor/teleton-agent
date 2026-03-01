@@ -3,6 +3,12 @@ import type { TelegramBridge } from "../telegram/bridge.js";
 import type { Api } from "telegram";
 import type { PluginLogger, SimpleMessage, MediaSendOptions } from "@teleton-agent/sdk";
 import { PluginSDKError } from "@teleton-agent/sdk";
+import {
+  requireBridge as requireBridgeUtil,
+  getClient as getClientUtil,
+  getApi,
+  toSimpleMessage,
+} from "./telegram-utils.js";
 
 /**
  * Creates the Telegram messages, media, and advanced SDK methods.
@@ -10,25 +16,11 @@ import { PluginSDKError } from "@teleton-agent/sdk";
  */
 export function createTelegramMessagesSDK(bridge: TelegramBridge, log: PluginLogger) {
   function requireBridge(): void {
-    if (!bridge.isAvailable()) {
-      throw new PluginSDKError(
-        "Telegram bridge not connected. SDK telegram methods can only be called at runtime (inside tool executors or start()), not during plugin loading.",
-        "BRIDGE_NOT_CONNECTED"
-      );
-    }
+    requireBridgeUtil(bridge);
   }
 
   function getClient() {
-    return bridge.getClient().getClient();
-  }
-
-  function toSimpleMessage(msg: any): SimpleMessage {
-    return {
-      id: msg.id,
-      text: msg.message ?? "",
-      senderId: Number(msg.fromId?.userId ?? msg.fromId?.channelId ?? 0),
-      timestamp: new Date(msg.date * 1000),
-    };
+    return getClientUtil(bridge);
   }
 
   return {
@@ -38,7 +30,7 @@ export function createTelegramMessagesSDK(bridge: TelegramBridge, log: PluginLog
       requireBridge();
       try {
         const gramJsClient = getClient();
-        const { Api } = await import("telegram");
+        const Api = await getApi();
 
         const isChannel = chatId.startsWith("-100");
         if (isChannel) {
@@ -66,11 +58,15 @@ export function createTelegramMessagesSDK(bridge: TelegramBridge, log: PluginLog
       }
     },
 
-    async forwardMessage(fromChatId: string, toChatId: string, messageId: number): Promise<number> {
+    async forwardMessage(
+      fromChatId: string,
+      toChatId: string,
+      messageId: number
+    ): Promise<number | null> {
       requireBridge();
       try {
         const gramJsClient = getClient();
-        const { Api } = await import("telegram");
+        const Api = await getApi();
 
         const result = await gramJsClient.invoke(
           new Api.messages.ForwardMessages({
@@ -92,7 +88,7 @@ export function createTelegramMessagesSDK(bridge: TelegramBridge, log: PluginLog
             }
           }
         }
-        return 0;
+        return null;
       } catch (err) {
         if (err instanceof PluginSDKError) throw err;
         throw new PluginSDKError(
@@ -110,7 +106,7 @@ export function createTelegramMessagesSDK(bridge: TelegramBridge, log: PluginLog
       requireBridge();
       try {
         const gramJsClient = getClient();
-        const { Api } = await import("telegram");
+        const Api = await getApi();
 
         await gramJsClient.invoke(
           new Api.messages.UpdatePinnedMessage({
@@ -133,7 +129,7 @@ export function createTelegramMessagesSDK(bridge: TelegramBridge, log: PluginLog
       requireBridge();
       try {
         const gramJsClient = getClient();
-        const { Api } = await import("telegram");
+        const Api = await getApi();
 
         const entity = await gramJsClient.getEntity(chatId);
 
@@ -155,7 +151,11 @@ export function createTelegramMessagesSDK(bridge: TelegramBridge, log: PluginLog
       }
     },
 
-    async scheduleMessage(chatId: string, text: string, scheduleDate: number): Promise<number> {
+    async scheduleMessage(
+      chatId: string,
+      text: string,
+      scheduleDate: number
+    ): Promise<number | null> {
       requireBridge();
       try {
         const gramJsClient = getClient();
@@ -165,7 +165,7 @@ export function createTelegramMessagesSDK(bridge: TelegramBridge, log: PluginLog
           schedule: scheduleDate,
         });
 
-        return result.id ?? 0;
+        return result.id ?? null;
       } catch (err) {
         if (err instanceof PluginSDKError) throw err;
         throw new PluginSDKError(
@@ -179,9 +179,7 @@ export function createTelegramMessagesSDK(bridge: TelegramBridge, log: PluginLog
       requireBridge();
       try {
         const gramJsClient = getClient();
-        const { Api } = await import("telegram");
-        const bigInt = ((await import("big-integer")) as any).default;
-
+        const Api = await getApi();
         const peer = await gramJsClient.getInputEntity(chatId);
 
         const result = await gramJsClient.invoke(
@@ -194,7 +192,7 @@ export function createTelegramMessagesSDK(bridge: TelegramBridge, log: PluginLog
             limit,
             maxId: 0,
             minId: 0,
-            hash: bigInt(0),
+            hash: 0n as any,
           })
         );
 
@@ -254,7 +252,7 @@ export function createTelegramMessagesSDK(bridge: TelegramBridge, log: PluginLog
       requireBridge();
       try {
         const gramJsClient = getClient();
-        const { Api } = await import("telegram");
+        const Api = await getApi();
 
         const result = await gramJsClient.sendFile(chatId, {
           file: video,
@@ -265,9 +263,9 @@ export function createTelegramMessagesSDK(bridge: TelegramBridge, log: PluginLog
             new Api.DocumentAttributeVideo({
               roundMessage: false,
               supportsStreaming: true,
-              duration: 0,
-              w: 0,
-              h: 0,
+              duration: opts?.duration ?? 0,
+              w: opts?.width ?? 0,
+              h: opts?.height ?? 0,
             }),
           ],
         });
@@ -290,13 +288,15 @@ export function createTelegramMessagesSDK(bridge: TelegramBridge, log: PluginLog
       requireBridge();
       try {
         const gramJsClient = getClient();
-        const { Api } = await import("telegram");
+        const Api = await getApi();
 
         const result = await gramJsClient.sendFile(chatId, {
           file: voice,
           caption: opts?.caption,
           replyTo: opts?.replyToId,
-          attributes: [new Api.DocumentAttributeAudio({ voice: true, duration: 0 })],
+          attributes: [
+            new Api.DocumentAttributeAudio({ voice: true, duration: opts?.duration ?? 0 }),
+          ],
         });
 
         return result.id;
@@ -317,7 +317,7 @@ export function createTelegramMessagesSDK(bridge: TelegramBridge, log: PluginLog
       requireBridge();
       try {
         const gramJsClient = getClient();
-        const { Api } = await import("telegram");
+        const Api = await getApi();
 
         const attributes: any[] = [];
         if (opts?.fileName) {
@@ -346,7 +346,7 @@ export function createTelegramMessagesSDK(bridge: TelegramBridge, log: PluginLog
       requireBridge();
       try {
         const gramJsClient = getClient();
-        const { Api } = await import("telegram");
+        const Api = await getApi();
 
         const result = await gramJsClient.sendFile(chatId, {
           file: gif,
@@ -386,6 +386,7 @@ export function createTelegramMessagesSDK(bridge: TelegramBridge, log: PluginLog
 
     async downloadMedia(chatId: string, messageId: number): Promise<Buffer | null> {
       requireBridge();
+      const MAX_DOWNLOAD_SIZE = 50 * 1024 * 1024; // 50 MB
       try {
         const gramJsClient = getClient();
 
@@ -397,12 +398,97 @@ export function createTelegramMessagesSDK(bridge: TelegramBridge, log: PluginLog
           return null;
         }
 
+        // Check file size before downloading to prevent OOM
+        const doc = (messages[0].media as any)?.document;
+        if (doc?.size && Number(doc.size) > MAX_DOWNLOAD_SIZE) {
+          throw new PluginSDKError(
+            `File too large (${Math.round(Number(doc.size) / 1024 / 1024)}MB). Max: 50MB`,
+            "OPERATION_FAILED"
+          );
+        }
+
         const buffer = await gramJsClient.downloadMedia(messages[0], {});
         return buffer ? Buffer.from(buffer as any) : null;
       } catch (err) {
         if (err instanceof PluginSDKError) throw err;
         throw new PluginSDKError(
           `Failed to download media: ${err instanceof Error ? err.message : String(err)}`,
+          "OPERATION_FAILED"
+        );
+      }
+    },
+
+    // ─── Scheduled Messages ────────────────────────────────────
+
+    async getScheduledMessages(chatId: string): Promise<SimpleMessage[]> {
+      requireBridge();
+      try {
+        const gramJsClient = getClient();
+        const Api = await getApi();
+        const peer = await gramJsClient.getInputEntity(chatId);
+
+        const result = await gramJsClient.invoke(
+          new Api.messages.GetScheduledHistory({
+            peer,
+            hash: 0n as any,
+          })
+        );
+
+        const messages: SimpleMessage[] = [];
+        if ("messages" in result) {
+          for (const msg of result.messages) {
+            if (msg.className === "Message") {
+              messages.push(toSimpleMessage(msg));
+            }
+          }
+        }
+        return messages;
+      } catch (err) {
+        if (err instanceof PluginSDKError) throw err;
+        log.error("telegram.getScheduledMessages() failed:", err);
+        return [];
+      }
+    },
+
+    async deleteScheduledMessage(chatId: string, messageId: number): Promise<void> {
+      requireBridge();
+      try {
+        const gramJsClient = getClient();
+        const Api = await getApi();
+        const peer = await gramJsClient.getInputEntity(chatId);
+
+        await gramJsClient.invoke(
+          new Api.messages.DeleteScheduledMessages({
+            peer,
+            id: [messageId],
+          })
+        );
+      } catch (err) {
+        if (err instanceof PluginSDKError) throw err;
+        throw new PluginSDKError(
+          `Failed to delete scheduled message: ${err instanceof Error ? err.message : String(err)}`,
+          "OPERATION_FAILED"
+        );
+      }
+    },
+
+    async sendScheduledNow(chatId: string, messageId: number): Promise<void> {
+      requireBridge();
+      try {
+        const gramJsClient = getClient();
+        const Api = await getApi();
+        const peer = await gramJsClient.getInputEntity(chatId);
+
+        await gramJsClient.invoke(
+          new Api.messages.SendScheduledMessages({
+            peer,
+            id: [messageId],
+          })
+        );
+      } catch (err) {
+        if (err instanceof PluginSDKError) throw err;
+        throw new PluginSDKError(
+          `Failed to send scheduled message now: ${err instanceof Error ? err.message : String(err)}`,
           "OPERATION_FAILED"
         );
       }

@@ -37,7 +37,7 @@ import {
   semverSatisfies,
   type SDKDependencies,
 } from "../../sdk/index.js";
-import type { PluginSDK } from "../../sdk/types.js";
+import type { PluginSDK } from "../../sdk/index.js";
 import { createSecretsSDK } from "../../sdk/secrets.js";
 import type {
   SecretDeclaration,

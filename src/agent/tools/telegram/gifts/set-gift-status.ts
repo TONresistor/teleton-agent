@@ -1,6 +1,5 @@
 import { Type } from "@sinclair/typebox";
 import { Api } from "telegram";
-import bigInt from "big-integer";
 import type { Tool, ToolExecutor, ToolResult } from "../../types.js";
 import { getErrorMessage } from "../../../../utils/errors.js";
 import { createLogger } from "../../../../utils/logger.js";
@@ -53,7 +52,7 @@ export const telegramSetGiftStatusExecutor: ToolExecutor<SetGiftStatusParams> = 
       emojiStatus = new Api.EmojiStatusEmpty();
     } else {
       emojiStatus = new Api.InputEmojiStatusCollectible({
-        collectibleId: bigInt(collectibleId),
+        collectibleId: BigInt(collectibleId) as any,
       });
     }
 

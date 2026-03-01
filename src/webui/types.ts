@@ -95,6 +95,7 @@ export interface StatusResponse {
   sessionCount: number;
   toolCount: number;
   tokenUsage: { totalTokens: number; totalCost: number };
+  platform: string;
 }
 
 export interface ToolInfo {

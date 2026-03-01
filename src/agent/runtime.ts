@@ -126,6 +126,21 @@ function extractContextSummary(context: Context, maxMessages: number = 10): stri
   return summaryParts.join("\n");
 }
 
+export interface ProcessMessageOptions {
+  chatId: string;
+  userMessage: string;
+  userName?: string;
+  timestamp?: number;
+  isGroup?: boolean;
+  pendingContext?: string | null;
+  toolContext?: Omit<ToolContext, "chatId" | "isGroup">;
+  senderUsername?: string;
+  hasMedia?: boolean;
+  mediaType?: string;
+  messageId?: number;
+  replyContext?: { senderName?: string; text: string; isAgent?: boolean };
+}
+
 export interface AgentResponse {
   content: string;
   toolCalls?: Array<{
@@ -174,20 +189,22 @@ export class AgentRuntime {
     return this.toolRegistry;
   }
 
-  async processMessage(
-    chatId: string,
-    userMessage: string,
-    userName?: string,
-    timestamp?: number,
-    isGroup?: boolean,
-    pendingContext?: string | null,
-    toolContext?: Omit<ToolContext, "chatId" | "isGroup">,
-    senderUsername?: string,
-    hasMedia?: boolean,
-    mediaType?: string,
-    messageId?: number,
-    replyContext?: { senderName?: string; text: string; isAgent?: boolean }
-  ): Promise<AgentResponse> {
+  async processMessage(opts: ProcessMessageOptions): Promise<AgentResponse> {
+    const {
+      chatId,
+      userMessage,
+      userName,
+      timestamp,
+      isGroup,
+      pendingContext,
+      toolContext,
+      senderUsername,
+      hasMedia,
+      mediaType,
+      messageId,
+      replyContext,
+    } = opts;
+
     try {
       let session = getOrCreateSession(chatId);
       const now = timestamp ?? Date.now();
@@ -257,7 +274,18 @@ export class AgentRuntime {
       log.info(`📨 ${msgType}: "${preview}${formattedMessage.length > 50 ? "..." : ""}"`);
 
       let relevantContext = "";
-      if (this.contextBuilder && !isTrivialMessage(userMessage)) {
+      let queryEmbedding: number[] | undefined;
+      const isNonTrivial = !isTrivialMessage(userMessage);
+
+      if (this.embedder && isNonTrivial) {
+        try {
+          queryEmbedding = await this.embedder.embedQuery(userMessage);
+        } catch (error) {
+          log.warn({ err: error }, "Embedding computation failed");
+        }
+      }
+
+      if (this.contextBuilder && isNonTrivial) {
         try {
           const dbContext = await this.contextBuilder.buildContext({
             query: userMessage,
@@ -267,6 +295,7 @@ export class AgentRuntime {
             searchAllChats: !isGroup,
             maxRecentMessages: CONTEXT_MAX_RECENT_MESSAGES,
             maxRelevantChunks: CONTEXT_MAX_RELEVANT_CHUNKS,
+            queryEmbedding,
           });
 
           const contextParts: string[] = [];
@@ -366,8 +395,7 @@ export class AgentRuntime {
             this.config.tool_rag?.skip_unlimited_providers !== false
           );
 
-        if (useRAG && this.toolRegistry && this.embedder) {
-          const queryEmbedding = await this.embedder.embedQuery(userMessage);
+        if (useRAG && this.toolRegistry && queryEmbedding) {
           tools = await this.toolRegistry.getForContextWithRAG(
             userMessage,
             queryEmbedding,

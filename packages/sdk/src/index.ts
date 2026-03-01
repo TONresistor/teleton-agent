@@ -45,6 +45,24 @@ export type {
   JettonInfo,
   JettonSendResult,
   NftItem,
+  // TON Analytics
+  JettonPrice,
+  JettonHolder,
+  JettonHistory,
+  // DEX
+  DexSDK,
+  DexQuoteParams,
+  DexQuoteResult,
+  DexSingleQuote,
+  DexSwapParams,
+  DexSwapResult,
+  // DNS
+  DnsSDK,
+  DnsCheckResult,
+  DnsAuction,
+  DnsAuctionResult,
+  DnsBidResult,
+  DnsResolveResult,
   // Payment
   SDKVerifyPaymentParams,
   SDKPaymentVerification,
@@ -63,6 +81,14 @@ export type {
   StarGift,
   ReceivedGift,
   StartContext,
+  // Telegram Extensions
+  Dialog,
+  StarsTransaction,
+  TransferResult,
+  CollectibleInfo,
+  UniqueGift,
+  GiftValue,
+  GiftOfferOptions,
   // Logger
   PluginLogger,
   // Secrets
@@ -73,6 +99,7 @@ export type {
   // Plugin definitions
   SimpleToolDef,
   PluginManifest,
+  PluginToolContext,
   ToolResult,
   ToolScope,
   ToolCategory,

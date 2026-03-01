@@ -129,7 +129,9 @@ Root SDK object passed to plugin functions.
 |----------|------|-------------|
 | `version` | `string` | SDK version (semver) |
 | `ton` | `TonSDK` | TON blockchain operations |
-| `telegram` | `TelegramSDK` | Telegram messaging operations |
+| `telegram` | `TelegramSDK` | Telegram messaging and user operations |
+| `secrets` | `SecretsSDK` | Secure access to plugin secrets (API keys, tokens) |
+| `storage` | `StorageSDK \| null` | Simple key-value storage (null if no DB) |
 | `db` | `Database \| null` | Isolated SQLite database (null if no `migrate` exported) |
 | `config` | `Record<string, unknown>` | Sanitized app config (no secrets) |
 | `pluginConfig` | `Record<string, unknown>` | Plugin-specific config from `config.yaml` |
@@ -167,6 +169,7 @@ type SDKErrorCode =
   | "BRIDGE_NOT_CONNECTED"   // Telegram bridge not ready
   | "WALLET_NOT_INITIALIZED" // TON wallet not configured
   | "INVALID_ADDRESS"        // Malformed TON address
+  | "SECRET_NOT_FOUND"       // Required secret not configured
   | "OPERATION_FAILED";      // Generic failure
 ```
 
@@ -191,6 +194,20 @@ import { SDK_VERSION } from "@teleton-agent/sdk";
 | `sendTON(to, amount, comment?)` | `Promise<TonSendResult>` | Send TON (irreversible) |
 | `getTransactions(address, limit?)` | `Promise<TonTransaction[]>` | Transaction history (max 50) |
 | `verifyPayment(params)` | `Promise<SDKPaymentVerification>` | Verify incoming payment with replay protection |
+| `getJettonBalances(ownerAddress?)` | `Promise<JettonBalance[]>` | Jetton balances (defaults to bot wallet) |
+| `getJettonInfo(jettonAddress)` | `Promise<JettonInfo \| null>` | Jetton metadata (name, symbol, decimals) |
+| `sendJetton(jettonAddress, to, amount, opts?)` | `Promise<JettonSendResult>` | Transfer jetton tokens (irreversible) |
+| `getJettonWalletAddress(ownerAddress, jettonAddress)` | `Promise<string \| null>` | Get jetton wallet address for owner |
+| `getNftItems(ownerAddress?)` | `Promise<NftItem[]>` | NFTs owned by address (defaults to bot) |
+| `getNftInfo(nftAddress)` | `Promise<NftItem \| null>` | NFT item metadata |
+| `toNano(amount)` | `bigint` | Convert TON to nanoTON |
+| `fromNano(nano)` | `string` | Convert nanoTON to TON string |
+| `validateAddress(address)` | `boolean` | Validate TON address format |
+| `getJettonPrice(jettonAddress)` | `Promise<JettonPrice \| null>` | Jetton USD/TON price with 24h/7d/30d changes |
+| `getJettonHolders(jettonAddress, limit?)` | `Promise<JettonHolder[]>` | Top holders ranked by balance (max 100) |
+| `getJettonHistory(jettonAddress)` | `Promise<JettonHistory \| null>` | Market analytics: volume, FDV, market cap |
+| `dex` | `DexSDK` | DEX quotes and swaps (STON.fi + DeDust) |
+| `dns` | `DnsSDK` | .ton domain management and auctions |
 
 #### `TonBalance`
 
@@ -243,6 +260,55 @@ type TransactionType =
   | "contract_call" | "multi_send";
 ```
 
+#### `JettonBalance`
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `jettonAddress` | `string` | Jetton master contract address |
+| `walletAddress` | `string` | Owner's jetton wallet address |
+| `balance` | `string` | Raw balance (string to avoid precision loss) |
+| `balanceFormatted` | `string` | Human-readable (e.g. `"100.50"`) |
+| `symbol` | `string` | Token ticker (e.g. `"USDT"`) |
+| `name` | `string` | Token name (e.g. `"Tether USD"`) |
+| `decimals` | `number` | Token decimals (e.g. 6 for USDT) |
+| `verified` | `boolean` | Whether verified on TonAPI |
+| `usdPrice` | `number?` | USD price per token (if available) |
+
+#### `JettonInfo`
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `address` | `string` | Jetton master contract address |
+| `name` | `string` | Token name |
+| `symbol` | `string` | Token ticker |
+| `decimals` | `number` | Token decimals |
+| `totalSupply` | `string` | Total supply in raw units |
+| `holdersCount` | `number` | Number of unique holders |
+| `verified` | `boolean` | Whether verified on TonAPI |
+| `description` | `string?` | Token description |
+| `image` | `string?` | Token image URL |
+
+#### `JettonSendResult`
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `success` | `boolean` | Whether transaction was sent |
+| `seqno` | `number` | Wallet sequence number used |
+
+#### `NftItem`
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `address` | `string` | NFT item contract address |
+| `index` | `number` | Index within collection |
+| `ownerAddress` | `string?` | Current owner address |
+| `collectionAddress` | `string?` | Collection contract address |
+| `collectionName` | `string?` | Collection name |
+| `name` | `string?` | NFT name |
+| `description` | `string?` | NFT description |
+| `image` | `string?` | NFT image URL |
+| `verified` | `boolean` | Whether verified |
+
 #### `SDKVerifyPaymentParams`
 
 | Field | Type | Description |
@@ -264,11 +330,208 @@ type TransactionType =
 | `secondsAgo` | `number?` | Age in seconds |
 | `error` | `string?` | Failure reason |
 
+#### `JettonPrice`
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `priceUSD` | `number \| null` | Price in USD |
+| `priceTON` | `number \| null` | Price in TON |
+| `change24h` | `string \| null` | 24h change (e.g. `"-2.5%"`) |
+| `change7d` | `string \| null` | 7d change |
+| `change30d` | `string \| null` | 30d change |
+
+#### `JettonHolder`
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `rank` | `number` | Rank (1 = top holder) |
+| `address` | `string` | Holder's TON address |
+| `name` | `string \| null` | Known name (e.g. `"Binance"`) |
+| `balance` | `string` | Formatted balance (e.g. `"1,234.56"`) |
+| `balanceRaw` | `string` | Raw balance in smallest units |
+
+#### `JettonHistory`
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `symbol` | `string` | Token symbol |
+| `name` | `string` | Token name |
+| `currentPrice` | `string` | Price in USD |
+| `currentPriceTON` | `string` | Price in TON |
+| `changes` | `{ "24h", "7d", "30d" }` | Price change percentages |
+| `volume24h` | `string` | 24h trading volume (USD) |
+| `fdv` | `string` | Fully diluted valuation |
+| `marketCap` | `string` | Market cap |
+| `holders` | `number` | Number of holders |
+
+#### DEX — `sdk.ton.dex`
+
+Dual DEX aggregator supporting STON.fi and DeDust. Compares quotes in parallel and recommends the best execution.
+
+#### `DexSDK`
+
+| Method | Returns | Description |
+|--------|---------|-------------|
+| `quote(params)` | `Promise<DexQuoteResult>` | Compare quotes from both DEXes |
+| `quoteSTONfi(params)` | `Promise<DexSingleQuote \| null>` | Quote from STON.fi only |
+| `quoteDeDust(params)` | `Promise<DexSingleQuote \| null>` | Quote from DeDust only |
+| `swap(params)` | `Promise<DexSwapResult>` | Swap via best DEX (or forced) |
+| `swapSTONfi(params)` | `Promise<DexSwapResult>` | Swap on STON.fi |
+| `swapDeDust(params)` | `Promise<DexSwapResult>` | Swap on DeDust |
+
+```typescript
+// Get best quote for swapping 10 TON → USDT
+const usdt = "EQCxE6mUtQJKFnGfaROTKOt1lZbDiiX1kCixRv7Nw2Id_sDs";
+const quote = await sdk.ton.dex.quote({
+  fromAsset: "ton",
+  toAsset: usdt,
+  amount: 10,
+  slippage: 0.01, // 1%
+});
+console.log(`Best: ${quote.recommended} → ${quote.stonfi?.expectedOutput ?? "N/A"} USDT`);
+
+// Execute the swap
+const result = await sdk.ton.dex.swap({ fromAsset: "ton", toAsset: usdt, amount: 10 });
+```
+
+#### `DexQuoteParams`
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `fromAsset` | `string` | `"ton"` or jetton master address |
+| `toAsset` | `string` | `"ton"` or jetton master address |
+| `amount` | `number` | Amount in human-readable units |
+| `slippage` | `number?` | Tolerance (0.01 = 1%, default: 0.01) |
+
+#### `DexQuoteResult`
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `stonfi` | `DexSingleQuote \| null` | STON.fi quote |
+| `dedust` | `DexSingleQuote \| null` | DeDust quote |
+| `recommended` | `"stonfi" \| "dedust"` | Best DEX for this trade |
+| `savings` | `string` | Savings vs the other DEX |
+
+#### `DexSingleQuote`
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `dex` | `"stonfi" \| "dedust"` | DEX name |
+| `expectedOutput` | `string` | Expected output amount |
+| `minOutput` | `string` | Minimum after slippage |
+| `rate` | `string` | Exchange rate |
+| `priceImpact` | `string?` | Price impact percentage |
+| `fee` | `string` | Fee amount |
+| `poolType` | `string?` | Pool type (DeDust: `"volatile"` or `"stable"`) |
+
+#### `DexSwapParams`
+
+Extends `DexQuoteParams` with:
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `dex` | `"stonfi" \| "dedust"?` | Force a specific DEX (omit for auto) |
+
+#### `DexSwapResult`
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `dex` | `"stonfi" \| "dedust"` | DEX used |
+| `fromAsset` | `string` | Source asset |
+| `toAsset` | `string` | Destination asset |
+| `amountIn` | `string` | Amount sent |
+| `expectedOutput` | `string` | Expected output |
+| `minOutput` | `string` | Minimum after slippage |
+| `slippage` | `string` | Slippage used |
+
+#### DNS — `sdk.ton.dns`
+
+Manage .ton domains: check availability, resolve addresses, participate in auctions, and link domains to wallets.
+
+#### `DnsSDK`
+
+| Method | Returns | Description |
+|--------|---------|-------------|
+| `check(domain)` | `Promise<DnsCheckResult>` | Check availability, owner, auction status |
+| `resolve(domain)` | `Promise<DnsResolveResult \| null>` | Resolve domain to wallet address |
+| `getAuctions(limit?)` | `Promise<DnsAuction[]>` | List active auctions |
+| `startAuction(domain)` | `Promise<DnsAuctionResult>` | Start auction for an available domain |
+| `bid(domain, amount)` | `Promise<DnsBidResult>` | Place bid on active auction |
+| `link(domain, address)` | `Promise<void>` | Link domain to wallet address |
+| `unlink(domain)` | `Promise<void>` | Remove wallet link |
+
+```typescript
+// Check if a domain is available
+const info = await sdk.ton.dns.check("mybot.ton");
+if (info.available) {
+  const result = await sdk.ton.dns.startAuction("mybot.ton");
+  sdk.log.info(`Auction started for ${result.domain}`);
+} else {
+  sdk.log.info(`Domain owned by ${info.owner}`);
+}
+
+// Resolve a domain
+const resolved = await sdk.ton.dns.resolve("alice.ton");
+if (resolved) {
+  await sdk.ton.sendTON(resolved.walletAddress!, 1, "Hello from plugin");
+}
+```
+
+#### `DnsCheckResult`
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `domain` | `string` | Domain name (e.g. `"example.ton"`) |
+| `available` | `boolean` | Whether the domain is available |
+| `owner` | `string?` | Current owner address |
+| `nftAddress` | `string?` | NFT address of the domain |
+| `walletAddress` | `string?` | Linked wallet address |
+| `auction` | `object?` | Active auction: `{ bids, lastBid, endTime }` |
+
+#### `DnsResolveResult`
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `domain` | `string` | Domain name |
+| `walletAddress` | `string \| null` | Linked wallet address |
+| `nftAddress` | `string` | NFT address of the domain |
+| `owner` | `string \| null` | Owner address |
+| `expirationDate` | `number?` | Expiration (unix timestamp) |
+
+#### `DnsAuction`
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `domain` | `string` | Domain name |
+| `nftAddress` | `string` | NFT address |
+| `owner` | `string` | Current highest bidder |
+| `lastBid` | `string` | Highest bid in TON |
+| `endTime` | `number` | Auction end (unix timestamp) |
+| `bids` | `number` | Number of bids |
+
+#### `DnsAuctionResult`
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `domain` | `string` | Domain name |
+| `success` | `boolean` | Whether auction started |
+| `bidAmount` | `string` | Initial bid in TON |
+
+#### `DnsBidResult`
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `domain` | `string` | Domain name |
+| `bidAmount` | `string` | Bid amount in TON |
+| `success` | `boolean` | Whether bid was placed |
+
 ---
 
 ### Telegram
 
 #### `TelegramSDK`
+
+**Core**
 
 | Method | Returns | Description |
 |--------|---------|-------------|
@@ -279,19 +542,123 @@ type TransactionType =
 | `getMessages(chatId, limit?)` | `Promise<SimpleMessage[]>` | Fetch recent messages (default 50) |
 | `getMe()` | `TelegramUser \| null` | Bot's user info |
 | `isAvailable()` | `boolean` | Whether the bridge is connected |
+| `getRawClient()` | `unknown \| null` | Raw GramJS client for advanced MTProto |
+
+**Messages**
+
+| Method | Returns | Description |
+|--------|---------|-------------|
+| `deleteMessage(chatId, messageId, revoke?)` | `Promise<void>` | Delete a message |
+| `forwardMessage(from, to, messageId)` | `Promise<number \| null>` | Forward message to another chat |
+| `pinMessage(chatId, messageId, opts?)` | `Promise<void>` | Pin/unpin a message |
+| `searchMessages(chatId, query, limit?)` | `Promise<SimpleMessage[]>` | Search messages in a chat |
+| `scheduleMessage(chatId, text, scheduleDate)` | `Promise<number \| null>` | Schedule message for later |
+| `getScheduledMessages(chatId)` | `Promise<SimpleMessage[]>` | Get scheduled messages in a chat |
+| `deleteScheduledMessage(chatId, messageId)` | `Promise<void>` | Delete a scheduled message |
+| `sendScheduledNow(chatId, messageId)` | `Promise<void>` | Send a scheduled message immediately |
+| `getReplies(chatId, messageId, limit?)` | `Promise<SimpleMessage[]>` | Get thread replies |
+
+**Media**
+
+| Method | Returns | Description |
+|--------|---------|-------------|
+| `sendPhoto(chatId, photo, opts?)` | `Promise<number>` | Send a photo |
+| `sendVideo(chatId, video, opts?)` | `Promise<number>` | Send a video |
+| `sendVoice(chatId, voice, opts?)` | `Promise<number>` | Send a voice message |
+| `sendFile(chatId, file, opts?)` | `Promise<number>` | Send a document/file |
+| `sendGif(chatId, gif, opts?)` | `Promise<number>` | Send an animated GIF |
+| `sendSticker(chatId, sticker)` | `Promise<number>` | Send a sticker |
+| `downloadMedia(chatId, messageId)` | `Promise<Buffer \| null>` | Download media (max 50MB) |
+
+**Chat & Users**
+
+| Method | Returns | Description |
+|--------|---------|-------------|
+| `getChatInfo(chatId)` | `Promise<ChatInfo \| null>` | Get chat/group/channel info |
+| `getUserInfo(userId)` | `Promise<UserInfo \| null>` | Get user information |
+| `resolveUsername(username)` | `Promise<ResolvedPeer \| null>` | Resolve @username to peer |
+| `getParticipants(chatId, limit?)` | `Promise<UserInfo[]>` | Get group/channel members |
+| `getDialogs(limit?)` | `Promise<Dialog[]>` | Get all conversations (max 100) |
+| `getHistory(chatId, limit?)` | `Promise<SimpleMessage[]>` | Get message history (max 100) |
+
+**Interactive**
+
+| Method | Returns | Description |
+|--------|---------|-------------|
+| `createPoll(chatId, question, answers, opts?)` | `Promise<number \| null>` | Create a poll |
+| `createQuiz(chatId, question, answers, correctIndex, explanation?)` | `Promise<number \| null>` | Create a quiz |
+
+**Moderation**
+
+| Method | Returns | Description |
+|--------|---------|-------------|
+| `banUser(chatId, userId)` | `Promise<void>` | Ban user from group |
+| `unbanUser(chatId, userId)` | `Promise<void>` | Unban user |
+| `muteUser(chatId, userId, untilDate)` | `Promise<void>` | Mute user (0 = forever) |
+| `kickUser(chatId, userId)` | `Promise<void>` | Kick user (ban + immediate unban) |
+
+**Stars & Gifts**
+
+| Method | Returns | Description |
+|--------|---------|-------------|
+| `getStarsBalance()` | `Promise<number>` | Get Telegram Stars balance |
+| `sendGift(userId, giftId, opts?)` | `Promise<void>` | Send a star gift |
+| `getAvailableGifts()` | `Promise<StarGift[]>` | Get gift catalog |
+| `getMyGifts(limit?)` | `Promise<ReceivedGift[]>` | Get received gifts |
+| `getResaleGifts(giftId, limit?)` | `Promise<StarGift[]>` | Get resale gifts from a collection |
+| `buyResaleGift(giftId)` | `Promise<void>` | Buy a resale gift |
+| `getStarsTransactions(limit?)` | `Promise<StarsTransaction[]>` | Stars transaction history |
+| `transferCollectible(msgId, toUserId)` | `Promise<TransferResult>` | Transfer a collectible gift |
+| `setCollectiblePrice(msgId, price)` | `Promise<void>` | Set/remove resale price (0 = unlist) |
+| `getCollectibleInfo(slug)` | `Promise<CollectibleInfo \| null>` | Fragment collectible info |
+| `getUniqueGift(slug)` | `Promise<UniqueGift \| null>` | NFT gift details by slug |
+| `getUniqueGiftValue(slug)` | `Promise<GiftValue \| null>` | NFT gift market valuation |
+| `sendGiftOffer(userId, giftSlug, price, opts?)` | `Promise<void>` | Make buy offer on an NFT gift |
+
+```typescript
+// Gift marketplace flow: browse → check value → make offer
+const gifts = await sdk.telegram.getMyGifts(10);
+for (const gift of gifts) {
+  sdk.log.info(`Gift ${gift.id} from user ${gift.fromId}, worth ${gift.starsAmount} stars`);
+}
+
+// Check NFT gift value
+const value = await sdk.telegram.getUniqueGiftValue("CryptoBot-42");
+if (value?.floorPrice) {
+  sdk.log.info(`Floor: ${value.floorPrice} ${value.currency}`);
+}
+
+// Transfer a collectible
+const result = await sdk.telegram.transferCollectible(gift.messageId!, targetUserId);
+sdk.log.info(`Transferred to ${result.transferredTo}, paid: ${result.paidTransfer}`);
+```
+
+**Stories & Advanced**
+
+| Method | Returns | Description |
+|--------|---------|-------------|
+| `sendStory(mediaPath, opts?)` | `Promise<number \| null>` | Post a story |
+| `setTyping(chatId)` | `Promise<void>` | Show typing indicator |
+
+#### `InlineButton`
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `text` | `string` | Button label text |
+| `callback_data` | `string` | Callback data sent when pressed |
 
 #### `SendMessageOptions`
 
 | Field | Type | Description |
 |-------|------|-------------|
 | `replyToId` | `number?` | Message ID to reply to |
-| `inlineKeyboard` | `Array<Array<{text, callback_data}>>?` | Inline keyboard rows |
+| `inlineKeyboard` | `InlineButton[][]?` | Inline keyboard rows |
 
 #### `EditMessageOptions`
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `inlineKeyboard` | `Array<Array<{text, callback_data}>>?` | Updated keyboard (omit to keep) |
+| `inlineKeyboard` | `InlineButton[][]?` | Updated keyboard (omit to keep) |
 
 #### `DiceResult`
 
@@ -319,6 +686,209 @@ type TransactionType =
 | `senderUsername` | `string?` | Sender username |
 | `timestamp` | `Date` | Message timestamp |
 
+#### `ChatInfo`
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | `string` | Chat ID |
+| `title` | `string` | Chat title or user's first name |
+| `type` | `"private" \| "group" \| "supergroup" \| "channel"` | Chat type |
+| `membersCount` | `number?` | Number of members |
+| `username` | `string?` | Chat username (if public) |
+| `description` | `string?` | Chat/channel description |
+
+#### `UserInfo`
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | `number` | Telegram user ID |
+| `firstName` | `string` | First name |
+| `lastName` | `string?` | Last name |
+| `username` | `string?` | Username without `@` |
+| `isBot` | `boolean` | Whether the user is a bot |
+
+#### `ResolvedPeer`
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | `number` | Entity ID |
+| `type` | `"user" \| "chat" \| "channel"` | Entity type |
+| `username` | `string?` | Username if available |
+| `title` | `string?` | Title or first name |
+
+#### `MediaSendOptions`
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `caption` | `string?` | Media caption text |
+| `replyToId` | `number?` | Message ID to reply to |
+| `inlineKeyboard` | `InlineButton[][]?` | Inline keyboard |
+| `duration` | `number?` | Duration in seconds (video/voice) |
+| `width` | `number?` | Width in pixels (video) |
+| `height` | `number?` | Height in pixels (video) |
+
+#### `PollOptions`
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `isAnonymous` | `boolean?` | Anonymous voters (default: true) |
+| `multipleChoice` | `boolean?` | Allow multiple answers (default: false) |
+
+#### `StarGift`
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | `string` | Gift ID |
+| `starsAmount` | `number` | Cost in Telegram Stars |
+| `availableAmount` | `number?` | Remaining available |
+| `totalAmount` | `number?` | Total supply |
+
+#### `ReceivedGift`
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | `string` | Gift ID |
+| `fromId` | `number?` | Sender user ID |
+| `date` | `number` | Unix timestamp |
+| `starsAmount` | `number` | Stars value |
+| `saved` | `boolean` | Whether saved to profile |
+| `messageId` | `number?` | Associated message ID |
+
+#### `Dialog`
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | `string \| null` | Chat ID |
+| `title` | `string` | Chat title or name |
+| `type` | `"dm" \| "group" \| "channel"` | Chat type |
+| `unreadCount` | `number` | Unread messages |
+| `unreadMentionsCount` | `number` | Unread mentions |
+| `isPinned` | `boolean` | Whether pinned |
+| `isArchived` | `boolean` | Whether archived |
+| `lastMessageDate` | `number \| null` | Last message (unix timestamp) |
+| `lastMessage` | `string \| null` | Last message preview |
+
+#### `StarsTransaction`
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | `string` | Transaction ID |
+| `amount` | `number` | Amount (+received, -spent) |
+| `date` | `number` | Unix timestamp |
+| `peer` | `string?` | Peer info |
+| `description` | `string?` | Description |
+
+#### `TransferResult`
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `msgId` | `number` | Message ID of transferred gift |
+| `transferredTo` | `string` | Recipient identifier |
+| `paidTransfer` | `boolean` | Whether it cost Stars |
+| `starsSpent` | `string?` | Stars spent (if paid) |
+
+#### `CollectibleInfo`
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `type` | `"username" \| "phone"` | Collectible type |
+| `value` | `string` | Username or phone number |
+| `purchaseDate` | `string` | ISO 8601 date |
+| `currency` | `string` | Fiat currency |
+| `amount` | `string?` | Fiat amount |
+| `cryptoCurrency` | `string?` | Crypto currency (e.g. `"TON"`) |
+| `cryptoAmount` | `string?` | Crypto amount |
+| `url` | `string?` | Fragment URL |
+
+#### `UniqueGift`
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | `string` | Gift ID |
+| `giftId` | `string` | Collection gift ID |
+| `slug` | `string` | URL slug |
+| `title` | `string` | Gift title |
+| `num` | `number` | Number in collection |
+| `owner` | `object` | `{ id?, name?, address?, username? }` |
+| `giftAddress` | `string?` | TON address of the NFT |
+| `attributes` | `Array` | `[{ type, name, rarityPercent? }]` |
+| `availability` | `object?` | `{ total, remaining }` |
+| `nftLink` | `string` | Link to NFT page |
+
+#### `GiftValue`
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `slug` | `string` | NFT slug |
+| `initialSaleDate` | `string?` | First sale (ISO 8601) |
+| `initialSaleStars` | `string?` | First sale price in Stars |
+| `lastSaleDate` | `string?` | Last sale (ISO 8601) |
+| `lastSalePrice` | `string?` | Last sale price |
+| `floorPrice` | `string?` | Floor price |
+| `averagePrice` | `string?` | Average price |
+| `listedCount` | `number?` | Number listed |
+| `currency` | `string?` | Currency |
+
+#### `GiftOfferOptions`
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `duration` | `number?` | Offer validity in seconds (default: 86400, min: 21600) |
+
+---
+
+### Secrets
+
+#### `SecretsSDK`
+
+Secure access to plugin secrets (API keys, tokens, credentials). Resolution order: environment variable > secrets store (`/plugin set`) > `pluginConfig`.
+
+| Method | Returns | Description |
+|--------|---------|-------------|
+| `get(key)` | `string \| undefined` | Get secret value |
+| `require(key)` | `string` | Get secret, throws `SECRET_NOT_FOUND` if missing |
+| `has(key)` | `boolean` | Check if a secret is configured |
+
+```typescript
+const apiKey = sdk.secrets.get("api_key");
+if (!apiKey) return { success: false, error: "API key not configured" };
+```
+
+#### `SecretDeclaration`
+
+Used in `PluginManifest.secrets` to declare required secrets.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `required` | `boolean` | Whether the plugin needs this secret to function |
+| `description` | `string` | Human-readable description |
+| `env` | `string?` | Environment variable name override |
+
+---
+
+### Storage
+
+#### `StorageSDK`
+
+Simple key-value storage for plugins. Uses an auto-created `_kv` table in the plugin's isolated DB. No `migrate()` export needed. Values are JSON-serialized with optional TTL.
+
+| Method | Returns | Description |
+|--------|---------|-------------|
+| `get<T>(key)` | `T \| undefined` | Get value (undefined if missing or expired) |
+| `set<T>(key, value, opts?)` | `void` | Set value (optional `{ ttl: ms }` for expiration) |
+| `delete(key)` | `boolean` | Delete a key (true if existed) |
+| `has(key)` | `boolean` | Check if key exists and is not expired |
+| `clear()` | `void` | Delete all keys |
+
+```typescript
+// Simple counter
+const count = sdk.storage.get<number>("visits") ?? 0;
+sdk.storage.set("visits", count + 1);
+
+// Cache with 5-minute TTL
+sdk.storage.set("api_result", data, { ttl: 300_000 });
+```
+
 ---
 
 ### Plugin Definitions
@@ -344,7 +914,8 @@ type TransactionType =
 | `description` | `string?` | Short description (max 256 chars) |
 | `dependencies` | `string[]?` | Required built-in modules |
 | `defaultConfig` | `Record<string, unknown>?` | Default config values |
-| `sdkVersion` | `string?` | Required SDK version range |
+| `sdkVersion` | `string?` | Required SDK version range (e.g. `">=1.0.0"`) |
+| `secrets` | `Record<string, SecretDeclaration>?` | Secrets required by this plugin |
 
 #### `ToolResult`
 
@@ -367,6 +938,31 @@ type ToolCategory = "data-bearing" | "action";
 ```
 
 `data-bearing` tool results are subject to observation masking (token reduction on older results). `action` tool results are always preserved in full.
+
+#### `StartContext`
+
+Context passed to the `start(ctx)` lifecycle hook.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `bridge` | `unknown` | Telegram bridge for advanced operations |
+| `db` | `unknown` | Plugin's isolated SQLite database |
+| `config` | `Record<string, unknown>` | Sanitized app config (no API keys) |
+| `pluginConfig` | `Record<string, unknown>` | Plugin-specific config from `config.yaml` |
+| `log` | `PluginLogger` | Prefixed logger |
+
+#### `PluginToolContext`
+
+Runtime context passed to tool `execute` functions.
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `chatId` | `string` | Telegram chat ID where tool was invoked |
+| `senderId` | `number` | Telegram user ID of the sender |
+| `isGroup` | `boolean` | Whether this is a group chat |
+| `bridge` | `unknown` | TelegramBridge for advanced operations |
+| `db` | `unknown` | Plugin's isolated SQLite database |
+| `config` | `Record<string, unknown>?` | Sanitized bot config |
 
 ---
 

@@ -29,38 +29,8 @@ vi.mock("telegram", () => {
 });
 
 // ─── Mocks ──────────────────────────────────────────────────────
-const mockGramJsClient = {
-  invoke: vi.fn(),
-  sendMessage: vi.fn(),
-  sendFile: vi.fn(),
-  getEntity: vi.fn(),
-  getInputEntity: vi.fn(),
-  getMessages: vi.fn(),
-  downloadMedia: vi.fn(),
-  uploadFile: vi.fn(),
-};
-
-const mockBridgeClient = {
-  getClient: () => mockGramJsClient,
-  getMe: vi.fn(),
-};
-
-const mockBridge = {
-  isAvailable: vi.fn(() => true),
-  getClient: () => mockBridgeClient,
-  sendMessage: vi.fn(),
-  editMessage: vi.fn(),
-  sendReaction: vi.fn(),
-  setTyping: vi.fn(),
-  getMessages: vi.fn(),
-} as any;
-
-const mockLog = {
-  info: vi.fn(),
-  warn: vi.fn(),
-  error: vi.fn(),
-  debug: vi.fn(),
-};
+import { createMocks } from "./__fixtures__/mocks.js";
+const { mockGramJsClient, mockBridgeClient, mockBridge, mockLog } = createMocks();
 
 describe("createTelegramSDK — core", () => {
   let sdk: ReturnType<typeof createTelegramSDK>;

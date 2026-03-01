@@ -625,14 +625,17 @@ When `tools` is a function, the SDK provides namespaced access to core services:
 |-----------|---------|
 | `sdk.ton` | **Wallet**: `getAddress()`, `getBalance()`, `getPrice()`, `sendTON()`, `getTransactions()`, `verifyPayment()` |
 | | **Jettons**: `getJettonBalances()`, `getJettonInfo()`, `sendJetton()`, `getJettonWalletAddress()` |
+| | **Analytics**: `getJettonPrice()`, `getJettonHolders()`, `getJettonHistory()` |
 | | **NFT**: `getNftItems()`, `getNftInfo()` |
+| | **DEX** (`sdk.ton.dex`): `quote()`, `swap()`, `quoteSTONfi()`, `quoteDeDust()`, `swapSTONfi()`, `swapDeDust()` |
+| | **DNS** (`sdk.ton.dns`): `check()`, `resolve()`, `getAuctions()`, `startAuction()`, `bid()`, `link()`, `unlink()` |
 | | **Utils**: `toNano()`, `fromNano()`, `validateAddress()` |
-| `sdk.telegram` | **Messages**: `sendMessage()`, `editMessage()`, `deleteMessage()`, `forwardMessage()`, `pinMessage()`, `searchMessages()`, `scheduleMessage()`, `getReplies()` |
+| `sdk.telegram` | **Messages**: `sendMessage()`, `editMessage()`, `deleteMessage()`, `forwardMessage()`, `pinMessage()`, `searchMessages()`, `scheduleMessage()`, `getScheduledMessages()`, `deleteScheduledMessage()`, `sendScheduledNow()`, `getReplies()` |
 | | **Media**: `sendPhoto()`, `sendVideo()`, `sendVoice()`, `sendFile()`, `sendGif()`, `sendSticker()`, `downloadMedia()` |
-| | **Chat & Users**: `getChatInfo()`, `getUserInfo()`, `resolveUsername()`, `getParticipants()` |
+| | **Chat & Users**: `getChatInfo()`, `getUserInfo()`, `resolveUsername()`, `getParticipants()`, `getDialogs()`, `getHistory()` |
 | | **Interactive**: `sendDice()`, `sendReaction()`, `createPoll()`, `createQuiz()` |
-| | **Moderation**: `banUser()`, `unbanUser()`, `muteUser()` |
-| | **Stars & Gifts**: `getStarsBalance()`, `sendGift()`, `getAvailableGifts()`, `getMyGifts()`, `getResaleGifts()`, `buyResaleGift()` |
+| | **Moderation**: `banUser()`, `unbanUser()`, `muteUser()`, `kickUser()` |
+| | **Stars & Gifts**: `getStarsBalance()`, `sendGift()`, `getAvailableGifts()`, `getMyGifts()`, `getResaleGifts()`, `buyResaleGift()`, `getStarsTransactions()`, `transferCollectible()`, `setCollectiblePrice()`, `getCollectibleInfo()`, `getUniqueGift()`, `getUniqueGiftValue()`, `sendGiftOffer()` |
 | | **Advanced**: `getMe()`, `isAvailable()`, `getRawClient()`, `setTyping()`, `sendStory()` |
 | `sdk.secrets` | `get()`, `require()`, `has()` - 3-tier resolution (env var → secrets file → plugin config) |
 | `sdk.storage` | `get()`, `set()`, `delete()`, `has()`, `clear()` - KV store with TTL support |

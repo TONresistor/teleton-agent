@@ -428,20 +428,20 @@ export class MessageHandler {
           const effectiveText = transcriptionText
             ? `🎤 (voice): ${transcriptionText}${message.text ? `\n${message.text}` : ""}`
             : message.text;
-          const response = await this.agent.processMessage(
-            message.chatId,
-            effectiveText,
+          const response = await this.agent.processMessage({
+            chatId: message.chatId,
+            userMessage: effectiveText,
             userName,
-            message.timestamp.getTime(),
-            message.isGroup,
+            timestamp: message.timestamp.getTime(),
+            isGroup: message.isGroup,
             pendingContext,
             toolContext,
-            message.senderUsername,
-            message.hasMedia,
-            message.mediaType,
-            message.id,
-            replyContext
-          );
+            senderUsername: message.senderUsername,
+            hasMedia: message.hasMedia,
+            mediaType: message.mediaType,
+            messageId: message.id,
+            replyContext,
+          });
 
           // 8. Handle response based on whether tools were used
           const hasToolCalls = response.toolCalls && response.toolCalls.length > 0;

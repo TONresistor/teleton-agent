@@ -2,6 +2,7 @@ import { useEffect, useRef, useSyncExternalStore, useState } from 'react';
 import { useConfigState } from '../hooks/useConfigState';
 import { AgentSettingsPanel } from '../components/AgentSettingsPanel';
 import { TelegramSettingsPanel } from '../components/TelegramSettingsPanel';
+import { ExecSettingsPanel } from '../components/ExecSettingsPanel';
 import { logStore } from '../lib/log-store';
 import { api, StatusData } from '../lib/api';
 
@@ -116,6 +117,11 @@ export function Dashboard() {
         <div className="card">
           <TelegramSettingsPanel getLocal={getLocal} getServer={getServer} setLocal={setLocal} saveConfig={saveConfig} cancelLocal={cancelLocal} />
         </div>
+        {s.platform === 'linux' && (
+          <div className="card" style={{ gridColumn: '1 / -1' }}>
+            <ExecSettingsPanel getLocal={getLocal} saveConfig={saveConfig} />
+          </div>
+        )}
       </div>
 
       {/* ── Live Logs ──────────────────────────────────────── */}

@@ -11,17 +11,13 @@ import type {
   PluginLogger,
 } from "@teleton-agent/sdk";
 import { PluginSDKError } from "@teleton-agent/sdk";
+import { requireBridge as requireBridgeUtil } from "./telegram-utils.js";
 import { createTelegramMessagesSDK } from "./telegram-messages.js";
 import { createTelegramSocialSDK } from "./telegram-social.js";
 
 export function createTelegramSDK(bridge: TelegramBridge, log: PluginLogger): TelegramSDK {
   function requireBridge(): void {
-    if (!bridge.isAvailable()) {
-      throw new PluginSDKError(
-        "Telegram bridge not connected. SDK telegram methods can only be called at runtime (inside tool executors or start()), not during plugin loading.",
-        "BRIDGE_NOT_CONNECTED"
-      );
-    }
+    requireBridgeUtil(bridge);
   }
 
   return {
@@ -67,7 +63,6 @@ export function createTelegramSDK(bridge: TelegramBridge, log: PluginLogger): Te
       requireBridge();
       try {
         const gramJsClient = bridge.getClient().getClient();
-        const { Api } = await import("telegram");
 
         const result = await gramJsClient.invoke(
           new Api.messages.SendMedia({

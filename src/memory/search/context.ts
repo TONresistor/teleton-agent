@@ -3,8 +3,37 @@ import type { EmbeddingProvider } from "../embeddings/provider.js";
 import { HybridSearch } from "./hybrid.js";
 import { MessageStore } from "../feed/messages.js";
 import { createLogger } from "../../utils/logger.js";
+import { FEED_MESSAGE_MAX_CHARS } from "../../constants/limits.js";
 
 const log = createLogger("Memory");
+
+/**
+ * Reorder chunks using "edges-first" pattern to mitigate the "lost in the middle"
+ * effect (Stanford, 2023; Chroma, 2025). Models attend best to the beginning and
+ * end of context. Assumes input is sorted by descending relevance score.
+ *
+ * Input:  [best, 2nd, 3rd, 4th, 5th]  (by score)
+ * Output: [best, 3rd, 5th, 4th, 2nd]  (best at start, 2nd-best at end)
+ */
+function reorderForEdges<T>(items: T[]): T[] {
+  if (items.length <= 2) return items;
+  const result: T[] = new Array(items.length);
+  let left = 0;
+  let right = items.length - 1;
+  for (let i = 0; i < items.length; i++) {
+    if (i % 2 === 0) {
+      result[left++] = items[i];
+    } else {
+      result[right--] = items[i];
+    }
+  }
+  return result;
+}
+
+function truncateFeedMessage(text: string): string {
+  if (text.length <= FEED_MESSAGE_MAX_CHARS) return text;
+  return text.slice(0, FEED_MESSAGE_MAX_CHARS) + "... [truncated]";
+}
 
 export interface ContextOptions {
   query: string;
@@ -15,6 +44,7 @@ export interface ContextOptions {
   maxRecentMessages?: number;
   maxRelevantChunks?: number;
   maxTokens?: number;
+  queryEmbedding?: number[];
 }
 
 export interface Context {
@@ -48,7 +78,7 @@ export class ContextBuilder {
       maxRelevantChunks = 5,
     } = options;
 
-    const queryEmbedding = await this.embedder.embedQuery(query);
+    const queryEmbedding = options.queryEmbedding ?? (await this.embedder.embedQuery(query));
 
     const recentTgMessages = this.messageStore.getRecentMessages(chatId, maxRecentMessages);
     const recentMessages = recentTgMessages.map((m) => ({
@@ -62,7 +92,7 @@ export class ContextBuilder {
         const knowledgeResults = await this.hybridSearch.searchKnowledge(query, queryEmbedding, {
           limit: maxRelevantChunks,
         });
-        relevantKnowledge.push(...knowledgeResults.map((r) => r.text));
+        relevantKnowledge.push(...reorderForEdges(knowledgeResults.map((r) => r.text)));
       } catch (error) {
         log.warn({ err: error }, "Knowledge search failed");
       }
@@ -81,7 +111,7 @@ export class ContextBuilder {
         });
         for (const r of feedResults) {
           if (!recentTextsSet.has(r.text)) {
-            relevantFeed.push(r.text);
+            relevantFeed.push(truncateFeedMessage(r.text));
           }
         }
 
@@ -91,8 +121,9 @@ export class ContextBuilder {
           });
           const existingTexts = new Set(relevantFeed);
           for (const r of globalResults) {
-            if (!existingTexts.has(r.text)) {
-              relevantFeed.push(`[From chat ${r.source}]: ${r.text}`);
+            const truncated = truncateFeedMessage(r.text);
+            if (!existingTexts.has(truncated)) {
+              relevantFeed.push(`[From chat ${r.source}]: ${truncated}`);
             }
           }
         }

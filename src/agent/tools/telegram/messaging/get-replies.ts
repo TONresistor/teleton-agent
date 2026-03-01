@@ -1,7 +1,6 @@
 import { Type } from "@sinclair/typebox";
 import type { Tool, ToolExecutor, ToolResult } from "../../types.js";
 import { Api } from "telegram";
-import bigInt from "big-integer";
 import { getErrorMessage } from "../../../../utils/errors.js";
 import { createLogger } from "../../../../utils/logger.js";
 
@@ -68,7 +67,7 @@ export const telegramGetRepliesExecutor: ToolExecutor<GetRepliesParams> = async 
         limit: limit,
         maxId: 0,
         minId: 0,
-        hash: bigInt(0),
+        hash: 0n as any,
       })
     );
 

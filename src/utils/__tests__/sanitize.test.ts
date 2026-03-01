@@ -359,6 +359,85 @@ describe("sanitizeForPrompt", () => {
     });
   });
 
+  describe("NFKC normalization", () => {
+    it("should normalize fullwidth Latin to ASCII", () => {
+      const input = "\uFF53\uFF59\uFF53\uFF54\uFF45\uFF4D"; // ｓｙｓｔｅｍ
+      expect(sanitizeForPrompt(input)).toBe("system");
+    });
+
+    it("should normalize mathematical monospace to ASCII", () => {
+      const input = "\uD835\uDEA8\uD835\uDEA9"; // 𝚨𝚩 (math bold capitals)
+      const result = sanitizeForPrompt(input);
+      expect(result).not.toContain("\uD835");
+    });
+
+    it("should normalize ligatures", () => {
+      const input = "\uFB01le"; // ﬁle
+      expect(sanitizeForPrompt(input)).toBe("file");
+    });
+
+    it("should preserve standard CJK characters", () => {
+      const input = "\u4F60\u597D"; // 你好
+      expect(sanitizeForPrompt(input)).toBe("\u4F60\u597D");
+    });
+
+    it("should preserve standard Arabic characters", () => {
+      const input = "\u0645\u0631\u062D\u0628\u0627"; // مرحبا
+      expect(sanitizeForPrompt(input)).toBe("\u0645\u0631\u062D\u0628\u0627");
+    });
+
+    it("should preserve Korean Hangul", () => {
+      const input = "\uD55C\uAD6D\uC5B4"; // 한국어
+      expect(sanitizeForPrompt(input)).toBe("\uD55C\uAD6D\uC5B4");
+    });
+  });
+
+  describe("Unicode Tag Block removal (U+E0000-E007F)", () => {
+    it("should remove TAG SPACE (U+E0020)", () => {
+      const input = "Hello\u{E0020}World";
+      expect(sanitizeForPrompt(input)).toBe("HelloWorld");
+    });
+
+    it("should remove TAG LATIN letters used for invisible injection", () => {
+      // U+E0041 = TAG LATIN CAPITAL LETTER A, etc.
+      const input = "Safe\u{E0041}\u{E0042}\u{E0043}Text";
+      expect(sanitizeForPrompt(input)).toBe("SafeText");
+    });
+
+    it("should remove CANCEL TAG (U+E007F)", () => {
+      const input = "Text\u{E007F}Here";
+      expect(sanitizeForPrompt(input)).toBe("TextHere");
+    });
+
+    it("should remove TAG language sequence", () => {
+      // Full tag sequence: TAG e, n, CANCEL TAG
+      const input = "Before\u{E0001}\u{E0065}\u{E006E}\u{E007F}After";
+      expect(sanitizeForPrompt(input)).toBe("BeforeAfter");
+    });
+  });
+
+  describe("Variation Selector removal", () => {
+    it("should remove basic variation selectors (U+FE00-FE0F)", () => {
+      const input = "Text\uFE0FHere";
+      expect(sanitizeForPrompt(input)).toBe("TextHere");
+    });
+
+    it("should remove VS1 (U+FE00)", () => {
+      const input = "A\uFE00B";
+      expect(sanitizeForPrompt(input)).toBe("AB");
+    });
+
+    it("should remove extended variation selectors (U+E0100-E01EF)", () => {
+      const input = "Text\u{E0100}Here";
+      expect(sanitizeForPrompt(input)).toBe("TextHere");
+    });
+
+    it("should remove multiple variation selectors in sequence", () => {
+      const input = "A\uFE0F\uFE0E\uFE0DB";
+      expect(sanitizeForPrompt(input)).toBe("AB");
+    });
+  });
+
   describe("combined attacks - prompt injection attempts", () => {
     it("should sanitize attempt with control chars and tags", () => {
       const input = "\x00<script>alert('xss')</script>\x00";
@@ -620,6 +699,48 @@ describe("sanitizeForContext", () => {
     it("should handle RAG-style context with metadata", () => {
       const input = "[Source: doc.txt]\nContent here\nMore content\n[End]";
       expect(sanitizeForContext(input)).toBe(input);
+    });
+  });
+
+  describe("NFKC normalization", () => {
+    it("should normalize fullwidth Latin to ASCII", () => {
+      const input = "\uFF53\uFF59\uFF53\uFF54\uFF45\uFF4D"; // ｓｙｓｔｅｍ
+      expect(sanitizeForContext(input)).toBe("system");
+    });
+
+    it("should normalize ligatures in multi-line content", () => {
+      const input = "\uFB01le\ncon\uFB01g";
+      expect(sanitizeForContext(input)).toBe("file\nconfig");
+    });
+
+    it("should preserve CJK across lines", () => {
+      const input = "\u4F60\u597D\n\u4E16\u754C";
+      expect(sanitizeForContext(input)).toBe("\u4F60\u597D\n\u4E16\u754C");
+    });
+  });
+
+  describe("Unicode Tag Block removal (U+E0000-E007F)", () => {
+    it("should remove TAG characters from multi-line content", () => {
+      const input = "Line1\u{E0041}\u{E0042}\nLine2\u{E007F}";
+      expect(sanitizeForContext(input)).toBe("Line1\nLine2");
+    });
+
+    it("should remove full invisible injection payload", () => {
+      const input =
+        "Safe content\u{E0001}\u{E0049}\u{E0067}\u{E006E}\u{E006F}\u{E0072}\u{E0065}\u{E007F}";
+      expect(sanitizeForContext(input)).toBe("Safe content");
+    });
+  });
+
+  describe("Variation Selector removal", () => {
+    it("should remove variation selectors from context", () => {
+      const input = "Text\uFE0FHere\nMore\uFE0EText";
+      expect(sanitizeForContext(input)).toBe("TextHere\nMoreText");
+    });
+
+    it("should remove extended variation selectors", () => {
+      const input = "A\u{E0100}B\n\u{E01EF}C";
+      expect(sanitizeForContext(input)).toBe("AB\nC");
     });
   });
 

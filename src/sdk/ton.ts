@@ -11,6 +11,9 @@ import type {
   JettonInfo,
   JettonSendResult,
   NftItem,
+  JettonPrice,
+  JettonHolder,
+  JettonHistory,
   PluginLogger,
 } from "@teleton-agent/sdk";
 import { PluginSDKError } from "@teleton-agent/sdk";
@@ -21,11 +24,15 @@ import {
   loadWallet,
   getKeyPair,
   getCachedTonClient,
+  invalidateTonClientCache,
 } from "../ton/wallet-service.js";
 import { sendTon } from "../ton/transfer.js";
 import { PAYMENT_TOLERANCE_RATIO } from "../constants/limits.js";
 import { withBlockchainRetry } from "../utils/retry.js";
-import { tonapiFetch } from "../constants/api-endpoints.js";
+import { tonapiFetch, GECKOTERMINAL_API_URL } from "../constants/api-endpoints.js";
+import { fetchWithTimeout } from "../utils/fetch.js";
+import { createDexSDK } from "./ton-dex.js";
+import { createDnsSDK } from "./ton-dns.js";
 import {
   toNano as tonToNano,
   fromNano as tonFromNano,
@@ -35,6 +42,16 @@ import {
 import { Address as TonAddress, beginCell, SendMode } from "@ton/core";
 import { withTxLock } from "../ton/tx-lock.js";
 import { formatTransactions } from "../ton/format-transactions.js";
+
+/** Format a raw BigInt token balance to a human-readable string. */
+function formatTokenBalance(rawBalance: bigint, decimals: number): string {
+  const divisor = BigInt(10) ** BigInt(decimals);
+  const wholePart = rawBalance / divisor;
+  const fractionalPart = rawBalance % divisor;
+  return fractionalPart === 0n
+    ? wholePart.toString()
+    : `${wholePart}.${fractionalPart.toString().padStart(decimals, "0").replace(/0+$/, "")}`;
+}
 
 const DEFAULT_MAX_AGE_MINUTES = 10;
 
@@ -176,6 +193,17 @@ export function createTonSDK(log: PluginLogger, db: Database.Database | null): T
         );
       }
 
+      // Check that used_transactions table exists (created by plugin's migrate())
+      const tableExists = db
+        .prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='used_transactions'")
+        .get();
+      if (!tableExists) {
+        throw new PluginSDKError(
+          "used_transactions table not found — export a migrate() that creates it",
+          "OPERATION_FAILED"
+        );
+      }
+
       const address = getWalletAddress();
       if (!address) {
         throw new PluginSDKError("Wallet not initialized", "WALLET_NOT_INITIALIZED");
@@ -264,15 +292,7 @@ export function createTonSDK(log: PluginLogger, db: Database.Database | null): T
           if (jetton.verification === "blacklist") continue;
 
           const decimals = jetton.decimals ?? 9;
-          const rawBalance = BigInt(balance);
-          const divisor = BigInt(10 ** decimals);
-          const wholePart = rawBalance / divisor;
-          const fractionalPart = rawBalance % divisor;
-
-          const balanceFormatted =
-            fractionalPart === BigInt(0)
-              ? wholePart.toString()
-              : `${wholePart}.${fractionalPart.toString().padStart(decimals, "0").replace(/0+$/, "")}`;
+          const balanceFormatted = formatTokenBalance(BigInt(balance), decimals);
 
           balances.push({
             jettonAddress: jetton.address,
@@ -375,8 +395,9 @@ export function createTonSDK(log: PluginLogger, db: Database.Database | null): T
         const amountInUnits = BigInt(whole + (frac + "0".repeat(decimals)).slice(0, decimals));
 
         if (amountInUnits > currentBalance) {
+          const balStr = formatTokenBalance(currentBalance, decimals);
           throw new PluginSDKError(
-            `Insufficient balance. Have ${Number(currentBalance) / 10 ** decimals}, need ${amount}`,
+            `Insufficient balance. Have ${balStr}, need ${amount}`,
             "OPERATION_FAILED"
           );
         }
@@ -409,34 +430,62 @@ export function createTonSDK(log: PluginLogger, db: Database.Database | null): T
         }
 
         const seqno = await withTxLock(async () => {
-          const wallet = WalletContractV5R1.create({
-            workchain: 0,
-            publicKey: keyPair.publicKey,
-          });
+          const MAX_SEND_ATTEMPTS = 3;
+          let lastErr: unknown;
 
-          const client = await getCachedTonClient();
-          const walletContract = client.open(wallet);
-          const seq = await walletContract.getSeqno();
+          for (let attempt = 1; attempt <= MAX_SEND_ATTEMPTS; attempt++) {
+            try {
+              const wallet = WalletContractV5R1.create({
+                workchain: 0,
+                publicKey: keyPair.publicKey,
+              });
 
-          await walletContract.sendTransfer({
-            seqno: seq,
-            secretKey: keyPair.secretKey,
-            sendMode: SendMode.PAY_GAS_SEPARATELY,
-            messages: [
-              internal({
-                to: TonAddress.parse(senderJettonWallet),
-                value: tonToNano("0.05"),
-                body: messageBody,
-                bounce: true,
-              }),
-            ],
-          });
+              const client = await getCachedTonClient();
+              const walletContract = client.open(wallet);
+              const seq = await walletContract.getSeqno();
 
-          return seq;
+              await walletContract.sendTransfer({
+                seqno: seq,
+                secretKey: keyPair.secretKey,
+                sendMode: SendMode.PAY_GAS_SEPARATELY,
+                messages: [
+                  internal({
+                    to: TonAddress.parse(senderJettonWallet),
+                    value: tonToNano("0.05"),
+                    body: messageBody,
+                    bounce: true,
+                  }),
+                ],
+              });
+
+              return seq;
+            } catch (err) {
+              lastErr = err;
+              const status = (err as any)?.status || (err as any)?.response?.status;
+              const respData = (err as any)?.response?.data;
+              if (status === 429 || (status && status >= 500)) {
+                invalidateTonClientCache();
+                if (attempt < MAX_SEND_ATTEMPTS) {
+                  log.warn(
+                    `sendJetton attempt ${attempt} failed (${status}): ${JSON.stringify(respData ?? (err as Error).message)}, retrying...`
+                  );
+                  await new Promise((r) => setTimeout(r, 1000 * attempt));
+                  continue;
+                }
+              }
+              throw err;
+            }
+          }
+          throw lastErr;
         });
 
         return { success: true, seqno };
       } catch (err) {
+        // Invalidate node cache on 429/5xx so next attempt picks a fresh node
+        const status = (err as any)?.status || (err as any)?.response?.status;
+        if (status === 429 || (status && status >= 500)) {
+          invalidateTonClientCache();
+        }
         if (err instanceof PluginSDKError) throw err;
         throw new PluginSDKError(
           `Failed to send jetton: ${err instanceof Error ? err.message : String(err)}`,
@@ -535,6 +584,161 @@ export function createTonSDK(log: PluginLogger, db: Database.Database | null): T
         return false;
       }
     },
+
+    // ─── Jetton Analytics ─────────────────────────────────────────
+
+    async getJettonPrice(jettonAddress: string): Promise<JettonPrice | null> {
+      try {
+        const response = await tonapiFetch(
+          `/rates?tokens=${encodeURIComponent(jettonAddress)}&currencies=usd,ton`
+        );
+        if (!response.ok) {
+          log.debug(`ton.getJettonPrice() TonAPI error: ${response.status}`);
+          return null;
+        }
+
+        const data = await response.json();
+        const rateData = data.rates?.[jettonAddress];
+        if (!rateData) return null;
+
+        return {
+          priceUSD: rateData.prices?.USD ?? null,
+          priceTON: rateData.prices?.TON ?? null,
+          change24h: rateData.diff_24h?.USD ?? null,
+          change7d: rateData.diff_7d?.USD ?? null,
+          change30d: rateData.diff_30d?.USD ?? null,
+        };
+      } catch (err) {
+        log.debug("ton.getJettonPrice() failed:", err);
+        return null;
+      }
+    },
+
+    async getJettonHolders(jettonAddress: string, limit?: number): Promise<JettonHolder[]> {
+      try {
+        const effectiveLimit = Math.min(limit ?? 10, 100);
+
+        // Parallel fetch: holders + decimals info
+        const [holdersResponse, infoResponse] = await Promise.all([
+          tonapiFetch(
+            `/jettons/${encodeURIComponent(jettonAddress)}/holders?limit=${effectiveLimit}`
+          ),
+          tonapiFetch(`/jettons/${encodeURIComponent(jettonAddress)}`),
+        ]);
+
+        if (!holdersResponse.ok) {
+          log.debug(`ton.getJettonHolders() TonAPI error: ${holdersResponse.status}`);
+          return [];
+        }
+
+        const data = await holdersResponse.json();
+        const addresses = data.addresses || [];
+
+        let decimals = 9;
+        if (infoResponse.ok) {
+          const infoData = await infoResponse.json();
+          decimals = parseInt(infoData.metadata?.decimals || "9");
+        }
+
+        return addresses.map((h: any, index: number) => {
+          return {
+            rank: index + 1,
+            address: h.owner?.address || h.address,
+            name: h.owner?.name || null,
+            balance: formatTokenBalance(BigInt(h.balance || "0"), decimals),
+            balanceRaw: h.balance || "0",
+          };
+        });
+      } catch (err) {
+        log.debug("ton.getJettonHolders() failed:", err);
+        return [];
+      }
+    },
+
+    async getJettonHistory(jettonAddress: string): Promise<JettonHistory | null> {
+      try {
+        const [ratesResponse, geckoResponse, infoResponse] = await Promise.all([
+          tonapiFetch(`/rates?tokens=${encodeURIComponent(jettonAddress)}&currencies=usd,ton`),
+          fetchWithTimeout(`${GECKOTERMINAL_API_URL}/networks/ton/tokens/${jettonAddress}`, {
+            headers: { Accept: "application/json" },
+          }),
+          tonapiFetch(`/jettons/${encodeURIComponent(jettonAddress)}`),
+        ]);
+
+        let symbol = "TOKEN";
+        let name = "Unknown Token";
+        let holdersCount = 0;
+
+        if (infoResponse.ok) {
+          const infoData = await infoResponse.json();
+          symbol = infoData.metadata?.symbol || symbol;
+          name = infoData.metadata?.name || name;
+          holdersCount = infoData.holders_count || 0;
+        }
+
+        let priceUSD: number | null = null;
+        let priceTON: number | null = null;
+        let change24h: string | null = null;
+        let change7d: string | null = null;
+        let change30d: string | null = null;
+
+        if (ratesResponse.ok) {
+          const ratesData = await ratesResponse.json();
+          const rateInfo = ratesData.rates?.[jettonAddress];
+          if (rateInfo) {
+            priceUSD = rateInfo.prices?.USD || null;
+            priceTON = rateInfo.prices?.TON || null;
+            change24h = rateInfo.diff_24h?.USD || null;
+            change7d = rateInfo.diff_7d?.USD || null;
+            change30d = rateInfo.diff_30d?.USD || null;
+          }
+        }
+
+        let volume24h: string = "N/A";
+        let fdv: string = "N/A";
+        let marketCap: string = "N/A";
+
+        if (geckoResponse.ok) {
+          const geckoData = await geckoResponse.json();
+          const attrs = geckoData.data?.attributes;
+          if (attrs) {
+            if (attrs.volume_usd?.h24) {
+              volume24h = `$${parseFloat(attrs.volume_usd.h24).toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
+            }
+            if (attrs.fdv_usd) {
+              fdv = `$${parseFloat(attrs.fdv_usd).toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
+            }
+            if (attrs.market_cap_usd) {
+              marketCap = `$${parseFloat(attrs.market_cap_usd).toLocaleString(undefined, { maximumFractionDigits: 0 })}`;
+            }
+          }
+        }
+
+        return {
+          symbol,
+          name,
+          currentPrice: priceUSD ? `$${priceUSD.toFixed(6)}` : "N/A",
+          currentPriceTON: priceTON ? `${priceTON.toFixed(6)} TON` : "N/A",
+          changes: {
+            "24h": change24h || "N/A",
+            "7d": change7d || "N/A",
+            "30d": change30d || "N/A",
+          },
+          volume24h,
+          fdv,
+          marketCap,
+          holders: holdersCount,
+        };
+      } catch (err) {
+        log.debug("ton.getJettonHistory() failed:", err);
+        return null;
+      }
+    },
+
+    // ─── Sub-namespaces ───────────────────────────────────────────
+
+    dex: Object.freeze(createDexSDK(log)),
+    dns: Object.freeze(createDnsSDK(log)),
   };
 }
 

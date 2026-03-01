@@ -28,6 +28,21 @@ export type {
   JettonInfo,
   JettonSendResult,
   NftItem,
+  JettonPrice,
+  JettonHolder,
+  JettonHistory,
+  DexSDK,
+  DexQuoteParams,
+  DexQuoteResult,
+  DexSingleQuote,
+  DexSwapParams,
+  DexSwapResult,
+  DnsSDK,
+  DnsCheckResult,
+  DnsAuction,
+  DnsAuctionResult,
+  DnsBidResult,
+  DnsResolveResult,
   SDKVerifyPaymentParams,
   SDKPaymentVerification,
   DiceResult,
@@ -43,8 +58,16 @@ export type {
   StarGift,
   ReceivedGift,
   StartContext,
+  Dialog,
+  StarsTransaction,
+  TransferResult,
+  CollectibleInfo,
+  UniqueGift,
+  GiftValue,
+  GiftOfferOptions,
   SimpleToolDef,
   PluginManifest,
+  PluginToolContext,
   ToolResult,
   ToolScope,
   ToolCategory,
@@ -66,13 +89,24 @@ export interface CreatePluginSDKOptions {
 /** Block ATTACH/DETACH to prevent cross-plugin DB access */
 const BLOCKED_SQL_RE = /\b(ATTACH|DETACH)\s+DATABASE\b/i;
 
+/** Strip SQL comments so they can't be used to bypass keyword detection */
+export function stripSqlComments(sql: string): string {
+  return sql
+    .replace(/\/\*[\s\S]*?\*\//g, " ") // block comments /* ... */
+    .replace(/--[^\n]*/g, " "); // line comments -- ...
+}
+
+function isSqlBlocked(sql: string): boolean {
+  return BLOCKED_SQL_RE.test(stripSqlComments(sql));
+}
+
 function createSafeDb(db: Database.Database): Database.Database {
   return new Proxy(db, {
     get(target, prop, receiver) {
       const value = Reflect.get(target, prop, receiver);
       if (prop === "exec") {
         return (sql: string) => {
-          if (BLOCKED_SQL_RE.test(sql)) {
+          if (isSqlBlocked(sql)) {
             throw new Error("ATTACH/DETACH DATABASE is not allowed in plugin context");
           }
           return target.exec(sql);
@@ -80,7 +114,7 @@ function createSafeDb(db: Database.Database): Database.Database {
       }
       if (prop === "prepare") {
         return (sql: string) => {
-          if (BLOCKED_SQL_RE.test(sql)) {
+          if (isSqlBlocked(sql)) {
             throw new Error("ATTACH/DETACH DATABASE is not allowed in plugin context");
           }
           return target.prepare(sql);
@@ -100,7 +134,7 @@ export function createPluginSDK(deps: SDKDependencies, opts: CreatePluginSDKOpti
   const secrets = Object.freeze(createSecretsSDK(opts.pluginName, opts.pluginConfig, log));
   const storage = safeDb ? Object.freeze(createStorageSDK(safeDb)) : null;
   const frozenLog = Object.freeze(log);
-  const frozenConfig = Object.freeze(opts.sanitizedConfig);
+  const frozenConfig = Object.freeze(JSON.parse(JSON.stringify(opts.sanitizedConfig ?? {})));
   const frozenPluginConfig = Object.freeze(JSON.parse(JSON.stringify(opts.pluginConfig ?? {})));
 
   return Object.freeze({

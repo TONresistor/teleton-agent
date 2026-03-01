@@ -4,32 +4,8 @@ import { createPluginSDK } from "../index.js";
 import { SDK_VERSION } from "@teleton-agent/sdk";
 
 // ─── Mocks ──────────────────────────────────────────────────────
-const mockGramJsClient = {
-  invoke: vi.fn(),
-  sendMessage: vi.fn(),
-  sendFile: vi.fn(),
-  getEntity: vi.fn(),
-  getInputEntity: vi.fn(),
-  getMessages: vi.fn(),
-  downloadMedia: vi.fn(),
-  uploadFile: vi.fn(),
-};
-
-const mockBridgeClient = {
-  getClient: () => mockGramJsClient,
-  getMe: vi.fn(),
-  answerCallbackQuery: vi.fn(),
-};
-
-const mockBridge = {
-  isAvailable: vi.fn(() => true),
-  getClient: () => mockBridgeClient,
-  sendMessage: vi.fn(),
-  editMessage: vi.fn(),
-  sendReaction: vi.fn(),
-  setTyping: vi.fn(),
-  getMessages: vi.fn(),
-} as any;
+import { createMocks } from "./__fixtures__/mocks.js";
+const { mockBridge } = createMocks();
 
 describe("createPluginSDK — factory integration", () => {
   let db: InstanceType<typeof Database>;

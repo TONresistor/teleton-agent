@@ -762,19 +762,15 @@ ${blue}  ┌──────────────────────�
       );
 
       // Feed prompt to agent (agent loop with full context)
-      const response = await this.agent.processMessage(
-        message.chatId,
-        agentPrompt,
-        "self-scheduled-task",
-        message.timestamp.getTime(),
-        false, // not group
-        null, // no pending context
+      const response = await this.agent.processMessage({
+        chatId: message.chatId,
+        userMessage: agentPrompt,
+        userName: "self-scheduled-task",
+        timestamp: message.timestamp.getTime(),
+        isGroup: false,
         toolContext,
-        undefined,
-        false,
-        undefined,
-        message.id
-      );
+        messageId: message.id,
+      });
 
       // Send agent response
       if (response.content && response.content.trim().length > 0) {

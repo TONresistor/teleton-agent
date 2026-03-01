@@ -156,6 +156,355 @@ export interface NftItem {
   verified: boolean;
 }
 
+// ─── Jetton Analytics Types ─────────────────────────────────────
+
+/** Jetton price data from TonAPI /rates */
+export interface JettonPrice {
+  /** Price in USD */
+  priceUSD: number | null;
+  /** Price in TON */
+  priceTON: number | null;
+  /** 24h change (USD) e.g. "-2.5%" */
+  change24h: string | null;
+  /** 7d change (USD) */
+  change7d: string | null;
+  /** 30d change (USD) */
+  change30d: string | null;
+}
+
+/** Top holder of a jetton */
+export interface JettonHolder {
+  /** Rank (1 = top holder) */
+  rank: number;
+  /** Holder's TON address */
+  address: string;
+  /** Human-readable name if known (e.g. "Binance") */
+  name: string | null;
+  /** Formatted balance (e.g. "1,234.56") */
+  balance: string;
+  /** Raw balance in smallest units */
+  balanceRaw: string;
+}
+
+/** Jetton market analytics (TonAPI + GeckoTerminal) */
+export interface JettonHistory {
+  /** Token symbol */
+  symbol: string;
+  /** Token name */
+  name: string;
+  /** Current price in USD */
+  currentPrice: string;
+  /** Current price in TON */
+  currentPriceTON: string;
+  /** Price changes */
+  changes: { "24h": string; "7d": string; "30d": string };
+  /** 24h trading volume in USD */
+  volume24h: string;
+  /** Fully diluted valuation */
+  fdv: string;
+  /** Market cap */
+  marketCap: string;
+  /** Number of holders */
+  holders: number;
+}
+
+// ─── DEX Types ──────────────────────────────────────────────────
+
+/** Parameters for DEX quote/swap */
+export interface DexQuoteParams {
+  /** Source asset: "ton" or jetton master address */
+  fromAsset: string;
+  /** Destination asset: "ton" or jetton master address */
+  toAsset: string;
+  /** Amount in human-readable units */
+  amount: number;
+  /** Slippage tolerance (0.01 = 1%, default 0.01, range 0.001-0.5) */
+  slippage?: number;
+}
+
+/** Aggregated quote comparing both DEXes */
+export interface DexQuoteResult {
+  /** STON.fi quote (null if no liquidity) */
+  stonfi: DexSingleQuote | null;
+  /** DeDust quote (null if no liquidity) */
+  dedust: DexSingleQuote | null;
+  /** Recommended DEX */
+  recommended: "stonfi" | "dedust";
+  /** Savings vs the other DEX (e.g. "0.5%") */
+  savings: string;
+}
+
+/** Quote from a single DEX */
+export interface DexSingleQuote {
+  /** DEX name */
+  dex: "stonfi" | "dedust";
+  /** Expected output amount (string to avoid precision loss) */
+  expectedOutput: string;
+  /** Minimum output after slippage */
+  minOutput: string;
+  /** Exchange rate */
+  rate: string;
+  /** Price impact percentage */
+  priceImpact?: string;
+  /** Fee amount */
+  fee: string;
+  /** Pool type (DeDust: "volatile" | "stable") */
+  poolType?: string;
+}
+
+/** Parameters for DEX swap (extends quote params) */
+export interface DexSwapParams extends DexQuoteParams {
+  /** Force a specific DEX (omit for auto-selection) */
+  dex?: "stonfi" | "dedust";
+}
+
+/** Result of a DEX swap execution */
+export interface DexSwapResult {
+  /** DEX used */
+  dex: "stonfi" | "dedust";
+  /** Source asset address */
+  fromAsset: string;
+  /** Destination asset address */
+  toAsset: string;
+  /** Amount sent */
+  amountIn: string;
+  /** Expected output */
+  expectedOutput: string;
+  /** Minimum output after slippage */
+  minOutput: string;
+  /** Slippage used */
+  slippage: string;
+}
+
+/** DEX sub-namespace on TonSDK */
+export interface DexSDK {
+  /** Compare quotes from STON.fi and DeDust, recommend the best */
+  quote(params: DexQuoteParams): Promise<DexQuoteResult>;
+  /** Get quote from STON.fi only */
+  quoteSTONfi(params: DexQuoteParams): Promise<DexSingleQuote | null>;
+  /** Get quote from DeDust only */
+  quoteDeDust(params: DexQuoteParams): Promise<DexSingleQuote | null>;
+  /** Execute swap via recommended DEX (or forced via params.dex) */
+  swap(params: DexSwapParams): Promise<DexSwapResult>;
+  /** Execute swap on STON.fi */
+  swapSTONfi(params: DexSwapParams): Promise<DexSwapResult>;
+  /** Execute swap on DeDust */
+  swapDeDust(params: DexSwapParams): Promise<DexSwapResult>;
+}
+
+// ─── DNS Types ──────────────────────────────────────────────────
+
+/** DNS domain check result */
+export interface DnsCheckResult {
+  /** Domain name (e.g. "example.ton") */
+  domain: string;
+  /** Whether the domain is available */
+  available: boolean;
+  /** Current owner address (if taken) */
+  owner?: string;
+  /** NFT address of the domain */
+  nftAddress?: string;
+  /** Linked wallet address */
+  walletAddress?: string;
+  /** Active auction info */
+  auction?: { bids: number; lastBid: string; endTime: number };
+}
+
+/** Active DNS auction */
+export interface DnsAuction {
+  /** Domain name */
+  domain: string;
+  /** NFT address */
+  nftAddress: string;
+  /** Current owner/bidder */
+  owner: string;
+  /** Current highest bid in TON */
+  lastBid: string;
+  /** Auction end time (unix timestamp) */
+  endTime: number;
+  /** Number of bids */
+  bids: number;
+}
+
+/** Result of starting a DNS auction */
+export interface DnsAuctionResult {
+  /** Domain name */
+  domain: string;
+  /** Whether auction was started successfully */
+  success: boolean;
+  /** Initial bid amount in TON */
+  bidAmount: string;
+}
+
+/** Result of placing a DNS bid */
+export interface DnsBidResult {
+  /** Domain name */
+  domain: string;
+  /** Bid amount in TON */
+  bidAmount: string;
+  /** Whether bid was placed successfully */
+  success: boolean;
+}
+
+/** DNS domain resolution result */
+export interface DnsResolveResult {
+  /** Domain name */
+  domain: string;
+  /** Linked wallet address */
+  walletAddress: string | null;
+  /** NFT address of the domain */
+  nftAddress: string;
+  /** Owner address */
+  owner: string | null;
+  /** Expiration date (unix timestamp) */
+  expirationDate?: number;
+}
+
+/** DNS sub-namespace on TonSDK */
+export interface DnsSDK {
+  /** Check domain availability, price, and auction status */
+  check(domain: string): Promise<DnsCheckResult>;
+  /** Resolve a .ton domain to an address */
+  resolve(domain: string): Promise<DnsResolveResult | null>;
+  /** List active DNS auctions */
+  getAuctions(limit?: number): Promise<DnsAuction[]>;
+  /** Start a new auction for an available domain */
+  startAuction(domain: string): Promise<DnsAuctionResult>;
+  /** Place a bid on an active auction */
+  bid(domain: string, amount: number): Promise<DnsBidResult>;
+  /** Link a domain to a wallet address */
+  link(domain: string, address: string): Promise<void>;
+  /** Unlink a domain (clear wallet record) */
+  unlink(domain: string): Promise<void>;
+}
+
+// ─── Telegram Extension Types ───────────────────────────────────
+
+/** Dialog/conversation from getDialogs */
+export interface Dialog {
+  /** Chat ID */
+  id: string | null;
+  /** Chat title or name */
+  title: string;
+  /** Chat type */
+  type: "dm" | "group" | "channel";
+  /** Number of unread messages */
+  unreadCount: number;
+  /** Number of unread mentions */
+  unreadMentionsCount: number;
+  /** Whether the chat is pinned */
+  isPinned: boolean;
+  /** Whether the chat is archived */
+  isArchived: boolean;
+  /** Last message date (unix timestamp) */
+  lastMessageDate: number | null;
+  /** Last message preview (truncated) */
+  lastMessage: string | null;
+}
+
+/** Stars transaction history entry */
+export interface StarsTransaction {
+  /** Transaction ID */
+  id: string;
+  /** Amount (positive = received, negative = spent) */
+  amount: number;
+  /** Transaction date (unix timestamp) */
+  date: number;
+  /** Peer info */
+  peer?: string;
+  /** Description */
+  description?: string;
+}
+
+/** Result of transferring a collectible */
+export interface TransferResult {
+  /** Message ID of the transferred gift */
+  msgId: number;
+  /** Recipient identifier */
+  transferredTo: string;
+  /** Whether transfer cost Stars */
+  paidTransfer: boolean;
+  /** Stars spent (if paid transfer) */
+  starsSpent?: string;
+}
+
+/** Fragment collectible information */
+export interface CollectibleInfo {
+  /** Collectible type */
+  type: "username" | "phone";
+  /** The username or phone number */
+  value: string;
+  /** Purchase date (ISO 8601) */
+  purchaseDate: string;
+  /** Fiat currency */
+  currency: string;
+  /** Fiat amount */
+  amount?: string;
+  /** Crypto currency (e.g. "TON") */
+  cryptoCurrency?: string;
+  /** Crypto amount */
+  cryptoAmount?: string;
+  /** Fragment URL */
+  url?: string;
+}
+
+/** Unique NFT gift details */
+export interface UniqueGift {
+  /** Gift ID */
+  id: string;
+  /** Collection gift ID */
+  giftId: string;
+  /** URL slug */
+  slug: string;
+  /** Gift title */
+  title: string;
+  /** Number in collection */
+  num: number;
+  /** Owner info */
+  owner: {
+    id?: string;
+    name?: string;
+    address?: string;
+    username?: string;
+  };
+  /** TON address of the gift NFT */
+  giftAddress?: string;
+  /** NFT attributes */
+  attributes: Array<{ type: string; name: string; rarityPercent?: number }>;
+  /** Availability info */
+  availability?: { total: number; remaining: number };
+  /** Link to NFT page */
+  nftLink: string;
+}
+
+/** Gift value/appraisal info */
+export interface GiftValue {
+  /** NFT slug */
+  slug: string;
+  /** Initial sale date (ISO 8601) */
+  initialSaleDate?: string;
+  /** Initial sale price in Stars */
+  initialSaleStars?: string;
+  /** Last sale date (ISO 8601) */
+  lastSaleDate?: string;
+  /** Last sale price */
+  lastSalePrice?: string;
+  /** Floor price */
+  floorPrice?: string;
+  /** Average price */
+  averagePrice?: string;
+  /** Number listed */
+  listedCount?: number;
+  /** Currency */
+  currency?: string;
+}
+
+/** Options for sendGiftOffer */
+export interface GiftOfferOptions {
+  /** Offer validity in seconds (default: 86400 = 24h, min: 21600 = 6h) */
+  duration?: number;
+}
+
 // ─── Payment Verification Types ─────────────────────────────────
 
 /** Parameters for verifying a TON payment */
@@ -190,18 +539,26 @@ export interface SDKPaymentVerification {
 
 // ─── Telegram Types ──────────────────────────────────────────────
 
+/** A single inline keyboard button */
+export interface InlineButton {
+  /** Button label text */
+  text: string;
+  /** Callback data sent when button is pressed */
+  callback_data: string;
+}
+
 /** Options for sending a message */
 export interface SendMessageOptions {
   /** Message ID to reply to */
   replyToId?: number;
   /** Inline keyboard buttons (2D array: rows of buttons) */
-  inlineKeyboard?: Array<Array<{ text: string; callback_data: string }>>;
+  inlineKeyboard?: InlineButton[][];
 }
 
 /** Options for editing a message */
 export interface EditMessageOptions {
   /** Updated inline keyboard (omit to keep existing) */
-  inlineKeyboard?: Array<Array<{ text: string; callback_data: string }>>;
+  inlineKeyboard?: InlineButton[][];
 }
 
 /** Result of sending a dice animation */
@@ -289,7 +646,13 @@ export interface MediaSendOptions {
   /** Message ID to reply to */
   replyToId?: number;
   /** Inline keyboard buttons */
-  inlineKeyboard?: Array<Array<{ text: string; callback_data: string }>>;
+  inlineKeyboard?: InlineButton[][];
+  /** Duration in seconds (for video/voice) */
+  duration?: number;
+  /** Width in pixels (for video) */
+  width?: number;
+  /** Height in pixels (for video) */
+  height?: number;
 }
 
 /** Options for creating a poll */
@@ -500,6 +863,38 @@ export interface TonSDK {
    * @returns true if valid TON address
    */
   validateAddress(address: string): boolean;
+
+  // ─── Jetton Analytics ─────────────────────────────────────────
+
+  /**
+   * Get current jetton price in USD and TON with change percentages.
+   * @param jettonAddress — Jetton master contract address
+   * @returns Price data, or null if unavailable.
+   */
+  getJettonPrice(jettonAddress: string): Promise<JettonPrice | null>;
+
+  /**
+   * Get top holders of a jetton.
+   * @param jettonAddress — Jetton master contract address
+   * @param limit — Max holders (default: 10, max: 100)
+   * @returns Array of holders ranked by balance.
+   */
+  getJettonHolders(jettonAddress: string, limit?: number): Promise<JettonHolder[]>;
+
+  /**
+   * Get jetton market analytics: price changes, volume, FDV, holders.
+   * @param jettonAddress — Jetton master contract address
+   * @returns Market analytics, or null if unavailable.
+   */
+  getJettonHistory(jettonAddress: string): Promise<JettonHistory | null>;
+
+  // ─── Sub-namespaces ───────────────────────────────────────────
+
+  /** DEX quotes and swaps (STON.fi + DeDust) */
+  readonly dex: DexSDK;
+
+  /** DNS domain management (.ton domains) */
+  readonly dns: DnsSDK;
 }
 
 /**
@@ -632,7 +1027,7 @@ export interface TelegramSDK {
    * @returns Message ID of the forwarded message
    * @throws {PluginSDKError} BRIDGE_NOT_CONNECTED, OPERATION_FAILED
    */
-  forwardMessage(fromChatId: string, toChatId: string, messageId: number): Promise<number>;
+  forwardMessage(fromChatId: string, toChatId: string, messageId: number): Promise<number | null>;
 
   /**
    * Pin or unpin a message in a chat.
@@ -667,7 +1062,7 @@ export interface TelegramSDK {
    * @returns Scheduled message ID
    * @throws {PluginSDKError} BRIDGE_NOT_CONNECTED, OPERATION_FAILED
    */
-  scheduleMessage(chatId: string, text: string, scheduleDate: number): Promise<number>;
+  scheduleMessage(chatId: string, text: string, scheduleDate: number): Promise<number | null>;
 
   /**
    * Get replies to a specific message (thread).
@@ -811,7 +1206,7 @@ export interface TelegramSDK {
     question: string,
     answers: string[],
     opts?: PollOptions
-  ): Promise<number>;
+  ): Promise<number | null>;
 
   /**
    * Create a quiz (poll with correct answer) in a chat.
@@ -830,7 +1225,7 @@ export interface TelegramSDK {
     answers: string[],
     correctIndex: number,
     explanation?: string
-  ): Promise<number>;
+  ): Promise<number | null>;
 
   // ─── Moderation ────────────────────────────────────────────
 
@@ -860,7 +1255,7 @@ export interface TelegramSDK {
    * @param untilDate — Unix timestamp when mute expires (0 = forever)
    * @throws {PluginSDKError} BRIDGE_NOT_CONNECTED, OPERATION_FAILED
    */
-  muteUser(chatId: string, userId: number | string, untilDate?: number): Promise<void>;
+  muteUser(chatId: string, userId: number | string, untilDate: number): Promise<void>;
 
   // ─── Stars & Gifts ─────────────────────────────────────────
 
@@ -902,12 +1297,13 @@ export interface TelegramSDK {
   getMyGifts(limit?: number): Promise<ReceivedGift[]>;
 
   /**
-   * Get star gifts available for resale.
+   * Get star gifts available for resale from a specific collection.
    *
+   * @param giftId — Collection ID (numeric string from getAvailableGifts)
    * @param limit — Max results (default: 50)
-   * @returns Array of resale gifts
+   * @returns Array of resale gift listings
    */
-  getResaleGifts(limit?: number): Promise<StarGift[]>;
+  getResaleGifts(giftId: string, limit?: number): Promise<StarGift[]>;
 
   /**
    * Buy a star gift from resale market.
@@ -925,7 +1321,7 @@ export interface TelegramSDK {
    * @returns Story ID
    * @throws {PluginSDKError} BRIDGE_NOT_CONNECTED, OPERATION_FAILED
    */
-  sendStory(mediaPath: string, opts?: { caption?: string }): Promise<number>;
+  sendStory(mediaPath: string, opts?: { caption?: string }): Promise<number | null>;
 
   // ─── Advanced ──────────────────────────────────────────────
 
@@ -935,6 +1331,114 @@ export interface TelegramSDK {
    * @param chatId — Chat ID
    */
   setTyping(chatId: string): Promise<void>;
+
+  // ─── Scheduled Messages ───────────────────────────────────
+
+  /**
+   * Get scheduled messages in a chat.
+   * @param chatId — Chat ID
+   * @returns Array of scheduled messages
+   */
+  getScheduledMessages(chatId: string): Promise<SimpleMessage[]>;
+
+  /**
+   * Delete a scheduled message.
+   * @param chatId — Chat ID
+   * @param messageId — Scheduled message ID
+   */
+  deleteScheduledMessage(chatId: string, messageId: number): Promise<void>;
+
+  /**
+   * Send a scheduled message immediately.
+   * @param chatId — Chat ID
+   * @param messageId — Scheduled message ID
+   */
+  sendScheduledNow(chatId: string, messageId: number): Promise<void>;
+
+  // ─── Chat ─────────────────────────────────────────────────
+
+  /**
+   * Get all dialogs (conversations).
+   * @param limit — Max dialogs (default: 50, max: 100)
+   * @returns Array of dialog info
+   */
+  getDialogs(limit?: number): Promise<Dialog[]>;
+
+  /**
+   * Get message history from a chat.
+   * @param chatId — Chat ID or @username
+   * @param limit — Max messages (default: 50, max: 100)
+   * @returns Array of messages
+   */
+  getHistory(chatId: string, limit?: number): Promise<SimpleMessage[]>;
+
+  // ─── Extended Moderation ──────────────────────────────────
+
+  /**
+   * Kick a user from a group (ban + immediate unban).
+   * @param chatId — Group/channel ID
+   * @param userId — User ID to kick
+   */
+  kickUser(chatId: string, userId: number | string): Promise<void>;
+
+  // ─── Extended Stars & Gifts ───────────────────────────────
+
+  /**
+   * Get Stars transaction history.
+   * @param limit — Max transactions (default: 50)
+   * @returns Array of transactions
+   */
+  getStarsTransactions(limit?: number): Promise<StarsTransaction[]>;
+
+  /**
+   * Transfer a collectible gift to another user.
+   * @param msgId — Message ID of the gift (from getMyGifts)
+   * @param toUserId — Recipient user ID or @username
+   * @returns Transfer result
+   */
+  transferCollectible(msgId: number, toUserId: number | string): Promise<TransferResult>;
+
+  /**
+   * Set or remove the resale price of a collectible.
+   * @param msgId — Message ID of the collectible
+   * @param price — Price in Stars (0 to unlist)
+   */
+  setCollectiblePrice(msgId: number, price: number): Promise<void>;
+
+  /**
+   * Get info about a Fragment collectible (username or phone).
+   * @param slug — Username (without @) or phone number
+   * @returns Collectible info, or null if not found
+   */
+  getCollectibleInfo(slug: string): Promise<CollectibleInfo | null>;
+
+  /**
+   * Look up a unique NFT gift by its slug.
+   * @param slug — NFT slug from t.me/nft/<slug>
+   * @returns Unique gift info, or null if not found
+   */
+  getUniqueGift(slug: string): Promise<UniqueGift | null>;
+
+  /**
+   * Get the market value of a unique NFT gift.
+   * @param slug — NFT slug
+   * @returns Gift value info, or null if not found
+   */
+  getUniqueGiftValue(slug: string): Promise<GiftValue | null>;
+
+  /**
+   * Send a buy offer on a unique NFT gift to its owner.
+   * @param userId — Owner's user ID or @username
+   * @param giftMsgId — Slug of the NFT gift
+   * @param price — Offer price in Stars
+   * @param opts — Duration options
+   */
+  sendGiftOffer(
+    userId: number | string,
+    giftSlug: string,
+    price: number,
+    opts?: GiftOfferOptions
+  ): Promise<void>;
 }
 
 /**

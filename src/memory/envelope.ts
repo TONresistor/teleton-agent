@@ -103,7 +103,7 @@ export function formatMessageEnvelope(params: EnvelopeParams): string {
 
   const header = `[${parts.join(" ")}]`;
 
-  const safeBody = params.body.replace(/<\/?user_message>/gi, "");
+  const safeBody = sanitizeForContext(params.body.replace(/<\/?user_message>/gi, ""));
   let body = params.isGroup
     ? `${senderLabel}: <user_message>${safeBody}</user_message>`
     : `<user_message>${safeBody}</user_message>`;

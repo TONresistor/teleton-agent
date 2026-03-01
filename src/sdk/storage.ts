@@ -14,6 +14,7 @@
 
 import type Database from "better-sqlite3";
 import type { StorageSDK } from "@teleton-agent/sdk";
+import { PluginSDKError } from "@teleton-agent/sdk";
 
 const KV_TABLE = "_kv";
 const CLEANUP_PROBABILITY = 0.05; // 5% chance per read to cleanup expired
@@ -37,7 +38,6 @@ export function createStorageSDK(db: Database.Database): StorageSDK {
     `INSERT OR REPLACE INTO ${KV_TABLE} (key, value, expires_at) VALUES (?, ?, ?)`
   );
   const stmtDel = db.prepare(`DELETE FROM ${KV_TABLE} WHERE key = ?`);
-  const stmtHas = db.prepare(`SELECT 1 FROM ${KV_TABLE} WHERE key = ?`);
   const stmtClear = db.prepare(`DELETE FROM ${KV_TABLE}`);
   const stmtCleanup = db.prepare(
     `DELETE FROM ${KV_TABLE} WHERE expires_at IS NOT NULL AND expires_at < ?`
@@ -66,7 +66,18 @@ export function createStorageSDK(db: Database.Database): StorageSDK {
     },
 
     set<T>(key: string, value: T, opts?: { ttl?: number }): void {
-      const serialized = JSON.stringify(value);
+      if (value === undefined) {
+        throw new PluginSDKError("Cannot store undefined value", "OPERATION_FAILED");
+      }
+      let serialized: string;
+      try {
+        serialized = JSON.stringify(value);
+      } catch (err) {
+        throw new PluginSDKError(
+          `Failed to serialize value: ${err instanceof Error ? err.message : String(err)}`,
+          "OPERATION_FAILED"
+        );
+      }
       const expiresAt = opts?.ttl ? Date.now() + opts.ttl : null;
       stmtSet.run(key, serialized, expiresAt);
     },

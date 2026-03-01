@@ -57,32 +57,32 @@ function estimateTokens(content: string): number {
   }
 }
 
-function calculateContextTokens(context: Context): number {
-  let total = 0;
+function estimateContextTokens(context: Context): number {
+  let charCount = 0;
 
   if (context.systemPrompt) {
-    total += estimateTokens(context.systemPrompt);
+    charCount += context.systemPrompt.length;
   }
 
   for (const message of context.messages) {
     if (message.role === "user") {
       if (typeof message.content === "string") {
-        total += estimateTokens(message.content);
+        charCount += message.content.length;
       } else if (Array.isArray(message.content)) {
         for (const block of message.content) {
-          if (block.type === "text") total += estimateTokens(block.text);
+          if (block.type === "text") charCount += block.text.length;
         }
       }
     } else if (message.role === "assistant") {
       for (const block of message.content) {
         if (block.type === "text") {
-          total += estimateTokens(block.text);
+          charCount += block.text.length;
         }
       }
     }
   }
 
-  return total;
+  return Math.ceil(charCount / 4);
 }
 
 export function shouldFlushMemory(
@@ -94,7 +94,7 @@ export function shouldFlushMemory(
     return false;
   }
 
-  const tokens = tokenCount ?? calculateContextTokens(context);
+  const tokens = tokenCount ?? estimateContextTokens(context);
   const softThreshold = config.softThresholdTokens ?? FALLBACK_SOFT_THRESHOLD_TOKENS;
 
   if (tokens >= softThreshold) {
@@ -145,7 +145,7 @@ export function shouldCompact(
   }
 
   if (config.maxTokens) {
-    const tokens = tokenCount ?? calculateContextTokens(context);
+    const tokens = tokenCount ?? estimateContextTokens(context);
     if (tokens >= config.maxTokens) {
       log.info(`Compaction needed: ~${tokens} tokens (max: ${config.maxTokens})`);
       return true;
@@ -330,7 +330,7 @@ export class CompactionManager {
     provider?: SupportedProvider,
     utilityModel?: string
   ): Promise<string | null> {
-    const tokenCount = calculateContextTokens(context);
+    const tokenCount = estimateContextTokens(context);
 
     if (shouldFlushMemory(context, this.config, tokenCount)) {
       flushMemoryToDailyLog(context);

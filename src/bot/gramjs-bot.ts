@@ -13,7 +13,7 @@
 import { TelegramClient, Api } from "telegram";
 import { StringSession } from "telegram/sessions/index.js";
 import { Logger, LogLevel } from "telegram/extensions/Logger.js";
-import bigInt from "big-integer";
+import { toLong } from "../utils/gramjs-bigint.js";
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from "fs";
 import { dirname } from "path";
 import { GRAMJS_RETRY_DELAY_MS, GRAMJS_CONNECT_RETRY_DELAY_MS } from "../constants/timeouts.js";
@@ -36,15 +36,15 @@ export function decodeInlineMessageId(encoded: string): Api.TypeInputBotInlineMe
   if (buf.length === 20) {
     return new Api.InputBotInlineMessageID({
       dcId: buf.readInt32LE(0),
-      id: bigInt(buf.readBigInt64LE(4).toString()),
-      accessHash: bigInt(buf.readBigInt64LE(12).toString()),
+      id: buf.readBigInt64LE(4) as any,
+      accessHash: buf.readBigInt64LE(12) as any,
     });
   } else if (buf.length === 24) {
     return new Api.InputBotInlineMessageID64({
       dcId: buf.readInt32LE(0),
-      ownerId: bigInt(buf.readBigInt64LE(4).toString()),
+      ownerId: buf.readBigInt64LE(4) as any,
       id: buf.readInt32LE(12),
-      accessHash: bigInt(buf.readBigInt64LE(16).toString()),
+      accessHash: buf.readBigInt64LE(16) as any,
     });
   }
 
@@ -140,7 +140,7 @@ export class GramJSBotClient {
     await withFloodRetry(() =>
       this.client.invoke(
         new Api.messages.SetInlineBotResults({
-          queryId: bigInt(params.queryId),
+          queryId: toLong(params.queryId),
           results: params.results,
           cacheTime: params.cacheTime ?? 0,
         })

@@ -29,6 +29,10 @@
   ],
   "author": "ZKProof",
   "license": "MIT",
+  "sideEffects": false,
+  "engines": {
+    "node": ">=20"
+  },
   "repository": {
     "type": "git",
     "url": "https://github.com/TONresistor/teleton-agent",

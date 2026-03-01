@@ -93,38 +93,8 @@ vi.mock("fs", async (importOriginal) => {
 });
 
 // ─── Mocks ──────────────────────────────────────────────────────
-const mockGramJsClient = {
-  invoke: vi.fn(),
-  sendMessage: vi.fn(),
-  sendFile: vi.fn(),
-  getEntity: vi.fn(),
-  getInputEntity: vi.fn(),
-  getMessages: vi.fn(),
-  downloadMedia: vi.fn(),
-  uploadFile: vi.fn(),
-};
-
-const mockBridgeClient = {
-  getClient: () => mockGramJsClient,
-  getMe: vi.fn(),
-};
-
-const mockBridge = {
-  isAvailable: vi.fn(() => true),
-  getClient: () => mockBridgeClient,
-  sendMessage: vi.fn(),
-  editMessage: vi.fn(),
-  sendReaction: vi.fn(),
-  setTyping: vi.fn(),
-  getMessages: vi.fn(),
-} as any;
-
-const mockLog = {
-  info: vi.fn(),
-  warn: vi.fn(),
-  error: vi.fn(),
-  debug: vi.fn(),
-};
+import { createMocks } from "./__fixtures__/mocks.js";
+const { mockGramJsClient, mockBridge, mockLog } = createMocks();
 
 describe("createTelegramSocialSDK", () => {
   let sdk: ReturnType<typeof createTelegramSocialSDK>;
@@ -151,7 +121,7 @@ describe("createTelegramSocialSDK", () => {
       ["createQuiz", () => sdk.createQuiz("chat", "q?", ["a", "b"], 0)],
       ["banUser", () => sdk.banUser("chat", 123)],
       ["unbanUser", () => sdk.unbanUser("chat", 123)],
-      ["muteUser", () => sdk.muteUser("chat", 123)],
+      ["muteUser", () => sdk.muteUser("chat", 123, 0)],
       ["getStarsBalance", () => sdk.getStarsBalance()],
       ["sendGift", () => sdk.sendGift(123, "gift1")],
       ["getAvailableGifts", () => sdk.getAvailableGifts()],
@@ -600,11 +570,11 @@ describe("createTelegramSocialSDK", () => {
       expect(invokeArg.media.poll.multipleChoice).toBe(true);
     });
 
-    it("returns 0 when no update found", async () => {
+    it("returns null when no update found", async () => {
       mockGramJsClient.invoke.mockResolvedValue(new (Api.Updates as any)({ updates: [] }));
 
       const result = await sdk.createPoll("chat1", "q?", ["a", "b"]);
-      expect(result).toBe(0);
+      expect(result).toBeNull();
     });
   });
 
@@ -714,7 +684,7 @@ describe("createTelegramSocialSDK", () => {
     it("invokes EditBanned with sendMessages restriction", async () => {
       mockGramJsClient.invoke.mockResolvedValue({});
 
-      await sdk.muteUser("chat1", 789);
+      await sdk.muteUser("chat1", 789, 0);
 
       const arg = mockGramJsClient.invoke.mock.calls[0][0];
       expect(arg._).toBe("channels.EditBanned");
@@ -735,7 +705,7 @@ describe("createTelegramSocialSDK", () => {
     it("wraps errors", async () => {
       mockGramJsClient.invoke.mockRejectedValue(new Error("fail"));
 
-      await expect(sdk.muteUser("c", 1)).rejects.toMatchObject({
+      await expect(sdk.muteUser("c", 1, 0)).rejects.toMatchObject({
         code: "OPERATION_FAILED",
       });
     });
@@ -994,12 +964,12 @@ describe("createTelegramSocialSDK", () => {
       expect(invokeArg.media._).toBe("InputMediaUploadedPhoto");
     });
 
-    it("returns 0 when result has no id", async () => {
+    it("returns null when result has no id", async () => {
       mockGramJsClient.uploadFile.mockResolvedValue({ _: "InputFile" });
       mockGramJsClient.invoke.mockResolvedValue(new (Api.Updates as any)({ updates: [] }));
 
       const result = await sdk.sendStory("/tmp/img.jpg");
-      expect(result).toBe(0);
+      expect(result).toBeNull();
     });
 
     it("wraps errors", async () => {

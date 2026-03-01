@@ -22,6 +22,7 @@ export function createStatusRoutes(deps: WebUIServerDeps) {
         sessionCount: sessionCountRow?.count ?? 0,
         toolCount: deps.toolRegistry.getAll().length,
         tokenUsage: getTokenUsage(),
+        platform: process.platform,
       };
 
       const response: APIResponse<StatusResponse> = {

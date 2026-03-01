@@ -1,13 +1,15 @@
 import { vi, describe, it, expect, beforeEach } from "vitest";
 
+const mockPino = vi.hoisted(() => ({
+  info: vi.fn(),
+  warn: vi.fn(),
+  error: vi.fn(),
+  debug: vi.fn(),
+}));
+
 // Mock pino logger so we don't need real logging infra
 vi.mock("../../utils/logger.js", () => ({
-  createLogger: vi.fn(() => ({
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-    debug: vi.fn(),
-  })),
+  createLogger: vi.fn(() => mockPino),
 }));
 
 // Mock workspace paths (needed by secrets SDK)
@@ -45,6 +47,7 @@ describe("SDK Logger wrapper", () => {
   let sdk: PluginSDK;
 
   beforeEach(() => {
+    vi.clearAllMocks();
     sdk = createPluginSDK(
       { bridge: mockBridge },
       {
@@ -70,43 +73,41 @@ describe("SDK Logger wrapper", () => {
     });
   });
 
-  describe("callable without error", () => {
-    it("accepts a single string argument", () => {
-      expect(() => sdk.log.info("hello")).not.toThrow();
-      expect(() => sdk.log.warn("warning")).not.toThrow();
-      expect(() => sdk.log.error("error")).not.toThrow();
-      expect(() => sdk.log.debug("debug")).not.toThrow();
+  describe("delegates to pino with joined string args", () => {
+    it("forwards single string to pino", () => {
+      sdk.log.info("hello");
+      expect(mockPino.info).toHaveBeenCalledWith("hello");
     });
 
-    it("accepts multiple arguments", () => {
-      expect(() => sdk.log.info("a", "b", "c")).not.toThrow();
-      expect(() => sdk.log.warn("x", "y")).not.toThrow();
-      expect(() => sdk.log.error("e1", "e2", "e3")).not.toThrow();
-      expect(() => sdk.log.debug("d1", "d2")).not.toThrow();
+    it("joins multiple arguments with space", () => {
+      sdk.log.warn("a", "b", "c");
+      expect(mockPino.warn).toHaveBeenCalledWith("a b c");
     });
 
-    it("accepts no arguments", () => {
-      expect(() => sdk.log.info()).not.toThrow();
-      expect(() => sdk.log.warn()).not.toThrow();
-      expect(() => sdk.log.error()).not.toThrow();
-      expect(() => sdk.log.debug()).not.toThrow();
-    });
-  });
-
-  describe("non-string arguments", () => {
-    it("handles numbers", () => {
-      expect(() => sdk.log.info(42 as any)).not.toThrow();
-      expect(() => sdk.log.warn(0 as any, -1 as any)).not.toThrow();
+    it("converts non-string arguments via String()", () => {
+      sdk.log.error(42 as any, { key: "val" } as any);
+      expect(mockPino.error).toHaveBeenCalledWith("42 [object Object]");
     });
 
-    it("handles objects and arrays", () => {
-      expect(() => sdk.log.info({ key: "val" } as any)).not.toThrow();
-      expect(() => sdk.log.debug([1, 2, 3] as any)).not.toThrow();
+    it("converts null and undefined", () => {
+      sdk.log.debug(null as any, undefined as any);
+      expect(mockPino.debug).toHaveBeenCalledWith("null undefined");
     });
 
-    it("handles null and undefined", () => {
-      expect(() => sdk.log.error(null as any)).not.toThrow();
-      expect(() => sdk.log.warn(undefined as any)).not.toThrow();
+    it("handles no arguments", () => {
+      sdk.log.info();
+      expect(mockPino.info).toHaveBeenCalledWith("");
+    });
+
+    it("routes to correct pino level", () => {
+      sdk.log.info("i");
+      sdk.log.warn("w");
+      sdk.log.error("e");
+      sdk.log.debug("d");
+      expect(mockPino.info).toHaveBeenCalledWith("i");
+      expect(mockPino.warn).toHaveBeenCalledWith("w");
+      expect(mockPino.error).toHaveBeenCalledWith("e");
+      expect(mockPino.debug).toHaveBeenCalledWith("d");
     });
   });
 
