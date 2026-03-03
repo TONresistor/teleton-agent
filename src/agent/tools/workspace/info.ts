@@ -6,6 +6,9 @@ import { join } from "path";
 import type { Tool, ToolExecutor, ToolResult } from "../types.js";
 import { WORKSPACE_ROOT, WORKSPACE_PATHS, MAX_FILE_SIZES } from "../../../workspace/index.js";
 import { getErrorMessage } from "../../../utils/errors.js";
+import { createLogger } from "../../../utils/logger.js";
+
+const log = createLogger("Tools");
 
 const MEMES_DIR = WORKSPACE_PATHS.MEMES_DIR;
 
@@ -45,7 +48,9 @@ function getDirSize(dirPath: string): { count: number; size: number } {
         } catch {}
       }
     }
-  } catch {}
+  } catch (err) {
+    log.debug({ err }, "Failed to read directory stats");
+  }
 
   return { count, size };
 }

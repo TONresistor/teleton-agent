@@ -5,6 +5,7 @@ export interface EnvelopeParams {
   senderId?: string;
   senderName?: string;
   senderUsername?: string;
+  senderRank?: string;
   timestamp: number;
   previousTimestamp?: number;
   body: string;
@@ -76,11 +77,18 @@ function buildSenderLabel(params: EnvelopeParams): string {
   const primary = name || username;
   const meta = [username, idTag].filter((v) => v && v !== primary);
 
+  let label: string;
   if (primary) {
-    return meta.length > 0 ? `${primary} (${meta.join(", ")})` : primary;
+    label = meta.length > 0 ? `${primary} (${meta.join(", ")})` : primary;
+  } else {
+    label = idTag || "unknown";
   }
 
-  return idTag || "unknown";
+  if (params.senderRank) {
+    label = `[${sanitizeForPrompt(params.senderRank)}] ${label}`;
+  }
+
+  return label;
 }
 
 export function formatMessageEnvelope(params: EnvelopeParams): string {

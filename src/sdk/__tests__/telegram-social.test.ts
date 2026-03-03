@@ -487,13 +487,21 @@ describe("createTelegramSocialSDK", () => {
           { id: BigInt(1), firstName: "A", lastName: "B", username: "ab", bot: false },
           { id: BigInt(2), firstName: "C", bot: true },
         ],
+        participants: [{ userId: BigInt(1), rank: "Admin" }, { userId: BigInt(2) }],
       });
 
       const result = await sdk.getParticipants("chat1");
 
       expect(result).toEqual([
-        { id: 1, firstName: "A", lastName: "B", username: "ab", isBot: false },
-        { id: 2, firstName: "C", lastName: undefined, username: undefined, isBot: true },
+        { id: 1, firstName: "A", lastName: "B", username: "ab", isBot: false, rank: "Admin" },
+        {
+          id: 2,
+          firstName: "C",
+          lastName: undefined,
+          username: undefined,
+          isBot: true,
+          rank: null,
+        },
       ]);
     });
 

@@ -23,7 +23,7 @@ export function getTranscriptPath(sessionId: string): string {
 
 function ensureSessionsDir(): void {
   if (!existsSync(SESSIONS_DIR)) {
-    mkdirSync(SESSIONS_DIR, { recursive: true });
+    mkdirSync(SESSIONS_DIR, { recursive: true, mode: 0o700 });
   }
 }
 
@@ -34,7 +34,7 @@ export function appendToTranscript(sessionId: string, message: Message | Assista
   const line = JSON.stringify(message) + "\n";
 
   try {
-    appendFileSync(transcriptPath, line, "utf-8");
+    appendFileSync(transcriptPath, line, { encoding: "utf-8", mode: 0o600 });
   } catch (error) {
     log.error({ err: error }, `Failed to append to transcript ${sessionId}`);
   }

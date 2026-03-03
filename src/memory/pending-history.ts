@@ -7,6 +7,7 @@ export interface PendingMessage {
   senderId: number;
   senderName?: string;
   senderUsername?: string;
+  senderRank?: string;
   text: string;
   timestamp: Date;
 }
@@ -34,6 +35,7 @@ export class PendingHistory {
       senderId: message.senderId,
       senderName: message.senderFirstName,
       senderUsername: message.senderUsername,
+      senderRank: message.senderRank,
       text: message.text,
       timestamp: message.timestamp,
     });
@@ -56,6 +58,9 @@ export class PendingHistory {
         senderLabel = `@${sanitizeForPrompt(msg.senderUsername)}`;
       } else {
         senderLabel = `User:${msg.senderId}`;
+      }
+      if (msg.senderRank) {
+        senderLabel = `[${sanitizeForPrompt(msg.senderRank)}] ${senderLabel}`;
       }
       const safeText = msg.text.replace(/<\/?user_message>/gi, "");
       return `${senderLabel}: <user_message>${safeText}</user_message>`;

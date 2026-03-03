@@ -627,6 +627,8 @@ export interface UserInfo {
   username?: string;
   /** Whether the user is a bot */
   isBot: boolean;
+  /** Custom rank/title (Layer 223+), null if not set */
+  rank?: string | null;
 }
 
 /** Resolved peer from username lookup */

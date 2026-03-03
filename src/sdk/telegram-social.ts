@@ -233,14 +233,20 @@ export function createTelegramSocialSDK(bridge: TelegramBridge, log: PluginLogge
         );
 
         const resultData = result as Api.channels.ChannelParticipants;
+        const participantMap = new Map<string, Api.TypeChannelParticipant>();
+        for (const p of resultData.participants || []) {
+          if ("userId" in p) participantMap.set(p.userId?.toString(), p);
+        }
         return (resultData.users || []).map((user) => {
           const u = user as Api.User;
+          const p = participantMap.get(u.id?.toString());
           return {
             id: Number(u.id),
             firstName: u.firstName || "",
             lastName: u.lastName || undefined,
             username: u.username || undefined,
             isBot: u.bot || false,
+            rank: (p && "rank" in p && p.rank) || null,
           };
         });
       } catch (err) {

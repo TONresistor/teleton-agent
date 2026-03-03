@@ -11,6 +11,7 @@ export interface TelegramMessage {
   senderId: number;
   senderUsername?: string;
   senderFirstName?: string;
+  senderRank?: string;
   text: string;
   isGroup: boolean;
   isChannel: boolean;
@@ -349,12 +350,16 @@ export class TelegramBridge {
       }
     }
 
+    // fromRank is a Layer 223 field on Message (not in CustomMessage typings)
+    const senderRank = (msg as unknown as { fromRank?: string }).fromRank || undefined;
+
     return {
       id: msg.id,
       chatId,
       senderId,
       senderUsername,
       senderFirstName,
+      senderRank,
       text,
       isGroup,
       isChannel,

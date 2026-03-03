@@ -135,6 +135,7 @@ export interface ProcessMessageOptions {
   pendingContext?: string | null;
   toolContext?: Omit<ToolContext, "chatId" | "isGroup">;
   senderUsername?: string;
+  senderRank?: string;
   hasMedia?: boolean;
   mediaType?: string;
   messageId?: number;
@@ -199,6 +200,7 @@ export class AgentRuntime {
       pendingContext,
       toolContext,
       senderUsername,
+      senderRank,
       hasMedia,
       mediaType,
       messageId,
@@ -251,6 +253,7 @@ export class AgentRuntime {
         senderId: toolContext?.senderId ? String(toolContext.senderId) : chatId,
         senderName: userName,
         senderUsername: senderUsername,
+        senderRank,
         timestamp: now,
         previousTimestamp,
         body: userMessage,

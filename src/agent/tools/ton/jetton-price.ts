@@ -73,7 +73,9 @@ export const jettonPriceExecutor: ToolExecutor<JettonPriceParams> = async (
         symbol = infoData.metadata?.symbol || symbol;
         name = infoData.metadata?.name || name;
       }
-    } catch {}
+    } catch (err) {
+      log.debug({ err }, "Failed to fetch jetton metadata");
+    }
 
     const priceInfo = {
       symbol,

@@ -109,6 +109,7 @@ export const telegramGetParticipantsExecutor: ToolExecutor<GetParticipantsParams
           p.className === "ChannelParticipantAdmin" || p.className === "ChannelParticipantCreator",
         isBanned: p.className === "ChannelParticipantBanned",
         role: p.className?.replace("ChannelParticipant", "").toLowerCase() || "member",
+        rank: ("rank" in p && p.rank) || null,
       };
     });
 

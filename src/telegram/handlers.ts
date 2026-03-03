@@ -437,6 +437,7 @@ export class MessageHandler {
             pendingContext,
             toolContext,
             senderUsername: message.senderUsername,
+            senderRank: message.senderRank,
             hasMedia: message.hasMedia,
             mediaType: message.mediaType,
             messageId: message.id,

@@ -313,7 +313,7 @@ export function shouldResetSession(session: SessionEntry, policy: SessionResetPo
       session.lastResetDate || new Date(session.createdAt).toISOString().split("T")[0];
 
     if (lastReset !== today) {
-      const currentHour = new Date().getHours();
+      const currentHour = new Date().getUTCHours();
       const resetHour = policy.daily_reset_hour;
 
       if (lastReset < today && currentHour >= resetHour) {
