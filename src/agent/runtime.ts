@@ -546,11 +546,13 @@ export class AgentRuntime {
         iteration++;
         log.debug(`🔄 Agentic iteration ${iteration}/${maxIterations}`);
 
-        const maskedMessages = maskOldToolResults(
-          context.messages,
-          undefined,
-          this.toolRegistry ?? undefined
-        );
+        // Track where current iteration starts so masking won't truncate its results
+        const iterationStartIndex = context.messages.length;
+
+        const maskedMessages = maskOldToolResults(context.messages, {
+          toolRegistry: this.toolRegistry ?? undefined,
+          currentIterationStartIndex: iterationStartIndex,
+        });
         const maskedContext: Context = { ...context, messages: maskedMessages };
 
         const response: ChatResponse = await chatWithContext(this.config.agent, {

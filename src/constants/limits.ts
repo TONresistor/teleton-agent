@@ -62,6 +62,8 @@ export const SESSION_SLUG_MAX_TOKENS = 50;
 
 // ─── Observation Masking ────────────────────────────────────────
 export const MASKING_KEEP_RECENT_COUNT = 10;
+export const RESULT_TRUNCATION_THRESHOLD = 4_000;
+export const RESULT_TRUNCATION_KEEP_CHARS = 500;
 
 // ─── Embedding Cache ────────────────────────────────────────────
 export const EMBEDDING_CACHE_EVICTION_RATIO = 0.1;
