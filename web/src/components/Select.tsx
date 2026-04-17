@@ -7,9 +7,10 @@ interface SelectProps {
   labels?: string[];
   onChange: (value: string) => void;
   style?: React.CSSProperties;
+  disabled?: boolean;
 }
 
-export function Select({ value, options, labels, onChange, style }: SelectProps) {
+export function Select({ value, options, labels, onChange, style, disabled }: SelectProps) {
   const [open, setOpen] = useState(false);
   const [focusIdx, setFocusIdx] = useState(-1);
   const [menuPos, setMenuPos] = useState<{ top: number; left: number; width: number } | null>(null);
@@ -105,10 +106,11 @@ export function Select({ value, options, labels, onChange, style }: SelectProps)
         type="button"
         className="custom-select-trigger"
         onClick={() => setOpen(!open)}
-        onKeyDown={handleKeyDown}
+        onKeyDown={disabled ? undefined : handleKeyDown}
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-controls={open ? menuId : undefined}
+        disabled={disabled}
       >
         <span>{labels ? labels[options.indexOf(value)] ?? value : value}</span>
         <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">

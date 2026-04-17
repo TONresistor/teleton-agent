@@ -547,6 +547,7 @@ export class GrammyBotBridge implements ITelegramBridge {
     const commands = [
       { command: "status", description: "View agent status" },
       { command: "model", description: "Switch LLM model" },
+      { command: "reasoning", description: "Set reasoning effort (off/low/medium/high)" },
       { command: "loop", description: "Set max agentic iterations" },
       { command: "policy", description: "Change access policy" },
       { command: "strategy", description: "View/change trading thresholds" },

@@ -93,6 +93,8 @@ export class AdminHandler {
         return this.handleLoopCommand(command);
       case "model":
         return this.handleModelCommand(command);
+      case "reasoning":
+        return this.handleReasoningCommand(command);
       case "policy":
         return this.handlePolicyCommand(command);
       case "pause":
@@ -167,12 +169,28 @@ export class AdminHandler {
   private handleModelCommand(command: AdminCommand): string {
     const cfg = this.agent.getConfig();
     if (command.args.length === 0) {
-      return `🧠 Current model: **${cfg.agent.model}**\n\nUsage: /model <model_name>`;
+      const reasoning = cfg.agent.reasoning_effort ?? "low";
+      return `🧠 Current model: **${cfg.agent.model}**\nReasoning: **${reasoning}**\n\nUsage: /model <model_name>`;
     }
     const newModel = command.args[0];
     const oldModel = cfg.agent.model;
     cfg.agent.model = newModel;
     return `🧠 Model: **${oldModel}** → **${newModel}**`;
+  }
+
+  private handleReasoningCommand(command: AdminCommand): string {
+    const cfg = this.agent.getConfig();
+    const valid = ["off", "low", "medium", "high"] as const;
+    if (command.args.length === 0) {
+      return `💭 Reasoning effort: **${cfg.agent.reasoning_effort ?? "low"}**\n\nControls thinking depth for reasoning models (o3, R1, etc).\nUsage: /reasoning <${valid.join("|")}>\n• off — skip reasoning (may not work with reasoning-only models)\n• low/medium/high — thinking depth`;
+    }
+    const value = command.args[0].toLowerCase();
+    if (!valid.includes(value as typeof valid[number])) {
+      return `❌ Invalid value. Must be one of: ${valid.join(", ")}`;
+    }
+    const old = cfg.agent.reasoning_effort ?? "low";
+    cfg.agent.reasoning_effort = value as typeof valid[number];
+    return `💭 Reasoning: **${old}** → **${value}**`;
   }
 
   private handlePolicyCommand(command: AdminCommand): string {
@@ -533,6 +551,9 @@ View agent status
 
 **/model** <name>
 Switch LLM model
+
+**/reasoning** [off|low|medium|high]
+Thinking depth for reasoning models (o3, DeepSeek R1, etc). No args = show current
 
 **/loop** <1-50>
 Set max agentic iterations

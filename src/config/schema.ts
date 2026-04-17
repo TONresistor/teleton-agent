@@ -53,6 +53,10 @@ export const AgentConfigSchema = z.object({
     .describe("Cheap model for summarization (auto-detected if omitted)"),
   max_tokens: z.number().default(4096),
   temperature: z.number().default(0.7),
+  reasoning_effort: z
+    .enum(["off", "low", "medium", "high"])
+    .default("low")
+    .describe("Reasoning effort for thinking models (off may not work with reasoning-only models like DeepSeek R1)"),
   system_prompt: z.string().nullable().default(null),
   max_agentic_iterations: z
     .number()

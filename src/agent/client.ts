@@ -267,6 +267,11 @@ export async function chatWithContext(
     sessionId: options.sessionId,
     cacheRetention: "long",
   };
+  // Apply user's reasoning effort preference (pi-ai stream() requires reasoningEffort, not reasoning)
+  const reasoningEffort = config.reasoning_effort ?? "low";
+  if (model.reasoning && reasoningEffort !== "off") {
+    completeOptions.reasoningEffort = reasoningEffort;
+  }
   if (isCocoon) {
     const { stripCocoonPayload } = await import("../cocoon/tool-adapter.js");
     completeOptions.onPayload = stripCocoonPayload;
@@ -380,6 +385,10 @@ export function streamWithContext(config: AgentConfig, options: ChatOptions): St
     sessionId: options.sessionId,
     cacheRetention: "long",
   };
+  const reasoningEffort = config.reasoning_effort ?? "low";
+  if (model.reasoning && reasoningEffort !== "off") {
+    streamOptions.reasoningEffort = reasoningEffort;
+  }
 
   const eventStream = stream(model, context, streamOptions as ProviderStreamOptions);
 

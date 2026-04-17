@@ -8,6 +8,8 @@ export interface ModelOption {
   value: string;
   name: string;
   description: string;
+  /** Whether this model supports reasoning/thinking (used for UI hints) */
+  reasoning?: boolean;
 }
 
 export const MODEL_OPTIONS: Record<string, ModelOption[]> = {
@@ -40,24 +42,26 @@ export const MODEL_OPTIONS: Record<string, ModelOption[]> = {
   ],
   openai: [
     { value: "gpt-5", name: "GPT-5", description: "Most capable, 400K ctx, $1.25/M" },
-    { value: "gpt-5-pro", name: "GPT-5 Pro", description: "Extended thinking, 400K ctx" },
+    { value: "gpt-5-pro", name: "GPT-5 Pro", description: "Extended thinking, 400K ctx", reasoning: true },
     { value: "gpt-5-mini", name: "GPT-5 Mini", description: "Fast & cheap, 400K ctx" },
     {
       value: "gpt-5.4",
       name: "GPT-5.4",
       description: "Latest frontier, reasoning, openai-responses API",
+      reasoning: true,
     },
     {
       value: "gpt-5.4-pro",
       name: "GPT-5.4 Pro",
       description: "Extended thinking, openai-responses API",
+      reasoning: true,
     },
     { value: "gpt-5.1", name: "GPT-5.1", description: "Latest gen, 400K ctx" },
     { value: "gpt-4o", name: "GPT-4o", description: "Balanced, 128K ctx, $2.50/M" },
     { value: "gpt-4.1", name: "GPT-4.1", description: "1M ctx, $2/M" },
     { value: "gpt-4.1-mini", name: "GPT-4.1 Mini", description: "1M ctx, cheap, $0.40/M" },
-    { value: "o4-mini", name: "o4 Mini", description: "Reasoning, fast, 200K ctx" },
-    { value: "o3", name: "o3", description: "Reasoning, 200K ctx, $2/M" },
+    { value: "o4-mini", name: "o4 Mini", description: "Reasoning, fast, 200K ctx", reasoning: true },
+    { value: "o3", name: "o3", description: "Reasoning, 200K ctx, $2/M", reasoning: true },
     { value: "codex-mini-latest", name: "Codex Mini", description: "Coding specialist" },
   ],
   "openai-codex": [
@@ -89,7 +93,7 @@ export const MODEL_OPTIONS: Record<string, ModelOption[]> = {
   xai: [
     { value: "grok-4-1-fast", name: "Grok 4.1 Fast", description: "Latest, vision, 2M ctx" },
     { value: "grok-4-fast", name: "Grok 4 Fast", description: "Vision, 2M ctx, $0.20/M" },
-    { value: "grok-4", name: "Grok 4", description: "Reasoning, 256K ctx, $3/M" },
+    { value: "grok-4", name: "Grok 4", description: "Reasoning, 256K ctx, $3/M", reasoning: true },
     { value: "grok-code-fast-1", name: "Grok Code", description: "Coding specialist, fast" },
     { value: "grok-3", name: "Grok 3", description: "Stable, 131K ctx, $3/M" },
   ],
@@ -99,11 +103,12 @@ export const MODEL_OPTIONS: Record<string, ModelOption[]> = {
       name: "Llama 4 Maverick",
       description: "Vision, 131K ctx, $0.20/M",
     },
-    { value: "qwen/qwen3-32b", name: "Qwen3 32B", description: "Reasoning, 131K ctx, $0.29/M" },
+    { value: "qwen/qwen3-32b", name: "Qwen3 32B", description: "Reasoning, 131K ctx, $0.29/M", reasoning: true },
     {
       value: "deepseek-r1-distill-llama-70b",
       name: "DeepSeek R1 70B",
       description: "Reasoning, 131K ctx, $0.75/M",
+      reasoning: true,
     },
     {
       value: "llama-3.3-70b-versatile",
@@ -129,11 +134,13 @@ export const MODEL_OPTIONS: Record<string, ModelOption[]> = {
       value: "deepseek/deepseek-r1",
       name: "DeepSeek R1",
       description: "Reasoning, 64K ctx, $0.70/M",
+      reasoning: true,
     },
     {
       value: "deepseek/deepseek-r1-0528",
       name: "DeepSeek R1 0528",
       description: "Reasoning improved, 64K ctx",
+      reasoning: true,
     },
     {
       value: "deepseek/deepseek-v3.2",
@@ -160,7 +167,7 @@ export const MODEL_OPTIONS: Record<string, ModelOption[]> = {
       description: "Web search integrated",
     },
     { value: "minimax/minimax-m2.5", name: "MiniMax M2.5", description: "Latest MiniMax" },
-    { value: "x-ai/grok-4", name: "Grok 4", description: "256K ctx, $3/M" },
+    { value: "x-ai/grok-4", name: "Grok 4", description: "256K ctx, $3/M", reasoning: true },
   ],
   moonshot: [
     { value: "k2p5", name: "Kimi K2.5", description: "Free, 262K ctx, multimodal" },
@@ -168,6 +175,7 @@ export const MODEL_OPTIONS: Record<string, ModelOption[]> = {
       value: "kimi-k2-thinking",
       name: "Kimi K2 Thinking",
       description: "Free, 262K ctx, reasoning",
+      reasoning: true,
     },
   ],
   mistral: [
@@ -190,6 +198,7 @@ export const MODEL_OPTIONS: Record<string, ModelOption[]> = {
       value: "magistral-small",
       name: "Magistral Small",
       description: "Reasoning, 128K ctx, $0.50/M",
+      reasoning: true,
     },
   ],
   cerebras: [
@@ -198,7 +207,7 @@ export const MODEL_OPTIONS: Record<string, ModelOption[]> = {
       name: "Qwen 3 235B",
       description: "131K ctx, $0.60/$1.20",
     },
-    { value: "gpt-oss-120b", name: "GPT OSS 120B", description: "Reasoning, 131K ctx, $0.25/M" },
+    { value: "gpt-oss-120b", name: "GPT OSS 120B", description: "Reasoning, 131K ctx, $0.25/M", reasoning: true },
     { value: "zai-glm-4.7", name: "ZAI GLM-4.7", description: "131K ctx, $2.25/M" },
     { value: "llama3.1-8b", name: "Llama 3.1 8B", description: "Fast & cheap, 32K ctx, $0.10/M" },
   ],
@@ -230,11 +239,13 @@ export const MODEL_OPTIONS: Record<string, ModelOption[]> = {
       value: "deepseek-ai/DeepSeek-R1-0528",
       name: "DeepSeek R1",
       description: "Reasoning, 163K ctx, $3/$5",
+      reasoning: true,
     },
     {
       value: "Qwen/Qwen3-235B-A22B-Thinking-2507",
       name: "Qwen3 235B",
       description: "Reasoning, 262K ctx, $0.30/$3",
+      reasoning: true,
     },
     {
       value: "Qwen/Qwen3-Coder-480B-A35B-Instruct",

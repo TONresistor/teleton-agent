@@ -599,7 +599,7 @@ export const api = {
   },
 
   async getModelsForProvider(provider: string) {
-    return fetchAPI<APIResponse<Array<{ value: string; name: string; description: string }>>>(`/config/models/${encodeURIComponent(provider)}`);
+    return fetchAPI<APIResponse<Array<{ value: string; name: string; description: string; reasoning?: boolean }>>>(`/config/models/${encodeURIComponent(provider)}`);
   },
 
   async getProviderMeta(provider: string) {

@@ -9,7 +9,7 @@ interface AgentSettingsPanelProps {
   setLocal: (key: string, value: string) => void;
   saveConfig: (key: string, value: string) => Promise<void>;
   cancelLocal?: (key: string) => void;
-  modelOptions: Array<{ value: string; name: string }>;
+  modelOptions: Array<{ value: string; name: string; reasoning?: boolean }>;
   pendingProvider: string | null;
   pendingMeta: ProviderMeta | null;
   pendingApiKey: string;
@@ -32,6 +32,8 @@ export function AgentSettingsPanel({
   handleProviderChange, handleProviderConfirm, handleProviderCancel,
   compact = false,
 }: AgentSettingsPanelProps) {
+  const supportsReasoning = modelOptions.find((m) => m.value === getLocal('agent.model'))?.reasoning ?? false;
+
   return (
     <>
       <div style={{ display: 'grid', gap: '16px' }}>
@@ -98,6 +100,16 @@ export function AgentSettingsPanel({
             options={modelOptions.map((m) => m.value)}
             labels={modelOptions.map((m) => m.name)}
             onChange={(v) => saveConfig('agent.model', v)}
+          />
+        </div>
+        <div className="form-group" style={{ marginBottom: 0, opacity: supportsReasoning ? 1 : 0.45 }}>
+          <label>Reasoning <InfoTip text={supportsReasoning ? "Thinking depth for this reasoning model" : "Current model does not support reasoning"} /></label>
+          <Select
+            value={getLocal('agent.reasoning_effort') || 'low'}
+            options={['off', 'low', 'medium', 'high']}
+            labels={['Off', 'Low', 'Medium', 'High']}
+            onChange={(v) => saveConfig('agent.reasoning_effort', v)}
+            disabled={!supportsReasoning}
           />
         </div>
         {!compact && (

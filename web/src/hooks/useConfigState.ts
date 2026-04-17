@@ -16,7 +16,7 @@ export function useConfigState() {
   const [configKeys, setConfigKeys] = useState<ConfigKeyData[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [modelOptions, setModelOptions] = useState<Array<{ value: string; name: string }>>([]);
+  const [modelOptions, setModelOptions] = useState<Array<{ value: string; name: string; reasoning?: boolean }>>([]);
 
   // Provider switch gating state
   const [pendingProvider, setPendingProvider] = useState<string | null>(null);
@@ -92,7 +92,7 @@ export function useConfigState() {
   useEffect(() => {
     if (!currentProvider) return;
     api.getModelsForProvider(currentProvider).then((res) => {
-      const models = res.data.map((m) => ({ value: m.value, name: m.name }));
+      const models = res.data.map((m) => ({ value: m.value, name: m.name, reasoning: m.reasoning }));
       setModelOptions(models);
       // Auto-select first model if current model isn't in the new list
       const currentModel = localInputs['agent.model'] ?? '';
