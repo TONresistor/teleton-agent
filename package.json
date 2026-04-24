@@ -1,6 +1,9 @@
 {
   "name": "teleton",
   "version": "0.8.6",
+  "overrides": {
+    "onnxruntime-node": "1.22.0-rev"
+  },
   "workspaces": [
     "packages/*"
   ],
