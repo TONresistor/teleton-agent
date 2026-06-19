@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Claude Opus 4.8 in the model catalog.
+
+### Changed
+
+- Migrated the LLM client from the deprecated `@mariozechner/pi-ai` to the maintained `@earendil-works/pi-ai` fork.
+
 ## [0.9.0] - 2026-06-19
 
 ### Added
