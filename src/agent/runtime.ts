@@ -45,7 +45,7 @@ import type {
   AssistantMessage,
   Message,
   ToolResultMessage,
-} from "@mariozechner/pi-ai";
+} from "@earendil-works/pi-ai";
 import { CompactionManager, DEFAULT_COMPACTION_CONFIG } from "../memory/compaction.js";
 import { maskOldToolResults } from "../memory/observation-masking.js";
 import { ContextBuilder } from "../memory/search/context.js";

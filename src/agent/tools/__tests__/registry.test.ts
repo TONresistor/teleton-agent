@@ -3,10 +3,10 @@ import Database from "better-sqlite3";
 import { ToolRegistry } from "../registry.js";
 import { Type } from "@sinclair/typebox";
 import type { Tool, ToolExecutor, ToolContext, ToolScope } from "../types.js";
-import type { ToolCall } from "@mariozechner/pi-ai";
+import type { ToolCall } from "@earendil-works/pi-ai";
 
 // Mock modules
-vi.mock("@mariozechner/pi-ai", () => ({
+vi.mock("@earendil-works/pi-ai", () => ({
   validateToolCall: vi.fn((tools, toolCall) => toolCall.arguments),
 }));
 

@@ -1,6 +1,6 @@
 import { Type } from "@sinclair/typebox";
 import type { TSchema } from "@sinclair/typebox";
-import type { Tool as PiAiTool } from "@mariozechner/pi-ai";
+import type { Tool as PiAiTool } from "@earendil-works/pi-ai";
 import type { Tool, ToolExecutor, ToolResult } from "../types.js";
 import type { ToolRegistry } from "../registry.js";
 import { createLogger } from "../../../utils/logger.js";

@@ -63,10 +63,10 @@
   },
   "dependencies": {
     "@dedust/sdk": "^0.8.7",
+    "@earendil-works/pi-ai": "^0.79.8",
     "@hono/node-server": "^2.0.4",
     "@huggingface/transformers": "^3.8.1",
     "@inquirer/prompts": "^8.3.2",
-    "@mariozechner/pi-ai": "^0.73.1",
     "@modelcontextprotocol/sdk": "^1.28.0",
     "@sinclair/typebox": "^0.34.48",
     "@tavily/core": "^0.7.2",

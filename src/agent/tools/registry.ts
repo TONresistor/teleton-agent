@@ -1,5 +1,5 @@
-import { validateToolCall } from "@mariozechner/pi-ai";
-import type { Tool as PiAiTool, ToolCall } from "@mariozechner/pi-ai";
+import { validateToolCall } from "@earendil-works/pi-ai";
+import type { Tool as PiAiTool, ToolCall } from "@earendil-works/pi-ai";
 import type { TSchema } from "@sinclair/typebox";
 import type {
   RegisteredTool,

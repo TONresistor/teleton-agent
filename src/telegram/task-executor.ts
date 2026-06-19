@@ -1,7 +1,7 @@
 import type { Task } from "../memory/agent/tasks.js";
 import type { ToolContext } from "../agent/tools/types.js";
 import type { ToolRegistry } from "../agent/tools/registry.js";
-import type { ToolCall } from "@mariozechner/pi-ai";
+import type { ToolCall } from "@earendil-works/pi-ai";
 import type { AgentRuntime } from "../agent/runtime.js";
 import {
   MAX_JSON_FIELD_CHARS,

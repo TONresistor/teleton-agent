@@ -1,4 +1,4 @@
-import type { Message, TextContent, ToolCall } from "@mariozechner/pi-ai";
+import type { Message, TextContent, ToolCall } from "@earendil-works/pi-ai";
 
 /**
  * Neutral, pure primitives for reading pi-ai `Message` content. Shared by the

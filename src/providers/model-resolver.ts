@@ -1,4 +1,4 @@
-import { getModel, type Model, type Api } from "@mariozechner/pi-ai";
+import { getModel, type Model, type Api } from "@earendil-works/pi-ai";
 import { getProviderMetadata, type SupportedProvider } from "../config/providers.js";
 import { createLogger } from "../utils/logger.js";
 import { fetchWithTimeout } from "../utils/fetch.js";

@@ -6,7 +6,7 @@ import {
   type Message,
   type Tool,
   type ProviderStreamOptions,
-} from "@mariozechner/pi-ai";
+} from "@earendil-works/pi-ai";
 import type { AgentConfig } from "../config/schema.js";
 import { appendToTranscript, readTranscript } from "../session/transcript.js";
 import type { SupportedProvider } from "../config/providers.js";
