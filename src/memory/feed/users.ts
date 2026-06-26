@@ -14,6 +14,21 @@ export interface TelegramUser {
   messageCount: number;
 }
 
+function rowToUser(row: TgUserRow): TelegramUser {
+  return {
+    id: row.id,
+    username: row.username ?? undefined,
+    firstName: row.first_name ?? undefined,
+    lastName: row.last_name ?? undefined,
+    isBot: Boolean(row.is_bot),
+    isAdmin: Boolean(row.is_admin),
+    isAllowed: Boolean(row.is_allowed),
+    firstSeenAt: new Date(row.first_seen_at * 1000),
+    lastSeenAt: new Date(row.last_seen_at * 1000),
+    messageCount: row.message_count,
+  };
+}
+
 export class UserStore {
   constructor(private db: Database.Database) {}
 
@@ -69,20 +84,7 @@ export class UserStore {
       | TgUserRow
       | undefined;
 
-    if (!row) return undefined;
-
-    return {
-      id: row.id,
-      username: row.username ?? undefined,
-      firstName: row.first_name ?? undefined,
-      lastName: row.last_name ?? undefined,
-      isBot: Boolean(row.is_bot),
-      isAdmin: Boolean(row.is_admin),
-      isAllowed: Boolean(row.is_allowed),
-      firstSeenAt: new Date(row.first_seen_at * 1000),
-      lastSeenAt: new Date(row.last_seen_at * 1000),
-      messageCount: row.message_count,
-    };
+    return row ? rowToUser(row) : undefined;
   }
 
   getUserByUsername(username: string): TelegramUser | undefined {
@@ -90,20 +92,7 @@ export class UserStore {
       .prepare(`SELECT * FROM tg_users WHERE username = ?`)
       .get(username.replace("@", "")) as TgUserRow | undefined;
 
-    if (!row) return undefined;
-
-    return {
-      id: row.id,
-      username: row.username ?? undefined,
-      firstName: row.first_name ?? undefined,
-      lastName: row.last_name ?? undefined,
-      isBot: Boolean(row.is_bot),
-      isAdmin: Boolean(row.is_admin),
-      isAllowed: Boolean(row.is_allowed),
-      firstSeenAt: new Date(row.first_seen_at * 1000),
-      lastSeenAt: new Date(row.last_seen_at * 1000),
-      messageCount: row.message_count,
-    };
+    return row ? rowToUser(row) : undefined;
   }
 
   updateLastSeen(userId: string): void {
@@ -165,18 +154,7 @@ export class UserStore {
       )
       .all() as TgUserRow[];
 
-    return rows.map((row) => ({
-      id: row.id,
-      username: row.username ?? undefined,
-      firstName: row.first_name ?? undefined,
-      lastName: row.last_name ?? undefined,
-      isBot: Boolean(row.is_bot),
-      isAdmin: Boolean(row.is_admin),
-      isAllowed: Boolean(row.is_allowed),
-      firstSeenAt: new Date(row.first_seen_at * 1000),
-      lastSeenAt: new Date(row.last_seen_at * 1000),
-      messageCount: row.message_count,
-    }));
+    return rows.map(rowToUser);
   }
 
   getRecentUsers(limit: number = 50): TelegramUser[] {
@@ -190,17 +168,6 @@ export class UserStore {
       )
       .all(limit) as TgUserRow[];
 
-    return rows.map((row) => ({
-      id: row.id,
-      username: row.username ?? undefined,
-      firstName: row.first_name ?? undefined,
-      lastName: row.last_name ?? undefined,
-      isBot: Boolean(row.is_bot),
-      isAdmin: Boolean(row.is_admin),
-      isAllowed: Boolean(row.is_allowed),
-      firstSeenAt: new Date(row.first_seen_at * 1000),
-      lastSeenAt: new Date(row.last_seen_at * 1000),
-      messageCount: row.message_count,
-    }));
+    return rows.map(rowToUser);
   }
 }
