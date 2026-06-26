@@ -12,15 +12,8 @@ vi.mock("../../memory/index.js", () => ({
 }));
 
 // Import after mock setup
-const {
-  getOrCreateSession,
-  updateSession,
-  getSession,
-  saveSessionStore,
-  loadSessionStore,
-  pruneOldSessions,
-  shouldResetSession,
-} = await import("../store.js");
+const { getOrCreateSession, updateSession, getSession, pruneOldSessions, shouldResetSession } =
+  await import("../store.js");
 
 describe("Session Store", () => {
   beforeEach(() => {
@@ -74,31 +67,17 @@ describe("Session Store", () => {
       expect(session!.outputTokens).toBe(1000);
     });
 
-    it("loads token usage from database via loadSessionStore", () => {
+    it("loads token usage from database via getSession", () => {
       getOrCreateSession("123");
       updateSession("123", {
         inputTokens: 9999,
         outputTokens: 4444,
       });
 
-      const store = loadSessionStore();
-      const session = store["telegram:123"];
-      expect(session).toBeDefined();
-      expect(session.inputTokens).toBe(9999);
-      expect(session.outputTokens).toBe(4444);
-    });
-
-    it("saves and restores token usage via saveSessionStore + loadSessionStore", () => {
-      const session = getOrCreateSession("456");
-      session.inputTokens = 7777;
-      session.outputTokens = 3333;
-
-      saveSessionStore({ "telegram:456": session });
-
-      const store = loadSessionStore();
-      const restored = store["telegram:456"];
-      expect(restored.inputTokens).toBe(7777);
-      expect(restored.outputTokens).toBe(3333);
+      const session = getSession("123");
+      expect(session).not.toBeNull();
+      expect(session!.inputTokens).toBe(9999);
+      expect(session!.outputTokens).toBe(4444);
     });
 
     it("defaults to 0 for new sessions", () => {

@@ -28,8 +28,6 @@ export interface SessionEntry {
   outputTokens?: number;
 }
 
-export type SessionStore = Record<string, SessionEntry>;
-
 /**
  * camelCase field → snake_case column for the fields updateSession can write.
  * `updated_at` is always set separately; `chatId`/`createdAt` are immutable.
@@ -93,61 +91,6 @@ function rowToSession(row: SessionRow): SessionEntry {
     inputTokens: row.input_tokens ?? undefined,
     outputTokens: row.output_tokens ?? undefined,
   };
-}
-export function loadSessionStore(): SessionStore {
-  try {
-    const db = getDb();
-    const rows = db.prepare("SELECT * FROM sessions").all() as SessionRow[];
-
-    const store: SessionStore = {};
-    for (const row of rows) {
-      const sessionKey = row.chat_id;
-      store[sessionKey] = rowToSession(row);
-    }
-
-    return store;
-  } catch (error) {
-    log.warn({ err: error }, "Failed to load sessions from database");
-    return {};
-  }
-}
-export function saveSessionStore(store: SessionStore): void {
-  try {
-    const db = getDb();
-
-    const insertStmt = db.prepare(`
-      INSERT INTO sessions (
-        id, chat_id, started_at, updated_at, message_count,
-        last_message_id, last_channel, last_to, context_tokens,
-        model, provider, last_reset_date, input_tokens, output_tokens
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-
-    db.transaction(() => {
-      db.prepare("DELETE FROM sessions").run();
-
-      for (const [chatId, session] of Object.entries(store)) {
-        insertStmt.run(
-          session.sessionId,
-          chatId,
-          session.createdAt,
-          session.updatedAt,
-          session.messageCount,
-          session.lastMessageId,
-          session.lastChannel,
-          session.lastTo,
-          session.contextTokens,
-          session.model,
-          session.provider,
-          session.lastResetDate,
-          session.inputTokens ?? 0,
-          session.outputTokens ?? 0
-        );
-      }
-    })();
-  } catch (error) {
-    log.error({ err: error }, "Failed to save sessions to database");
-  }
 }
 export function getOrCreateSession(chatId: string): SessionEntry {
   const db = getDb();
