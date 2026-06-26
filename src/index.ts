@@ -24,6 +24,7 @@ import { registerAllTools } from "./agent/tools/register-all.js";
 import { type PluginModuleWithHooks } from "./agent/tools/plugin-loader.js";
 import type { HookName, AgentStartEvent, AgentStopEvent } from "./sdk/hooks/types.js";
 import { createHookRunner } from "./sdk/hooks/runner.js";
+import type { HookRegistry } from "./sdk/hooks/registry.js";
 import type { SDKDependencies } from "./sdk/index.js";
 import type { SupportedProvider } from "./config/providers.js";
 import { readRawConfig, setNestedValue, writeRawConfig } from "./config/configurable-keys.js";
@@ -379,38 +380,7 @@ ${blue}  ┌──────────────────────�
 
     if (modeChanged) {
       log.info(`Mode changed to "${this.config.telegram.mode}", recreating bridge & registry`);
-
-      // Recreate bridge for the new mode
-      this.bridge = createBridge(this.config);
-      this.sdkDeps.bridge = this.bridge;
-
-      // Update tool registry mode (filters tools for user vs bot)
-      this.toolRegistry.setMode(this.config.telegram.mode);
-      if (this.config.telegram.allow_from?.length) {
-        this.toolRegistry.setAllowFrom(this.config.telegram.allow_from);
-      }
-
-      // Swap bridge ref in handlers that hold it
-      this.messageHandler.setBridge(this.bridge);
-
-      // Recreate handlers that don't support hot-swap
-      const db = getDatabase().getDb();
-      const modulePermissions = new ModulePermissions(db);
-      this.toolRegistry.setPermissions(modulePermissions);
-      this.adminHandler = new AdminHandler(
-        this.bridge,
-        this.config.telegram,
-        this.agent,
-        this.configPath,
-        modulePermissions,
-        this.toolRegistry
-      );
-      this.heartbeatRunner = new HeartbeatRunner(this.agent, this.bridge, this.config);
-      this.scheduledTaskHandler = new ScheduledTaskHandler(this.agent, this.bridge, this.config);
-
-      // New bridge = new message listeners needed
-      this.messageHandlersRegistered = false;
-      this.callbackHandlerRegistered = false;
+      this.recreateForModeChange();
     }
 
     // Truncate stale external plugins from previous run (keep builtins only)
@@ -501,28 +471,7 @@ ${blue}  ┌──────────────────────�
     }
 
     // Create hook runner if any plugins registered hooks
-    if (hookRegistry.hasAnyHooks()) {
-      const hookRunner = createHookRunner(hookRegistry, { logger: log });
-      this.agent.setHookRunner(hookRunner);
-      this.hookRunner = hookRunner;
-      const activeHooks: HookName[] = [
-        "tool:before",
-        "tool:after",
-        "tool:error",
-        "prompt:before",
-        "prompt:after",
-        "session:start",
-        "session:end",
-        "message:receive",
-        "response:before",
-        "response:after",
-        "response:error",
-        "agent:start",
-        "agent:stop",
-      ];
-      const active = activeHooks.filter((n) => hookRegistry.hasHooks(n));
-      log.info(`🪝 Hook runner created (${active.join(", ")})`);
-    }
+    if (hookRegistry.hasAnyHooks()) this.installHookRunner(hookRegistry);
 
     this.wirePluginEventHooks();
 
@@ -560,25 +509,7 @@ ${blue}  ┌──────────────────────�
     // Hook: agent:start
     this.startTime = Date.now();
     this.messagesProcessed = 0;
-    if (this.hookRunner) {
-      let version = "0.0.0";
-      try {
-        const { createRequire } = await import("module");
-        const req = createRequire(import.meta.url);
-        version = (req("../package.json") as { version: string }).version;
-      } catch {
-        /* ignore */
-      }
-      const agentStartEvent: AgentStartEvent = {
-        version,
-        provider,
-        model: this.config.agent.model,
-        pluginCount: pluginNames.length,
-        toolCount: this.toolCount,
-        timestamp: Date.now(),
-      };
-      await this.hookRunner.runObservingHook("agent:start", agentStartEvent);
-    }
+    await this.emitAgentStartHook(provider, pluginNames.length);
 
     // Start heartbeat timer if enabled
     if (this.config.heartbeat.enabled) {
@@ -588,7 +519,63 @@ ${blue}  ┌──────────────────────�
       }
     }
 
-    // Initialize message debouncer
+    this.installMessagePipeline();
+  }
+
+  /** Create and install the plugin hook runner; log which hooks are active. */
+  private installHookRunner(hookRegistry: HookRegistry): void {
+    const hookRunner = createHookRunner(hookRegistry, { logger: log });
+    this.agent.setHookRunner(hookRunner);
+    this.hookRunner = hookRunner;
+    const activeHooks: HookName[] = [
+      "tool:before",
+      "tool:after",
+      "tool:error",
+      "prompt:before",
+      "prompt:after",
+      "session:start",
+      "session:end",
+      "message:receive",
+      "response:before",
+      "response:after",
+      "response:error",
+      "agent:start",
+      "agent:stop",
+    ];
+    const active = activeHooks.filter((n) => hookRegistry.hasHooks(n));
+    log.info(`🪝 Hook runner created (${active.join(", ")})`);
+  }
+
+  /** Emit the agent:start observing hook (no-op when no hook runner). */
+  private async emitAgentStartHook(
+    provider: SupportedProvider,
+    pluginCount: number
+  ): Promise<void> {
+    if (!this.hookRunner) return;
+    let version = "0.0.0";
+    try {
+      const { createRequire } = await import("module");
+      const req = createRequire(import.meta.url);
+      version = (req("../package.json") as { version: string }).version;
+    } catch {
+      /* ignore */
+    }
+    const agentStartEvent: AgentStartEvent = {
+      version,
+      provider,
+      model: this.config.agent.model,
+      pluginCount,
+      toolCount: this.toolCount,
+      timestamp: Date.now(),
+    };
+    await this.hookRunner.runObservingHook("agent:start", agentStartEvent);
+  }
+
+  /**
+   * Initialize the message debouncer and register the (one-time) new-message
+   * listener that feeds it. Idempotent across agent restarts via the WebUI.
+   */
+  private installMessagePipeline(): void {
     this.debouncer = new MessageDebouncer(
       { debounceMs: this.config.telegram.debounce_ms },
       (msg) => {
@@ -621,6 +608,44 @@ ${blue}  ┌──────────────────────�
       });
       this.messageHandlersRegistered = true;
     }
+  }
+
+  /**
+   * Recreate the bridge, registry mode, and non-hot-swappable handlers after a
+   * user/bot mode switch. Caller logs the switch and guards on modeChanged.
+   */
+  private recreateForModeChange(): void {
+    // Recreate bridge for the new mode
+    this.bridge = createBridge(this.config);
+    this.sdkDeps.bridge = this.bridge;
+
+    // Update tool registry mode (filters tools for user vs bot)
+    this.toolRegistry.setMode(this.config.telegram.mode);
+    if (this.config.telegram.allow_from?.length) {
+      this.toolRegistry.setAllowFrom(this.config.telegram.allow_from);
+    }
+
+    // Swap bridge ref in handlers that hold it
+    this.messageHandler.setBridge(this.bridge);
+
+    // Recreate handlers that don't support hot-swap
+    const db = getDatabase().getDb();
+    const modulePermissions = new ModulePermissions(db);
+    this.toolRegistry.setPermissions(modulePermissions);
+    this.adminHandler = new AdminHandler(
+      this.bridge,
+      this.config.telegram,
+      this.agent,
+      this.configPath,
+      modulePermissions,
+      this.toolRegistry
+    );
+    this.heartbeatRunner = new HeartbeatRunner(this.agent, this.bridge, this.config);
+    this.scheduledTaskHandler = new ScheduledTaskHandler(this.agent, this.bridge, this.config);
+
+    // New bridge = new message listeners needed
+    this.messageHandlersRegistered = false;
+    this.callbackHandlerRegistered = false;
   }
 
   // ─── Mode-specific wiring ──────────────────────────────────────────────
