@@ -38,7 +38,7 @@ import {
   semverSatisfies,
   type SDKDependencies,
 } from "../../sdk/index.js";
-import type { PluginSDK } from "../../sdk/index.js";
+import type { PluginSDK } from "@teleton-agent/sdk";
 import { HookRegistry } from "../../sdk/hooks/registry.js";
 import { createSecretsSDK } from "../../sdk/secrets.js";
 import type {
