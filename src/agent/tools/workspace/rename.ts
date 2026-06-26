@@ -6,7 +6,6 @@ import { dirname } from "path";
 import { mkdirSync } from "fs";
 import type { Tool, ToolExecutor } from "../types.js";
 import { validatePath } from "../../../workspace/index.js";
-import { withToolErrors } from "../wrap.js";
 
 interface WorkspaceRenameParams {
   from: string;
@@ -34,46 +33,45 @@ export const workspaceRenameTool: Tool = {
   }),
 };
 
-export const workspaceRenameExecutor: ToolExecutor<WorkspaceRenameParams> =
-  withToolErrors<WorkspaceRenameParams>(async (params) => {
-    const { from, to, overwrite = false } = params;
+export const workspaceRenameExecutor: ToolExecutor<WorkspaceRenameParams> = async (params) => {
+  const { from, to, overwrite = false } = params;
 
-    // Validate source path (must exist)
-    const validatedFrom = validatePath(from, false);
+  // Validate source path (must exist)
+  const validatedFrom = validatePath(from, false);
 
-    if (validatedFrom.isDirectory) {
-      return {
-        success: false,
-        error: "Cannot rename directories. Use this tool for files only.",
-      };
-    }
-
-    // Validate destination path (may not exist yet)
-    const validatedTo = validatePath(to, true);
-
-    // Check if destination already exists
-    if (validatedTo.exists && !overwrite) {
-      return {
-        success: false,
-        error: `Destination already exists: '${to}'. Use overwrite=true to replace.`,
-      };
-    }
-
-    // Create parent directory if needed
-    const parentDir = dirname(validatedTo.absolutePath);
-    if (!existsSync(parentDir)) {
-      mkdirSync(parentDir, { recursive: true });
-    }
-
-    // Perform the rename/move
-    renameSync(validatedFrom.absolutePath, validatedTo.absolutePath);
-
+  if (validatedFrom.isDirectory) {
     return {
-      success: true,
-      data: {
-        from: validatedFrom.relativePath,
-        to: validatedTo.relativePath,
-        message: `File renamed successfully`,
-      },
+      success: false,
+      error: "Cannot rename directories. Use this tool for files only.",
     };
-  });
+  }
+
+  // Validate destination path (may not exist yet)
+  const validatedTo = validatePath(to, true);
+
+  // Check if destination already exists
+  if (validatedTo.exists && !overwrite) {
+    return {
+      success: false,
+      error: `Destination already exists: '${to}'. Use overwrite=true to replace.`,
+    };
+  }
+
+  // Create parent directory if needed
+  const parentDir = dirname(validatedTo.absolutePath);
+  if (!existsSync(parentDir)) {
+    mkdirSync(parentDir, { recursive: true });
+  }
+
+  // Perform the rename/move
+  renameSync(validatedFrom.absolutePath, validatedTo.absolutePath);
+
+  return {
+    success: true,
+    data: {
+      from: validatedFrom.relativePath,
+      to: validatedTo.relativePath,
+      message: `File renamed successfully`,
+    },
+  };
+};

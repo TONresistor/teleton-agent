@@ -5,7 +5,6 @@ import { readdirSync, lstatSync } from "fs";
 import { join } from "path";
 import type { Tool, ToolExecutor } from "../types.js";
 import { validateDirectory, WORKSPACE_ROOT } from "../../../workspace/index.js";
-import { withToolErrors } from "../wrap.js";
 
 interface WorkspaceListParams {
   path?: string;
@@ -83,33 +82,32 @@ function listDir(dirPath: string, recursive: boolean, filter: string): FileInfo[
   return results;
 }
 
-export const workspaceListExecutor: ToolExecutor<WorkspaceListParams> =
-  withToolErrors<WorkspaceListParams>(async (params) => {
-    const { path = "", recursive = false, filter = "all" } = params;
+export const workspaceListExecutor: ToolExecutor<WorkspaceListParams> = async (params) => {
+  const { path = "", recursive = false, filter = "all" } = params;
 
-    // Validate the path
-    const validated = validateDirectory(path || WORKSPACE_ROOT);
+  // Validate the path
+  const validated = validateDirectory(path || WORKSPACE_ROOT);
 
-    if (!validated.exists) {
-      return {
-        success: true,
-        data: {
-          path: validated.relativePath || "/",
-          files: [],
-          message: "Directory does not exist",
-        },
-      };
-    }
-
-    const files = listDir(validated.absolutePath, recursive, filter);
-
+  if (!validated.exists) {
     return {
       success: true,
       data: {
         path: validated.relativePath || "/",
-        files,
-        count: files.length,
-        workspaceRoot: WORKSPACE_ROOT,
+        files: [],
+        message: "Directory does not exist",
       },
     };
-  });
+  }
+
+  const files = listDir(validated.absolutePath, recursive, filter);
+
+  return {
+    success: true,
+    data: {
+      path: validated.relativePath || "/",
+      files,
+      count: files.length,
+      workspaceRoot: WORKSPACE_ROOT,
+    },
+  };
+};

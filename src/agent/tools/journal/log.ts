@@ -8,7 +8,6 @@ import { getDatabase } from "../../../memory/database.js";
 import { JournalStore } from "../../../memory/journal-store.js";
 import type { JournalType, JournalOutcome } from "../../../memory/journal-store.js";
 import type { Tool, ToolExecutor } from "../types.js";
-import { withToolErrors } from "../wrap.js";
 import { formatAssetFlow, formatTxHash } from "./format.js";
 
 interface JournalLogParams {
@@ -77,69 +76,67 @@ export const journalLogTool: Tool = {
   }),
 };
 
-export const journalLogExecutor: ToolExecutor<JournalLogParams> = withToolErrors<JournalLogParams>(
-  async (params, context) => {
-    const db = getDatabase().getDb();
-    const store = new JournalStore(db);
+export const journalLogExecutor: ToolExecutor<JournalLogParams> = async (params, context) => {
+  const db = getDatabase().getDb();
+  const store = new JournalStore(db);
 
-    const entry = store.addEntry({
-      type: params.type,
-      action: params.action,
-      asset_from: params.asset_from,
-      asset_to: params.asset_to,
-      amount_from: params.amount_from,
-      amount_to: params.amount_to,
-      price_ton: params.price_ton,
-      counterparty: params.counterparty,
-      platform: params.platform,
-      reasoning: params.reasoning,
-      outcome: params.outcome ?? "pending",
-      tx_hash: params.tx_hash,
-      tool_used: "journal_log",
-      chat_id: context.chatId?.toString(),
-      user_id: context.senderId,
-    });
+  const entry = store.addEntry({
+    type: params.type,
+    action: params.action,
+    asset_from: params.asset_from,
+    asset_to: params.asset_to,
+    amount_from: params.amount_from,
+    amount_to: params.amount_to,
+    price_ton: params.price_ton,
+    counterparty: params.counterparty,
+    platform: params.platform,
+    reasoning: params.reasoning,
+    outcome: params.outcome ?? "pending",
+    tx_hash: params.tx_hash,
+    tool_used: "journal_log",
+    chat_id: context.chatId?.toString(),
+    user_id: context.senderId,
+  });
 
-    // Format output
-    const lines: string[] = [
-      `📝 Journal Entry #${entry.id} logged`,
-      ``,
-      `**Type**: ${entry.type}`,
-      `**Action**: ${entry.action}`,
-    ];
+  // Format output
+  const lines: string[] = [
+    `📝 Journal Entry #${entry.id} logged`,
+    ``,
+    `**Type**: ${entry.type}`,
+    `**Action**: ${entry.action}`,
+  ];
 
-    const assetFlow = formatAssetFlow(entry);
-    if (assetFlow) {
-      lines.push(`**Assets**: ${assetFlow}`);
-    }
-
-    if (entry.price_ton) {
-      lines.push(`**Price**: ${entry.price_ton} TON`);
-    }
-
-    if (entry.counterparty) {
-      lines.push(`**Counterparty**: ${entry.counterparty}`);
-    }
-
-    if (entry.platform) {
-      lines.push(`**Platform**: ${entry.platform}`);
-    }
-
-    lines.push(`**Outcome**: ${entry.outcome}`);
-    lines.push(`**Reasoning**: ${entry.reasoning}`);
-
-    if (entry.tx_hash) {
-      lines.push(`**TX**: ${formatTxHash(entry.tx_hash)}`);
-    }
-
-    lines.push(``, `_Logged at ${new Date(entry.created_at * 1000).toISOString()}_`);
-
-    return {
-      success: true,
-      data: {
-        entry,
-        message: lines.join("\n"),
-      },
-    };
+  const assetFlow = formatAssetFlow(entry);
+  if (assetFlow) {
+    lines.push(`**Assets**: ${assetFlow}`);
   }
-);
+
+  if (entry.price_ton) {
+    lines.push(`**Price**: ${entry.price_ton} TON`);
+  }
+
+  if (entry.counterparty) {
+    lines.push(`**Counterparty**: ${entry.counterparty}`);
+  }
+
+  if (entry.platform) {
+    lines.push(`**Platform**: ${entry.platform}`);
+  }
+
+  lines.push(`**Outcome**: ${entry.outcome}`);
+  lines.push(`**Reasoning**: ${entry.reasoning}`);
+
+  if (entry.tx_hash) {
+    lines.push(`**TX**: ${formatTxHash(entry.tx_hash)}`);
+  }
+
+  lines.push(``, `_Logged at ${new Date(entry.created_at * 1000).toISOString()}_`);
+
+  return {
+    success: true,
+    data: {
+      entry,
+      message: lines.join("\n"),
+    },
+  };
+};
