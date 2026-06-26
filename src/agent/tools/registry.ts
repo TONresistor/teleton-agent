@@ -34,6 +34,8 @@ type AccessDenial =
   | { kind: "disabled" }
   | { kind: "admin-only" }
   | { kind: "allowlist" }
+  | { kind: "dm-only" }
+  | { kind: "group-only" }
   | { kind: "module-disabled"; module: string }
   | { kind: "module-admin"; module: string };
 
@@ -168,6 +170,17 @@ export class ToolRegistry {
       return { ok: false, reason: { kind: "mode", mode: toolMode } };
     }
 
+    // Channel restriction (code-declared, DB cannot override): a "dm-only" tool
+    // never runs in a group and a "group-only" tool never runs in a DM. Applies
+    // regardless of identity — it gates where the tool runs, not who runs it.
+    const channelScope = this.tools.get(name)?.scope;
+    if (channelScope === "dm-only" && ctx.isGroup) {
+      return { ok: false, reason: { kind: "dm-only" } };
+    }
+    if (channelScope === "group-only" && !ctx.isGroup) {
+      return { ok: false, reason: { kind: "group-only" } };
+    }
+
     const level = this.getEffectiveLevel(name);
     if (level === "off") return { ok: false, reason: { kind: "disabled" } };
     if (level === "admin" && !ctx.isAdmin) return { ok: false, reason: { kind: "admin-only" } };
@@ -202,6 +215,10 @@ export class ToolRegistry {
         return `Tool "${name}" is restricted to admin users`;
       case "allowlist":
         return `Tool "${name}" is restricted to allowed users`;
+      case "dm-only":
+        return `Tool "${name}" can only be used in a direct message`;
+      case "group-only":
+        return `Tool "${name}" can only be used in a group`;
       case "module-disabled":
         return `Module "${reason.module}" is disabled in this group`;
       case "module-admin":

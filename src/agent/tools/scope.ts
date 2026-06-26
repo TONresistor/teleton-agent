@@ -17,12 +17,12 @@ export function isToolAccessLevel(v: unknown): v is ToolAccessLevel {
 }
 
 /**
- * Map a legacy single-value {@link ToolScope} (still the code-declared default
- * for built-in / MCP / plugin tools) to an access level. Single source of truth
- * for the old→new translation — reused by the DB migration, the runtime default
- * seeding, and the backward-compatible API. The old context dimension
- * (dm-only / group-only) collapses to "all"; the channel gating now lives in the
- * global DM/Group policies.
+ * Map a single-value {@link ToolScope} (the code-declared default for built-in /
+ * MCP / plugin tools) to an access level. Single source of truth for the
+ * scope→level translation — reused by the DB migration, the runtime default
+ * seeding, and the API. Note the channel dimension (dm-only / group-only) maps
+ * to level "all" here because it is NOT an authority level: it is enforced
+ * separately in ToolRegistry.checkAccess from the tool's declared scope.
  */
 export function scopeToLevel(scope: ToolScope | null | undefined): ToolAccessLevel {
   switch (scope) {

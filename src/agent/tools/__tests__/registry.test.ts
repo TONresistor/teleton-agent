@@ -320,6 +320,40 @@ describe("ToolRegistry", () => {
     });
   });
 
+  describe("channel scope (dm-only / group-only)", () => {
+    beforeEach(() => {
+      registry.register(createMockTool("dm_tool"), createMockExecutor(), "dm-only");
+      registry.register(createMockTool("group_tool"), createMockExecutor(), "group-only");
+    });
+
+    it("excludes dm-only tools in groups and group-only tools in DMs", () => {
+      const dm = registry.getForContext(false, null, undefined, true).map((t) => t.name);
+      expect(dm).toContain("dm_tool");
+      expect(dm).not.toContain("group_tool");
+
+      const group = registry.getForContext(true, null, undefined, true).map((t) => t.name);
+      expect(group).toContain("group_tool");
+      expect(group).not.toContain("dm_tool");
+    });
+
+    it("denies executing a dm-only tool in a group", async () => {
+      const result = await registry.execute({ name: "dm_tool", input: { message: "x" } } as any, {
+        ...mockContext,
+        isGroup: true,
+      });
+      expect(result.success).toBe(false);
+      expect(result.error).toMatch(/direct message/i);
+    });
+
+    it("allows executing a dm-only tool in a DM", async () => {
+      const result = await registry.execute({ name: "dm_tool", input: { message: "x" } } as any, {
+        ...mockContext,
+        isGroup: false,
+      });
+      expect(result.success).toBe(true);
+    });
+  });
+
   // ---------- Tool execution ----------
 
   describe("execute()", () => {
