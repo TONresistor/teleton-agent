@@ -78,15 +78,6 @@ storage:
   memory_file: "~/custom_memory.json"
   history_limit: 50
 
-deals:
-  enabled: false
-  expiry_seconds: 60
-  buy_max_floor_percent: 90
-  sell_min_floor_percent: 110
-  poll_interval_ms: 3000
-  max_verification_retries: 5
-  expiry_check_interval_ms: 30000
-
 webui:
   enabled: true
   port: 8888
@@ -311,10 +302,6 @@ describe("Config Loader", () => {
       // Storage
       expect(config.storage.history_limit).toBe(50);
 
-      // Deals
-      expect(config.deals.enabled).toBe(false);
-      expect(config.deals.expiry_seconds).toBe(60);
-
       // WebUI
       expect(config.webui.enabled).toBe(true);
       expect(config.webui.port).toBe(8888);
@@ -382,10 +369,6 @@ describe("Config Loader", () => {
 
       // Storage defaults
       expect(config.storage.history_limit).toBe(100);
-
-      // Deals defaults
-      expect(config.deals.enabled).toBe(true);
-      expect(config.deals.expiry_seconds).toBe(120);
 
       // WebUI defaults
       expect(config.webui.enabled).toBe(false);

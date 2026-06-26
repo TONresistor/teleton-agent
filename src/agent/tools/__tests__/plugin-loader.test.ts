@@ -75,15 +75,6 @@ function makeConfig(overrides?: Partial<Config>): Config {
       history_limit: 100,
     },
     embedding: { provider: "local" },
-    deals: {
-      enabled: true,
-      expiry_seconds: 120,
-      buy_max_floor_percent: 95,
-      sell_min_floor_percent: 105,
-      poll_interval_ms: 5000,
-      max_verification_retries: 12,
-      expiry_check_interval_ms: 60000,
-    },
     webui: {
       enabled: false,
       port: 7777,
@@ -304,13 +295,6 @@ describe("sanitizeConfigForPlugins — config isolation", () => {
     const sanitized = sanitizeConfigForPlugins(config) as any;
 
     expect(sanitized.telegram.admin_ids).toEqual([111, 222]);
-  });
-
-  it("T4d: preserves deals.enabled", () => {
-    const config = makeConfig();
-    const sanitized = sanitizeConfigForPlugins(config) as any;
-
-    expect(sanitized.deals.enabled).toBe(true);
   });
 
   it("T4e: does not expose top-level secret keys", () => {

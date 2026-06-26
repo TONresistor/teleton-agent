@@ -2,8 +2,7 @@
  * Inline router — Grammy middleware that routes inline queries and callbacks
  * to registered plugin handlers by prefix.
  *
- * Installed BEFORE DealBot handlers so plugins get first crack.
- * Queries/callbacks without a known prefix fall through to DealBot via next().
+ * Queries/callbacks without a known plugin prefix fall through via next().
  */
 
 import type { Context, MiddlewareFn } from "grammy";
@@ -76,14 +75,10 @@ export class InlineRouter {
   }
 
   // ── Prefix routing contract ──────────────────────────────────────────────
-  // This middleware is installed BEFORE DealBot in the Grammy chain. It peels a
-  // `prefix:rest` segment off inline queries / callback data / chosen-result ids
-  // (via splitPrefix) and dispatches to the matching registered plugin.
-  //
-  // A prefix is RESERVED for DealBot — accept · decline · sent · copy_addr ·
-  // copy_memo · refresh (see decodeCallback in types.ts) — and plugins must not
-  // register those names. Any prefix without a registered plugin handler (or no
-  // colon at all) falls through via next() to DealBot's own handlers.
+  // This middleware peels a `prefix:rest` segment off inline queries / callback
+  // data / chosen-result ids (via splitPrefix) and dispatches to the matching
+  // registered plugin. Any prefix without a registered plugin handler (or no
+  // colon at all) falls through via next().
   middleware(): MiddlewareFn<Context> {
     return async (ctx, next) => {
       // ── Inline Query ─────────────────────────────────
@@ -96,7 +91,7 @@ export class InlineRouter {
             return; // handled, don't fall through
           }
         }
-        // No match — fall through to DealBot
+        // No match — fall through
         return next();
       }
 

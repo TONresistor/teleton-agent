@@ -3,10 +3,10 @@
  *
  * Encapsulates every GramJS (MTProto) operation the bot performs on inline
  * messages — answering inline queries with styled buttons and editing inline
- * messages — so DealBot and the plugin SDK stay free of transport plumbing.
+ * messages — so the plugin SDK stays free of transport plumbing.
  *
  * Depends only on a GramJSBotClient and the pure formatting helpers; it has no
- * knowledge of deals or business logic. Each higher-level caller keeps its own
+ * knowledge of business logic. Each higher-level caller keeps its own
  * Grammy (Bot API) fallback.
  */
 

@@ -77,11 +77,8 @@ export const TelegramConfigSchema = z
     bot_token: z
       .string()
       .optional()
-      .describe("Telegram Bot token from @BotFather for inline deal buttons"),
-    bot_username: z
-      .string()
-      .optional()
-      .describe("Bot username without @ (e.g., 'teleton_deals_bot')"),
+      .describe("Telegram Bot token from @BotFather for inline bot features"),
+    bot_username: z.string().optional().describe("Bot username without @ (e.g., 'my_agent_bot')"),
     stream_mode: z
       .enum(["all", "replace", "off"])
       .default("replace")
@@ -142,17 +139,6 @@ export const MetaConfigSchema = z.object({
   last_modified_at: z.string().optional(),
   onboard_command: z.string().default("teleton setup"),
 });
-
-const _DealsObject = z.object({
-  enabled: z.boolean().default(true),
-  expiry_seconds: z.number().default(120),
-  buy_max_floor_percent: z.number().default(95),
-  sell_min_floor_percent: z.number().default(105),
-  poll_interval_ms: z.number().default(5000),
-  max_verification_retries: z.number().default(12),
-  expiry_check_interval_ms: z.number().default(60000),
-});
-export const DealsConfigSchema = _DealsObject.default(_DealsObject.parse({}));
 
 const _WebUIObject = z.object({
   enabled: z.boolean().default(false).describe("Enable WebUI server"),
@@ -341,7 +327,6 @@ export const ConfigSchema = z.object({
   telegram: TelegramConfigSchema,
   storage: StorageConfigSchema.default(StorageConfigSchema.parse({})),
   embedding: EmbeddingConfigSchema,
-  deals: DealsConfigSchema,
   webui: WebUIConfigSchema,
   logging: LoggingConfigSchema,
   dev: DevConfigSchema,
@@ -389,7 +374,6 @@ export type Config = z.infer<typeof ConfigSchema>;
 export type AgentConfig = z.infer<typeof AgentConfigSchema>;
 export type TelegramConfig = z.infer<typeof TelegramConfigSchema>;
 export type SessionResetPolicy = z.infer<typeof SessionResetPolicySchema>;
-export type DealsConfig = z.infer<typeof DealsConfigSchema>;
 export type WebUIConfig = z.infer<typeof WebUIConfigSchema>;
 export type McpConfig = z.infer<typeof McpConfigSchema>;
 export type McpServerConfig = z.infer<typeof McpServerSchema>;

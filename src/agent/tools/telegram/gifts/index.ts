@@ -2,12 +2,7 @@ import {
   telegramGetAvailableGiftsTool,
   telegramGetAvailableGiftsExecutor,
 } from "./get-available-gifts.js";
-import { telegramSendGiftTool, telegramSendGiftExecutor } from "./send-gift.js";
 import { telegramGetMyGiftsTool, telegramGetMyGiftsExecutor } from "./get-my-gifts.js";
-import {
-  telegramTransferCollectibleTool,
-  telegramTransferCollectibleExecutor,
-} from "./transfer-collectible.js";
 import {
   telegramSetCollectiblePriceTool,
   telegramSetCollectiblePriceExecutor,
@@ -41,22 +36,8 @@ export const tools: ToolEntry[] = [
     tags: ["finance"],
   },
   {
-    tool: telegramSendGiftTool,
-    executor: telegramSendGiftExecutor,
-    scope: "dm-only",
-    mode: "user",
-    tags: ["finance"],
-  },
-  {
     tool: telegramGetMyGiftsTool,
     executor: telegramGetMyGiftsExecutor,
-    mode: "user",
-    tags: ["finance"],
-  },
-  {
-    tool: telegramTransferCollectibleTool,
-    executor: telegramTransferCollectibleExecutor,
-    scope: "dm-only",
     mode: "user",
     tags: ["finance"],
   },

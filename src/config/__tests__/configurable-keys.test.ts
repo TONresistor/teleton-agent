@@ -114,42 +114,6 @@ describe("CONFIGURABLE_KEYS — new scalar entries", () => {
     });
   });
 
-  describe("deals.expiry_seconds", () => {
-    const meta = CONFIGURABLE_KEYS["deals.expiry_seconds"];
-
-    it("accepts 10-3600", () => {
-      expect(meta.validate("120")).toBeUndefined();
-    });
-
-    it("rejects below min", () => {
-      expect(meta.validate("5")).toBeDefined();
-    });
-  });
-
-  describe("deals.buy_max_floor_percent", () => {
-    const meta = CONFIGURABLE_KEYS["deals.buy_max_floor_percent"];
-
-    it("accepts 1-100", () => {
-      expect(meta.validate("95")).toBeUndefined();
-    });
-
-    it("rejects above 100", () => {
-      expect(meta.validate("101")).toBeDefined();
-    });
-  });
-
-  describe("deals.sell_min_floor_percent", () => {
-    const meta = CONFIGURABLE_KEYS["deals.sell_min_floor_percent"];
-
-    it("accepts 100-500", () => {
-      expect(meta.validate("105")).toBeUndefined();
-    });
-
-    it("rejects below 100", () => {
-      expect(meta.validate("99")).toBeDefined();
-    });
-  });
-
   describe("gocoon.port", () => {
     const meta = CONFIGURABLE_KEYS["gocoon.port"];
 

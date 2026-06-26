@@ -2,7 +2,7 @@
  * Central tool registration for the Teleton agent.
  *
  * Each category exports a `tools: ToolEntry[]` array with scope info co-located.
- * Deals tools are loaded separately via module-loader.ts.
+ * Built-in modules (ton-proxy, exec) are loaded separately via module-loader.ts.
  */
 
 import type { ToolRegistry } from "./registry.js";

@@ -122,6 +122,5 @@ export function sanitizeConfigForPlugins(config: Config): Record<string, unknown
     telegram: {
       admin_ids: config.telegram.admin_ids,
     },
-    deals: { enabled: config.deals.enabled },
   };
 }

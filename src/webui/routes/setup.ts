@@ -16,7 +16,7 @@ import {
   validateApiKeyFormat,
   type SupportedProvider,
 } from "../../config/providers.js";
-import { ConfigSchema, DealsConfigSchema } from "../../config/schema.js";
+import { ConfigSchema } from "../../config/schema.js";
 import { ensureWorkspace, isNewWorkspace } from "../../workspace/manager.js";
 import { TELETON_ROOT } from "../../workspace/paths.js";
 import {
@@ -505,10 +505,6 @@ export function createSetupRoutes(options?: { keyHash?: string }): Hono {
           history_limit: 100,
         },
         embedding: { provider: "local" as const },
-        deals: DealsConfigSchema.parse({
-          enabled: true,
-          ...(input.deals ?? {}),
-        }),
         webui: {
           enabled: input.webui?.enabled ?? false,
           port: 7777,

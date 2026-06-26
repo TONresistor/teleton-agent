@@ -103,7 +103,7 @@ export function createPluginSDK(deps: SDKDependencies, opts: CreatePluginSDKOpti
   const frozenPluginConfig = Object.freeze(JSON.parse(JSON.stringify(opts.pluginConfig ?? {})));
 
   // Lazy bot SDK — deps.inlineRouter/gramjsBot/grammyBot may not be available
-  // at plugin load time (plugins load before DealBot starts). The getter
+  // at plugin load time (the bot is wired after plugins load). The getter
   // retries until deps are wired and a non-null BotSDK is created.
   // Plugins without a botManifest get null cached immediately (no retry).
   let cachedBot: ReturnType<typeof createBotSDK> | undefined;

@@ -36,7 +36,7 @@ import { TELETON_ROOT } from "../../workspace/paths.js";
 import { TelegramUserClient } from "../../telegram/client.js";
 import { maskSecret } from "../../utils/mask.js";
 import YAML from "yaml";
-import { type Config, DealsConfigSchema } from "../../config/schema.js";
+import { type Config } from "../../config/schema.js";
 import { getModelsForProvider } from "../../config/model-catalog.js";
 import {
   generateWallet,
@@ -326,7 +326,6 @@ function buildConfig(input: BuildConfigInput): Config {
       history_limit: 100,
     },
     embedding: { provider: "local" },
-    deals: DealsConfigSchema.parse({ enabled: !!input.botToken }),
     webui: {
       enabled: false,
       port: 7777,
@@ -894,11 +893,11 @@ async function stepModules(
   let botToken: string | undefined;
   let botUsername: string | undefined;
 
-  // Bot token (recommended — required for deals module; skipped in bot mode, handled at step 5)
+  // Bot token (optional — enables inline bot features; skipped in bot mode, handled at step 5)
   const setupBot =
     telegramMode === "user"
       ? await confirm({
-          message: `Add a Telegram bot token? ${DIM("(recommended — enables deals & inline buttons)")}`,
+          message: `Add a Telegram bot token? ${DIM("(optional — enables inline buttons)")}`,
           default: true,
           theme,
         })

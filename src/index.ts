@@ -43,7 +43,6 @@ import { createLogger, initLoggerFromConfig } from "./utils/logger.js";
 import { AgentLifecycle } from "./agent/lifecycle.js";
 import { InlineRouter } from "./bot/inline-router.js";
 import { PluginRateLimiter } from "./bot/rate-limiter.js";
-import { setBotPreMiddleware, getDealBot } from "./deals/module.js";
 import type { WebUIServer } from "./webui/server.js";
 import type { ApiServer } from "./api/server.js";
 import { HeartbeatRunner } from "./heartbeat.js";
@@ -454,11 +453,6 @@ ${blue}  ┌──────────────────────�
     const inlineRouter = new InlineRouter();
     const rateLimiter = new PluginRateLimiter();
 
-    // User mode: install DealBot middleware before modules start
-    if (isUserBridge(this.bridge)) {
-      setBotPreMiddleware(inlineRouter.middleware());
-    }
-
     // Start module background jobs (after bridge connect)
     const pluginContext = await this.startModules();
 
@@ -467,7 +461,7 @@ ${blue}  ┌──────────────────────�
     if (isBotBridge(this.bridge)) {
       this.wireBotMode(inlineRouter, rateLimiter, firstStart);
     } else {
-      this.wireUserMode(inlineRouter, rateLimiter, firstStart);
+      this.wireUserMode(firstStart);
     }
 
     // Create hook runner if any plugins registered hooks
@@ -661,7 +655,7 @@ ${blue}  ┌──────────────────────�
     this.sdkDeps.inlineRouter = inlineRouter;
     this.sdkDeps.gramjsBot = null;
     this.sdkDeps.rateLimiter = rateLimiter;
-    log.info("Bot mode: using main Grammy bridge (no DealBot)");
+    log.info("Bot mode: using main Grammy bridge");
 
     if (isBotBridge(this.bridge)) {
       this.bridge.setCallbackHandler((msg) => {
@@ -697,23 +691,10 @@ ${blue}  ┌──────────────────────�
   }
 
   /**
-   * Wire user-mode SDK deps from DealBot and register service message handler.
+   * Wire user-mode handlers. Registers the service message handler on first
+   * start. (User mode has no Grammy bot, so the plugin bot SDK stays inactive.)
    */
-  private wireUserMode(
-    inlineRouter: InlineRouter,
-    rateLimiter: PluginRateLimiter,
-    firstStart: boolean
-  ): void {
-    const activeDealBot = getDealBot();
-    if (activeDealBot) {
-      this.sdkDeps.inlineRouter = inlineRouter;
-      this.sdkDeps.gramjsBot = activeDealBot.getGramJSBot();
-      this.sdkDeps.grammyBot = activeDealBot.getBot();
-      this.sdkDeps.rateLimiter = rateLimiter;
-      inlineRouter.setGramJSBot(activeDealBot.getGramJSBot());
-      log.info("Bot SDK: inline router installed");
-    }
-
+  private wireUserMode(firstStart: boolean): void {
     if (firstStart && isUserBridge(this.bridge)) {
       this.bridge.onServiceMessage(async (message) => {
         try {
@@ -817,7 +798,7 @@ ${blue}  ┌──────────────────────�
   }
 
   /**
-   * Start module background jobs with timeout. Skips deals module in bot mode.
+   * Start module background jobs with timeout.
    */
   private async startModules(): Promise<PluginContext> {
     const moduleDb = getDatabase().getDb();
@@ -829,10 +810,6 @@ ${blue}  ┌──────────────────────�
     const startedModules: typeof this.modules = [];
     try {
       for (const mod of this.modules) {
-        if (isBotBridge(this.bridge) && mod.name === "deals") {
-          log.info("Bot mode: skipping deals module (uses separate Grammy polling)");
-          continue;
-        }
         await Promise.race([
           mod.start?.(pluginContext),
           new Promise<never>((_, reject) =>

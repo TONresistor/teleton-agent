@@ -27,14 +27,6 @@ export interface StyledButtonDef {
 }
 
 /**
- * Result type for all message builders
- */
-export interface DealMessage {
-  text: string;
-  buttons: StyledButtonDef[][];
-}
-
-/**
  * Convert styled button definitions to GramJS TL markup (with colors + copy buttons)
  * Uses native Layer 223 constructors (KeyboardButtonStyle, KeyboardButtonCopy)
  */
