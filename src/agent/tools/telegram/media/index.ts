@@ -10,14 +10,6 @@ import {
 } from "./transcribe-audio.js";
 import type { ToolEntry } from "../../types.js";
 
-export { telegramSendPhotoTool, telegramSendPhotoExecutor };
-export { telegramSendVoiceTool, telegramSendVoiceExecutor };
-export { telegramSendStickerTool, telegramSendStickerExecutor };
-export { telegramSendGifTool, telegramSendGifExecutor };
-export { telegramDownloadMediaTool, telegramDownloadMediaExecutor };
-export { visionAnalyzeTool, visionAnalyzeExecutor };
-export { telegramTranscribeAudioTool, telegramTranscribeAudioExecutor };
-
 export const tools: ToolEntry[] = [
   {
     tool: telegramSendPhotoTool,

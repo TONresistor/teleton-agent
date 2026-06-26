@@ -4,11 +4,6 @@ import { memorySearchTool, memorySearchExecutor } from "./memory-search.js";
 import { sessionSearchTool, sessionSearchExecutor } from "./session-search.js";
 import type { ToolEntry } from "../../types.js";
 
-export { memoryWriteTool, memoryWriteExecutor };
-export { memoryReadTool, memoryReadExecutor };
-export { memorySearchTool, memorySearchExecutor };
-export { sessionSearchTool, sessionSearchExecutor };
-
 export const tools: ToolEntry[] = [
   {
     tool: memoryWriteTool,

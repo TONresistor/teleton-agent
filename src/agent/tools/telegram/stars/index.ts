@@ -9,9 +9,6 @@ import {
 } from "./get-transactions.js";
 import type { ToolEntry } from "../../types.js";
 
-export { telegramGetStarsBalanceTool, telegramGetStarsBalanceExecutor };
-export { telegramGetStarsTransactionsTool, telegramGetStarsTransactionsExecutor };
-
 export const tools: ToolEntry[] = [
   {
     tool: telegramGetStarsBalanceTool,

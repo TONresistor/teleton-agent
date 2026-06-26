@@ -4,11 +4,6 @@ import { telegramGetMyStickersTool, telegramGetMyStickersExecutor } from "./get-
 import { telegramAddStickerSetTool, telegramAddStickerSetExecutor } from "./add-sticker-set.js";
 import type { ToolEntry } from "../../types.js";
 
-export { telegramSearchStickersTool, telegramSearchStickersExecutor };
-export { telegramSearchGifsTool, telegramSearchGifsExecutor };
-export { telegramGetMyStickersTool, telegramGetMyStickersExecutor };
-export { telegramAddStickerSetTool, telegramAddStickerSetExecutor };
-
 export const tools: ToolEntry[] = [
   {
     tool: telegramSearchStickersTool,

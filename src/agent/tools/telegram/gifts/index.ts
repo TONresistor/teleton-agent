@@ -33,20 +33,6 @@ import { getUserGiftsEntry } from "./get-user-gifts.js";
 import { getAvailableGiftsBotEntry } from "./get-available-gifts-bot.js";
 import type { ToolEntry } from "../../types.js";
 
-export { telegramGetAvailableGiftsTool, telegramGetAvailableGiftsExecutor };
-export { telegramSendGiftTool, telegramSendGiftExecutor };
-export { telegramGetMyGiftsTool, telegramGetMyGiftsExecutor };
-export { telegramTransferCollectibleTool, telegramTransferCollectibleExecutor };
-export { telegramSetCollectiblePriceTool, telegramSetCollectiblePriceExecutor };
-export { telegramGetResaleGiftsTool, telegramGetResaleGiftsExecutor };
-export { telegramBuyResaleGiftTool, telegramBuyResaleGiftExecutor };
-export { telegramSetGiftStatusTool, telegramSetGiftStatusExecutor };
-export { telegramGetCollectibleInfoTool, telegramGetCollectibleInfoExecutor };
-export { telegramGetUniqueGiftTool, telegramGetUniqueGiftExecutor };
-export { telegramGetUniqueGiftValueTool, telegramGetUniqueGiftValueExecutor };
-export { telegramSendGiftOfferTool, telegramSendGiftOfferExecutor };
-export { telegramResolveGiftOfferTool, telegramResolveGiftOfferExecutor };
-
 export const tools: ToolEntry[] = [
   {
     tool: telegramGetAvailableGiftsTool,

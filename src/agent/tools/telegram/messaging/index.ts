@@ -30,25 +30,6 @@ import {
 import { botInlineSendTool, botInlineSendExecutor } from "./inline-send.js";
 import type { ToolEntry } from "../../types.js";
 
-export { telegramSendMessageTool, telegramSendMessageExecutor };
-export { telegramEditMessageTool, telegramEditMessageExecutor };
-export { telegramDeleteMessageTool, telegramDeleteMessageExecutor };
-export { telegramForwardMessageTool, telegramForwardMessageExecutor };
-export { telegramScheduleMessageTool, telegramScheduleMessageExecutor };
-export { telegramSearchMessagesTool, telegramSearchMessagesExecutor };
-export {
-  telegramPinMessageTool,
-  telegramPinMessageExecutor,
-  telegramUnpinMessageTool,
-  telegramUnpinMessageExecutor,
-};
-export { telegramQuoteReplyTool, telegramQuoteReplyExecutor };
-export { telegramGetRepliesTool, telegramGetRepliesExecutor };
-export { telegramGetScheduledMessagesTool, telegramGetScheduledMessagesExecutor };
-export { telegramDeleteScheduledMessageTool, telegramDeleteScheduledMessageExecutor };
-export { telegramSendScheduledNowTool, telegramSendScheduledNowExecutor };
-export { botInlineSendTool, botInlineSendExecutor };
-
 export const tools: ToolEntry[] = [
   {
     tool: telegramSendMessageTool,

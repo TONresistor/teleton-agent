@@ -6,10 +6,6 @@ import {
 } from "./add-chat-to-folder.js";
 import type { ToolEntry } from "../../types.js";
 
-export { telegramGetFoldersTool, telegramGetFoldersExecutor };
-export { telegramCreateFolderTool, telegramCreateFolderExecutor };
-export { telegramAddChatToFolderTool, telegramAddChatToFolderExecutor };
-
 export const tools: ToolEntry[] = [
   {
     tool: telegramGetFoldersTool,
