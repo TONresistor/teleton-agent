@@ -12,6 +12,7 @@ const log = createLogger("Tools");
  */
 interface BuyResaleGiftParams {
   slug: string;
+  maxPriceStars: number;
 }
 
 /**
@@ -20,10 +21,15 @@ interface BuyResaleGiftParams {
 export const telegramBuyResaleGiftTool: Tool = {
   name: "telegram_buy_resale_gift",
   description:
-    "Buy a collectible from the resale marketplace using Stars. Get slug from telegram_get_resale_gifts.",
+    "Buy a collectible from the resale marketplace using Stars. Get slug and priceStars from telegram_get_resale_gifts, then set maxPriceStars to the exact maximum approved by the owner.",
   parameters: Type.Object({
     slug: Type.String({
       description: "The slug of the listing to purchase (from telegram_get_resale_gifts)",
+    }),
+    maxPriceStars: Type.Integer({
+      description:
+        "Maximum Stars the owner approved for this purchase. The live payment form is checked before spending.",
+      minimum: 1,
     }),
   }),
 };
@@ -36,7 +42,7 @@ export const telegramBuyResaleGiftExecutor: ToolExecutor<BuyResaleGiftParams> = 
   context
 ): Promise<ToolResult> => {
   try {
-    const { slug } = params;
+    const { slug, maxPriceStars } = params;
     const gramJsClient = getClient(context.bridge);
 
     // Buy for self
@@ -48,6 +54,27 @@ export const telegramBuyResaleGiftExecutor: ToolExecutor<BuyResaleGiftParams> = 
     });
 
     const form = await gramJsClient.invoke(new Api.payments.GetPaymentForm({ invoice }));
+    if (form.invoice.currency !== "XTR") {
+      return {
+        success: false,
+        error: `Unsupported resale currency: ${form.invoice.currency}. This tool only purchases with Stars.`,
+      };
+    }
+
+    const livePrice = form.invoice.prices.reduce(
+      (total, price) => total + BigInt(price.amount.toString()),
+      0n
+    );
+    if (livePrice > BigInt(Number.MAX_SAFE_INTEGER)) {
+      return { success: false, error: "Live resale price is too large to verify safely" };
+    }
+    const livePriceStars = Number(livePrice);
+    if (livePriceStars > maxPriceStars) {
+      return {
+        success: false,
+        error: `Live resale price is ${livePriceStars} Stars, above the approved maximum of ${maxPriceStars} Stars. Request a new approval.`,
+      };
+    }
 
     // Complete the purchase
     await gramJsClient.invoke(
@@ -62,7 +89,8 @@ export const telegramBuyResaleGiftExecutor: ToolExecutor<BuyResaleGiftParams> = 
       data: {
         slug,
         purchased: true,
-        message: "Collectible purchased successfully! It's now in your collection.",
+        priceStars: livePriceStars,
+        message: `Collectible purchased for ${livePriceStars} Stars. It's now in your collection.`,
       },
     };
   } catch (error) {
