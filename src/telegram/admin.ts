@@ -105,6 +105,10 @@ export class AdminHandler {
         return this.handleResumeCommand();
       case "wallet":
         return await this.handleWalletCommand();
+      case "approve":
+        return await this.handleApprovalCommand(command, true);
+      case "reject":
+        return await this.handleApprovalCommand(command, false);
       case "stop":
         return await this.handleStopCommand();
       case "verbose":
@@ -238,6 +242,35 @@ export class AdminHandler {
 
     const friendly = Address.parse(address).toString({ bounceable: false });
     return `💎 **${result.balance} TON**\n📍 \`${friendly}\``;
+  }
+
+  private async handleApprovalCommand(command: AdminCommand, approve: boolean): Promise<string> {
+    const ownUserId = this.bridge.getOwnUserId?.();
+    if (ownUserId !== undefined && command.senderId === Number(ownUserId)) {
+      return "❌ Approval must come from a separate interactive admin account";
+    }
+
+    const approvalId = command.args[0];
+    if (!approvalId) {
+      return `❌ Usage: /${approve ? "approve" : "reject"} <request_id>`;
+    }
+    if (!this.registry) return "❌ Tool registry unavailable";
+
+    const result = approve
+      ? await this.registry.approvePendingAction(approvalId, command.senderId, command.chatId)
+      : await this.registry.rejectPendingAction(approvalId, command.senderId, command.chatId);
+
+    if (!result.success) return `❌ ${result.error ?? "Approval failed"}`;
+    if (!approve) return `🚫 Approval request ${approvalId} rejected.`;
+
+    const data = result.data;
+    const message =
+      data && typeof data === "object" && "message" in data && typeof data.message === "string"
+        ? data.message
+        : data === undefined
+          ? "Action completed."
+          : JSON.stringify(data);
+    return `✅ Approved action completed\n\n${message}`;
   }
 
   getBootstrapContent(): string | null {
@@ -535,6 +568,9 @@ Manage plugin secrets (API keys, tokens)
 
 **/wallet**
 Check TON wallet balance
+
+**/approve** <request_id> / **/reject** <request_id>
+Approve or reject a pending financial action
 
 **/verbose**
 Toggle verbose debug logging

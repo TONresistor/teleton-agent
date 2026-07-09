@@ -575,6 +575,8 @@ export class GrammyBotBridge implements ITelegramBridge {
       { command: "modules", description: "Manage module permissions" },
       { command: "plugin", description: "Manage plugin secrets" },
       { command: "wallet", description: "Check TON wallet balance" },
+      { command: "approve", description: "Approve a pending financial action" },
+      { command: "reject", description: "Reject a pending financial action" },
       { command: "verbose", description: "Toggle verbose logging" },
       { command: "rag", description: "Toggle Tool RAG or view status" },
       { command: "guest", description: "Toggle guest mode" },

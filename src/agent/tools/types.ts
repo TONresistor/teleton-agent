@@ -108,6 +108,8 @@ export interface RegisteredTool {
   scope?: ToolScope;
   /** Hard authority floor. Runtime configuration may only make access stricter. */
   minimumAccess: ToolAccessLevel;
+  /** Whether execution requires a separate, human-authenticated approval step. */
+  requiresApproval: boolean;
   /** Telegram mode this tool runs in. */
   mode: ToolMode;
   /** Module this tool belongs to (name prefix for built-ins, plugin name otherwise). */
@@ -127,6 +129,8 @@ export interface ToolEntry {
   scope?: ToolScope;
   /** Hard authority floor, independent from the DM/group channel scope. */
   minimumAccess?: ToolAccessLevel;
+  /** Require a separate owner command before executing this tool. */
+  requiresApproval?: boolean;
   /** Telegram mode(s) this tool runs in. Mandatory — every tool must declare it. */
   mode: ToolMode;
   /** Toolset tags for profile-based filtering (e.g. "core", "finance", "social") */

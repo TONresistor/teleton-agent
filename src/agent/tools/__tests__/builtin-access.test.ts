@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { ToolRegistry } from "../registry.js";
 import { registerAllTools } from "../register-all.js";
 
@@ -47,5 +47,35 @@ describe("built-in tool access policy", () => {
     expect(visible.has("telegram_send_message")).toBe(true);
     expect(visible.has("ton_send")).toBe(false);
     expect(visible.has("telegram_get_history")).toBe(false);
+  });
+
+  it("wires the approval gate into real financial tool registrations", async () => {
+    const registry = new ToolRegistry("user");
+    registerAllTools(registry);
+    const sendMessage = vi.fn(async () => ({ id: 1, date: 1, chatId: "dm" }));
+
+    const result = await registry.execute(
+      {
+        type: "toolCall",
+        id: "financial-call",
+        name: "ton_send",
+        arguments: { to: "EQrecipient", amount: 1 },
+      },
+      {
+        bridge: {
+          getMode: () => "user",
+          getOwnUserId: () => 999n,
+          sendMessage,
+        } as never,
+        db: {} as never,
+        chatId: "dm",
+        senderId: 42,
+        isGroup: false,
+        config: { telegram: { admin_ids: [42] } } as never,
+      }
+    );
+
+    expect(result).toMatchObject({ success: false, data: { approvalRequired: true } });
+    expect(sendMessage).toHaveBeenCalledOnce();
   });
 });

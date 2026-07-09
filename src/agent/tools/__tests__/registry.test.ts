@@ -387,6 +387,166 @@ describe("ToolRegistry", () => {
   // ---------- Tool execution ----------
 
   describe("execute()", () => {
+    it("should defer approval-required tools without calling their executor", async () => {
+      const tool = createMockTool("financial_tool", "action");
+      const executor = createMockExecutor({ success: true });
+      const sendMessage = vi.fn(async () => ({ id: 1, date: 1, chatId: "test-chat" }));
+      mockContext.bridge = { getMode: () => "user", sendMessage } as any;
+      mockContext.senderId = 99999;
+
+      registry.register(tool, executor, "admin-only", "both", [], "admin", true);
+
+      const result = await registry.execute(
+        {
+          type: "toolCall",
+          id: "call-approval",
+          name: tool.name,
+          arguments: { message: "send exactly 1 TON" },
+        },
+        mockContext
+      );
+
+      expect(result).toMatchObject({
+        success: false,
+        data: { approvalRequired: true },
+      });
+      expect(result.error).toContain("owner approval");
+      expect(executor).not.toHaveBeenCalled();
+      expect(sendMessage).toHaveBeenCalledOnce();
+      expect(sendMessage.mock.calls[0][0].text).toContain("send exactly 1 TON");
+      expect(sendMessage.mock.calls[0][0].text).toMatch(/\/approve [a-f0-9-]+/);
+      expect(JSON.stringify(result)).not.toMatch(/\/approve [a-f0-9-]+/);
+    });
+
+    it("should execute an approved request once for the same admin and chat", async () => {
+      const tool = createMockTool("financial_tool", "action");
+      const executor = createMockExecutor({ success: true, data: { tx: "abc" } });
+      const sendMessage = vi.fn(async () => ({ id: 1, date: 1, chatId: "test-chat" }));
+      mockContext.bridge = { getMode: () => "user", sendMessage } as any;
+      mockContext.senderId = 99999;
+
+      registry.register(tool, executor, "admin-only", "both", [], "admin", true);
+      await registry.execute(
+        {
+          type: "toolCall",
+          id: "call-approval",
+          name: tool.name,
+          arguments: { message: "send exactly 1 TON" },
+        },
+        mockContext
+      );
+      const approvalId = sendMessage.mock.calls[0][0].text.match(/\/approve ([a-f0-9-]+)/)?.[1];
+      expect(approvalId).toBeTruthy();
+
+      await expect(
+        registry.approvePendingAction(approvalId!, 11111, "test-chat")
+      ).resolves.toMatchObject({ success: false });
+      await expect(
+        registry.approvePendingAction(approvalId!, 99999, "wrong-chat")
+      ).resolves.toMatchObject({ success: false });
+      expect(executor).not.toHaveBeenCalled();
+
+      await expect(registry.approvePendingAction(approvalId!, 99999, "test-chat")).resolves.toEqual(
+        { success: true, data: { tx: "abc" } }
+      );
+      expect(executor).toHaveBeenCalledOnce();
+      expect(executor).toHaveBeenCalledWith({ message: "send exactly 1 TON" }, mockContext);
+
+      await expect(
+        registry.approvePendingAction(approvalId!, 99999, "test-chat")
+      ).resolves.toMatchObject({ success: false });
+      expect(executor).toHaveBeenCalledOnce();
+    });
+
+    it("should reject a pending approval without executing it", async () => {
+      const tool = createMockTool("financial_tool", "action");
+      const executor = createMockExecutor({ success: true });
+      const sendMessage = vi.fn(async () => ({ id: 1, date: 1, chatId: "test-chat" }));
+      mockContext.bridge = { getMode: () => "user", sendMessage } as any;
+      mockContext.senderId = 99999;
+
+      registry.register(tool, executor, "admin-only", "both", [], "admin", true);
+      await registry.execute(
+        {
+          type: "toolCall",
+          id: "call-approval",
+          name: tool.name,
+          arguments: { message: "send exactly 1 TON" },
+        },
+        mockContext
+      );
+      const approvalId = sendMessage.mock.calls[0][0].text.match(/\/approve ([a-f0-9-]+)/)?.[1];
+
+      await expect(
+        registry.rejectPendingAction(approvalId!, 99999, "test-chat")
+      ).resolves.toMatchObject({ success: true });
+      await expect(
+        registry.approvePendingAction(approvalId!, 99999, "test-chat")
+      ).resolves.toMatchObject({ success: false });
+      expect(executor).not.toHaveBeenCalled();
+    });
+
+    it("should fail closed for self-originated autonomous financial actions", async () => {
+      const tool = createMockTool("financial_tool", "action");
+      const executor = createMockExecutor({ success: true });
+      const sendMessage = vi.fn();
+      mockContext.bridge = {
+        getMode: () => "user",
+        getOwnUserId: () => 99999n,
+        sendMessage,
+      } as any;
+      mockContext.senderId = 99999;
+
+      registry.register(tool, executor, "admin-only", "both", [], "admin", true);
+      const result = await registry.execute(
+        {
+          type: "toolCall",
+          id: "call-self-approval",
+          name: tool.name,
+          arguments: { message: "send exactly 1 TON" },
+        },
+        mockContext
+      );
+
+      expect(result).toMatchObject({ success: false });
+      expect(result.error).toContain("interactive admin request");
+      expect(sendMessage).not.toHaveBeenCalled();
+      expect(executor).not.toHaveBeenCalled();
+    });
+
+    it("should expire pending approvals after five minutes", async () => {
+      vi.useFakeTimers();
+      try {
+        vi.setSystemTime(new Date("2026-07-09T00:00:00Z"));
+        const tool = createMockTool("financial_tool", "action");
+        const executor = createMockExecutor({ success: true });
+        const sendMessage = vi.fn(async () => ({ id: 1, date: 1, chatId: "test-chat" }));
+        mockContext.bridge = { getMode: () => "user", sendMessage } as any;
+        mockContext.senderId = 99999;
+
+        registry.register(tool, executor, "admin-only", "both", [], "admin", true);
+        await registry.execute(
+          {
+            type: "toolCall",
+            id: "call-expiring-approval",
+            name: tool.name,
+            arguments: { message: "send exactly 1 TON" },
+          },
+          mockContext
+        );
+        const approvalId = sendMessage.mock.calls[0][0].text.match(/\/approve ([a-f0-9-]+)/)?.[1];
+
+        await vi.advanceTimersByTimeAsync(5 * 60 * 1000 + 1);
+
+        await expect(
+          registry.approvePendingAction(approvalId!, 99999, "test-chat")
+        ).resolves.toMatchObject({ success: false });
+        expect(executor).not.toHaveBeenCalled();
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
     it("should execute tool successfully", async () => {
       const tool = createMockTool("test_tool");
       const mockResult = { success: true, data: "result" };

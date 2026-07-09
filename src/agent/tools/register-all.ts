@@ -17,7 +17,7 @@ import { tools as journalTools } from "./journal/index.js";
 import { tools as workspaceTools } from "./workspace/index.js";
 import { tools as webTools } from "./web/index.js";
 import { toolSearchTool, createToolSearchExecutor } from "./search/index.js";
-import { getBuiltinMinimumAccess } from "./security-policy.js";
+import { getBuiltinMinimumAccess, requiresBuiltinApproval } from "./security-policy.js";
 
 const ALL_CATEGORIES: ToolEntry[][] = [
   telegramTools,
@@ -32,14 +32,15 @@ const ALL_CATEGORIES: ToolEntry[][] = [
 
 export function registerAllTools(registry: ToolRegistry): void {
   for (const category of ALL_CATEGORIES) {
-    for (const { tool, executor, scope, mode, tags, minimumAccess } of category) {
+    for (const { tool, executor, scope, mode, tags, minimumAccess, requiresApproval } of category) {
       registry.register(
         tool,
         executor,
         scope,
         mode,
         tags,
-        minimumAccess ?? getBuiltinMinimumAccess(tool, scope)
+        minimumAccess ?? getBuiltinMinimumAccess(tool, scope),
+        requiresApproval ?? requiresBuiltinApproval(tool.name)
       );
     }
   }
@@ -49,5 +50,5 @@ export function registerAllTools(registry: ToolRegistry): void {
   // The executor lazily reads registry.getToolIndex() + registry.getEmbedder() at call time,
   // both of which are set during startAgent() — after this registration.
   const toolSearchExecutor = createToolSearchExecutor(registry);
-  registry.register(toolSearchTool, toolSearchExecutor, "open", "both", ["core"], "all");
+  registry.register(toolSearchTool, toolSearchExecutor, "open", "both", ["core"], "all", false);
 }

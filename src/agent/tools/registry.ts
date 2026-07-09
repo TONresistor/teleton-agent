@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { validateToolCall } from "@earendil-works/pi-ai";
 import type { Tool as PiAiTool, ToolCall } from "@earendil-works/pi-ai";
 import type { TSchema } from "@sinclair/typebox";
@@ -28,6 +29,18 @@ import { getErrorMessage } from "../../utils/errors.js";
 import { createLogger } from "../../utils/logger.js";
 
 const log = createLogger("Registry");
+const APPROVAL_TTL_MS = 5 * 60 * 1000;
+
+interface PendingApproval {
+  id: string;
+  toolName: string;
+  args: unknown;
+  context: ToolContext;
+  senderId: number;
+  chatId: string;
+  fingerprint: string;
+  createdAt: number;
+}
 
 /** Reason a tool is denied for a context — mapped to a user message by execute(). */
 type AccessDenial =
@@ -53,6 +66,7 @@ export class ToolRegistry {
   private onToolsChangedCallbacks: Array<(removed: string[], added: PiAiTool[]) => void> = [];
   private mode: RuntimeMode;
   private allowFrom: Set<number> = new Set();
+  private pendingApprovals: Map<string, PendingApproval> = new Map();
 
   constructor(mode: RuntimeMode = "user") {
     this.mode = mode;
@@ -70,6 +84,7 @@ export class ToolRegistry {
       executor: ToolExecutor;
       scope?: ToolScope;
       minimumAccess?: ToolAccessLevel;
+      requiresApproval?: boolean;
       mode: ToolMode;
       module: string;
       tags?: string[];
@@ -81,6 +96,7 @@ export class ToolRegistry {
       scope:
         entry.scope && entry.scope !== "always" && entry.scope !== "open" ? entry.scope : undefined,
       minimumAccess: entry.minimumAccess ?? scopeToLevel(entry.scope),
+      requiresApproval: entry.requiresApproval ?? false,
       mode: entry.mode,
       module: entry.module,
       tags: entry.tags && entry.tags.length > 0 ? entry.tags : undefined,
@@ -93,7 +109,8 @@ export class ToolRegistry {
     scope?: ToolScope,
     mode: ToolMode = "both",
     tags?: string[],
-    minimumAccess?: ToolAccessLevel
+    minimumAccess?: ToolAccessLevel,
+    requiresApproval = false
   ): void {
     if (this.tools.has(tool.name)) {
       throw new Error(`Tool "${tool.name}" is already registered`);
@@ -106,6 +123,7 @@ export class ToolRegistry {
       module: tool.name.split("_")[0],
       tags,
       minimumAccess,
+      requiresApproval,
     });
     this.toolArrayCache = null;
   }
@@ -256,6 +274,150 @@ export class ToolRegistry {
     try {
       const validatedArgs = validateToolCall(this.getAll(), toolCall);
 
+      if (registered.requiresApproval) {
+        return await this.requestApproval(toolCall.name, validatedArgs, context);
+      }
+
+      return await this.executeRegistered(toolCall.name, registered, validatedArgs, context);
+    } catch (error) {
+      log.error({ err: error }, `Error executing tool ${toolCall.name}`);
+      return {
+        success: false,
+        error: getErrorMessage(error),
+      };
+    }
+  }
+
+  /** Execute a single-use request after an authenticated admin command. */
+  async approvePendingAction(
+    approvalId: string,
+    senderId: number,
+    chatId: string
+  ): Promise<ToolResult> {
+    this.cleanupPendingApprovals();
+    const pending = this.pendingApprovals.get(approvalId);
+    if (!pending) {
+      return { success: false, error: "Unknown or expired approval request" };
+    }
+    if (pending.senderId !== senderId || pending.chatId !== chatId) {
+      return { success: false, error: "This approval request belongs to another admin or chat" };
+    }
+
+    // Consume before execution so concurrent/repeated commands cannot replay it.
+    this.pendingApprovals.delete(approvalId);
+
+    const registered = this.tools.get(pending.toolName);
+    if (!registered) {
+      return { success: false, error: `Tool "${pending.toolName}" is no longer available` };
+    }
+
+    const isAdmin = pending.context.config?.telegram.admin_ids.includes(senderId) ?? false;
+    const access = this.checkAccess(pending.toolName, {
+      isGroup: pending.context.isGroup,
+      isAdmin,
+      senderId,
+      chatId,
+    });
+    if (!access.ok) {
+      return { success: false, error: this.denialMessage(pending.toolName, access.reason) };
+    }
+
+    return this.executeRegistered(pending.toolName, registered, pending.args, pending.context);
+  }
+
+  async rejectPendingAction(
+    approvalId: string,
+    senderId: number,
+    chatId: string
+  ): Promise<ToolResult> {
+    this.cleanupPendingApprovals();
+    const pending = this.pendingApprovals.get(approvalId);
+    if (!pending) {
+      return { success: false, error: "Unknown or expired approval request" };
+    }
+    if (pending.senderId !== senderId || pending.chatId !== chatId) {
+      return { success: false, error: "This approval request belongs to another admin or chat" };
+    }
+    this.pendingApprovals.delete(approvalId);
+    return { success: true, data: { rejected: true, tool: pending.toolName } };
+  }
+
+  private async requestApproval(
+    toolName: string,
+    args: unknown,
+    context: ToolContext
+  ): Promise<ToolResult> {
+    const ownUserId = context.bridge.getOwnUserId?.();
+    if (ownUserId !== undefined && context.senderId === Number(ownUserId)) {
+      return {
+        success: false,
+        error:
+          "Financial actions cannot be approved from a self-originated or autonomous context. Start an interactive admin request instead.",
+      };
+    }
+
+    this.cleanupPendingApprovals();
+    const fingerprint = JSON.stringify([context.senderId, context.chatId, toolName, args]);
+    const existing = Array.from(this.pendingApprovals.values()).find(
+      (pending) => pending.fingerprint === fingerprint
+    );
+    if (existing) return this.approvalRequiredResult();
+
+    const id = randomUUID();
+    const pending: PendingApproval = {
+      id,
+      toolName,
+      args: structuredClone(args),
+      context,
+      senderId: context.senderId,
+      chatId: context.chatId,
+      fingerprint,
+      createdAt: Date.now(),
+    };
+    this.pendingApprovals.set(id, pending);
+
+    const serializedArgs = JSON.stringify(args, null, 2).slice(0, 3000);
+    try {
+      await context.bridge.sendMessage({
+        chatId: context.chatId,
+        text:
+          `⚠️ Explicit approval required\n\n` +
+          `Tool: ${toolName}\n` +
+          `Parameters:\n${serializedArgs}\n\n` +
+          `Approve once: /approve ${id}\n` +
+          `Reject: /reject ${id}\n` +
+          `Expires in 5 minutes.`,
+      });
+    } catch (error) {
+      this.pendingApprovals.delete(id);
+      throw error;
+    }
+
+    return this.approvalRequiredResult();
+  }
+
+  private approvalRequiredResult(): ToolResult {
+    return {
+      success: false,
+      error: "Explicit owner approval is required. A separate approval request was sent.",
+      data: { approvalRequired: true },
+    };
+  }
+
+  private cleanupPendingApprovals(): void {
+    const cutoff = Date.now() - APPROVAL_TTL_MS;
+    for (const [id, pending] of this.pendingApprovals) {
+      if (pending.createdAt < cutoff) this.pendingApprovals.delete(id);
+    }
+  }
+
+  private async executeRegistered(
+    toolName: string,
+    registered: RegisteredTool,
+    validatedArgs: unknown,
+    context: ToolContext
+  ): Promise<ToolResult> {
+    try {
       let timeoutHandle: ReturnType<typeof setTimeout>;
       const result = await Promise.race([
         registered.executor(validatedArgs, context),
@@ -263,9 +425,7 @@ export class ToolRegistry {
           timeoutHandle = setTimeout(
             () =>
               reject(
-                new Error(
-                  `Tool "${toolCall.name}" timed out after ${TOOL_EXECUTION_TIMEOUT_MS / 1000}s`
-                )
+                new Error(`Tool "${toolName}" timed out after ${TOOL_EXECUTION_TIMEOUT_MS / 1000}s`)
               ),
             TOOL_EXECUTION_TIMEOUT_MS
           );
@@ -274,7 +434,7 @@ export class ToolRegistry {
 
       return result;
     } catch (error) {
-      log.error({ err: error }, `Error executing tool ${toolCall.name}`);
+      log.error({ err: error }, `Error executing tool ${toolName}`);
       return {
         success: false,
         error: getErrorMessage(error),
