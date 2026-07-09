@@ -675,10 +675,10 @@ describe("ToolRegistry", () => {
       expect(result.error).toBe("Execution failed");
     });
 
-    it("should timeout long-running tools", async () => {
+    it("should timeout long-running data-bearing tools", async () => {
       vi.useFakeTimers();
 
-      const tool = createMockTool("slow_tool");
+      const tool = createMockTool("slow_tool", "data-bearing");
       const executor = vi.fn(async () => {
         await new Promise((resolve) => setTimeout(resolve, 100_000));
         return { success: true };
@@ -703,6 +703,45 @@ describe("ToolRegistry", () => {
       expect(result.error).toContain("timed out");
 
       vi.useRealTimers();
+    });
+
+    it("should not report an action timeout while its side effect is still running", async () => {
+      vi.useFakeTimers();
+      try {
+        let sideEffectCompleted = false;
+        let resultSettled = false;
+        const tool = createMockTool("slow_action", "action");
+        const executor = vi.fn(async () => {
+          await new Promise((resolve) => setTimeout(resolve, 100_000));
+          sideEffectCompleted = true;
+          return { success: true };
+        });
+        registry.register(tool, executor);
+
+        const resultPromise = registry.execute(
+          {
+            type: "toolCall",
+            id: "slow-action-call",
+            name: tool.name,
+            arguments: { message: "perform once" },
+          },
+          mockContext
+        );
+        void resultPromise.then(() => {
+          resultSettled = true;
+        });
+
+        await vi.advanceTimersByTimeAsync(90_000);
+
+        expect(resultSettled).toBe(false);
+        expect(sideEffectCompleted).toBe(false);
+
+        await vi.advanceTimersByTimeAsync(10_000);
+        await expect(resultPromise).resolves.toEqual({ success: true });
+        expect(sideEffectCompleted).toBe(true);
+      } finally {
+        vi.useRealTimers();
+      }
     });
   });
 

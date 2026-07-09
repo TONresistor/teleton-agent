@@ -418,6 +418,13 @@ export class ToolRegistry {
     context: ToolContext
   ): Promise<ToolResult> {
     try {
+      // An action has no cancellation channel. Racing it against a timer would
+      // report failure while the side effect continues, inviting a duplicate
+      // retry. Only explicitly read-only tools may use the registry timeout.
+      if (registered.tool.category !== "data-bearing") {
+        return await registered.executor(validatedArgs, context);
+      }
+
       let timeoutHandle: ReturnType<typeof setTimeout>;
       const result = await Promise.race([
         registered.executor(validatedArgs, context),
