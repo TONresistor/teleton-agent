@@ -192,24 +192,17 @@ export async function registerMcpTools(
 
         const executor: ToolExecutor = async (params): Promise<ToolResult> => {
           try {
-            let timeoutHandle: ReturnType<typeof setTimeout>;
-            const result = await Promise.race([
-              conn.client.callTool({
+            // Use the MCP protocol's request timeout so the client sends a
+            // cancellation notification. A local Promise.race would return an
+            // error while leaving the remote operation orphaned and retryable.
+            const result = await conn.client.callTool(
+              {
                 name: mcpTool.name,
                 arguments: params as Record<string, unknown>,
-              }),
-              new Promise<never>((_, reject) => {
-                timeoutHandle = setTimeout(
-                  () =>
-                    reject(
-                      new Error(
-                        `MCP tool "${mcpTool.name}" timed out after ${TOOL_EXECUTION_TIMEOUT_MS / 1000}s`
-                      )
-                    ),
-                  TOOL_EXECUTION_TIMEOUT_MS
-                );
-              }),
-            ]).finally(() => clearTimeout(timeoutHandle));
+              },
+              undefined,
+              { timeout: TOOL_EXECUTION_TIMEOUT_MS }
+            );
 
             if (result.isError) {
               const errorText = extractText(
@@ -247,6 +240,7 @@ export async function registerMcpTools(
             name: prefixedName,
             description: mcpTool.description || `MCP tool from ${conn.serverName}`,
             parameters: schema as unknown as Tool["parameters"],
+            category: mcpTool.annotations?.readOnlyHint === true ? "data-bearing" : "action",
           },
           executor,
           scope: conn.scope,
