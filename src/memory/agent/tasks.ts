@@ -19,6 +19,9 @@ export interface Task {
   payload?: string;
   reason?: string;
   scheduledMessageId?: number;
+  originSenderId?: number;
+  originChatId?: string;
+  originIsGroup?: boolean;
 }
 
 export class TaskStore {
@@ -32,6 +35,9 @@ export class TaskStore {
     payload?: string;
     reason?: string;
     scheduledMessageId?: number;
+    originSenderId?: number;
+    originChatId?: string;
+    originIsGroup?: boolean;
     dependsOn?: string[];
   }): Task {
     const id = randomUUID();
@@ -40,8 +46,12 @@ export class TaskStore {
     this.db
       .prepare(
         `
-      INSERT INTO tasks (id, description, status, priority, created_by, created_at, scheduled_for, payload, reason, scheduled_message_id)
-      VALUES (?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO tasks (
+        id, description, status, priority, created_by, created_at,
+        scheduled_for, payload, reason, scheduled_message_id,
+        origin_sender_id, origin_chat_id, origin_is_group
+      )
+      VALUES (?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `
       )
       .run(
@@ -53,7 +63,10 @@ export class TaskStore {
         task.scheduledFor ? Math.floor(task.scheduledFor.getTime() / 1000) : null,
         task.payload ?? null,
         task.reason ?? null,
-        task.scheduledMessageId ?? null
+        task.scheduledMessageId ?? null,
+        task.originSenderId ?? null,
+        task.originChatId ?? null,
+        task.originIsGroup === undefined ? null : task.originIsGroup ? 1 : 0
       );
 
     if (task.dependsOn && task.dependsOn.length > 0) {
@@ -73,6 +86,9 @@ export class TaskStore {
       payload: task.payload,
       reason: task.reason,
       scheduledMessageId: task.scheduledMessageId,
+      originSenderId: task.originSenderId,
+      originChatId: task.originChatId,
+      originIsGroup: task.originIsGroup,
     };
   }
 
@@ -164,6 +180,9 @@ export class TaskStore {
       payload: row.payload ?? undefined,
       reason: row.reason ?? undefined,
       scheduledMessageId: row.scheduled_message_id ?? undefined,
+      originSenderId: row.origin_sender_id ?? undefined,
+      originChatId: row.origin_chat_id ?? undefined,
+      originIsGroup: row.origin_is_group === null ? undefined : row.origin_is_group === 1,
     };
   }
 

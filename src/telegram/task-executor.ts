@@ -77,6 +77,20 @@ export async function executeScheduledTask(
   if (payload.type === "tool_call") {
     // Mode 1: Auto-execute tool, feed result to agent
     try {
+      // Scheduled direct calls are limited to read-only tools. Actions must run
+      // through an agent turn (and their normal approval/authorization gates).
+      if (toolRegistry.getToolCategory(payload.tool) !== "data-bearing") {
+        return buildAgentPrompt(
+          task,
+          {
+            toolExecuted: payload.tool,
+            toolParams: payload.params ?? {},
+            toolError: `Refused scheduled action tool "${payload.tool}"; only data-bearing tools can auto-execute.`,
+          },
+          parentResults
+        );
+      }
+
       const toolCall: ToolCall = {
         type: "toolCall",
         id: `scheduled-${task.id}`,
