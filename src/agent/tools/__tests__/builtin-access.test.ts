@@ -3,6 +3,7 @@ import { ToolRegistry } from "../registry.js";
 import { registerAllTools } from "../register-all.js";
 
 const ADMIN_ONLY_TOOLS = [
+  "ton_get_address",
   "ton_send",
   "jetton_send",
   "stonfi_swap",
@@ -19,6 +20,29 @@ const ADMIN_ONLY_TOOLS = [
   "memory_read",
   "memory_search",
   "session_search",
+] as const;
+
+const OWNER_PRIVATE_READS = [
+  "ton_get_address",
+  "ton_get_balance",
+  "ton_my_transactions",
+  "jetton_balances",
+  "nft_list",
+  "telegram_get_admined_channels",
+  "telegram_get_blocked",
+  "telegram_get_common_chats",
+  "telegram_get_dialogs",
+  "telegram_get_folders",
+  "telegram_get_history",
+  "telegram_get_me",
+  "telegram_get_my_gifts",
+  "telegram_get_my_stickers",
+  "telegram_get_replies",
+  "telegram_get_scheduled_messages",
+  "telegram_get_stars_balance",
+  "telegram_get_stars_transactions",
+  "telegram_get_user_info",
+  "telegram_search_messages",
 ] as const;
 
 describe("built-in tool access policy", () => {
@@ -47,6 +71,20 @@ describe("built-in tool access policy", () => {
     expect(visible.has("telegram_send_message")).toBe(true);
     expect(visible.has("ton_send")).toBe(false);
     expect(visible.has("telegram_get_history")).toBe(false);
+  });
+
+  it("keeps every owner-default and account-private read admin-only", () => {
+    const registry = new ToolRegistry("user");
+    registerAllTools(registry);
+    registry.setAllowFrom([12345]);
+
+    const visible = new Set(
+      registry.getForContext(false, null, "dm", false, 12345).map((t) => t.name)
+    );
+
+    for (const name of OWNER_PRIVATE_READS) {
+      expect(visible.has(name), `${name} must remain owner-only`).toBe(false);
+    }
   });
 
   it("wires the approval gate into real financial tool registrations", async () => {
