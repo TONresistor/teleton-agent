@@ -24,9 +24,12 @@ export interface McpConnection {
   scope: ToolScope;
 }
 
-import { TOOL_EXECUTION_TIMEOUT_MS } from "../../constants/timeouts.js";
-
 const MCP_CONNECT_TIMEOUT_MS = 30_000;
+// Node's largest non-overflowing timer (~24.8 days). MCP tool metadata is
+// remote-controlled, so no MCP tool is trusted read-only enough for a normal
+// retry-producing timeout. This is effectively "no operational timeout" while
+// preserving the SDK's required finite request timer.
+const MCP_UNTRUSTED_TOOL_TIMEOUT_MS = 2_147_483_647;
 
 /**
  * Parse a command string into command + args.
@@ -192,16 +195,16 @@ export async function registerMcpTools(
 
         const executor: ToolExecutor = async (params): Promise<ToolResult> => {
           try {
-            // Use the MCP protocol's request timeout so the client sends a
-            // cancellation notification. A local Promise.race would return an
-            // error while leaving the remote operation orphaned and retryable.
+            // MCP cancellation is cooperative and cannot prove a remote side
+            // effect stopped. Keep untrusted tool calls pending instead of
+            // returning a normal timeout that invites a duplicate retry.
             const result = await conn.client.callTool(
               {
                 name: mcpTool.name,
                 arguments: params as Record<string, unknown>,
               },
               undefined,
-              { timeout: TOOL_EXECUTION_TIMEOUT_MS }
+              { timeout: MCP_UNTRUSTED_TOOL_TIMEOUT_MS }
             );
 
             if (result.isError) {
@@ -240,7 +243,9 @@ export async function registerMcpTools(
             name: prefixedName,
             description: mcpTool.description || `MCP tool from ${conn.serverName}`,
             parameters: schema as unknown as Tool["parameters"],
-            category: mcpTool.annotations?.readOnlyHint === true ? "data-bearing" : "action",
+            // readOnlyHint is supplied by the remote server and is not a local
+            // safety guarantee. Treat every MCP tool as an action.
+            category: "action",
           },
           executor,
           scope: conn.scope,

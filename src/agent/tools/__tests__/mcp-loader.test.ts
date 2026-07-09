@@ -2,10 +2,13 @@ import { describe, expect, it, vi } from "vitest";
 import { registerMcpTools } from "../mcp-loader.js";
 
 describe("MCP tool execution", () => {
-  it("delegates timeout/cancellation to the MCP client without orphaning the call", async () => {
+  it("runs untrusted MCP tools without an operational retry-producing timeout", async () => {
     vi.useFakeTimers();
     try {
-      let registeredTools: Array<{ executor: (params: unknown) => Promise<unknown> }> = [];
+      let registeredTools: Array<{
+        tool: { category?: string };
+        executor: (params: unknown) => Promise<unknown>;
+      }> = [];
       let sideEffectCompleted = false;
       const callTool = vi.fn(async () => {
         await new Promise((resolve) => setTimeout(resolve, 100_000));
@@ -24,6 +27,7 @@ describe("MCP tool execution", () => {
             {
               name: "mutate",
               description: "Perform one side effect",
+              annotations: { readOnlyHint: true },
               inputSchema: { type: "object", properties: { id: { type: "string" } } },
             },
           ],
@@ -35,6 +39,8 @@ describe("MCP tool execution", () => {
         [{ serverName: "test", client: client as never, scope: "admin-only" }],
         registry as never
       );
+
+      expect(registeredTools[0].tool.category).toBe("action");
 
       let settled = false;
       const resultPromise = registeredTools[0].executor({ id: "once" });
@@ -52,7 +58,7 @@ describe("MCP tool execution", () => {
       expect(callTool).toHaveBeenCalledWith(
         { name: "mutate", arguments: { id: "once" } },
         undefined,
-        expect.objectContaining({ timeout: 90_000 })
+        expect.objectContaining({ timeout: 2_147_483_647 })
       );
     } finally {
       vi.useRealTimers();
