@@ -354,6 +354,36 @@ describe("ToolRegistry", () => {
     });
   });
 
+  describe("minimum access floor", () => {
+    it("does not let a persisted all-level override weaken an admin floor", () => {
+      const tool = createMockTool("wallet_action", "action");
+      registry.register(tool, createMockExecutor(), "dm-only", "both", [], "admin");
+
+      db.prepare(
+        `INSERT INTO tool_config
+          (tool_name, enabled, scope, scope_level, updated_at, updated_by)
+         VALUES (?, 1, 'open', 'all', unixepoch(), NULL)`
+      ).run(tool.name);
+      registry.loadConfigFromDB(db);
+
+      expect(registry.getToolConfig(tool.name)).toEqual({ level: "admin" });
+      expect(registry.getForContext(false, null, undefined, false, 12345)).toEqual([]);
+      expect(registry.getForContext(false, null, undefined, true, 99999)).toContainEqual(tool);
+    });
+
+    it("clamps runtime updates below the declared minimum", () => {
+      const tool = createMockTool("private_data", "data-bearing");
+      registry.register(tool, createMockExecutor(), "open", "both", [], "admin");
+      registry.loadConfigFromDB(db);
+
+      expect(registry.updateToolLevel(tool.name, "all")).toBe(true);
+      expect(registry.getToolConfig(tool.name)).toEqual({ level: "admin" });
+      expect(
+        db.prepare("SELECT scope_level FROM tool_config WHERE tool_name = ?").get(tool.name)
+      ).toEqual({ scope_level: "admin" });
+    });
+  });
+
   // ---------- Tool execution ----------
 
   describe("execute()", () => {

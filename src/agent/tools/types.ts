@@ -38,6 +38,9 @@ export interface ToolResult {
  */
 export type ToolCategory = "data-bearing" | "action";
 
+/** Runtime authority required to expose and execute a tool. */
+export type ToolAccessLevel = "all" | "allowlist" | "admin" | "off";
+
 /**
  * Tool scope for context-based filtering.
  * - "open": included in both DMs and groups (default, canonical form)
@@ -103,6 +106,8 @@ export interface RegisteredTool {
   executor: ToolExecutor;
   /** Declared non-trivial scope (undefined for the default always/open). */
   scope?: ToolScope;
+  /** Hard authority floor. Runtime configuration may only make access stricter. */
+  minimumAccess: ToolAccessLevel;
   /** Telegram mode this tool runs in. */
   mode: ToolMode;
   /** Module this tool belongs to (name prefix for built-ins, plugin name otherwise). */
@@ -120,6 +125,8 @@ export interface ToolEntry {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- tool executors accept varied param shapes
   executor: ToolExecutor<any>;
   scope?: ToolScope;
+  /** Hard authority floor, independent from the DM/group channel scope. */
+  minimumAccess?: ToolAccessLevel;
   /** Telegram mode(s) this tool runs in. Mandatory — every tool must declare it. */
   mode: ToolMode;
   /** Toolset tags for profile-based filtering (e.g. "core", "finance", "social") */

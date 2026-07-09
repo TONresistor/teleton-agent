@@ -7,6 +7,7 @@ import type {
   Tool,
   ToolContext,
   ToolExecutor,
+  ToolAccessLevel,
   ToolMode,
   ToolResult,
   ToolScope,
@@ -21,7 +22,7 @@ import {
   saveToolConfig,
   type ToolConfig,
 } from "../../memory/tool-config.js";
-import { scopeToLevel, levelToScope, type ToolAccessLevel } from "./scope.js";
+import { enforceMinimumAccess, scopeToLevel, levelToScope } from "./scope.js";
 import type { ToolIndex } from "./tool-index.js";
 import { getErrorMessage } from "../../utils/errors.js";
 import { createLogger } from "../../utils/logger.js";
@@ -68,6 +69,7 @@ export class ToolRegistry {
       tool: Tool;
       executor: ToolExecutor;
       scope?: ToolScope;
+      minimumAccess?: ToolAccessLevel;
       mode: ToolMode;
       module: string;
       tags?: string[];
@@ -78,6 +80,7 @@ export class ToolRegistry {
       executor: entry.executor,
       scope:
         entry.scope && entry.scope !== "always" && entry.scope !== "open" ? entry.scope : undefined,
+      minimumAccess: entry.minimumAccess ?? scopeToLevel(entry.scope),
       mode: entry.mode,
       module: entry.module,
       tags: entry.tags && entry.tags.length > 0 ? entry.tags : undefined,
@@ -89,7 +92,8 @@ export class ToolRegistry {
     executor: ToolExecutor<TParams>,
     scope?: ToolScope,
     mode: ToolMode = "both",
-    tags?: string[]
+    tags?: string[],
+    minimumAccess?: ToolAccessLevel
   ): void {
     if (this.tools.has(tool.name)) {
       throw new Error(`Tool "${tool.name}" is already registered`);
@@ -101,6 +105,7 @@ export class ToolRegistry {
       mode,
       module: tool.name.split("_")[0],
       tags,
+      minimumAccess,
     });
     this.toolArrayCache = null;
   }
@@ -326,7 +331,7 @@ export class ToolRegistry {
     let seeded = false;
     for (const name of names) {
       if (!this.toolConfigs.has(name)) {
-        initializeToolConfig(this.db, name, scopeToLevel(this.tools.get(name)?.scope));
+        initializeToolConfig(this.db, name, this.getMinimumAccess(name));
         seeded = true;
       }
     }
@@ -340,6 +345,19 @@ export class ToolRegistry {
     this.toolConfigs = loadAllToolConfigs(db);
     // Seed DB with defaults for tools that don't have config yet
     this.seedConfigs(this.tools.keys());
+    // Security floors are code invariants, not user-configurable defaults. Clamp
+    // stale rows created before the floor existed so restarts remain coherent.
+    let reconciled = false;
+    for (const name of this.tools.keys()) {
+      const config = this.toolConfigs.get(name);
+      if (!config) continue;
+      const clamped = enforceMinimumAccess(config.level, this.getMinimumAccess(name));
+      if (clamped !== config.level) {
+        saveToolConfig(db, name, clamped, config.updatedBy ?? undefined);
+        reconciled = true;
+      }
+    }
+    if (reconciled) this.toolConfigs = loadAllToolConfigs(db);
     // Clear cache to force regeneration with new configs
     this.toolArrayCache = null;
   }
@@ -348,10 +366,13 @@ export class ToolRegistry {
    * Effective access level for a tool: the DB override if present, else the
    * code-declared default scope mapped to a level.
    */
+  private getMinimumAccess(toolName: string): ToolAccessLevel {
+    return this.tools.get(toolName)?.minimumAccess ?? "all";
+  }
+
   private getEffectiveLevel(toolName: string): ToolAccessLevel {
     const config = this.toolConfigs.get(toolName);
-    if (config) return config.level;
-    return scopeToLevel(this.tools.get(toolName)?.scope);
+    return enforceMinimumAccess(config?.level ?? "all", this.getMinimumAccess(toolName));
   }
 
   /**
@@ -375,7 +396,12 @@ export class ToolRegistry {
   updateToolLevel(toolName: string, level: ToolAccessLevel, updatedBy?: number): boolean {
     if (!this.tools.has(toolName) || !this.db) return false;
 
-    saveToolConfig(this.db, toolName, level, updatedBy);
+    saveToolConfig(
+      this.db,
+      toolName,
+      enforceMinimumAccess(level, this.getMinimumAccess(toolName)),
+      updatedBy
+    );
 
     // Update in-memory cache
     this.toolConfigs = loadAllToolConfigs(this.db);
@@ -395,7 +421,7 @@ export class ToolRegistry {
     if (!enabled) {
       next = "off";
     } else if (this.getEffectiveLevel(toolName) === "off") {
-      next = scopeToLevel(this.tools.get(toolName)?.scope);
+      next = this.getMinimumAccess(toolName);
     } else {
       next = this.getEffectiveLevel(toolName);
     }
@@ -422,10 +448,16 @@ export class ToolRegistry {
    */
   registerPluginTools(
     pluginName: string,
-    tools: Array<{ tool: Tool; executor: ToolExecutor; scope?: ToolScope; mode?: ToolMode }>
+    tools: Array<{
+      tool: Tool;
+      executor: ToolExecutor;
+      scope?: ToolScope;
+      mode?: ToolMode;
+      minimumAccess?: ToolAccessLevel;
+    }>
   ): number {
     const names: string[] = [];
-    for (const { tool, executor, scope, mode } of tools) {
+    for (const { tool, executor, scope, mode, minimumAccess } of tools) {
       if (this.tools.has(tool.name)) continue;
       this.insertTool(tool.name, {
         tool,
@@ -433,6 +465,7 @@ export class ToolRegistry {
         scope,
         mode: mode ?? "both",
         module: pluginName,
+        minimumAccess,
       });
       names.push(tool.name);
     }
@@ -458,13 +491,19 @@ export class ToolRegistry {
    */
   replacePluginTools(
     pluginName: string,
-    newTools: Array<{ tool: Tool; executor: ToolExecutor; scope?: ToolScope; mode?: ToolMode }>
+    newTools: Array<{
+      tool: Tool;
+      executor: ToolExecutor;
+      scope?: ToolScope;
+      mode?: ToolMode;
+      minimumAccess?: ToolAccessLevel;
+    }>
   ): void {
     // Collect old tool names before removal (allowed to re-register these)
     const previousNames = new Set(this.pluginToolNames.get(pluginName) ?? []);
     this.removePluginTools(pluginName);
     const names: string[] = [];
-    for (const { tool, executor, scope, mode } of newTools) {
+    for (const { tool, executor, scope, mode, minimumAccess } of newTools) {
       // Prevent overwriting core/other-plugin tools
       if (this.tools.has(tool.name) && !previousNames.has(tool.name)) {
         log.warn(
@@ -478,6 +517,7 @@ export class ToolRegistry {
         scope,
         mode: mode ?? "both",
         module: pluginName,
+        minimumAccess,
       });
       names.push(tool.name);
     }
