@@ -18,6 +18,7 @@ const SITE_RECORD_KEY = BigInt(
 );
 
 export type DnsUpdateErrorCode =
+  | "INVALID_DOMAIN"
   | "INVALID_ADDRESS"
   | "INVALID_ADNL_ADDRESS"
   | "WALLET_NOT_INITIALIZED"
@@ -59,6 +60,9 @@ export function normalizeTonDomain(domain: string): string {
     .trim()
     .toLowerCase()
     .replace(/\.ton$/, "");
+  if (!normalized) {
+    throw new DnsUpdateError("Domain must not be empty.", "INVALID_DOMAIN");
+  }
   return `${normalized}.ton`;
 }
 

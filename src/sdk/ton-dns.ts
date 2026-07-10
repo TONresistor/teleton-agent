@@ -66,10 +66,6 @@ async function sendWalletMessage(
   return sent;
 }
 
-function normalizeDomain(domain: string): string {
-  return normalizeTonDomain(domain);
-}
-
 function dnsSdkError(error: unknown, operation: string): PluginSDKError {
   if (error instanceof PluginSDKError) return error;
   if (error instanceof DnsUpdateError) {
@@ -78,10 +74,20 @@ function dnsSdkError(error: unknown, operation: string): PluginSDKError {
         ? "WALLET_NOT_INITIALIZED"
         : error.code === "INVALID_ADDRESS"
           ? "INVALID_ADDRESS"
-          : "OPERATION_FAILED";
+          : error.code === "INVALID_DOMAIN" || error.code === "INVALID_ADNL_ADDRESS"
+            ? "INVALID_INPUT"
+            : "OPERATION_FAILED";
     return new PluginSDKError(error.message, code);
   }
   return new PluginSDKError(`${operation}: ${getErrorMessage(error)}`, "OPERATION_FAILED");
+}
+
+function normalizeDomain(domain: string): string {
+  try {
+    return normalizeTonDomain(domain);
+  } catch (error) {
+    throw dnsSdkError(error, "Invalid domain");
+  }
 }
 
 export function createDnsSDK(log: PluginLogger): DnsSDK {
@@ -147,6 +153,9 @@ export function createDnsSDK(log: PluginLogger): DnsSDK {
     },
 
     async getAuctions(limit?: number): Promise<DnsAuction[]> {
+      if (limit !== undefined && (!Number.isInteger(limit) || limit < 1)) {
+        throw new PluginSDKError("Auction limit must be a positive integer", "INVALID_INPUT");
+      }
       try {
         const response = await tonapiFetch(
           `/dns/auctions?tld=ton&limit=${Math.min(limit ?? 20, 100)}`
@@ -201,7 +210,7 @@ export function createDnsSDK(log: PluginLogger): DnsSDK {
     async bid(domain: string, amount: number): Promise<DnsBidResult> {
       const normalized = normalizeDomain(domain);
       if (!Number.isFinite(amount) || amount <= 0) {
-        throw new PluginSDKError("Bid amount must be positive", "OPERATION_FAILED");
+        throw new PluginSDKError("Bid amount must be positive", "INVALID_INPUT");
       }
 
       const walletData = loadWallet();

@@ -64,6 +64,7 @@ describe("DNS mutation service", () => {
 
   it("normalizes public DNS inputs consistently", () => {
     expect(normalizeTonDomain("  Example.TON ")).toBe("example.ton");
+    expect(() => normalizeTonDomain("  ")).toThrow("Domain must not be empty");
     expect(normalizeAdnlAddress(`0x${"AB".repeat(32)}`)).toBe("ab".repeat(32));
     expect(() => normalizeAdnlAddress("invalid")).toThrow(DnsUpdateError);
   });
