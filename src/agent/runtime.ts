@@ -16,6 +16,11 @@ import {
 } from "../constants/limits.js";
 import { TELEGRAM_SEND_TOOLS } from "../constants/tools.js";
 import {
+  deliveredTelegramText,
+  sentSuccessfullyToChat,
+  type CompletedToolCall,
+} from "./telegram-send-state.js";
+import {
   chatWithContext,
   streamWithContext,
   loadContextFromTranscript,
@@ -109,10 +114,7 @@ export interface ProcessMessageOptions {
 
 export interface AgentResponse {
   content: string;
-  toolCalls?: Array<{
-    name: string;
-    input: Record<string, unknown>;
-  }>;
+  toolCalls?: CompletedToolCall[];
   streamed?: boolean;
 }
 
@@ -136,7 +138,7 @@ interface LoopResult {
   finalResponse: ChatResponse | null;
   session: ReturnType<typeof getOrCreateSession>;
   context: Context;
-  totalToolCalls: Array<{ name: string; input: Record<string, unknown> }>;
+  totalToolCalls: CompletedToolCall[];
   accumulatedTexts: string[];
   accumulatedUsage: UsageAccumulator;
   wasStreamed: boolean;
@@ -968,7 +970,7 @@ export class AgentRuntime {
     toolPlans: ToolPlan[],
     execResults: ToolExecResult[],
     sink: {
-      totalToolCalls: Array<{ name: string; input: Record<string, unknown> }>;
+      totalToolCalls: CompletedToolCall[];
       iterationToolNames: string[];
       sessionId: string;
       chatId: string;
@@ -1023,6 +1025,11 @@ export class AgentRuntime {
       sink.totalToolCalls.push({
         name: block.name,
         input: plan.params,
+        result: {
+          success: exec.result.success,
+          data: exec.result.data,
+          error: exec.result.error,
+        },
       });
 
       const resultText = truncateToolResult(exec.result, MAX_TOOL_RESULT_SIZE);
@@ -1078,7 +1085,7 @@ export class AgentRuntime {
     let iteration = 0;
     const retry = { overflowResets: 0, rateLimitRetries: 0, serverErrorRetries: 0 };
     let finalResponse: ChatResponse | null = null;
-    const totalToolCalls: Array<{ name: string; input: Record<string, unknown> }> = [];
+    const totalToolCalls: CompletedToolCall[] = [];
     const accumulatedTexts: string[] = [];
     const accumulatedUsage = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalCost: 0 };
     const seenToolSignatures = new Set<string>();
@@ -1302,13 +1309,13 @@ export class AgentRuntime {
 
     let content = accumulatedTexts.join("\n").trim() || finalResponse.text;
 
-    const usedTelegramSendTool = totalToolCalls.some((tc) => TELEGRAM_SEND_TOOLS.has(tc.name));
+    const sentToCurrentChat = totalToolCalls.some((call) => sentSuccessfullyToChat(call, chatId));
 
-    if (!content && totalToolCalls.length > 0 && !usedTelegramSendTool) {
+    if (!content && totalToolCalls.length > 0 && !sentToCurrentChat) {
       log.warn("Empty response after tool calls - generating fallback");
       content =
         "I executed the requested action but couldn't generate a response. Please try again.";
-    } else if (!content && usedTelegramSendTool) {
+    } else if (!content && sentToCurrentChat) {
       log.info("Response sent via Telegram tool - no additional text needed");
       content = "";
     } else if (!content && accumulatedUsage.input === 0 && accumulatedUsage.output === 0) {
@@ -1361,7 +1368,10 @@ export class AgentRuntime {
     if (wasStreamed && opts.streamToChat) {
       const bridge = opts.streamToChat.bridge;
       if (isBotBridge(bridge)) {
-        if (usedTelegramSendTool) {
+        if (
+          (!content && sentToCurrentChat) ||
+          deliveredTelegramText(totalToolCalls, chatId, content)
+        ) {
           // Agent already sent via tool — just clear the draft bubble
           await bridge.clearDraft(opts.streamToChat.chatId);
         } else {

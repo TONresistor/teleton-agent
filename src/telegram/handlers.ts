@@ -8,8 +8,8 @@ import type { EmbeddingProvider } from "../memory/embeddings/provider.js";
 import { readOffset, writeOffset } from "./offset-store.js";
 import { PendingHistory } from "../memory/pending-history.js";
 import type { ToolContext } from "../agent/tools/types.js";
-import { TELEGRAM_SEND_TOOLS } from "../constants/tools.js";
 import { isSilentReply } from "../constants/tokens.js";
+import { deliveredTelegramText } from "../agent/telegram-send-state.js";
 import { transcribeAudio } from "../sdk/telegram-utils.js";
 import { TYPING_REFRESH_MS } from "../constants/timeouts.js";
 import { createLogger } from "../utils/logger.js";
@@ -490,19 +490,21 @@ export class MessageHandler {
             streamToChat,
           });
 
-          // 8. Handle response based on whether tools were used
-          const hasToolCalls = response.toolCalls && response.toolCalls.length > 0;
-
-          // Check if agent used any Telegram send tool - it already sent the message
-          const telegramSendCalled =
-            hasToolCalls && response.toolCalls?.some((tc) => TELEGRAM_SEND_TOOLS.has(tc.name));
+          // Suppress only an identical text that was confirmed delivered to this
+          // chat. Cross-chat sends, failed sends, and distinct confirmations must
+          // still produce a response to the requester.
+          const responseAlreadyDelivered = deliveredTelegramText(
+            response.toolCalls,
+            message.chatId,
+            response.content
+          );
 
           if (isSilentReply(response.content)) {
             log.debug("Silent reply suppressed");
           } else if (response.streamed) {
             log.debug("Response already streamed to chat");
           } else if (
-            !telegramSendCalled &&
+            !responseAlreadyDelivered &&
             response.content &&
             response.content.trim().length > 0
           ) {
@@ -537,7 +539,7 @@ export class MessageHandler {
               true
             );
           } else if (
-            telegramSendCalled &&
+            responseAlreadyDelivered &&
             response.content &&
             response.content.trim().length > 0 &&
             !isSilentReply(response.content)

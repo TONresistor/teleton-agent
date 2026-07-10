@@ -488,17 +488,86 @@ describe("MessageHandler", () => {
   // ── T9: telegramSendCalled detection ─────────────────────────────────────
 
   describe("telegramSendCalled detection", () => {
-    it("when processMessage uses a telegram send tool → bridge.sendMessage NOT called", async () => {
+    it("does not duplicate text successfully delivered to the current chat", async () => {
       const agent = makeAgent();
       agent.processMessage.mockResolvedValue({
         content: "sent via tool",
-        toolCalls: [{ name: "telegram_send_message", args: {} }],
+        toolCalls: [
+          {
+            name: "telegram_send_message",
+            input: { chatId: "chat1", text: "sent via tool" },
+            result: { success: true },
+          },
+        ],
       });
 
       const { handler, bridge } = createHandler({ dm_policy: "open" }, { agent });
       await handler.handleMessage(makeMessage({ id: 101 }));
 
       expect(bridge.sendMessage).not.toHaveBeenCalled();
+    });
+
+    it("sends the final response when the Telegram tool targeted another chat", async () => {
+      const agent = makeAgent();
+      agent.processMessage.mockResolvedValue({
+        content: "Message sent to Alice",
+        toolCalls: [
+          {
+            name: "telegram_send_message",
+            input: { chatId: "alice", text: "hello" },
+            result: { success: true },
+          },
+        ],
+      });
+
+      const { handler, bridge } = createHandler({ dm_policy: "open" }, { agent });
+      await handler.handleMessage(makeMessage({ id: 102, chatId: "chat1" }));
+
+      expect(bridge.sendMessage).toHaveBeenCalledWith(
+        expect.objectContaining({ chatId: "chat1", text: "Message sent to Alice" })
+      );
+    });
+
+    it("sends the final response when the Telegram tool failed", async () => {
+      const agent = makeAgent();
+      agent.processMessage.mockResolvedValue({
+        content: "I could not send the message",
+        toolCalls: [
+          {
+            name: "telegram_send_message",
+            input: { chatId: "chat1", text: "hello" },
+            result: { success: false, error: "forbidden" },
+          },
+        ],
+      });
+
+      const { handler, bridge } = createHandler({ dm_policy: "open" }, { agent });
+      await handler.handleMessage(makeMessage({ id: 103, chatId: "chat1" }));
+
+      expect(bridge.sendMessage).toHaveBeenCalledWith(
+        expect.objectContaining({ chatId: "chat1", text: "I could not send the message" })
+      );
+    });
+
+    it("sends a distinct confirmation after a successful current-chat send", async () => {
+      const agent = makeAgent();
+      agent.processMessage.mockResolvedValue({
+        content: "Done",
+        toolCalls: [
+          {
+            name: "telegram_send_message",
+            input: { chatId: "chat1", text: "hello" },
+            result: { success: true },
+          },
+        ],
+      });
+
+      const { handler, bridge } = createHandler({ dm_policy: "open" }, { agent });
+      await handler.handleMessage(makeMessage({ id: 104, chatId: "chat1" }));
+
+      expect(bridge.sendMessage).toHaveBeenCalledWith(
+        expect.objectContaining({ chatId: "chat1", text: "Done" })
+      );
     });
 
     it("when processMessage has no send tool → bridge.sendMessage IS called", async () => {
@@ -547,11 +616,18 @@ describe("MessageHandler", () => {
     });
 
     for (const toolName of TELEGRAM_SEND_TOOLS) {
+      if (toolName === "telegram_forward_message") continue;
       it(`recognizes ${toolName} as a send tool`, async () => {
         const agent = makeAgent();
         agent.processMessage.mockResolvedValue({
           content: "tool response",
-          toolCalls: [{ name: toolName, args: {} }],
+          toolCalls: [
+            {
+              name: toolName,
+              input: { chatId: "chat1", text: "tool response" },
+              result: { success: true },
+            },
+          ],
         });
 
         const { handler, bridge } = createHandler({ dm_policy: "open" }, { agent });
