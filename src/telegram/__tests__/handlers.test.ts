@@ -683,6 +683,55 @@ describe("MessageHandler", () => {
     });
   });
 
+  describe("provider failures", () => {
+    it("replies with a safe quota message and marks the update processed", async () => {
+      const agent = makeAgent();
+      agent.processMessage.mockRejectedValue(
+        new Error("API error: Codex error: The usage limit has been reached")
+      );
+
+      const { handler, bridge } = createHandler({ dm_policy: "open" }, { agent });
+      await handler.handleMessage(makeMessage({ id: 201, chatId: "chat1" }));
+
+      expect(bridge.sendMessage).toHaveBeenCalledWith({
+        chatId: "chat1",
+        text: "⚠️ The AI provider usage limit has been reached. Please try again later or switch providers.",
+        replyToId: 201,
+      });
+      expect(mockWriteOffset).toHaveBeenCalledWith(201, "chat1");
+    });
+
+    it("does not expose unexpected provider details", async () => {
+      const agent = makeAgent();
+      agent.processMessage.mockRejectedValue(
+        new Error("API error: upstream failed with secret diagnostic details")
+      );
+
+      const { handler, bridge } = createHandler({ dm_policy: "open" }, { agent });
+      await handler.handleMessage(makeMessage({ id: 202, chatId: "chat1" }));
+
+      expect(bridge.sendMessage).toHaveBeenCalledWith({
+        chatId: "chat1",
+        text: "⚠️ The AI provider is unavailable. Please try again later.",
+        replyToId: 202,
+      });
+    });
+
+    it("keeps the update retryable when the error notification cannot be delivered", async () => {
+      const agent = makeAgent();
+      agent.processMessage.mockRejectedValue(
+        new Error("API error: Codex error: The usage limit has been reached")
+      );
+      const bridge = makeBridge();
+      bridge.sendMessage.mockRejectedValue(new Error("Telegram unavailable"));
+
+      const { handler } = createHandler({ dm_policy: "open" }, { agent, bridge });
+      await handler.handleMessage(makeMessage({ id: 203, chatId: "chat1" }));
+
+      expect(mockWriteOffset).not.toHaveBeenCalled();
+    });
+  });
+
   // ── Edge cases ───────────────────────────────────────────────────────────
 
   describe("handleMessage edge cases", () => {

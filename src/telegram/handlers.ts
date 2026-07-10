@@ -18,6 +18,36 @@ import { getErrorMessage } from "../utils/errors.js";
 const log = createLogger("Telegram");
 import type { PluginMessageEvent } from "@teleton-agent/sdk";
 
+function providerFailureReply(error: unknown): string {
+  const message = getErrorMessage(error).toLowerCase();
+
+  if (
+    message.includes("usage limit") ||
+    message.includes("insufficient_quota") ||
+    message.includes("quota exceeded")
+  ) {
+    return "⚠️ The AI provider usage limit has been reached. Please try again later or switch providers.";
+  }
+
+  if (
+    message.includes("rate limit") ||
+    message.includes("rate_limited") ||
+    /\b429\b/.test(message)
+  ) {
+    return "⚠️ The AI provider is temporarily rate-limited. Please try again in a moment.";
+  }
+
+  if (
+    message.includes("authentication token is expired") ||
+    message.includes("invalid authentication") ||
+    /\b(?:401|unauthorized)\b/.test(message)
+  ) {
+    return "⚠️ The AI provider credentials are invalid or expired. Please refresh them and try again.";
+  }
+
+  return "⚠️ The AI provider is unavailable. Please try again later.";
+}
+
 export interface MessageContext {
   message: TelegramMessage;
   isAdmin: boolean;
@@ -488,22 +518,43 @@ export class MessageHandler {
                 }
               : undefined;
 
-          const response = await this.agent.processMessage({
-            chatId: message.chatId,
-            userMessage: effectiveText,
-            userName,
-            timestamp: message.timestamp.getTime(),
-            isGroup: message.isGroup,
-            pendingContext,
-            toolContext,
-            senderUsername: message.senderUsername,
-            senderRank: message.senderRank,
-            hasMedia: message.hasMedia,
-            mediaType: message.mediaType,
-            messageId: message.id,
-            replyContext,
-            streamToChat,
-          });
+          let response: Awaited<ReturnType<AgentRuntime["processMessage"]>>;
+          try {
+            response = await this.agent.processMessage({
+              chatId: message.chatId,
+              userMessage: effectiveText,
+              userName,
+              timestamp: message.timestamp.getTime(),
+              isGroup: message.isGroup,
+              pendingContext,
+              toolContext,
+              senderUsername: message.senderUsername,
+              senderRank: message.senderRank,
+              hasMedia: message.hasMedia,
+              mediaType: message.mediaType,
+              messageId: message.id,
+              replyContext,
+              streamToChat,
+            });
+          } catch (error) {
+            log.error({ err: error }, "Agent provider request failed");
+
+            try {
+              await this.bridge.sendMessage({
+                chatId: message.chatId,
+                text: providerFailureReply(error),
+                replyToId: message.id,
+              });
+
+              if (this.bridge.requiresOffsetDedup()) {
+                writeOffset(message.id, message.chatId);
+              }
+            } catch (notificationError) {
+              log.error({ err: notificationError }, "Failed to send provider error notification");
+            }
+
+            return;
+          }
 
           // Suppress only an identical text that was confirmed delivered to this
           // chat. Cross-chat sends, failed sends, and distinct confirmations must
