@@ -1,359 +1,113 @@
 import type {
+  APIResponse,
   ConfigKeyData,
+  ConversationChat,
+  ConversationMessage,
   FileEntry,
   LogEntry,
   MarketplacePlugin,
   McpServerInfo,
-  MemorySearchResult,
+  MemoryChunk,
   MemorySourceFile,
+  MemoryStats,
   ModuleInfo,
-  StatusResponse,
+  PluginManifest,
+  PluginSecretsInfo,
+  SearchResult,
+  StatusData,
+  TaskData,
   ToolAccessLevel,
-  ToolInfo,
+  ToolConfigData,
+  ToolRagStatus,
+  WalletInfo,
+  WalletTransaction,
   WorkspaceInfo,
-} from '../../../src/webui/contracts';
+} from "./api-types";
+import { API_BASE, fetchAPI } from "./http-client";
 
-export type {
-  ConfigKeyData,
-  FileEntry,
-  LogEntry,
-  MarketplacePlugin,
-  McpServerInfo,
-  MemorySourceFile,
-  ModuleInfo,
-  ToolAccessLevel,
-  ToolInfo,
-  WorkspaceInfo,
-};
-export type StatusData = StatusResponse;
-export type SearchResult = MemorySearchResult;
-
-const API_BASE = '/api';
-
-// ── Setup types ─────────────────────────────────────────────────────
-
-export interface SetupStatusResponse {
-  workspaceExists: boolean;
-  configExists: boolean;
-  walletExists: boolean;
-  walletAddress: string | null;
-  sessionExists: boolean;
-  envVars: {
-    apiKey: string | null;
-    apiKeyRaw: boolean;
-    telegramApiId: string | null;
-    telegramApiHash: string | null;
-    telegramPhone: string | null;
-  };
-}
-
-export interface SetupProvider {
-  id: string;
-  displayName: string;
-  defaultModel: string;
-  utilityModel: string;
-  toolLimit: number | null;
-  keyPrefix: string | null;
-  consoleUrl: string | null;
-  credentialMode: 'api-key' | 'cli-auto' | 'none';
-  requiresApiKey: boolean;
-}
-
-export interface SetupModelOption {
-  value: string;
-  name: string;
-  description: string;
-  isCustom?: boolean;
-}
-
-export interface BotValidation {
-  valid: boolean;
-  networkError: boolean;
-  bot?: { username: string; firstName: string };
-  error?: string;
-}
-
-export interface WalletStatus {
-  exists: boolean;
-  address?: string;
-}
-
-export interface WalletResult {
-  address: string;
-  mnemonic: string[];
-}
-
-export interface AuthCodeResult {
-  authSessionId: string;
-  codeDelivery: "app" | "sms" | "fragment";
-  fragmentUrl?: string;
-  codeLength?: number;
-  expiresAt: number;
-}
-
-export interface AuthVerifyResult {
-  status: 'authenticated' | '2fa_required';
-  user?: { id: number; firstName: string; username: string };
-  passwordHint?: string;
-}
-
-export interface SetupConfig {
-  agent: { provider: string; api_key?: string; base_url?: string; model?: string; max_agentic_iterations?: number };
-  telegram: {
-    mode?: 'user' | 'bot';
-    api_id: number;
-    api_hash: string;
-    phone: string;
-    admin_ids: number[];
-    owner_id: number;
-    dm_policy?: string;
-    group_policy?: string;
-    require_mention?: boolean;
-    bot_token?: string;
-    bot_username?: string;
-  };
-  gocoon?: { port: number };
-  tonapi_key?: string;
-  toncenter_api_key?: string;
-  tavily_api_key?: string;
-  webui?: { enabled: boolean };
-}
-
-// ── Response types ──────────────────────────────────────────────────
-
-export interface MemoryStats {
-  knowledge: number;
-  sessions: number;
-  messages: number;
-  chats: number;
-}
-
-export interface MemoryChunk {
-  id: string;
-  text: string;
-  source: string;
-  startLine: number | null;
-  endLine: number | null;
-  updatedAt: number;
-}
-
-export interface ConversationChat {
-  id: string;
-  type: string;
-  title: string | null;
-  username: string | null;
-  message_count: number;
-  last_message_at: number | null;
-  last_message: string | null;
-}
-
-export interface ConversationMessage {
-  id: string;
-  chat_id: string;
-  sender_id: string | null;
-  text: string | null;
-  is_from_agent: number;
-  has_media: number;
-  media_type: string | null;
-  timestamp: number;
-}
-
-export interface WalletInfo {
-  address: string | null;
-  balance: string;
-}
-
-export interface WalletTransaction {
-  type: string;
-  hash: string;
-  amount?: string;
-  from?: string;
-  to?: string;
-  comment?: string | null;
-  date: string;
-  secondsAgo: number;
-  explorer: string;
-  jettonAmount?: string;
-  jettonWallet?: string;
-  nftAddress?: string;
-}
-
-export interface PluginManifest {
-  name: string;
-  version: string;
-  author?: string;
-  description?: string;
-  dependencies?: string[];
-  sdkVersion?: string;
-}
-
-export interface TaskData {
-  id: string;
-  description: string;
-  status: 'pending' | 'in_progress' | 'done' | 'failed' | 'cancelled';
-  priority: number;
-  createdBy?: string;
-  createdAt: string;
-  startedAt?: string | null;
-  completedAt?: string | null;
-  scheduledFor?: string | null;
-  payload?: string | null;
-  reason?: string | null;
-  result?: string | null;
-  error?: string | null;
-  dependencies: string[];
-  dependents: string[];
-}
-
-export interface ToolConfigData {
-  tool: string;
-  level: ToolAccessLevel;
-  scope?: string;
-  enabled?: boolean;
-}
-
-export interface ToolRagStatus {
-  enabled: boolean;
-  indexed: boolean;
-  topK: number;
-  totalTools: number;
-  alwaysInclude?: string[];
-  skipUnlimitedProviders?: boolean;
-}
-
-export interface SecretDeclaration {
-  required: boolean;
-  description: string;
-  env?: string;
-}
-
-export interface PluginSecretsInfo {
-  declared: Record<string, SecretDeclaration>;
-  configured: string[];
-}
-
-// ── API response wrapper ────────────────────────────────────────────
-
-interface APIResponse<T> {
-  success: boolean;
-  data: T;
-}
-
-// ── Fetch helpers ───────────────────────────────────────────────────
-
-async function fetchJson<T>(
-  endpoint: string,
-  options: RequestInit | undefined,
-  opts: { credentials?: boolean; unwrapData?: boolean }
-): Promise<T> {
-  const headers: HeadersInit = {
-    'Content-Type': 'application/json',
-    ...options?.headers,
-  };
-
-  const response = await fetch(`${API_BASE}${endpoint}`, {
-    ...options,
-    headers,
-    ...(opts.credentials ? { credentials: 'include' } : {}), // send HttpOnly cookie automatically
-  });
-
-  if (!response.ok) {
-    const error = await response.json().catch(() => ({ error: response.statusText }));
-    throw new Error(error.error || `HTTP ${response.status}`);
-  }
-
-  const json = await response.json();
-  return opts.unwrapData ? (json.data !== undefined ? json.data : json) : json;
-}
-
-async function fetchSetupAPI<T>(endpoint: string, options?: RequestInit): Promise<T> {
-  return fetchJson<T>(endpoint, options, { unwrapData: true });
-}
-
-async function fetchAPI<T>(endpoint: string, options?: RequestInit): Promise<T> {
-  return fetchJson<T>(endpoint, options, { credentials: true });
-}
-
-// ── Auth ────────────────────────────────────────────────────────────
-
-/** Check if session cookie is valid */
-export async function checkAuth(): Promise<boolean> {
-  try {
-    const res = await fetch('/auth/check', { credentials: 'include' });
-    const data = await res.json();
-    return data.success && data.data?.authenticated;
-  } catch {
-    return false;
-  }
-}
-
-/** Login with token — server sets HttpOnly cookie */
-export async function login(token: string): Promise<boolean> {
-  try {
-    const res = await fetch('/auth/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ token }),
-      credentials: 'include',
-    });
-    return res.ok;
-  } catch {
-    return false;
-  }
-}
-
-/** Logout — server clears cookie */
-export async function logout(): Promise<void> {
-  await fetch('/auth/logout', { method: 'POST', credentials: 'include' }).catch(() => {});
-}
+export * from "./api-types";
+export { checkAuth, login, logout } from "./http-client";
+export { setup } from "./setup-api";
 
 // ── API methods ─────────────────────────────────────────────────────
 
 export const api = {
   async getStatus() {
-    return fetchAPI<APIResponse<StatusData>>('/status');
+    return fetchAPI<APIResponse<StatusData>>("/status");
   },
 
   // gocoon: decentralized LLM on TON
   async gocoonStatus() {
-    return fetchAPI<APIResponse<{ installed: boolean; version: string | null; wallet: { fundAddress: string; ownerAddress: string; balanceTon: string; balanceNano: string; funded: boolean; recommendedFundingTon: string } | null; runner: boolean }>>('/gocoon/status');
+    return fetchAPI<
+      APIResponse<{
+        installed: boolean;
+        version: string | null;
+        wallet: {
+          fundAddress: string;
+          ownerAddress: string;
+          balanceTon: string;
+          balanceNano: string;
+          funded: boolean;
+          recommendedFundingTon: string;
+        } | null;
+        runner: boolean;
+      }>
+    >("/gocoon/status");
   },
   async gocoonInstall() {
-    return fetchAPI<APIResponse<{ version: string }>>('/gocoon/install', { method: 'POST' });
+    return fetchAPI<APIResponse<{ version: string }>>("/gocoon/install", { method: "POST" });
   },
   async gocoonInit() {
-    return fetchAPI<APIResponse<{ fundAddress: string; recommendedFundingTon: string }>>('/gocoon/init', { method: 'POST' });
+    return fetchAPI<APIResponse<{ fundAddress: string; recommendedFundingTon: string }>>(
+      "/gocoon/init",
+      { method: "POST" }
+    );
   },
   async gocoonTopup(amount: string) {
-    return fetchAPI<APIResponse<{ amount: string }>>('/gocoon/topup', { method: 'POST', body: JSON.stringify({ amount }) });
+    return fetchAPI<APIResponse<{ amount: string }>>("/gocoon/topup", {
+      method: "POST",
+      body: JSON.stringify({ amount }),
+    });
   },
   async gocoonWithdrawStart(destination: string) {
-    return fetchAPI<APIResponse<{ started: boolean }>>('/gocoon/withdraw', { method: 'POST', body: JSON.stringify({ destination }) });
+    return fetchAPI<APIResponse<{ started: boolean }>>("/gocoon/withdraw", {
+      method: "POST",
+      body: JSON.stringify({ destination }),
+    });
   },
   async gocoonWithdrawStatus() {
-    return fetchAPI<APIResponse<{ running: boolean; done: boolean; events: { stage: string; status: string; message: string; at: number }[]; error?: string }>>('/gocoon/withdraw');
+    return fetchAPI<
+      APIResponse<{
+        running: boolean;
+        done: boolean;
+        events: { stage: string; status: string; message: string; at: number }[];
+        error?: string;
+      }>
+    >("/gocoon/withdraw");
   },
   async gocoonRunnerStop() {
-    return fetchAPI<APIResponse<{ stopped: boolean }>>('/gocoon/runner/stop', { method: 'POST' });
+    return fetchAPI<APIResponse<{ stopped: boolean }>>("/gocoon/runner/stop", { method: "POST" });
   },
   async gocoonReset() {
-    return fetchAPI<APIResponse<{ reset: boolean }>>('/gocoon/reset', { method: 'POST' });
+    return fetchAPI<APIResponse<{ reset: boolean }>>("/gocoon/reset", { method: "POST" });
   },
 
   async getTools() {
-    return fetchAPI<APIResponse<ModuleInfo[]>>('/tools');
+    return fetchAPI<APIResponse<ModuleInfo[]>>("/tools");
   },
 
   async getMemoryStats() {
-    return fetchAPI<APIResponse<MemoryStats>>('/memory/stats');
+    return fetchAPI<APIResponse<MemoryStats>>("/memory/stats");
   },
 
   async searchKnowledge(query: string, limit = 10) {
-    return fetchAPI<APIResponse<SearchResult[]>>(`/memory/search?q=${encodeURIComponent(query)}&limit=${limit}`);
+    return fetchAPI<APIResponse<SearchResult[]>>(
+      `/memory/search?q=${encodeURIComponent(query)}&limit=${limit}`
+    );
   },
 
   async getMemorySources() {
-    return fetchAPI<APIResponse<MemorySourceFile[]>>('/memory/sources');
+    return fetchAPI<APIResponse<MemorySourceFile[]>>("/memory/sources");
   },
 
   async getSourceChunks(sourceKey: string) {
@@ -361,19 +115,21 @@ export const api = {
   },
 
   async getWallet() {
-    return fetchAPI<APIResponse<WalletInfo>>('/wallet');
+    return fetchAPI<APIResponse<WalletInfo>>("/wallet");
   },
 
   async getWalletTransactions() {
-    return fetchAPI<APIResponse<WalletTransaction[]>>('/wallet/transactions');
+    return fetchAPI<APIResponse<WalletTransaction[]>>("/wallet/transactions");
   },
 
   async getConversations() {
-    return fetchAPI<APIResponse<ConversationChat[]>>('/conversations');
+    return fetchAPI<APIResponse<ConversationChat[]>>("/conversations");
   },
 
   async getConversationMessages(chatId: string, limit = 50, offset = 0) {
-    return fetchAPI<APIResponse<ConversationMessage[]>>(`/conversations/${encodeURIComponent(chatId)}/messages?limit=${limit}&offset=${offset}`);
+    return fetchAPI<APIResponse<ConversationMessage[]>>(
+      `/conversations/${encodeURIComponent(chatId)}/messages?limit=${limit}&offset=${offset}`
+    );
   },
 
   async getSoulFile(filename: string) {
@@ -382,102 +138,118 @@ export const api = {
 
   async updateSoulFile(filename: string, content: string) {
     return fetchAPI<APIResponse<{ message: string }>>(`/soul/${filename}`, {
-      method: 'PUT',
+      method: "PUT",
       body: JSON.stringify({ content }),
     });
   },
 
   async getPlugins() {
-    return fetchAPI<APIResponse<PluginManifest[]>>('/plugins');
+    return fetchAPI<APIResponse<PluginManifest[]>>("/plugins");
   },
 
   async setPluginPriority(pluginName: string, priority: number) {
-    return fetchAPI<APIResponse<{ pluginName: string; priority: number }>>('/plugins/priorities', {
-      method: 'POST',
+    return fetchAPI<APIResponse<{ pluginName: string; priority: number }>>("/plugins/priorities", {
+      method: "POST",
       body: JSON.stringify({ pluginName, priority }),
     });
   },
 
   async getToolRag() {
-    return fetchAPI<APIResponse<ToolRagStatus>>('/tools/rag');
+    return fetchAPI<APIResponse<ToolRagStatus>>("/tools/rag");
   },
 
-  async updateToolRag(config: { enabled?: boolean; topK?: number; alwaysInclude?: string[]; skipUnlimitedProviders?: boolean }) {
-    return fetchAPI<APIResponse<ToolRagStatus>>('/tools/rag', {
-      method: 'PUT',
+  async updateToolRag(config: {
+    enabled?: boolean;
+    topK?: number;
+    alwaysInclude?: string[];
+    skipUnlimitedProviders?: boolean;
+  }) {
+    return fetchAPI<APIResponse<ToolRagStatus>>("/tools/rag", {
+      method: "PUT",
       body: JSON.stringify(config),
     });
   },
 
   async getMcpServers() {
-    return fetchAPI<APIResponse<McpServerInfo[]>>('/mcp');
+    return fetchAPI<APIResponse<McpServerInfo[]>>("/mcp");
   },
 
-  async addMcpServer(data: { package?: string; url?: string; name?: string; args?: string[]; scope?: string; env?: Record<string, string> }) {
-    return fetchAPI<APIResponse<{ name: string; message: string }>>('/mcp', {
-      method: 'POST',
+  async addMcpServer(data: {
+    package?: string;
+    url?: string;
+    name?: string;
+    args?: string[];
+    scope?: string;
+    env?: Record<string, string>;
+  }) {
+    return fetchAPI<APIResponse<{ name: string; message: string }>>("/mcp", {
+      method: "POST",
       body: JSON.stringify(data),
     });
   },
 
   async removeMcpServer(name: string) {
-    return fetchAPI<APIResponse<{ name: string; message: string }>>(`/mcp/${encodeURIComponent(name)}`, {
-      method: 'DELETE',
-    });
+    return fetchAPI<APIResponse<{ name: string; message: string }>>(
+      `/mcp/${encodeURIComponent(name)}`,
+      {
+        method: "DELETE",
+      }
+    );
   },
 
-  async updateToolConfig(
-    toolName: string,
-    config: { level?: ToolAccessLevel }
-  ) {
+  async updateToolConfig(toolName: string, config: { level?: ToolAccessLevel }) {
     return fetchAPI<APIResponse<ToolConfigData>>(`/tools/${toolName}`, {
-      method: 'PUT',
+      method: "PUT",
       body: JSON.stringify(config),
     });
   },
 
-  async workspaceList(_path = '', _recursive = false) {
+  async workspaceList(_path = "", _recursive = false) {
     const params = new URLSearchParams();
-    if (_path) params.set('path', _path);
-    if (_recursive) params.set('recursive', 'true');
+    if (_path) params.set("path", _path);
+    if (_recursive) params.set("recursive", "true");
     const qs = params.toString();
-    return fetchAPI<APIResponse<{ entries: FileEntry[]; truncated?: boolean }>>(`/workspace${qs ? `?${qs}` : ''}`);
+    return fetchAPI<APIResponse<{ entries: FileEntry[]; truncated?: boolean }>>(
+      `/workspace${qs ? `?${qs}` : ""}`
+    );
   },
 
   async workspaceRead(path: string) {
-    return fetchAPI<APIResponse<{ content: string; size: number }>>(`/workspace/read?path=${encodeURIComponent(path)}`);
+    return fetchAPI<APIResponse<{ content: string; size: number }>>(
+      `/workspace/read?path=${encodeURIComponent(path)}`
+    );
   },
 
   async workspaceWrite(path: string, content: string) {
-    return fetchAPI<APIResponse<{ message: string }>>('/workspace/write', {
-      method: 'POST',
+    return fetchAPI<APIResponse<{ message: string }>>("/workspace/write", {
+      method: "POST",
       body: JSON.stringify({ path, content }),
     });
   },
 
   async workspaceMkdir(path: string) {
-    return fetchAPI<APIResponse<{ message: string }>>('/workspace/mkdir', {
-      method: 'POST',
+    return fetchAPI<APIResponse<{ message: string }>>("/workspace/mkdir", {
+      method: "POST",
       body: JSON.stringify({ path }),
     });
   },
 
   async workspaceDelete(path: string, recursive = false) {
-    return fetchAPI<APIResponse<{ message: string }>>('/workspace', {
-      method: 'DELETE',
+    return fetchAPI<APIResponse<{ message: string }>>("/workspace", {
+      method: "DELETE",
       body: JSON.stringify({ path, recursive }),
     });
   },
 
   async workspaceRename(from: string, to: string) {
-    return fetchAPI<APIResponse<{ message: string }>>('/workspace/rename', {
-      method: 'POST',
+    return fetchAPI<APIResponse<{ message: string }>>("/workspace/rename", {
+      method: "POST",
       body: JSON.stringify({ from, to }),
     });
   },
 
   async workspaceInfo() {
-    return fetchAPI<APIResponse<WorkspaceInfo>>('/workspace/info');
+    return fetchAPI<APIResponse<WorkspaceInfo>>("/workspace/info");
   },
 
   workspaceRawUrl(path: string): string {
@@ -485,132 +257,170 @@ export const api = {
   },
 
   async tasksList(_status?: string) {
-    const qs = _status ? `?status=${_status}` : '';
+    const qs = _status ? `?status=${_status}` : "";
     return fetchAPI<APIResponse<TaskData[]>>(`/tasks${qs}`);
   },
 
   async tasksDelete(_id: string) {
-    return fetchAPI<APIResponse<{ message: string }>>(`/tasks/${_id}`, { method: 'DELETE' });
+    return fetchAPI<APIResponse<{ message: string }>>(`/tasks/${_id}`, { method: "DELETE" });
   },
 
   async tasksCancel(_id: string) {
-    return fetchAPI<APIResponse<TaskData>>(`/tasks/${_id}/cancel`, { method: 'POST' });
+    return fetchAPI<APIResponse<TaskData>>(`/tasks/${_id}/cancel`, { method: "POST" });
   },
 
   async tasksClean(status: string) {
-    return fetchAPI<APIResponse<{ deleted: number }>>('/tasks/clean', {
-      method: 'POST',
+    return fetchAPI<APIResponse<{ deleted: number }>>("/tasks/clean", {
+      method: "POST",
       body: JSON.stringify({ status }),
     });
   },
 
   async getConfigKeys() {
-    return fetchAPI<APIResponse<ConfigKeyData[]>>('/config');
+    return fetchAPI<APIResponse<ConfigKeyData[]>>("/config");
   },
 
   async setConfigKey(key: string, value: string | string[]) {
     return fetchAPI<APIResponse<ConfigKeyData>>(`/config/${key}`, {
-      method: 'PUT',
+      method: "PUT",
       body: JSON.stringify({ value }),
     });
   },
 
   async getModelsForProvider(provider: string) {
-    return fetchAPI<APIResponse<Array<{ value: string; name: string; description: string }>>>(`/config/models/${encodeURIComponent(provider)}`);
+    return fetchAPI<APIResponse<Array<{ value: string; name: string; description: string }>>>(
+      `/config/models/${encodeURIComponent(provider)}`
+    );
   },
 
   async getProviderMeta(provider: string) {
-    return fetchAPI<APIResponse<{ needsKey: boolean; keyHint: string; keyPrefix: string | null; consoleUrl: string; displayName: string }>>(`/config/provider-meta/${encodeURIComponent(provider)}`);
+    return fetchAPI<
+      APIResponse<{
+        needsKey: boolean;
+        keyHint: string;
+        keyPrefix: string | null;
+        consoleUrl: string;
+        displayName: string;
+      }>
+    >(`/config/provider-meta/${encodeURIComponent(provider)}`);
   },
 
   async validateApiKey(provider: string, apiKey: string) {
-    return fetchAPI<APIResponse<{ valid: boolean; error: string | null }>>('/config/validate-api-key', {
-      method: 'POST',
-      body: JSON.stringify({ provider, apiKey }),
-    });
+    return fetchAPI<APIResponse<{ valid: boolean; error: string | null }>>(
+      "/config/validate-api-key",
+      {
+        method: "POST",
+        body: JSON.stringify({ provider, apiKey }),
+      }
+    );
   },
 
   async getMarketplace(_refresh = false) {
-    const qs = _refresh ? '?refresh=true' : '';
+    const qs = _refresh ? "?refresh=true" : "";
     return fetchAPI<APIResponse<MarketplacePlugin[]>>(`/marketplace${qs}`);
   },
 
   async installPlugin(id: string) {
-    return fetchAPI<APIResponse<{ name: string; version: string; toolCount: number }>>('/marketplace/install', {
-      method: 'POST',
-      body: JSON.stringify({ id }),
-    });
+    return fetchAPI<APIResponse<{ name: string; version: string; toolCount: number }>>(
+      "/marketplace/install",
+      {
+        method: "POST",
+        body: JSON.stringify({ id }),
+      }
+    );
   },
 
   async uninstallPlugin(id: string) {
-    return fetchAPI<APIResponse<{ message: string }>>('/marketplace/uninstall', {
-      method: 'POST',
+    return fetchAPI<APIResponse<{ message: string }>>("/marketplace/uninstall", {
+      method: "POST",
       body: JSON.stringify({ id }),
     });
   },
 
   async updatePlugin(id: string) {
-    return fetchAPI<APIResponse<{ name: string; version: string; toolCount: number }>>('/marketplace/update', {
-      method: 'POST',
-      body: JSON.stringify({ id }),
-    });
+    return fetchAPI<APIResponse<{ name: string; version: string; toolCount: number }>>(
+      "/marketplace/update",
+      {
+        method: "POST",
+        body: JSON.stringify({ id }),
+      }
+    );
   },
 
   async getPluginSecrets(pluginId: string) {
-    return fetchAPI<APIResponse<PluginSecretsInfo>>(`/marketplace/secrets/${encodeURIComponent(pluginId)}`);
+    return fetchAPI<APIResponse<PluginSecretsInfo>>(
+      `/marketplace/secrets/${encodeURIComponent(pluginId)}`
+    );
   },
 
   async setPluginSecret(pluginId: string, key: string, value: string) {
-    return fetchAPI<APIResponse<{ key: string; set: boolean }>>(`/marketplace/secrets/${encodeURIComponent(pluginId)}/${encodeURIComponent(key)}`, {
-      method: 'PUT',
-      body: JSON.stringify({ value }),
-    });
+    return fetchAPI<APIResponse<{ key: string; set: boolean }>>(
+      `/marketplace/secrets/${encodeURIComponent(pluginId)}/${encodeURIComponent(key)}`,
+      {
+        method: "PUT",
+        body: JSON.stringify({ value }),
+      }
+    );
   },
 
   async unsetPluginSecret(pluginId: string, key: string) {
-    return fetchAPI<APIResponse<{ key: string; set: boolean }>>(`/marketplace/secrets/${encodeURIComponent(pluginId)}/${encodeURIComponent(key)}`, {
-      method: 'DELETE',
-    });
+    return fetchAPI<APIResponse<{ key: string; set: boolean }>>(
+      `/marketplace/secrets/${encodeURIComponent(pluginId)}/${encodeURIComponent(key)}`,
+      {
+        method: "DELETE",
+      }
+    );
   },
 
   // ── Hooks ─────────────────────────────────────────────────────────
 
   async getBlocklist() {
-    return fetchAPI<APIResponse<{ enabled: boolean; keywords: string[]; message: string }>>('/hooks/blocklist');
+    return fetchAPI<APIResponse<{ enabled: boolean; keywords: string[]; message: string }>>(
+      "/hooks/blocklist"
+    );
   },
 
   async updateBlocklist(config: { enabled: boolean; keywords: string[]; message: string }) {
-    return fetchAPI<APIResponse<{ enabled: boolean; keywords: string[]; message: string }>>('/hooks/blocklist', {
-      method: 'PUT',
-      body: JSON.stringify(config),
-    });
+    return fetchAPI<APIResponse<{ enabled: boolean; keywords: string[]; message: string }>>(
+      "/hooks/blocklist",
+      {
+        method: "PUT",
+        body: JSON.stringify(config),
+      }
+    );
   },
 
   async getTriggers() {
-    return fetchAPI<APIResponse<Array<{ id: string; keyword: string; context: string; enabled: boolean }>>>('/hooks/triggers');
+    return fetchAPI<
+      APIResponse<Array<{ id: string; keyword: string; context: string; enabled: boolean }>>
+    >("/hooks/triggers");
   },
 
   async createTrigger(data: { keyword: string; context: string; enabled?: boolean }) {
-    return fetchAPI<APIResponse<{ id: string; keyword: string; context: string; enabled: boolean }>>('/hooks/triggers', {
-      method: 'POST',
+    return fetchAPI<
+      APIResponse<{ id: string; keyword: string; context: string; enabled: boolean }>
+    >("/hooks/triggers", {
+      method: "POST",
       body: JSON.stringify(data),
     });
   },
 
   async updateTrigger(id: string, data: { keyword?: string; context?: string; enabled?: boolean }) {
-    return fetchAPI<APIResponse<{ id: string; keyword: string; context: string; enabled: boolean }>>(`/hooks/triggers/${id}`, {
-      method: 'PUT',
+    return fetchAPI<
+      APIResponse<{ id: string; keyword: string; context: string; enabled: boolean }>
+    >(`/hooks/triggers/${id}`, {
+      method: "PUT",
       body: JSON.stringify(data),
     });
   },
 
   async deleteTrigger(id: string) {
-    return fetchAPI<APIResponse<null>>(`/hooks/triggers/${id}`, { method: 'DELETE' });
+    return fetchAPI<APIResponse<null>>(`/hooks/triggers/${id}`, { method: "DELETE" });
   },
 
   async toggleTrigger(id: string, enabled: boolean) {
     return fetchAPI<APIResponse<{ id: string; enabled: boolean }>>(`/hooks/triggers/${id}/toggle`, {
-      method: 'PATCH',
+      method: "PATCH",
       body: JSON.stringify({ enabled }),
     });
   },
@@ -618,31 +428,57 @@ export const api = {
   // ── TON Proxy ──────────────────────────────────────────────────────
 
   async getTonProxyStatus() {
-    return fetchAPI<APIResponse<{ running: boolean; installed: boolean; port: number; enabled: boolean; pid?: number }>>('/ton-proxy');
+    return fetchAPI<
+      APIResponse<{
+        running: boolean;
+        installed: boolean;
+        port: number;
+        enabled: boolean;
+        pid?: number;
+      }>
+    >("/ton-proxy");
   },
 
   async startTonProxy() {
-    return fetchAPI<APIResponse<{ running: boolean; installed: boolean; port: number; enabled: boolean; pid?: number }>>('/ton-proxy/start', { method: 'POST' });
+    return fetchAPI<
+      APIResponse<{
+        running: boolean;
+        installed: boolean;
+        port: number;
+        enabled: boolean;
+        pid?: number;
+      }>
+    >("/ton-proxy/start", { method: "POST" });
   },
 
   async stopTonProxy() {
-    return fetchAPI<APIResponse<{ running: boolean; installed: boolean; port: number; enabled: boolean; pid?: number }>>('/ton-proxy/stop', { method: 'POST' });
+    return fetchAPI<
+      APIResponse<{
+        running: boolean;
+        installed: boolean;
+        port: number;
+        enabled: boolean;
+        pid?: number;
+      }>
+    >("/ton-proxy/stop", { method: "POST" });
   },
 
   async uninstallTonProxy() {
-    return fetchAPI<APIResponse<{ running: boolean; installed: boolean; port: number; enabled: boolean }>>('/ton-proxy/uninstall', { method: 'POST' });
+    return fetchAPI<
+      APIResponse<{ running: boolean; installed: boolean; port: number; enabled: boolean }>
+    >("/ton-proxy/uninstall", { method: "POST" });
   },
 
   connectLogs(onLog: (entry: LogEntry) => void, onError?: (error: Event) => void) {
     const url = `${API_BASE}/logs/stream`;
     const eventSource = new EventSource(url);
 
-    eventSource.addEventListener('log', (event) => {
+    eventSource.addEventListener("log", (event) => {
       try {
         const entry = JSON.parse(event.data);
         onLog(entry);
       } catch (error) {
-        console.error('Failed to parse log entry:', error);
+        console.error("Failed to parse log entry:", error);
       }
     });
 
@@ -651,128 +487,5 @@ export const api = {
     };
 
     return () => eventSource.close();
-  },
-};
-
-// ── Setup API (no auth required) ────────────────────────────────────
-
-export const setup = {
-  getStatus: () =>
-    fetchSetupAPI<SetupStatusResponse>('/setup/status'),
-
-  getProviders: () =>
-    fetchSetupAPI<SetupProvider[]>('/setup/providers'),
-
-  getModels: (_provider: string) =>
-    fetchSetupAPI<SetupModelOption[]>(`/setup/models/${encodeURIComponent(_provider)}`),
-
-  validateApiKey: (provider: string, apiKey: string) =>
-    fetchSetupAPI<{ valid: boolean; error?: string }>('/setup/validate/api-key', {
-      method: 'POST',
-      body: JSON.stringify({ provider, apiKey }),
-    }),
-
-  validateBotToken: (token: string) =>
-    fetchSetupAPI<BotValidation>('/setup/validate/bot-token', {
-      method: 'POST',
-      body: JSON.stringify({ token }),
-    }),
-
-  initWorkspace: (agentName?: string) =>
-    fetchSetupAPI<{ created: boolean; path: string }>('/setup/workspace/init', {
-      method: 'POST',
-      body: JSON.stringify({ agentName }),
-    }),
-
-  getWalletStatus: () =>
-    fetchSetupAPI<WalletStatus>('/setup/wallet/status'),
-
-  generateWallet: () =>
-    fetchSetupAPI<WalletResult>('/setup/wallet/generate', { method: 'POST' }),
-
-  importWallet: (mnemonic: string) =>
-    fetchSetupAPI<{ address: string }>('/setup/wallet/import', {
-      method: 'POST',
-      body: JSON.stringify({ mnemonic }),
-    }),
-
-  sendCode: (apiId: number, apiHash: string, phone: string) =>
-    fetchSetupAPI<AuthCodeResult>('/setup/telegram/send-code', {
-      method: 'POST',
-      body: JSON.stringify({ apiId, apiHash, phone }),
-    }),
-
-  verifyCode: (authSessionId: string, code: string) =>
-    fetchSetupAPI<AuthVerifyResult>('/setup/telegram/verify-code', {
-      method: 'POST',
-      body: JSON.stringify({ authSessionId, code }),
-    }),
-
-  verifyPassword: (authSessionId: string, password: string) =>
-    fetchSetupAPI<AuthVerifyResult>('/setup/telegram/verify-password', {
-      method: 'POST',
-      body: JSON.stringify({ authSessionId, password }),
-    }),
-
-  resendCode: (authSessionId: string) =>
-    fetchSetupAPI<{ codeDelivery: "app" | "sms" | "fragment"; fragmentUrl?: string; codeLength?: number }>('/setup/telegram/resend-code', {
-      method: 'POST',
-      body: JSON.stringify({ authSessionId }),
-    }),
-
-  startQr: (apiId: number, apiHash: string) =>
-    fetchSetupAPI<{ authSessionId: string; token: string; expires: number; expiresAt: number }>('/setup/telegram/qr-start', {
-      method: 'POST',
-      body: JSON.stringify({ apiId, apiHash }),
-    }),
-
-  refreshQr: (authSessionId: string) =>
-    fetchSetupAPI<{
-      status: "waiting" | "authenticated" | "2fa_required" | "expired";
-      token?: string;
-      expires?: number;
-      user?: { id: number; firstName: string; username?: string };
-      passwordHint?: string;
-    }>('/setup/telegram/qr-refresh', {
-      method: 'POST',
-      body: JSON.stringify({ authSessionId }),
-    }),
-
-  cancelSession: (authSessionId: string) =>
-    fetchSetupAPI<void>('/setup/telegram/session', {
-      method: 'DELETE',
-      body: JSON.stringify({ authSessionId }),
-    }),
-
-  saveConfig: (config: SetupConfig) =>
-    fetchSetupAPI<{ path: string }>('/setup/config/save', {
-      method: 'POST',
-      body: JSON.stringify(config),
-    }),
-
-  launch: () =>
-    fetchSetupAPI<{ token: string }>('/setup/launch', { method: 'POST' }),
-
-  pollHealth: async (timeoutMs = 30000): Promise<void> => {
-    const start = Date.now();
-    const interval = 1000;
-    // Wait a beat for the server to restart
-    await new Promise((r) => setTimeout(r, 1500));
-
-    while (Date.now() - start < timeoutMs) {
-      try {
-        const authRes = await fetch('/auth/check', { signal: AbortSignal.timeout(2000) });
-        if (authRes.ok) {
-          const json = await authRes.json();
-          // The setup server returns { data: { setup: true } } — reject it.
-          // The agent WebUI returns { data: { authenticated: bool } } without setup flag.
-          if (json.success && json.data && !json.data.setup) return;
-        }
-      } catch {
-        // Server not up yet (connection refused, timeout, etc.)
-      }
-      await new Promise((r) => setTimeout(r, interval));
-    }
-    throw new Error('Agent did not start within the expected time');
   },
 };
