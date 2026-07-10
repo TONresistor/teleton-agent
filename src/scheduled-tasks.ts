@@ -30,7 +30,10 @@ export class ScheduledTaskHandler {
     // Extract task ID from format: [TASK:uuid] description
     const match = message.text.match(/^\[TASK:([^\]]+)\]/);
     if (!match) {
-      log.warn(`Invalid task format: ${message.text}`);
+      log.warn(
+        { messageId: message.id, messageLength: message.text.length },
+        "Invalid task format"
+      );
       return;
     }
 
@@ -138,7 +141,7 @@ export class ScheduledTaskHandler {
       // Mark task as done if agent responded successfully
       taskStore.completeTask(taskId, response.content);
 
-      log.info(`Executed scheduled task ${taskId}: ${task.description}`);
+      log.info({ taskId }, "Executed scheduled task");
 
       // Initialize dependency resolver if needed
       if (!this.dependencyResolver) {

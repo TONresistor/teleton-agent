@@ -46,7 +46,10 @@ export const telegramTranscribeAudioExecutor: ToolExecutor<TranscribeAudioParams
       };
     }
 
-    log.info(`transcribe_audio: msg ${params.messageId} → "${result.text?.substring(0, 50)}..."`);
+    log.info(
+      { messageId: params.messageId, transcriptLength: result.text?.length ?? 0 },
+      "Audio message transcribed"
+    );
 
     return { success: true, data: result };
   } catch (error: unknown) {

@@ -150,7 +150,7 @@ export class TaskDependencyResolver {
 
         if (skipOnFailure) {
           this.taskStore.cancelTask(depId);
-          log.info(`↳ Cancelled task ${depId}: ${task.description}`);
+          log.info({ taskId: depId }, "Cancelled dependent task");
 
           // Recursively cancel dependents
           await this.onTaskFail(depId);
@@ -172,7 +172,7 @@ export class TaskDependencyResolver {
         return;
       }
 
-      log.info(`Triggering dependent task: ${task.description}`);
+      log.info({ taskId }, "Triggering dependent task");
 
       if (this.bridge.getMode() === "bot") {
         // Bot mode: send to first admin via bridge

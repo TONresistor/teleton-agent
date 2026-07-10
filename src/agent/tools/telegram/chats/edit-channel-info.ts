@@ -84,7 +84,16 @@ export const telegramEditChannelInfoExecutor: ToolExecutor<EditChannelInfoParams
       updates.push(`about → "${about.substring(0, 50)}${about.length > 50 ? "..." : ""}"`);
     }
 
-    log.info(`edit_channel_info: ${channel.title} - ${updates.join(", ")}`);
+    log.info(
+      {
+        channelId: channel.id.toString(),
+        updatedFields: [
+          title !== undefined ? "title" : null,
+          about !== undefined ? "about" : null,
+        ].filter(Boolean),
+      },
+      "Channel info edited"
+    );
 
     return {
       success: true,

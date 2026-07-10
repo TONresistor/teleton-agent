@@ -97,7 +97,7 @@ export const botInlineSendExecutor: ToolExecutor<BotInlineSendParams> = async (p
       })
     );
 
-    log.info(`Inline bot result sent: plugin="${plugin}" query="${query}" index=${resultIndex}`);
+    log.info({ plugin, queryLength: query.length, resultIndex }, "Inline bot result sent");
 
     return {
       success: true,

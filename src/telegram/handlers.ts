@@ -437,7 +437,8 @@ export class MessageHandler {
               if (transcribeResult.text) {
                 transcriptionText = transcribeResult.text;
                 log.info(
-                  `Auto-transcribed voice msg ${message.id}: "${transcriptionText?.substring(0, 80)}..."`
+                  { messageId: message.id, transcriptLength: transcriptionText.length },
+                  "Voice message auto-transcribed"
                 );
               }
             } catch (innerError) {

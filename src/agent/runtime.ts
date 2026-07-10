@@ -262,7 +262,10 @@ export class AgentRuntime {
       }
       const enrichedQuery = enrichRAGQuery(searchQuery);
       if (enrichedQuery !== searchQuery) {
-        log.debug({ original: searchQuery, enriched: enrichedQuery }, "RAG query enriched");
+        log.debug(
+          { originalLength: searchQuery.length, enrichedLength: enrichedQuery.length },
+          "RAG query enriched"
+        );
       }
       // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- guarded above
       return this.embedder!.embedQuery(enrichedQuery.slice(0, EMBEDDING_QUERY_MAX_CHARS));
@@ -483,12 +486,15 @@ export class AgentRuntime {
       log.debug(`Including ${pendingContext.split("\n").length - 1} pending messages`);
     }
 
-    log.debug(`Formatted message: ${formattedMessage.substring(0, 100)}...`);
-
-    const preview = formattedMessage.slice(0, 50).replace(/\n/g, " ");
-    const who = senderUsername ? `@${senderUsername}` : userName;
-    const msgType = isGroup ? `Group ${chatId} ${who}` : `DM ${who}`;
-    log.info(`${msgType}: "${preview}${formattedMessage.length > 50 ? "..." : ""}"`);
+    log.info(
+      {
+        chatId,
+        isGroup,
+        messageLength: formattedMessage.length,
+        hasMedia: opts.hasMedia ?? false,
+      },
+      "Telegram message received"
+    );
 
     let relevantContext = "";
     const isNonTrivial = !isTrivialMessage(effectiveMessage);
