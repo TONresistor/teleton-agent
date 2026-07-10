@@ -37,6 +37,7 @@
   "scripts": {
     "build": "npm run build:sdk && npm run build:backend && npm run build:web",
     "build:sdk": "npm run build -w @teleton-agent/sdk",
+    "check:sdk-package": "npm run build:sdk && node scripts/check-sdk-package.mjs",
     "build:backend": "tsup --config tsup.config.ts",
     "build:web": "cd web && npm run build",
     "prestart": "npm run build",

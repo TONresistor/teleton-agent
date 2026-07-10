@@ -38,6 +38,9 @@ jobs:
       - name: Build SDK workspace
         run: npm run build -w packages/sdk
 
+      - name: Verify SDK package contract
+        run: node scripts/check-sdk-package.mjs
+
       - name: Type check
         run: npm run typecheck
 

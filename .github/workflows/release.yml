@@ -27,6 +27,7 @@ jobs:
       - run: npm ci
       - run: cd web && npm ci
       - run: npm run build -w packages/sdk
+      - run: node scripts/check-sdk-package.mjs
       - run: npm run typecheck
       - run: npm run build
       - run: node dist/cli/index.js --help
@@ -117,7 +118,7 @@ jobs:
             echo "publish=false" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Install root deps (for @types/node hoisting)
+      - name: Install dependencies
         if: steps.check.outputs.publish == 'true'
         run: npm ci
 
@@ -167,7 +168,7 @@ jobs:
 
   # ---- GitHub Release ----
   create-release:
-    needs: [publish-npm]
+    needs: [publish-npm, publish-sdk, publish-docker]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
