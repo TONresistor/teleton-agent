@@ -93,7 +93,8 @@
   "overrides": {
     "@aws-sdk/xml-builder": "3.972.19",
     "fast-xml-parser": "5.7.1",
-    "axios": ">=1.15.2"
+    "axios": ">=1.15.2",
+    "esbuild": "0.28.1"
   },
   "devDependencies": {
     "@ston-fi/api": "^0.32.0",
