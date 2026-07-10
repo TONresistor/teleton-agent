@@ -132,7 +132,6 @@ vi.mock("../../utils/logger.js", () => ({
 vi.mock("../../config/schema.js", () => ({
   ConfigSchema: { parse: vi.fn((v: unknown) => v) },
   DEFAULT_TOOL_RAG_ALWAYS_INCLUDE: ["journal_*", "workspace_*", "web_*"],
-  DealsConfigSchema: { parse: vi.fn((v: unknown) => v) },
 }));
 
 vi.mock("../../constants/limits.js", () => ({
@@ -157,7 +156,7 @@ import {
   getProviderMetadata,
   validateApiKeyFormat,
 } from "../../config/providers.js";
-import { ConfigSchema, DealsConfigSchema } from "../../config/schema.js";
+import { ConfigSchema } from "../../config/schema.js";
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -241,7 +240,6 @@ describe("Setup API Routes", () => {
     });
     (validateApiKeyFormat as Mock).mockReturnValue(undefined);
     (ConfigSchema.parse as Mock).mockImplementation((v: unknown) => v);
-    (DealsConfigSchema.parse as Mock).mockImplementation((v: unknown) => v);
     mockAuthManager.sendCode.mockReset();
     mockAuthManager.verifyCode.mockReset();
     mockAuthManager.verifyPassword.mockReset();

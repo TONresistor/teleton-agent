@@ -133,7 +133,7 @@ export const manifest = {
   version: "1.0.0",            // Required: semver
   author: "Your Name",         // Optional: max 128 chars
   description: "What it does", // Optional: max 256 chars
-  dependencies: ["deals"],     // Optional: required built-in modules
+  dependencies: ["ton-proxy"], // Optional: required built-in modules
   sdkVersion: ">=1.0.0",       // Optional: minimum SDK version (supports ^, >=, exact)
   defaultConfig: {             // Optional: merged with user's plugin config
     max_results: 10,

@@ -580,7 +580,6 @@ export class GrammyBotBridge implements ITelegramBridge {
       { command: "model", description: "Switch LLM model" },
       { command: "loop", description: "Set max agentic iterations" },
       { command: "policy", description: "Change access policy" },
-      { command: "strategy", description: "View/change trading thresholds" },
       { command: "modules", description: "Manage module permissions" },
       { command: "plugin", description: "Manage plugin secrets" },
       { command: "wallet", description: "Check TON wallet balance" },

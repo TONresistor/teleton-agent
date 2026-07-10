@@ -11,7 +11,6 @@ Run `teleton setup` to generate a config file interactively, or copy `config.exa
 - [agent](#agent)
 - [telegram](#telegram)
 - [embedding](#embedding)
-- [deals](#deals)
 - [webui](#webui)
 - [storage](#storage)
 - [logging](#logging)
@@ -136,8 +135,8 @@ Telegram client and messaging behavior.
 | `telegram.owner_username` | `string` | *optional* | Owner's Telegram username without `@` (e.g., `"zkproof"`). |
 | `telegram.owner_id` | `number` | *optional* | Owner's Telegram user ID. |
 | `telegram.debounce_ms` | `number` | `1500` | Debounce delay in milliseconds for group messages. When multiple messages arrive in quick succession, they are batched into a single processing cycle. Set to `0` to disable. |
-| `telegram.bot_token` | `string` | *optional* | Telegram Bot token from @BotFather. Required for the deals system's inline buttons. |
-| `telegram.bot_username` | `string` | *optional* | Bot username without `@` (e.g., `"teleton_deals_bot"`). Required when `bot_token` is set. |
+| `telegram.bot_token` | `string` | *optional in user mode* | Telegram Bot token from @BotFather. Required in bot mode; enables plugin inline cards and callbacks in user mode. |
+| `telegram.bot_username` | `string` | *optional* | Bot username without `@` (e.g., `"teleton_agent_bot"`). Used with `bot_token` for inline queries. |
 
 ### DM Policies
 
@@ -172,7 +171,7 @@ telegram:
   owner_username: "zkproof"
   debounce_ms: 1500
   # bot_token: "123456:ABC-DEF..."
-  # bot_username: "my_deals_bot"
+  # bot_username: "my_agent_bot"
 ```
 
 ---
@@ -195,33 +194,6 @@ embedding:
 ```
 
 The `"local"` provider uses ONNX Runtime with the `@huggingface/transformers` library and requires no external API calls. The `"none"` provider disables vector search entirely and uses only SQLite FTS5 for memory retrieval.
-
----
-
-## deals
-
-Configuration for the peer-to-peer deals/escrow system.
-
-| Key | Type | Default | Description |
-|-----|------|---------|-------------|
-| `deals.enabled` | `boolean` | `true` | Enable the deals module. |
-| `deals.expiry_seconds` | `number` | `120` | Time in seconds before an unaccepted deal expires. |
-| `deals.buy_max_floor_percent` | `number` | `95` | Maximum price as a percentage of floor price for buy deals. |
-| `deals.sell_min_floor_percent` | `number` | `105` | Minimum price as a percentage of floor price for sell deals. |
-| `deals.poll_interval_ms` | `number` | `5000` | How frequently (in milliseconds) the system polls for payment verification on active deals. |
-| `deals.max_verification_retries` | `number` | `12` | Maximum number of payment verification attempts before timing out. |
-| `deals.expiry_check_interval_ms` | `number` | `60000` | How frequently (in milliseconds) expired deals are cleaned up. |
-
-### Example
-
-```yaml
-deals:
-  enabled: true
-  expiry_seconds: 120
-  buy_max_floor_percent: 80
-  sell_min_floor_percent: 115
-  poll_interval_ms: 5000
-```
 
 ---
 
@@ -690,10 +662,6 @@ telegram:
 
 embedding:
   provider: "local"
-
-deals:
-  enabled: true
-  expiry_seconds: 120
 
 webui:
   enabled: false

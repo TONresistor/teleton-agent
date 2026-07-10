@@ -179,7 +179,7 @@ export function ConfigStep({ data, onChange }: StepProps) {
             </span>
           </div>
           <p style={{ fontSize: 'var(--font-sm)', margin: '0 0 8px' }}>
-            Inline buttons and deals module.
+            Required in bot mode; optional in user mode for plugin inline cards and callbacks.
           </p>
           <div className="form-row" style={{ gap: '8px' }}>
             <PasswordInput

@@ -83,7 +83,6 @@ export interface SetupConfig {
     bot_username?: string;
   };
   gocoon?: { port: number };
-  deals?: { enabled?: boolean; buy_max_floor_percent?: number; sell_min_floor_percent?: number };
   tonapi_key?: string;
   toncenter_api_key?: string;
   tavily_api_key?: string;

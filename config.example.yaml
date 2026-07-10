@@ -40,9 +40,9 @@ telegram:
   # owner_id: 123456789              # Owner's Telegram user ID
   debounce_ms: 1500                  # Group message batching delay (0 = disabled)
 
-  # Optional: inline bot for deals system
+  # Optional in user mode: plugin inline cards and callback handling
   # bot_token: "123456:ABC-DEF..."   # From @BotFather
-  # bot_username: "your_deals_bot"
+  # bot_username: "your_agent_bot"
 
 # Optional: TonAPI key for higher rate limits
 # tonapi_key: "YOUR_TONAPI_KEY"      # From @tonapi_bot
@@ -82,16 +82,6 @@ webui:
 #     - "journal_*"                    # Prefix glob: all journal_ tools
 #     - "workspace_*"
 #     - "web_*"
-
-# Deals / OTC trading module
-# deals:
-#   enabled: true
-#   expiry_seconds: 120              # Seconds before a pending deal expires
-#   buy_max_floor_percent: 100       # Max price as % of floor for buy offers
-#   sell_min_floor_percent: 105      # Min price as % of floor for sell offers
-#   poll_interval_ms: 5000           # Payment verification polling interval
-#   max_verification_retries: 12     # Max payment verification attempts
-#   expiry_check_interval_ms: 60000  # Stale deal check interval
 
 # Storage paths (defaults are fine for most users)
 # storage:

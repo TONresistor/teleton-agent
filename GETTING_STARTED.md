@@ -13,7 +13,7 @@ Complete guide to installing, configuring, and running your Teleton AI agent.
 | **Telegram Account** | Dedicated account recommended (agent has full control) |
 | **Telegram API Credentials** | `api_id` + `api_hash` from [my.telegram.org/apps](https://my.telegram.org/apps) |
 | **Telegram User ID** | Message [@userinfobot](https://t.me/userinfobot) to get yours |
-| **Bot Token** *(optional)* | From [@BotFather](https://t.me/BotFather) - required for the deals system |
+| **Bot Token** *(optional in user mode)* | From [@BotFather](https://t.me/BotFather) for plugin inline cards and callbacks; required in bot mode |
 | **TonAPI Key** *(optional)* | From [@AntTonTechBot](https://t.me/AntTonTechBot) mini app - higher rate limits |
 
 ---
@@ -57,7 +57,7 @@ The interactive wizard configures everything:
 3. **Access Policies** - DM policy (open/allowlist/pairing/disabled), group policy, mention rules
 4. **Admin** - Your Telegram User ID, owner name/username
 5. **TON Wallet** - Generates a W5R1 wallet with 24-word mnemonic
-6. **Deals** *(optional)* - Bot token for the deals system, trading thresholds
+6. **Optional Integrations** - Bot token, TonAPI, Toncenter, and Tavily credentials
 7. **Workspace** - Creates template files (SOUL.md, IDENTITY.md, STRATEGY.md, etc.)
 
 **Files created:**
@@ -98,7 +98,7 @@ You should see:
 ✅ Knowledge indexed
 ✅ Telegram: @your_agent connected
 ✅ TON Blockchain: connected
-✅ Agent is ready! (124 tools)
+✅ Agent is ready! (128 base tools)
 ```
 
 **Verify:** Send `/ping` to your agent on Telegram.
@@ -124,11 +124,6 @@ telegram:
   require_mention: true    # Require @mention in groups
   admin_ids: [123456789]   # Your Telegram User ID
   debounce_ms: 1500        # Group message batching delay
-
-deals:
-  enabled: true
-  buy_max_floor_percent: 100   # Buy at or below floor price
-  sell_min_floor_percent: 105  # Sell at floor + 5% minimum
 
 ```
 
@@ -158,13 +153,16 @@ Admin commands are only available to users listed in `admin_ids`. All commands w
 | `/clear` | Clear current chat history |
 | `/clear <chat_id>` | Clear specific chat history |
 | `/model <name>` | Switch LLM model at runtime |
-| `/strategy` | View or change trading thresholds |
-| `/strategy buy 95` | Set buy threshold to 95% of floor |
-| `/strategy sell 110` | Set sell threshold to 110% of floor |
 | `/wallet` | Show wallet address and balance |
+| `/approve <request_id>` / `/reject <request_id>` | Resolve a pending financial action |
 | `/policy dm open` | Change DM policy at runtime |
+| `/modules set\|info\|reset` | Manage per-group tool permissions |
+| `/plugin set\|unset\|keys` | Manage plugin secrets |
 | `/pause` / `/resume` | Pause/resume agent responses |
 | `/loop <iterations>` | Set max agentic iterations |
+| `/verbose` | Toggle debug logging |
+| `/rag [status\|topk <n>]` | Toggle Tool RAG or view status |
+| `/guest [on\|off]` | View or toggle bot guest mode |
 | `/stop` | Emergency shutdown |
 | `/help` | List all commands |
 
@@ -172,18 +170,20 @@ Admin commands are only available to users listed in `admin_ids`. All commands w
 
 ## Tool Categories
 
-Teleton has **~124 tools** across these categories:
+Teleton has **128 always-registered tools**, plus 5 optional system tools:
 
 | Category | Count | Highlights |
 |----------|-------|------------|
-| **Telegram** | 77 | Messaging, media, chats, groups, polls, stickers, gifts, stars, stories, contacts, folders, profile, memory, tasks |
+| **Telegram** | 83 | Messaging, media, chats, groups, polls, stickers, gifts, stars, stories, contacts, folders, profile, memory, tasks |
 | **TON & Jettons** | 15 | W5R1 wallet, send/receive TON & jettons, balances, prices, holders, history, charts, NFTs, DEX quotes |
 | **STON.fi DEX** | 5 | Swap, quote, search, trending tokens, liquidity pools |
 | **DeDust DEX** | 5 | Swap, quote, pools, prices, token info |
-| **TON DNS** | 7 | Domain check, auctions, bidding, resolution |
-| **Deals** | 5 | Secure gift/TON trading with strategy enforcement and inline bot confirmations |
+| **TON DNS** | 8 | Domain check, auctions, bidding, resolution, TON Sites |
 | **Journal** | 3 | Log trades/operations with reasoning and P&L |
 | **Workspace** | 6 | Sandboxed file operations |
+| **Web** | 2 | Search and page extraction |
+| **Tool Search** | 1 | Semantic retrieval across the registry |
+| **System** *(optional)* | 5 | Exec (4) and TON Proxy status (1) |
 
 ---
 
@@ -202,27 +202,6 @@ During setup, a **W5R1 wallet** is generated with a 24-word mnemonic stored in `
 ### Import Existing Wallet
 
 During setup, you can import a wallet instead of generating a new one.
-
----
-
-## Deals System
-
-The deals system enables secure gift/TON trading with strategy enforcement.
-
-**Requirements:** Bot token configured, deals enabled in config.
-
-**How it works:**
-1. Agent proposes a deal (buy/sell gift)
-2. Strategy rules are enforced automatically (buy below floor, sell above floor +5%)
-3. Inline bot shows deal card with Accept/Decline buttons
-4. User sends TON first, agent verifies on-chain
-5. Gift is transferred after payment verification
-
-**Customize thresholds:**
-```
-/strategy buy 90    # Only buy at 90% of floor or less
-/strategy sell 115  # Only sell at 115% of floor or more
-```
 
 ---
 
@@ -330,7 +309,7 @@ export const tools = [
 Restart the agent — the plugin is auto-loaded:
 ```
 🔌 Plugin "hello.js": 1 tool registered
-✅ 122 tools loaded (1 from plugins)
+✅ Tool registry loaded (including 1 plugin tool)
 ```
 
 Plugins receive a full SDK with 108 methods across 9 namespaces: `sdk.ton`, `sdk.telegram`, `sdk.bot`, `sdk.secrets`, `sdk.storage`, `sdk.log`, and more. This includes TON wallet operations like `createTransfer`, `createJettonTransfer`, `getPublicKey`, and `getWalletVersion` for signing transactions without broadcasting.
@@ -344,13 +323,12 @@ For contributors, create a TypeScript tool in `src/agent/tools/` and register it
 ```
 src/
 ├── index.ts        # Main application entry point (TeletonApp)
-├── agent/          # LLM runtime, tool registry, ~124 tool implementations
+├── agent/          # LLM runtime and tool registry
 │   └── tools/      # telegram/, ton/, stonfi/, dedust/, dns/, journal/, workspace/
 ├── telegram/       # GramJS bridge, message handlers, admin commands, debouncing
 ├── memory/         # SQLite database, RAG search (FTS5 + vector), compaction
 ├── ton/            # Wallet operations, payment verification, TON blockchain
-├── deals/          # Deal proposals, strategy checker, config
-├── bot/            # Grammy + GramJS bot for styled inline deal buttons
+├── bot/            # Plugin inline-query and callback routing
 ├── sdk/            # Plugin SDK (v1.0.0) — TON, Telegram services for plugins
 ├── ton-proxy/      # TON Proxy module (Tonutils-Proxy integration)
 ├── session/        # Session persistence, transcripts

@@ -88,7 +88,7 @@ describe("InlineRouter", () => {
         onInlineQuery: vi.fn(async () => []),
       });
 
-      const ctx = createInlineQueryCtx("dealid123"); // no colon, no prefix
+      const ctx = createInlineQueryCtx("item123"); // no colon, no prefix
       const next = vi.fn();
       await router.middleware()(ctx, next);
 
@@ -190,7 +190,7 @@ describe("InlineRouter", () => {
         onCallback: [{ pattern: "like:*", regex: compileGlob("like:*"), handler: vi.fn() }],
       });
 
-      const ctx = createCallbackCtx("deals:accept:123");
+      const ctx = createCallbackCtx("quiz:accept:123");
       const next = vi.fn();
       await router.middleware()(ctx, next);
 

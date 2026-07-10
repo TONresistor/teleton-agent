@@ -43,7 +43,7 @@ interface CatalogGiftSummary {
 export const telegramGetAvailableGiftsTool: Tool = {
   name: "telegram_get_available_gifts",
   description:
-    "List available Star Gifts from the Telegram catalog (userbot API). Use filter='resale' to find collectible collections with marketplace listings. Returns giftId values for telegram_send_gift and telegram_get_resale_gifts. For the bot API version, use telegram_get_available_gifts_bot.",
+    "List available Star Gifts from the Telegram catalog (userbot API). Use filter='resale' to find collectible collections with marketplace listings. Returns giftId values for telegram_get_resale_gifts. For the bot API version, use telegram_get_available_gifts_bot.",
   category: "data-bearing",
   parameters: Type.Object({
     filter: Type.Optional(
@@ -186,8 +186,7 @@ export const telegramGetAvailableGiftsExecutor: ToolExecutor<GetAvailableGiftsPa
           returned: page.length,
           hasMore: offset + limit < totalFiltered,
         },
-        usage:
-          "Use gift 'id' with telegram_get_resale_gifts(giftId) to browse resale listings, or telegram_send_gift(userId, giftId) to send.",
+        usage: "Use gift 'id' with telegram_get_resale_gifts(giftId) to browse resale listings.",
       },
     };
   } catch (error) {

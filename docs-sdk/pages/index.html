@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Introduction - Teleton Agent Documentation</title>
-    <meta name="description" content="Teleton is an autonomous AI agent platform for Telegram with native TON blockchain integration. 135+ tools, 15 LLM providers, open source.">
+    <meta name="description" content="Teleton is an autonomous AI agent platform for Telegram with native TON blockchain integration. 128 base tools plus 5 optional system tools, 16 LLM providers, open source.">
     <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg">
     <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
     <link href="https://cdn.jsdelivr.net/npm/geist@1.3.1/dist/fonts/geist-sans/style.min.css" rel="stylesheet">
@@ -29,7 +29,7 @@
         <aside class="sidebar" id="sidebar"><nav class="sidebar-nav">
             <div class="nav-section"><div class="nav-section-title">Start Here</div><ul class="nav-list"><div class="nav-list-inner"><li><a href="/index.html" class="nav-link active">Introduction</a></li><li><a href="installation.html" class="nav-link">Installation</a></li><li><a href="quickstart.html" class="nav-link">Quick Start</a></li><li><a href="configuration.html" class="nav-link">Configuration</a></li></div></ul></div>
 <div class="nav-section"><div class="nav-section-title">Understand</div><ul class="nav-list"><div class="nav-list-inner"><li><a href="architecture.html" class="nav-link">Architecture</a></li><li><a href="agentic-loop.html" class="nav-link">Agentic Loop</a></li><li><a href="memory-system.html" class="nav-link">Memory System</a></li><li><a href="security.html" class="nav-link">Security</a></li></div></ul></div>
-<div class="nav-section"><div class="nav-section-title">Tools</div><ul class="nav-list"><div class="nav-list-inner"><li><a href="tools-telegram.html" class="nav-link">Telegram (76)</a></li><li><a href="tools-ton.html" class="nav-link">TON Blockchain (15)</a></li><li><a href="tools-dex.html" class="nav-link">DEX Trading (10)</a></li><li><a href="tools-dns.html" class="nav-link">DNS &amp; Domains (8)</a></li><li><a href="tools-deals.html" class="nav-link">Deals &amp; Escrow (5)</a></li><li><a href="tools-other.html" class="nav-link">Utilities</a></li></div></ul></div>
+<div class="nav-section"><div class="nav-section-title">Tools</div><ul class="nav-list"><div class="nav-list-inner"><li><a href="tools-telegram.html" class="nav-link">Telegram (83)</a></li><li><a href="tools-ton.html" class="nav-link">TON Blockchain (15)</a></li><li><a href="tools-dex.html" class="nav-link">DEX Trading (10)</a></li><li><a href="tools-dns.html" class="nav-link">DNS &amp; Domains (8)</a></li><li><a href="tools-other.html" class="nav-link">Utilities</a></li></div></ul></div>
 <div class="nav-section"><div class="nav-section-title">Build Plugins</div><ul class="nav-list"><div class="nav-list-inner"><li><a href="plugin-sdk.html" class="nav-link">Plugin SDK</a></li></div></ul></div>
 <div class="nav-section"><div class="nav-section-title">SDK Reference</div><ul class="nav-list"><div class="nav-list-inner"><li><a href="sdk-overview.html" class="nav-link">Overview</a></li><li><a href="sdk-ton.html" class="nav-link">TON Blockchain</a></li><li><a href="sdk-dex.html" class="nav-link">DEX Trading</a></li><li><a href="sdk-dns.html" class="nav-link">DNS &amp; Domains</a></li><li><a href="sdk-telegram.html" class="nav-link">Telegram</a></li><li><a href="sdk-bot.html" class="nav-link">Bot SDK</a></li><li><a href="sdk-utilities.html" class="nav-link">Utilities</a></li><li><a href="sdk-errors.html" class="nav-link">Error Handling</a></li><li><a href="tutorial-payment-bot.html" class="nav-link">Tutorial: Payment Bot</a></li><li><a href="tutorial-dex-bot.html" class="nav-link">Tutorial: DEX Bot</a></li><li><a href="tutorial-inline-bot.html" class="nav-link">Tutorial: Inline Bot</a></li></div></ul></div>
 <div class="nav-section"><div class="nav-section-title">Deploy &amp; Manage</div><ul class="nav-list"><div class="nav-list-inner"><li><a href="deploy-docker.html" class="nav-link">Docker</a></li><li><a href="cli-reference.html" class="nav-link">CLI Reference</a></li></div></ul></div>
@@ -37,7 +37,7 @@
         <main class="main"><article class="content">
 
             <h1>Teleton Agent</h1>
-            <p class="lead">Autonomous AI agent platform for Telegram with native TON blockchain integration. 135+ built-in tools, 15 LLM providers, Plugin SDK: open source.</p>
+            <p class="lead">Autonomous AI agent platform for Telegram with native TON blockchain integration. 128 base tools plus 5 optional system tools, 16 LLM providers, Plugin SDK: open source.</p>
 
             <p>Teleton operates as a real Telegram user account or a Telegram Bot. It thinks through an agentic loop with tool calling, remembers conversations across sessions with hybrid RAG, and natively integrates the TON blockchain: send crypto, swap on DEXs, bid on domains, verify payments: all from a chat message. It can schedule tasks to run autonomously at any time.</p>
 
@@ -48,10 +48,10 @@
                     <tbody>
                         <tr><td><strong>Full Telegram Access</strong></td><td>Real user via MTProto, not a bot</td></tr>
                         <tr><td><strong>Agentic Loop</strong></td><td>Think, act, observe, repeat until tasks complete</td></tr>
-                        <tr><td><strong>15 LLM Providers</strong></td><td>Anthropic, OpenAI, Google, xAI, Groq, and more</td></tr>
+                        <tr><td><strong>16 LLM Providers</strong></td><td>Anthropic, Codex, Grok Build, OpenAI, Google, xAI, Groq, and more</td></tr>
                         <tr><td><strong>TON Blockchain</strong></td><td>Wallet, jettons, DEX swaps, DNS, NFTs</td></tr>
                         <tr><td><strong>Persistent Memory</strong></td><td>Hybrid RAG, vector + keyword, auto-compaction</td></tr>
-                        <tr><td><strong>135+ Built-in Tools</strong></td><td>Messaging, media, crypto, DEX, DNS, files</td></tr>
+                        <tr><td><strong>128+ Built-in Tools</strong></td><td>Messaging, media, crypto, DEX, DNS, files</td></tr>
                         <tr><td><strong>Plugin SDK</strong></td><td>Custom tools, isolated DBs, secrets, hooks</td></tr>
                         <tr><td><strong>MCP Client</strong></td><td>Connect any MCP tool server</td></tr>
                         <tr><td><strong>Secure by Design</strong></td><td>Sandbox, plugin isolation, prompt defense</td></tr>
@@ -64,16 +64,16 @@
                 <div class="table-wrapper"><table>
                     <thead><tr><th>Category</th><th>Tools</th><th>Description</th></tr></thead>
                     <tbody>
-                        <tr><td>Telegram</td><td>80</td><td>Messages, media, chats, polls, stickers, gifts, stars, stories</td></tr>
+                        <tr><td>Telegram</td><td>83</td><td>Messages, media, chats, polls, stickers, gifts, stars, stories</td></tr>
                         <tr><td>TON &amp; Jettons</td><td>15</td><td>Wallet, send/receive, balances, prices, NFTs, DEX router</td></tr>
                         <tr><td>STON.fi DEX</td><td>5</td><td>Swap, quote, search, trending, pools</td></tr>
                         <tr><td>DeDust DEX</td><td>5</td><td>Swap, quote, pools, prices, token analytics</td></tr>
                         <tr><td>TON DNS</td><td>8</td><td>Auctions, bidding, linking, TON Sites, resolution</td></tr>
-                        <tr><td>Deals</td><td>5</td><td>P2P escrow, on-chain verification, anti double-spend</td></tr>
                         <tr><td>Journal</td><td>3</td><td>Trade logging, P&amp;L tracking, natural language queries</td></tr>
                         <tr><td>Web</td><td>2</td><td>Search and page extraction via Tavily</td></tr>
                         <tr><td>Workspace</td><td>6</td><td>Sandboxed file operations, path traversal protection</td></tr>
-                        <tr><td>Exec</td><td>4</td><td>Shell, files, processes (off by default, admin-only)</td></tr>
+                        <tr><td>Tool Search</td><td>1</td><td>Semantic retrieval across the complete tool registry</td></tr>
+                        <tr><td>System</td><td>5</td><td>Exec (4) and TON Proxy status (1), both optional</td></tr>
                     </tbody>
                 </table></div>
             </section>
@@ -83,7 +83,7 @@
                 <div class="table-wrapper"><table>
                     <thead><tr><th>Capability</th><th>Description</th></tr></thead>
                     <tbody>
-                        <tr><td><strong>Multi-Provider LLM</strong></td><td>15 providers, hot-swap from dashboard or CLI</td></tr>
+                        <tr><td><strong>Multi-Provider LLM</strong></td><td>16 providers, hot-swap from dashboard or CLI</td></tr>
                         <tr><td><strong>RAG + Hybrid Search</strong></td><td>Vector (sqlite-vec) + keyword (FTS5) fused search</td></tr>
                         <tr><td><strong>Auto-Compaction</strong></td><td>AI summarizes old context, saves to <code>memory/*.md</code></td></tr>
                         <tr><td><strong>Observation Masking</strong></td><td>Compresses old tool results, saves ~90% context</td></tr>
@@ -108,7 +108,7 @@
                     <tbody>
                         <tr><td><strong>Auth</strong></td><td>Phone + api_id + api_hash</td><td>Bot token from @BotFather</td></tr>
                         <tr><td><strong>Protocol</strong></td><td>MTProto (GramJS)</td><td>Bot API (Grammy)</td></tr>
-                        <tr><td><strong>Tools</strong></td><td>135+</td><td>67 (11 Telegram + 56 non-Telegram)</td></tr>
+                        <tr><td><strong>Tools</strong></td><td>128 base, up to 133 with optional system modules</td><td>Registry filtered automatically by bot-compatible capabilities</td></tr>
                         <tr><td><strong>Risk</strong></td><td>Account ban possible</td><td>No ban risk</td></tr>
                         <tr><td><strong>Dialogs/History</strong></td><td>Full access</td><td>Not available</td></tr>
                         <tr><td><strong>Media sending</strong></td><td>All types</td><td>Photos only (v1)</td></tr>
@@ -123,11 +123,11 @@
                 <h2>Prerequisites</h2>
                 <ul>
                     <li><strong>Node.js 22.22.2+ LTS</strong>: <a href="https://nodejs.org/" target="_blank" rel="noopener">Download</a> (Node 24 requires 24.15.0+)</li>
-                    <li><strong>LLM API Key</strong>: Anthropic (recommended), OpenAI, Google, xAI, Groq, OpenRouter, Moonshot, Mistral, Cerebras, ZAI, MiniMax, Hugging Face, Cocoon, or Local</li>
+                    <li><strong>LLM credentials</strong>: An API key for a supported hosted provider, or local CLI credentials for Codex/Grok Build; Gocoon and Local are keyless</li>
                     <li><strong>Telegram Account</strong>: Dedicated account recommended for security</li>
                     <li><strong>Telegram API Credentials</strong>: From <a href="https://my.telegram.org/apps" target="_blank" rel="noopener">my.telegram.org/apps</a></li>
                     <li><strong>Your Telegram User ID</strong>: Message <a href="https://t.me/userinfobot" target="_blank" rel="noopener">@userinfobot</a></li>
-                    <li><strong>Bot Token</strong> <em>(optional)</em>: From @BotFather for inline bot features (deals)</li>
+                    <li><strong>Bot Token</strong> <em>(optional in user mode)</em>: From @BotFather for plugin inline cards and callbacks; required in bot mode</li>
                 </ul>
                 <p><strong>Security Warning:</strong> The agent will have full control over the Telegram account. Use a dedicated account, not your main one.</p>
             </section>

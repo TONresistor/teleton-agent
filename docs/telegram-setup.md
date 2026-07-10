@@ -132,8 +132,8 @@ If you change your 2FA password after establishing a session, you do not need to
 
 A regular Telegram Bot token (from @BotFather) is optionally used alongside the user client for specific features:
 
-- **Inline keyboard buttons** in the deals system
-- **Callback query handling** for interactive UI elements
+- **Plugin inline cards** inserted into regular chats
+- **Callback query handling** for interactive plugin UI elements
 
 The bot token is NOT used for the primary message sending/receiving -- that is handled by the user client.
 
@@ -330,24 +330,26 @@ All admin commands require the sender's Telegram user ID to be listed in `admin_
 
 ### Command Summary
 
-| # | Command | Syntax | Description |
-|---|---------|--------|-------------|
-| 1 | `/status` | `/status` | View agent status: active conversations, provider, model, policies, paused state. |
-| 2 | `/model` | `/model [model_name]` | View or switch the LLM model at runtime. |
-| 3 | `/loop` | `/loop [1-50]` | View or set max agentic loop iterations. |
-| 4 | `/policy` | `/policy <dm\|group> <value>` | View or change access policies. |
-| 5 | `/strategy` | `/strategy [buy\|sell <percent>]` | View or change trading strategy thresholds. |
-| 6 | `/modules` | `/modules [set\|info\|reset] ...` | Manage per-group module permissions (group-only). |
-| 7 | `/plugin` | `/plugin <set\|unset\|keys> ...` | Manage plugin secrets (API keys, tokens). |
-| 8 | `/wallet` | `/wallet` | Check TON wallet balance and address. |
-| 9 | `/verbose` | `/verbose` | Toggle verbose debug logging on/off. |
-| 10 | `/guest` | `/guest [on\|off]` | View or toggle guest mode. |
-| 11 | `/pause` | `/pause` | Pause the agent (ignores non-admin messages). |
-| 12 | `/resume` | `/resume` | Resume the agent after pause. |
-| 13 | `/stop` | `/stop` | Emergency shutdown (terminates process). |
-| 14 | `/clear` | `/clear [chat_id]` | Clear conversation history for a chat. |
-| 15 | `/ping` | `/ping` | Health check (returns "Pong!"). |
-| 16 | `/help` | `/help` | Display all available commands. |
+| Command | Syntax | Description |
+|---------|--------|-------------|
+| `/status` | `/status` | View active conversations, provider, model, policies, and paused state. |
+| `/model` | `/model [model_name]` | View or switch the LLM model at runtime. |
+| `/loop` | `/loop [1-50]` | View or set max agentic loop iterations. |
+| `/policy` | `/policy <dm\|group> <value>` | View or change access policies. |
+| `/modules` | `/modules [set\|info\|reset] ...` | Manage per-group module permissions (group-only). |
+| `/plugin` | `/plugin <set\|unset\|keys> ...` | Manage plugin secrets. |
+| `/wallet` | `/wallet` | Check TON wallet balance and address. |
+| `/approve` | `/approve <request_id>` | Approve a pending financial action. |
+| `/reject` | `/reject <request_id>` | Reject a pending financial action. |
+| `/verbose` | `/verbose` | Toggle verbose debug logging. |
+| `/rag` | `/rag [status\|topk <n>]` | Toggle Tool RAG or view its status. |
+| `/guest` | `/guest [on\|off]` | View or toggle guest mode. |
+| `/pause` | `/pause` | Pause the agent. |
+| `/resume` | `/resume` | Resume the agent. |
+| `/stop` | `/stop` | Emergency shutdown. |
+| `/clear` | `/clear [chat_id]` | Clear conversation history for a chat. |
+| `/ping` | `/ping` | Health check. |
+| `/help` | `/help` | Display available commands. |
 
 > `/task <description>` and `/boot` are also available but handled by the message handler layer, not AdminHandler directly.
 
@@ -378,18 +380,6 @@ Change DM or group access policies at runtime.
 ```
 /policy dm allowlist
 /policy group disabled
-```
-
-### /strategy
-
-Adjust trading thresholds for the deals module.
-
-- **Buy threshold (50-150):** Max % of floor price the agent will pay.
-- **Sell threshold (100-200):** Min % of floor price the agent will accept.
-
-```
-/strategy buy 90
-/strategy sell 130
 ```
 
 ### /modules
