@@ -1,7 +1,7 @@
 // src/workspace/validator.ts
 
 import { existsSync, lstatSync, readdirSync } from "fs";
-import { resolve, normalize, relative, extname, basename } from "path";
+import { resolve, normalize, relative, extname, basename, join, sep } from "path";
 import { homedir } from "os";
 import { WORKSPACE_ROOT, ALLOWED_EXTENSIONS, MAX_FILE_SIZES } from "./paths.js";
 import { MAX_FILENAME_LENGTH } from "../constants/limits.js";
@@ -61,6 +61,27 @@ export interface ValidatedPath {
   filename: string;
 }
 
+function assertNoSymlinkComponents(absolutePath: string, inputPath: string): void {
+  const components = relative(WORKSPACE_ROOT, absolutePath).split(sep).filter(Boolean);
+  let current = WORKSPACE_ROOT;
+
+  for (const component of components) {
+    current = join(current, component);
+    try {
+      if (lstatSync(current).isSymbolicLink()) {
+        throw new WorkspaceSecurityError(
+          "Access denied: Symbolic links are not allowed for security reasons.",
+          inputPath
+        );
+      }
+    } catch (error: unknown) {
+      if (error instanceof WorkspaceSecurityError) throw error;
+      if ((error as NodeJS.ErrnoException).code === "ENOENT") break;
+      throw error;
+    }
+  }
+}
+
 /**
  * Validate and resolve a path within the workspace
  *
@@ -118,6 +139,11 @@ export function validatePath(inputPath: string, allowCreate: boolean = false): V
     );
   }
 
+  // Reject symlinks in every existing path component. Checking only the final
+  // node allows `workspace/link/file` to escape when `link` points elsewhere.
+  // This also protects write targets whose final file does not exist yet.
+  assertNoSymlinkComponents(absolutePath, inputPath);
+
   // Check if path exists
   const exists = existsSync(absolutePath);
 
@@ -126,19 +152,6 @@ export function validatePath(inputPath: string, allowCreate: boolean = false): V
       `File not found: '${inputPath}' does not exist in workspace.`,
       inputPath
     );
-  }
-
-  // SECURITY FIX: Use lstatSync() instead of statSync() to detect symlinks
-  // (statSync follows symlinks, lstatSync does not)
-  if (exists) {
-    const stats = lstatSync(absolutePath);
-
-    if (stats.isSymbolicLink()) {
-      throw new WorkspaceSecurityError(
-        `Access denied: Symbolic links are not allowed for security reasons.`,
-        inputPath
-      );
-    }
   }
 
   return {
