@@ -25,11 +25,18 @@ export interface McpConnection {
 }
 
 const MCP_CONNECT_TIMEOUT_MS = 30_000;
-// Node's largest non-overflowing timer (~24.8 days). MCP tool metadata is
-// remote-controlled, so no MCP tool is trusted read-only enough for a normal
-// retry-producing timeout. This is effectively "no operational timeout" while
-// preserving the SDK's required finite request timer.
-const MCP_UNTRUSTED_TOOL_TIMEOUT_MS = 2_147_483_647;
+const MCP_TOOL_DEADLINE_MS = 120_000;
+// Let our local deadline report an explicit unknown outcome before asking the
+// SDK to abort the transport. This keeps chat capacity bounded while avoiding a
+// misleading normal failure that could encourage duplicate side effects.
+const MCP_SDK_TIMEOUT_MS = MCP_TOOL_DEADLINE_MS + 5_000;
+
+class McpToolDeadlineError extends Error {
+  constructor() {
+    super(`MCP tool exceeded the ${MCP_TOOL_DEADLINE_MS / 1000}s execution deadline`);
+    this.name = "McpToolDeadlineError";
+  }
+}
 
 /**
  * Parse a command string into command + args.
@@ -194,18 +201,24 @@ export async function registerMcpTools(
         const prefixedName = `mcp_${conn.serverName}_${mcpTool.name}`;
 
         const executor: ToolExecutor = async (params): Promise<ToolResult> => {
+          let deadline: ReturnType<typeof setTimeout> | undefined;
           try {
-            // MCP cancellation is cooperative and cannot prove a remote side
-            // effect stopped. Keep untrusted tool calls pending instead of
-            // returning a normal timeout that invites a duplicate retry.
-            const result = await conn.client.callTool(
-              {
-                name: mcpTool.name,
-                arguments: params as Record<string, unknown>,
-              },
-              undefined,
-              { timeout: MCP_UNTRUSTED_TOOL_TIMEOUT_MS }
-            );
+            const result = await Promise.race([
+              conn.client.callTool(
+                {
+                  name: mcpTool.name,
+                  arguments: params as Record<string, unknown>,
+                },
+                undefined,
+                { timeout: MCP_SDK_TIMEOUT_MS }
+              ),
+              new Promise<never>((_, reject) => {
+                deadline = setTimeout(
+                  () => reject(new McpToolDeadlineError()),
+                  MCP_TOOL_DEADLINE_MS
+                );
+              }),
+            ]);
 
             if (result.isError) {
               const errorText = extractText(
@@ -220,10 +233,21 @@ export async function registerMcpTools(
             const text = extractText(result.content as Array<{ type: string; text?: string }>);
             return { success: true, data: sanitizeForContext(text) };
           } catch (innerError: unknown) {
+            if (innerError instanceof McpToolDeadlineError) {
+              return {
+                success: false,
+                error:
+                  `MCP tool "${mcpTool.name}" exceeded its execution deadline. ` +
+                  "Its remote outcome is unknown; do not retry automatically.",
+                data: { outcome: "unknown", retryable: false },
+              };
+            }
             return {
               success: false,
               error: `MCP tool "${mcpTool.name}" failed: ${getErrorMessage(innerError)}`,
             };
+          } finally {
+            if (deadline) clearTimeout(deadline);
           }
         };
 

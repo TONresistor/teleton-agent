@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { registerMcpTools } from "../mcp-loader.js";
 
 describe("MCP tool execution", () => {
-  it("runs untrusted MCP tools without an operational retry-producing timeout", async () => {
+  it("uses a bounded timeout for untrusted MCP actions", async () => {
     vi.useFakeTimers();
     try {
       let registeredTools: Array<{
@@ -58,8 +58,49 @@ describe("MCP tool execution", () => {
       expect(callTool).toHaveBeenCalledWith(
         { name: "mutate", arguments: { id: "once" } },
         undefined,
-        expect.objectContaining({ timeout: 2_147_483_647 })
+        expect.objectContaining({ timeout: 125_000 })
       );
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it("releases a stalled MCP action with a non-retryable unknown outcome", async () => {
+    vi.useFakeTimers();
+    try {
+      let registeredTools: Array<{
+        executor: (params: unknown) => Promise<unknown>;
+      }> = [];
+      const registry = {
+        registerPluginTools: vi.fn((_name, tools) => {
+          registeredTools = tools;
+          return tools.length;
+        }),
+      };
+      const client = {
+        listTools: vi.fn(async () => ({
+          tools: [{ name: "hang", inputSchema: { type: "object", properties: {} } }],
+        })),
+        callTool: vi.fn(
+          async () =>
+            await new Promise((resolve) =>
+              setTimeout(() => resolve({ isError: false, content: [] }), 300_000)
+            )
+        ),
+      };
+
+      await registerMcpTools(
+        [{ serverName: "test", client: client as never, scope: "admin-only" }],
+        registry as never
+      );
+
+      const resultPromise = registeredTools[0].executor({});
+      await vi.advanceTimersByTimeAsync(120_000);
+
+      await expect(resultPromise).resolves.toMatchObject({
+        success: false,
+        data: { outcome: "unknown", retryable: false },
+      });
     } finally {
       vi.useRealTimers();
     }
