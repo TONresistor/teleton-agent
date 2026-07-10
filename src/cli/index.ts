@@ -7,30 +7,15 @@ import { apiRotateKeyCommand, apiFingerprintCommand } from "./commands/api.js";
 import { registerGocoonCommand } from "./commands/gocoon.js";
 import { main as startApp } from "../index.js";
 import { configExists, getDefaultConfigPath } from "../config/loader.js";
-import { readFileSync, existsSync } from "fs";
-import { dirname, join } from "path";
-import { fileURLToPath } from "url";
 import { getErrorMessage } from "../utils/errors.js";
-
-function findPackageJson(): Record<string, unknown> {
-  let dir = dirname(fileURLToPath(import.meta.url));
-  for (let i = 0; i < 10; i++) {
-    const candidate = join(dir, "package.json");
-    if (existsSync(candidate)) {
-      return JSON.parse(readFileSync(candidate, "utf-8"));
-    }
-    dir = dirname(dir);
-  }
-  return { version: "0.0.0" };
-}
-const packageJson = findPackageJson();
+import { PACKAGE_VERSION } from "../utils/package-info.js";
 
 const program = new Command();
 
 program
   .name("teleton")
   .description("Teleton Agent - Personal AI Agent for Telegram")
-  .version(packageJson.version as string);
+  .version(PACKAGE_VERSION);
 
 // Setup command
 program

@@ -49,6 +49,7 @@ import { HeartbeatRunner } from "./heartbeat.js";
 import { StartupMaintenance } from "./startup-maintenance.js";
 import { ScheduledTaskHandler } from "./scheduled-tasks.js";
 import { PluginOrchestrator } from "./plugin-orchestrator.js";
+import { PACKAGE_VERSION } from "./utils/package-info.js";
 
 const log = createLogger("App");
 
@@ -568,16 +569,8 @@ ${blue}  ┌──────────────────────�
     pluginCount: number
   ): Promise<void> {
     if (!this.hookRunner) return;
-    let version = "0.0.0";
-    try {
-      const { createRequire } = await import("module");
-      const req = createRequire(import.meta.url);
-      version = (req("../package.json") as { version: string }).version;
-    } catch {
-      /* ignore */
-    }
     const agentStartEvent: AgentStartEvent = {
-      version,
+      version: PACKAGE_VERSION,
       provider,
       model: this.config.agent.model,
       pluginCount,

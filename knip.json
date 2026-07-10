@@ -2,24 +2,15 @@
   "$schema": "https://unpkg.com/knip@6/schema.json",
   "workspaces": {
     ".": {
-      "entry": [
-        "src/cli/**/*.ts",
-        "src/webui/**/*.ts",
-        "src/agent/index.ts",
-        "src/telegram/index.ts",
-        "src/sdk/hooks/index.ts",
-        "src/constants/index.ts",
-        "src/api/**/*.ts"
-      ],
       "project": ["src/**/*.ts"]
     },
     "packages/sdk": {
       "project": ["src/**/*.ts"]
+    },
+    "web": {
+      "project": ["src/**/*.{ts,tsx}"]
     }
   },
-  "ignoreDependencies": [
-    "@grammyjs/types"
-  ],
-  "ignoreExportsUsedInFile": true,
-  "exclude": ["exports", "types"]
+  "ignoreDependencies": ["@grammyjs/types"],
+  "ignoreExportsUsedInFile": true
 }

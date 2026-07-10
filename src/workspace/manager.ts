@@ -1,23 +1,14 @@
 // src/workspace/manager.ts
 
 import { existsSync, mkdirSync, readFileSync, copyFileSync } from "fs";
-import { join, dirname } from "path";
-import { fileURLToPath } from "url";
+import { join } from "path";
 import { TELETON_ROOT, WORKSPACE_ROOT, WORKSPACE_PATHS } from "./paths.js";
 import { createLogger } from "../utils/logger.js";
+import { findPackageRoot } from "../utils/package-info.js";
 
 const log = createLogger("Workspace");
 
-// Resolve package root by walking up from current file until we find package.json
-function findPackageRoot(): string {
-  let dir = dirname(fileURLToPath(import.meta.url));
-  for (let i = 0; i < 10; i++) {
-    if (existsSync(join(dir, "package.json"))) return dir;
-    dir = dirname(dir);
-  }
-  return process.cwd();
-}
-const TEMPLATES_DIR = join(findPackageRoot(), "src", "templates");
+const TEMPLATES_DIR = join(findPackageRoot() ?? process.cwd(), "src", "templates");
 
 export interface WorkspaceConfig {
   workspaceDir?: string;

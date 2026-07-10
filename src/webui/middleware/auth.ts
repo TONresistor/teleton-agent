@@ -12,16 +12,6 @@ export function generateToken(): string {
 }
 
 /**
- * Mask a token for safe display in logs.
- * Shows first 4 + last 4 characters: "abcd...wxyz".
- * Tokens shorter than 12 chars are fully masked.
- */
-export function maskToken(token: string): string {
-  if (token.length < 12) return "****";
-  return `${token.slice(0, 4)}...${token.slice(-4)}`;
-}
-
-/**
  * Timing-safe token comparison to prevent side-channel attacks.
  * Returns false for empty or mismatched-length tokens.
  */

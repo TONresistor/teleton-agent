@@ -10,13 +10,11 @@
  * Grammy (Bot API) fallback.
  */
 
-import { Api } from "telegram";
 import type { GramJSBotClient } from "../gramjs-bot.js";
 import {
   toTLMarkup,
   hasStyledButtons,
   parseHtml,
-  stripCustomEmoji,
   type StyledButtonDef,
 } from "../../sdk/formatting.js";
 import { getGramJSErrorMessage } from "../../utils/errors.js";
@@ -67,60 +65,4 @@ export async function editInlineViaGramJS(params: {
     if (getGramJSErrorMessage(error) === "MESSAGE_NOT_MODIFIED") return true;
     throw error;
   }
-}
-
-/**
- * Edit an inline message via GramJS without swallowing MESSAGE_NOT_MODIFIED.
- *
- * Used by chosen_inline_result, where any failure (including a no-op edit on a
- * freshly created message) must surface to the caller's Grammy fallback path.
- */
-export async function editInlineViaGramJSStrict(params: {
-  gramjsBot: GramJSBotClient;
-  inlineMessageId: string;
-  html: string;
-  buttons?: StyledButtonDef[][];
-}): Promise<void> {
-  await editInlineRaw(params);
-}
-
-/**
- * Answer an inline query with a single styled article result via GramJS MTProto.
- *
- * Custom emojis are stripped (SetInlineBotResults does not support them). The
- * caller supplies the already-built title/description and the styled message body.
- */
-export async function answerInlineQueryStyled(params: {
-  gramjsBot: GramJSBotClient;
-  queryId: string;
-  resultId: string;
-  title: string;
-  description: string;
-  html: string;
-  buttons: StyledButtonDef[][];
-}): Promise<void> {
-  const { gramjsBot, queryId, resultId, title, description, html, buttons } = params;
-
-  const strippedHtml = stripCustomEmoji(html);
-  const { text: plainText, entities } = parseHtml(strippedHtml);
-  const markup = hasStyledButtons(buttons) ? toTLMarkup(buttons) : undefined;
-
-  await gramjsBot.answerInlineQuery({
-    queryId,
-    results: [
-      new Api.InputBotInlineResult({
-        id: resultId,
-        type: "article",
-        title,
-        description,
-        sendMessage: new Api.InputBotInlineMessageText({
-          message: plainText,
-          entities: entities.length > 0 ? entities : undefined,
-          noWebpage: true,
-          replyMarkup: markup,
-        }),
-      }),
-    ],
-    cacheTime: 0,
-  });
 }
