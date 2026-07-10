@@ -11,7 +11,11 @@ export class ProviderRuntime {
   private gocoonSupervisor: GocoonSupervisor | null = null;
   private gocoonProxy: GocoonSseProxy | null = null;
 
-  constructor(private readonly config: Config) {}
+  constructor(private config: Config) {}
+
+  updateConfig(config: Config): void {
+    this.config = config;
+  }
 
   async initialize(): Promise<void> {
     if (this.config.agent.provider === "gocoon") {

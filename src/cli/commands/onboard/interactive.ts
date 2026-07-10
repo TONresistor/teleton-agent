@@ -43,7 +43,6 @@ import {
   validateApiKeyFormat,
   type SupportedProvider,
 } from "../../../config/providers.js";
-import { fetchWithTimeout } from "../../../utils/fetch.js";
 import { getErrorMessage } from "../../../utils/errors.js";
 import ora from "ora";
 import { getCodexApiKey, isCodexTokenValid } from "../../../providers/codex-credentials.js";
@@ -54,6 +53,7 @@ import {
 } from "../../../providers/grok-build-credentials.js";
 import type { OnboardOptions } from "../onboard.js";
 import { buildConfig, type Policy } from "./config-builder.js";
+import { validateAndFetchBot, validateBotTokenFormat } from "./telegram-validation.js";
 
 // ── Progress steps ────────────────────────────────────────────────────
 
@@ -175,34 +175,6 @@ async function promptOptionalKey(opts: {
     theme,
     validate: (v = "") => opts.validate(v),
   });
-}
-
-/** Shared bot-token format (id:hash). Used by all interactive + non-interactive sites. */
-export const BOT_TOKEN_REGEX = /^[0-9]+:[A-Za-z0-9_-]+$/;
-
-/** Validate bot-token format for an inquirer `validate` callback. */
-function validateBotTokenFormat(value: string): true | string {
-  if (!value) return "Bot token is required";
-  if (!BOT_TOKEN_REGEX.test(value)) return "Invalid format (expected 123456:ABC...)";
-  return true;
-}
-
-/**
- * Call Telegram getMe to verify a bot token and fetch its username.
- * Returns `ok:true` with the username when verified, `ok:false` when the
- * token is rejected, or `networkError:true` when the API is unreachable.
- */
-async function validateAndFetchBot(
-  token: string
-): Promise<{ ok: boolean; username?: string; networkError?: boolean }> {
-  try {
-    const res = await fetchWithTimeout(`https://api.telegram.org/bot${token}/getMe`);
-    const data = await res.json();
-    if (!data.ok) return { ok: false };
-    return { ok: true, username: data.result.username };
-  } catch {
-    return { ok: false, networkError: true };
-  }
 }
 
 /** Prompt for a 24-word mnemonic and import+save the wallet, with spinner feedback. */

@@ -321,6 +321,7 @@ ${blue}  ┌──────────────────────�
     const freshConfig = loadConfig(this.configPath);
     const modeChanged = freshConfig.telegram.mode !== this.config.telegram.mode;
     this.config = freshConfig;
+    this.providerRuntime.updateConfig(this.config);
 
     if (modeChanged) {
       log.info(`Mode changed to "${this.config.telegram.mode}", recreating bridge & registry`);

@@ -7,7 +7,7 @@ import { assertGrokBuildReady } from "../../../providers/grok-build-credentials.
 import { getErrorMessage } from "../../../utils/errors.js";
 import type { OnboardOptions } from "../onboard.js";
 import { buildConfig } from "./config-builder.js";
-import { BOT_TOKEN_REGEX } from "./interactive.js";
+import { BOT_TOKEN_REGEX } from "./telegram-validation.js";
 
 /**
  * Non-interactive onboarding (requires all options)
