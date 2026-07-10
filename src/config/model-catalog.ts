@@ -10,6 +10,12 @@ export interface ModelOption {
   description: string;
 }
 
+export const CODEX_LUNA_MODEL_ID = "gpt-5.6-luna";
+
+export function isCodexLunaEnabled(): boolean {
+  return process.env.TELETON_ENABLE_CODEX_LUNA?.trim().toLowerCase() === "true";
+}
+
 export const MODEL_OPTIONS: Record<string, ModelOption[]> = {
   anthropic: [
     {
@@ -306,5 +312,9 @@ export const MODEL_OPTIONS: Record<string, ModelOption[]> = {
 /** Get models for a provider (codex → openai-codex) */
 export function getModelsForProvider(provider: string): ModelOption[] {
   const key = provider === "codex" ? "openai-codex" : provider;
-  return MODEL_OPTIONS[key] || [];
+  const models = MODEL_OPTIONS[key] || [];
+  if (provider === "codex" && !isCodexLunaEnabled()) {
+    return models.filter((model) => model.value !== CODEX_LUNA_MODEL_ID);
+  }
+  return models;
 }

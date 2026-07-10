@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { TELEGRAM_MAX_MESSAGE_LENGTH } from "../constants/limits.js";
 import { SUPPORTED_PROVIDER_IDS } from "./providers.js";
+import { CODEX_LUNA_MODEL_ID, isCodexLunaEnabled } from "./model-catalog.js";
 
 export const DMPolicy = z.enum(["allowlist", "open", "admin-only", "disabled"]);
 export const GroupPolicy = z.enum(["open", "allowlist", "admin-only", "disabled"]);
@@ -25,28 +26,42 @@ export const SessionResetPolicySchema = z.object({
     .describe("Minutes of inactivity before session reset (default: 24h)"),
 });
 
-export const AgentConfigSchema = z.object({
-  provider: z.enum(SUPPORTED_PROVIDER_IDS).default("anthropic"),
-  api_key: z.string().default(""),
-  base_url: z
-    .string()
-    .url()
-    .optional()
-    .describe("Base URL for local LLM server (e.g. http://localhost:11434/v1)"),
-  model: z.string().default("claude-haiku-4-5-20251001"),
-  utility_model: z
-    .string()
-    .optional()
-    .describe("Cheap model for summarization (auto-detected if omitted)"),
-  max_tokens: z.number().default(4096),
-  temperature: z.number().default(0.7),
-  system_prompt: z.string().nullable().default(null),
-  max_agentic_iterations: z
-    .number()
-    .default(5)
-    .describe("Maximum number of agentic loop iterations (tool call → result → tool call cycles)"),
-  session_reset_policy: SessionResetPolicySchema.default(SessionResetPolicySchema.parse({})),
-});
+export const AgentConfigSchema = z
+  .object({
+    provider: z.enum(SUPPORTED_PROVIDER_IDS).default("anthropic"),
+    api_key: z.string().default(""),
+    base_url: z
+      .string()
+      .url()
+      .optional()
+      .describe("Base URL for local LLM server (e.g. http://localhost:11434/v1)"),
+    model: z.string().default("claude-haiku-4-5-20251001"),
+    utility_model: z
+      .string()
+      .optional()
+      .describe("Cheap model for summarization (auto-detected if omitted)"),
+    max_tokens: z.number().default(4096),
+    temperature: z.number().default(0.7),
+    system_prompt: z.string().nullable().default(null),
+    max_agentic_iterations: z
+      .number()
+      .default(5)
+      .describe(
+        "Maximum number of agentic loop iterations (tool call → result → tool call cycles)"
+      ),
+    session_reset_policy: SessionResetPolicySchema.default(SessionResetPolicySchema.parse({})),
+  })
+  .superRefine((agent, context) => {
+    if (agent.provider !== "codex" || isCodexLunaEnabled()) return;
+    for (const field of ["model", "utility_model"] as const) {
+      if (agent[field] !== CODEX_LUNA_MODEL_ID) continue;
+      context.addIssue({
+        code: "custom",
+        path: [field],
+        message: `${CODEX_LUNA_MODEL_ID} is not currently available; use gpt-5.6-terra`,
+      });
+    }
+  });
 
 export const TelegramConfigSchema = z
   .object({

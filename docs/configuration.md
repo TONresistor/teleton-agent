@@ -104,6 +104,10 @@ When you change the `provider` and omit `model`, the platform auto-selects:
 `$GROK_HOME/auth.json` (default: `~/.grok/auth.json`) and connects directly to
 the Grok Build CLI proxy. The session token is not stored in Teleton's config.
 
+Codex model `gpt-5.6-luna` is hidden and rejected by default because the live
+backend does not currently advertise it. Keep production on `gpt-5.6-terra`;
+`TELETON_ENABLE_CODEX_LUNA=true` exists only for controlled backend revalidation.
+
 ---
 
 ## telegram

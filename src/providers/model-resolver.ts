@@ -3,6 +3,7 @@ import { getProviderMetadata, type SupportedProvider } from "../config/providers
 import { createLogger } from "../utils/logger.js";
 import { fetchWithTimeout } from "../utils/fetch.js";
 import { getGrokBuildCliVersion } from "./grok-build-credentials.js";
+import { CODEX_LUNA_MODEL_ID, isCodexLunaEnabled } from "../config/model-catalog.js";
 
 const log = createLogger("LLM");
 
@@ -139,6 +140,12 @@ const MOONSHOT_MODEL_ALIASES: Record<string, string> = {
 };
 
 export function getProviderModel(provider: SupportedProvider, modelId: string): Model<Api> {
+  if (provider === "codex" && modelId === CODEX_LUNA_MODEL_ID && !isCodexLunaEnabled()) {
+    throw new Error(
+      `${CODEX_LUNA_MODEL_ID} is disabled because the Codex backend does not currently advertise it; use gpt-5.6-terra or set TELETON_ENABLE_CODEX_LUNA=true only for controlled revalidation`
+    );
+  }
+
   const cacheKey = `${provider}:${modelId}`;
   const cached = modelCache.get(cacheKey);
   if (cached) return cached;
