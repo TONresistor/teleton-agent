@@ -1,5 +1,3 @@
-import type { Api } from "telegram";
-import type { PluginMessageEvent, PluginCallbackEvent } from "@teleton-agent/sdk";
 import { loadConfig, getDefaultConfigPath, type Config } from "./config/index.js";
 import { loadSoul } from "./soul/index.js";
 import { AgentRuntime } from "./agent/runtime.js";
@@ -17,23 +15,17 @@ import { setTonapiKey } from "./constants/api-endpoints.js";
 import { setToncenterApiKey } from "./ton/endpoint.js";
 import { TELETON_ROOT } from "./workspace/paths.js";
 import { join } from "path";
-import { existsSync } from "fs";
-import type { GocoonSupervisor, GocoonSseProxy } from "./gocoon/index.js";
 import { ToolRegistry } from "./agent/tools/registry.js";
 import { registerAllTools } from "./agent/tools/register-all.js";
-import { type PluginModuleWithHooks } from "./agent/tools/plugin-loader.js";
 import type { HookName, AgentStartEvent, AgentStopEvent } from "./sdk/hooks/types.js";
 import { createHookRunner } from "./sdk/hooks/runner.js";
 import type { HookRegistry } from "./sdk/hooks/registry.js";
 import type { SDKDependencies } from "./sdk/index.js";
 import type { SupportedProvider } from "./config/providers.js";
-import { readRawConfig, setNestedValue, writeRawConfig } from "./config/configurable-keys.js";
 import { loadModules } from "./agent/tools/module-loader.js";
 import { ModulePermissions } from "./agent/tools/module-permissions.js";
 import { SHUTDOWN_TIMEOUT_MS } from "./constants/timeouts.js";
 
-const PLUGIN_START_TIMEOUT_MS = 30_000;
-const PLUGIN_STOP_TIMEOUT_MS = 30_000;
 import type { PluginModule, PluginContext } from "./agent/tools/types.js";
 import { PluginWatcher } from "./agent/tools/plugin-watcher.js";
 import { loadMcpServers, closeMcpServers, type McpConnection } from "./agent/tools/mcp-loader.js";
@@ -50,6 +42,16 @@ import { StartupMaintenance } from "./startup-maintenance.js";
 import { ScheduledTaskHandler } from "./scheduled-tasks.js";
 import { PluginOrchestrator } from "./plugin-orchestrator.js";
 import { PACKAGE_VERSION } from "./utils/package-info.js";
+import { ProviderRuntime } from "./app/provider-runtime.js";
+import {
+  countPluginEventHooks,
+  createUserPluginCallbackHandler,
+  dispatchPluginCallback,
+  dispatchPluginMessage,
+} from "./app/plugin-events.js";
+import { createServerDeps } from "./app/server-deps.js";
+import { startPluginModules, stopPluginModules } from "./app/plugin-lifecycle.js";
+import { resolveOwnerInfo } from "./app/owner-info.js";
 
 const log = createLogger("App");
 
@@ -69,8 +71,7 @@ export class TeletonApp {
   private webuiServer: WebUIServer | null = null;
   private apiServer: ApiServer | null = null;
   private pluginWatcher: PluginWatcher | null = null;
-  private gocoonSupervisor: GocoonSupervisor | null = null;
-  private gocoonProxy: GocoonSseProxy | null = null;
+  private providerRuntime: ProviderRuntime;
   private mcpConnections: McpConnection[] = [];
   private callbackHandlerRegistered = false;
   private messageHandlersRegistered = false;
@@ -87,64 +88,22 @@ export class TeletonApp {
 
   private configPath: string;
 
-  private getMcpServerInfo() {
-    return Object.entries(this.config.mcp.servers).map(([name, serverConfig]) => {
-      const type = serverConfig.command
-        ? ("stdio" as const)
-        : serverConfig.url
-          ? ("streamable-http" as const)
-          : ("sse" as const);
-      const target = serverConfig.command ?? serverConfig.url ?? "";
-      const connected = this.mcpConnections.some((c) => c.serverName === name);
-      const moduleName = `mcp_${name}`;
-      const moduleTools = this.toolRegistry.getModuleTools(moduleName);
-      return {
-        name,
-        type,
-        target,
-        scope: serverConfig.scope ?? "always",
-        enabled: serverConfig.enabled ?? true,
-        connected,
-        toolCount: moduleTools.length,
-        tools: moduleTools.map((t) => t.name),
-        envKeys: Object.keys(serverConfig.env ?? {}),
-      };
-    });
-  }
-
   private buildServerDeps() {
-    const mcpServers = () => this.getMcpServerInfo();
-    const builtinNames = this.modules.map((m) => m.name);
-    const pluginContext: PluginContext = {
-      bridge: this.bridge,
-      db: getDatabase().getDb(),
-      config: this.config,
-    };
-    return {
+    return createServerDeps({
       agent: this.agent,
       bridge: this.bridge,
       memory: this.memory,
       toolRegistry: this.toolRegistry,
-      plugins: this.modules
-        .filter((m) => this.toolRegistry.isPluginModule(m.name))
-        .map((m) => ({ name: m.name, version: m.version ?? "0.0.0" })),
-      mcpServers,
-      config: this.config.webui,
+      modules: this.modules,
+      mcpConnections: this.mcpConnections,
+      config: this.config,
       configPath: this.configPath,
       lifecycle: this.lifecycle,
-      marketplace: {
-        modules: this.modules,
-        config: this.config,
-        sdkDeps: this.sdkDeps,
-        pluginContext,
-        loadedModuleNames: builtinNames,
-        rewireHooks: () => this.wirePluginEventHooks(),
-      },
+      sdkDeps: this.sdkDeps,
       userHookEvaluator: this.userHookEvaluator,
-      gocoonControl: {
-        stopRunner: () => this.stopGocoonRunner(),
-      },
-    };
+      rewireHooks: () => this.wirePluginEventHooks(),
+      stopGocoonRunner: () => this.stopGocoonRunner(),
+    });
   }
 
   /**
@@ -153,31 +112,13 @@ export class TeletonApp {
    * stays up; gocoon inference is unavailable until the next restart.
    */
   stopGocoonRunner(): boolean {
-    let stopped = false;
-    if (this.gocoonProxy) {
-      try {
-        this.gocoonProxy.stop();
-      } catch (error: unknown) {
-        log.error({ err: error }, "gocoon sse-proxy stop failed");
-      }
-      this.gocoonProxy = null;
-      stopped = true;
-    }
-    if (this.gocoonSupervisor) {
-      try {
-        this.gocoonSupervisor.stop();
-      } catch (error: unknown) {
-        log.error({ err: error }, "gocoon supervisor stop failed");
-      }
-      this.gocoonSupervisor = null;
-      stopped = true;
-    }
-    return stopped;
+    return this.providerRuntime.stopGocoon();
   }
 
   constructor(configPath?: string) {
     this.configPath = configPath ?? getDefaultConfigPath();
     this.config = loadConfig(this.configPath);
+    this.providerRuntime = new ProviderRuntime(this.config);
 
     // Wire YAML logging config to pino (H2 fix)
     initLoggerFromConfig(this.config.logging);
@@ -438,14 +379,14 @@ ${blue}  ┌──────────────────────�
     this.agent.initializeContextBuilder(this.memory.embedder, getDatabase().isVectorSearchReady());
 
     // Register provider-specific models (gocoon / local LLM)
-    await this.initializeProviders();
+    await this.providerRuntime.initialize();
 
     // Connect to Telegram
     await this.bridge.connect();
     if (!this.bridge.isAvailable()) {
       throw new Error("Failed to connect to Telegram");
     }
-    await this.resolveOwnerInfo();
+    await resolveOwnerInfo(this.config, this.bridge, this.configPath);
     const ownUserId = this.bridge.getOwnUserId();
     if (ownUserId) {
       this.messageHandler.setOwnUserId(ownUserId.toString());
@@ -719,203 +660,16 @@ ${blue}  ┌──────────────────────�
   }
 
   /**
-   * Register provider-specific models (gocoon / local LLM).
-   */
-  private async initializeProviders(): Promise<void> {
-    if (this.config.agent.provider === "gocoon") {
-      const port = this.config.gocoon?.port ?? 10000;
-      const autoStart = this.config.gocoon?.auto_start ?? true;
-      try {
-        if (autoStart) {
-          const {
-            ensureGocoonBinaries,
-            GocoonSupervisor,
-            runnerBaseUrl,
-            clientConfigPath,
-            walletInfo,
-          } = await import("./gocoon/index.js");
-          if (!existsSync(clientConfigPath())) {
-            throw new Error(
-              "gocoon is not set up yet; run `teleton gocoon init` (or use the Gocoon page) first"
-            );
-          }
-          await ensureGocoonBinaries();
-          // Opening the channel needs free TON on-chain; fail clearly instead of a health timeout.
-          const wallet = await walletInfo();
-          if (wallet.balanceNano < 2_000_000_000n) {
-            throw new Error(
-              `COCOON wallet has ${wallet.balanceTon} TON; gocoon needs at least 2 TON free to open the channel. ` +
-                `Fund ${wallet.fundAddress} (Gocoon page or \`teleton gocoon init\`), then restart.`
-            );
-          }
-          this.gocoonSupervisor = new GocoonSupervisor({
-            configPath: clientConfigPath(),
-            healthUrl: `${runnerBaseUrl(port)}/v1/models`,
-            startGraceMs: 60_000, // first on-chain channel registration can take ~60s
-          });
-          await this.gocoonSupervisor.start();
-          log.info(`Gocoon runner started on port ${port}`);
-        }
-        // pi-ai always streams and only parses SSE; the gocoon runner returns a
-        // single JSON document. Front the runner with a local proxy that frames
-        // its reply as SSE so streaming clients parse it. Keeps gocoon untouched.
-        const { GocoonSseProxy } = await import("./gocoon/index.js");
-        this.gocoonProxy = new GocoonSseProxy({ runnerPort: port });
-        await this.gocoonProxy.start();
-        const { registerGocoonModels } = await import("./agent/client.js");
-        const models = await registerGocoonModels(this.gocoonProxy.port);
-        if (models.length === 0) {
-          throw new Error(`No models found on port ${port}`);
-        }
-        log.info(
-          `Gocoon ready: ${models.length} model(s) (runner ${port}, sse-proxy ${this.gocoonProxy.port})`
-        );
-      } catch (error: unknown) {
-        // Non-fatal: keep the agent and WebUI alive so gocoon can be installed and
-        // funded from the Gocoon page, then a restart activates it.
-        log.warn(`Gocoon not ready: ${getErrorMessage(error)}`);
-        log.warn(
-          "Agent is up but can't chat until gocoon is funded. Open the Gocoon page (or run `teleton gocoon init`), then restart."
-        );
-      }
-    }
-
-    if (this.config.agent.provider === "local" && !this.config.agent.base_url) {
-      throw new Error(
-        "Local provider requires base_url in config (e.g. http://localhost:11434/v1)"
-      );
-    }
-    if (this.config.agent.provider === "local" && this.config.agent.base_url) {
-      try {
-        const { registerLocalModels } = await import("./agent/client.js");
-        const models = await registerLocalModels(this.config.agent.base_url);
-        if (models.length > 0) {
-          log.info(`Discovered ${models.length} local model(s): ${models.join(", ")}`);
-          if (!this.config.agent.model || this.config.agent.model === "auto") {
-            this.config.agent.model = models[0];
-            log.info(`Using local model: ${models[0]}`);
-          }
-        } else {
-          log.warn("No models found on local LLM server — is it running?");
-        }
-      } catch (error: unknown) {
-        log.error(
-          `Local LLM server unavailable at ${this.config.agent.base_url}: ${getErrorMessage(error)}`
-        );
-        log.error("Start the LLM server first (e.g. ollama serve)");
-        throw new Error(`Local LLM server unavailable: ${getErrorMessage(error)}`);
-      }
-    }
-  }
-
-  /**
    * Start module background jobs with timeout.
    */
   private async startModules(): Promise<PluginContext> {
-    const moduleDb = getDatabase().getDb();
     const pluginContext: PluginContext = {
       bridge: this.bridge,
-      db: moduleDb,
+      db: getDatabase().getDb(),
       config: this.config,
     };
-    const startedModules: typeof this.modules = [];
-    try {
-      for (const mod of this.modules) {
-        await Promise.race([
-          mod.start?.(pluginContext),
-          new Promise<never>((_, reject) =>
-            setTimeout(
-              () => reject(new Error(`Plugin "${mod.name}" start() timed out after 30s`)),
-              PLUGIN_START_TIMEOUT_MS
-            )
-          ),
-        ]);
-        startedModules.push(mod);
-      }
-    } catch (error) {
-      log.error({ err: error }, "Module start failed, cleaning up started modules");
-      for (const mod of startedModules.reverse()) {
-        try {
-          await Promise.race([
-            mod.stop?.(),
-            new Promise<never>((_, reject) =>
-              setTimeout(
-                () => reject(new Error(`Plugin "${mod.name}" stop() timed out after 30s`)),
-                PLUGIN_STOP_TIMEOUT_MS
-              )
-            ),
-          ]);
-        } catch (innerError: unknown) {
-          log.error({ err: innerError }, `Module "${mod.name}" cleanup failed`);
-        }
-      }
-      throw error;
-    }
+    await startPluginModules(this.modules, pluginContext);
     return pluginContext;
-  }
-
-  /**
-   * Resolve owner name and username from Telegram API if not already configured.
-   * Persists resolved values to the config file so this only happens once.
-   */
-  private async resolveOwnerInfo(): Promise<void> {
-    try {
-      // Skip if both are already set
-      if (this.config.telegram.owner_name && this.config.telegram.owner_username) {
-        return;
-      }
-
-      // Can't resolve without an owner ID
-      if (!this.config.telegram.owner_id) {
-        return;
-      }
-
-      if (!isUserBridge(this.bridge)) return;
-      const entity = await this.bridge.getClient().getEntity(String(this.config.telegram.owner_id));
-
-      // Check that the entity is a User (has firstName)
-      if (!entity || !("firstName" in entity)) {
-        return;
-      }
-
-      const user = entity as Api.User;
-      const firstName = user.firstName || "";
-      const lastName = user.lastName || "";
-      const fullName = lastName ? `${firstName} ${lastName}` : firstName;
-      const username = user.username || "";
-
-      let updated = false;
-
-      if (!this.config.telegram.owner_name && fullName) {
-        this.config.telegram.owner_name = fullName;
-        updated = true;
-      }
-
-      if (!this.config.telegram.owner_username && username) {
-        this.config.telegram.owner_username = username;
-        updated = true;
-      }
-
-      if (updated) {
-        // Persist to disk
-        const raw = readRawConfig(this.configPath);
-        if (this.config.telegram.owner_name) {
-          setNestedValue(raw, "telegram.owner_name", this.config.telegram.owner_name);
-        }
-        if (this.config.telegram.owner_username) {
-          setNestedValue(raw, "telegram.owner_username", this.config.telegram.owner_username);
-        }
-        writeRawConfig(raw, this.configPath);
-
-        const displayName = this.config.telegram.owner_name || "Unknown";
-        const displayUsername = this.config.telegram.owner_username
-          ? ` (@${this.config.telegram.owner_username})`
-          : "";
-        log.info(`Owner resolved: ${displayName}${displayUsername}`);
-      }
-    } catch (error) {
-      log.warn(`Could not resolve owner info: ${getErrorMessage(error)}`);
-    }
   }
 
   /**
@@ -1008,114 +762,37 @@ ${blue}  ┌──────────────────────�
    * plugins are picked up without re-registering handlers.
    */
   private wirePluginEventHooks(): void {
-    // Message hooks: single dynamic dispatcher that iterates this.modules
     this.messageHandler.setPluginMessageHooks([
-      async (event: PluginMessageEvent) => {
-        for (const mod of this.modules) {
-          const withHooks = mod as PluginModuleWithHooks;
-          if (withHooks.onMessage) {
-            try {
-              await withHooks.onMessage(event);
-            } catch (error: unknown) {
-              log.error(`❌ [${mod.name}] onMessage error: ${getErrorMessage(error)}`);
-            }
-          }
-        }
-      },
+      (event) => dispatchPluginMessage(this.modules, event),
     ]);
 
-    const hookCount = this.modules.filter((m) => (m as PluginModuleWithHooks).onMessage).length;
+    const hookCount = countPluginEventHooks(this.modules, "onMessage");
     if (hookCount > 0) {
       log.info(`${hookCount} plugin onMessage hook(s) registered`);
     }
 
-    // Callback query handler: register ONCE, dispatch dynamically
     if (!this.callbackHandlerRegistered && isUserBridge(this.bridge)) {
       const userBridge = this.bridge;
-      userBridge.getClient().addCallbackQueryHandler(async (update: unknown) => {
-        if (!update || typeof update !== "object") {
-          return;
-        }
-        const callbackUpdate = update as {
-          queryId?: unknown;
-          data?: { toString(): string } | string;
-          peer?: {
-            channelId?: { toString(): string };
-            chatId?: { toString(): string };
-            userId?: { toString(): string };
-          };
-          msgId?: unknown;
-          userId?: unknown;
-        };
-        const queryId = callbackUpdate.queryId;
-        const data =
-          typeof callbackUpdate.data === "string"
-            ? callbackUpdate.data
-            : callbackUpdate.data?.toString() || "";
-        const parts = data.split(":");
-        const action = parts[0];
-        const params = parts.slice(1);
-
-        const chatId =
-          callbackUpdate.peer?.channelId?.toString() ??
-          callbackUpdate.peer?.chatId?.toString() ??
-          callbackUpdate.peer?.userId?.toString() ??
-          "";
-        const messageId =
-          typeof callbackUpdate.msgId === "number"
-            ? callbackUpdate.msgId
-            : Number(callbackUpdate.msgId || 0);
-        const userId = Number(callbackUpdate.userId);
-
-        const answer = async (text?: string, alert = false): Promise<void> => {
-          try {
-            await userBridge.getClient().answerCallbackQuery(queryId, { message: text, alert });
-          } catch (error: unknown) {
-            log.error(`❌ Failed to answer callback query: ${getErrorMessage(error)}`);
-          }
-        };
-
-        const event: PluginCallbackEvent = {
-          data,
-          action,
-          params,
-          chatId,
-          messageId,
-          userId,
-          answer,
-        };
-
-        await this.dispatchPluginCallback(event);
-      });
+      userBridge
+        .getClient()
+        .addCallbackQueryHandler(
+          createUserPluginCallbackHandler(userBridge, (event) =>
+            dispatchPluginCallback(this.modules, event)
+          )
+        );
       this.callbackHandlerRegistered = true;
 
-      const cbCount = this.modules.filter(
-        (m) => (m as PluginModuleWithHooks).onCallbackQuery
-      ).length;
+      const cbCount = countPluginEventHooks(this.modules, "onCallbackQuery");
       if (cbCount > 0) {
         log.info(`${cbCount} plugin onCallbackQuery hook(s) registered`);
       }
     } else if (!this.callbackHandlerRegistered && isBotBridge(this.bridge)) {
-      this.inlineRouter.setCallbackObserver((event) => this.dispatchPluginCallback(event));
+      this.inlineRouter.setCallbackObserver((event) => dispatchPluginCallback(this.modules, event));
       this.callbackHandlerRegistered = true;
 
-      const cbCount = this.modules.filter(
-        (m) => (m as PluginModuleWithHooks).onCallbackQuery
-      ).length;
+      const cbCount = countPluginEventHooks(this.modules, "onCallbackQuery");
       if (cbCount > 0) {
         log.info(`${cbCount} plugin onCallbackQuery hook(s) registered`);
-      }
-    }
-  }
-
-  private async dispatchPluginCallback(event: PluginCallbackEvent): Promise<void> {
-    for (const mod of this.modules) {
-      const withHooks = mod as PluginModuleWithHooks;
-      if (!withHooks.onCallbackQuery) continue;
-      try {
-        await withHooks.onCallbackQuery(event);
-      } catch (error: unknown) {
-        log.error(`❌ [${mod.name}] onCallbackQuery error: ${getErrorMessage(error)}`);
       }
     }
   }
@@ -1187,21 +864,8 @@ ${blue}  ┌──────────────────────�
       }
     }
 
-    // Stop the gocoon SSE proxy and runner (when teleton supervises them)
-    if (this.gocoonProxy) {
-      try {
-        this.gocoonProxy.stop();
-      } catch (error: unknown) {
-        log.error({ err: error }, "gocoon sse-proxy stop failed");
-      }
-    }
-    if (this.gocoonSupervisor) {
-      try {
-        this.gocoonSupervisor.stop();
-      } catch (error: unknown) {
-        log.error({ err: error }, "gocoon supervisor stop failed");
-      }
-    }
+    // Stop supervised provider resources (Gocoon runner/proxy when active).
+    this.providerRuntime.stopGocoon();
 
     // Close MCP connections
     if (this.mcpConnections.length > 0) {
@@ -1228,21 +892,7 @@ ${blue}  ┌──────────────────────�
       log.error({ err: error }, "Message queue drain failed");
     }
 
-    for (const mod of this.modules) {
-      try {
-        await Promise.race([
-          mod.stop?.(),
-          new Promise<never>((_, reject) =>
-            setTimeout(
-              () => reject(new Error(`Plugin "${mod.name}" stop() timed out after 30s`)),
-              PLUGIN_STOP_TIMEOUT_MS
-            )
-          ),
-        ]);
-      } catch (error: unknown) {
-        log.error({ err: error }, `Module "${mod.name}" stop failed`);
-      }
-    }
+    await stopPluginModules(this.modules);
 
     this.callbackHandlerRegistered = false;
     // messageHandlersRegistered stays true — Grammy Bot instance retains its middleware tree
