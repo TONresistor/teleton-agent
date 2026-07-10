@@ -752,7 +752,7 @@ async function stepProvider(
   }
 
   // Model selection (advanced mode only, after provider + API key)
-  let selectedModel = providerMeta.defaultModel;
+  let selectedModel: string = providerMeta.defaultModel;
 
   if (selectedProvider !== "gocoon" && selectedProvider !== "local") {
     const providerModels = getModelsForProvider(selectedProvider);

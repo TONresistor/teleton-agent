@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { TELEGRAM_MAX_MESSAGE_LENGTH } from "../constants/limits.js";
 import { SUPPORTED_PROVIDER_IDS } from "./providers.js";
-import { CODEX_LUNA_MODEL_ID, isCodexLunaEnabled } from "./model-catalog.js";
+import { getModelAvailability } from "./model-catalog.js";
 
 export const DMPolicy = z.enum(["allowlist", "open", "admin-only", "disabled"]);
 export const GroupPolicy = z.enum(["open", "allowlist", "admin-only", "disabled"]);
@@ -54,13 +54,15 @@ export const AgentConfigSchema = z
     session_reset_policy: SessionResetPolicySchema.default(SessionResetPolicySchema.parse({})),
   })
   .superRefine((agent, context) => {
-    if (agent.provider !== "codex" || isCodexLunaEnabled()) return;
     for (const field of ["model", "utility_model"] as const) {
-      if (agent[field] !== CODEX_LUNA_MODEL_ID) continue;
+      const modelId = agent[field];
+      if (!modelId) continue;
+      const availability = getModelAvailability(agent.provider, modelId);
+      if (availability.available) continue;
       context.addIssue({
         code: "custom",
         path: [field],
-        message: `${CODEX_LUNA_MODEL_ID} is not currently available; use gpt-5.6-terra`,
+        message: availability.message ?? `${modelId} is not currently available`,
       });
     }
   });

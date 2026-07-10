@@ -10,13 +10,22 @@ export interface ModelOption {
   description: string;
 }
 
-export const CODEX_LUNA_MODEL_ID = "gpt-5.6-luna";
+interface ModelGate {
+  enabled: () => boolean;
+  disabledMessage: string;
+}
 
-export function isCodexLunaEnabled(): boolean {
+interface CatalogModelOption extends ModelOption {
+  gate?: ModelGate;
+}
+
+const CODEX_LUNA_MODEL_ID = "gpt-5.6-luna";
+
+function isCodexLunaEnabled(): boolean {
   return process.env.TELETON_ENABLE_CODEX_LUNA?.trim().toLowerCase() === "true";
 }
 
-export const MODEL_OPTIONS: Record<string, ModelOption[]> = {
+const MODEL_OPTIONS: Record<string, CatalogModelOption[]> = {
   anthropic: [
     {
       value: "claude-opus-4-8",
@@ -88,9 +97,14 @@ export const MODEL_OPTIONS: Record<string, ModelOption[]> = {
       description: "Balanced agentic coding model, preview, 372K ctx",
     },
     {
-      value: "gpt-5.6-luna",
+      value: CODEX_LUNA_MODEL_ID,
       name: "GPT-5.6 Luna",
       description: "Fast and affordable agentic coding model, preview, 372K ctx",
+      gate: {
+        enabled: isCodexLunaEnabled,
+        disabledMessage:
+          "gpt-5.6-luna is disabled because the Codex backend does not currently advertise it; use gpt-5.6-terra or set TELETON_ENABLE_CODEX_LUNA=true only for controlled revalidation",
+      },
     },
     { value: "gpt-5.4", name: "GPT-5.4", description: "Reasoning, 272K ctx" },
     { value: "gpt-5.4-mini", name: "GPT-5.4 Mini", description: "Fast & cheap, reasoning" },
@@ -309,12 +323,27 @@ export const MODEL_OPTIONS: Record<string, ModelOption[]> = {
   ],
 };
 
+function catalogKey(provider: string): string {
+  return provider === "codex" ? "openai-codex" : provider;
+}
+
+export function getModelAvailability(
+  provider: string,
+  modelId: string
+): { available: boolean; message?: string } {
+  const model = MODEL_OPTIONS[catalogKey(provider)]?.find((option) => option.value === modelId);
+  if (!model?.gate || model.gate.enabled()) return { available: true };
+  return { available: false, message: model.gate.disabledMessage };
+}
+
+export function assertModelAvailable(provider: string, modelId: string): void {
+  const availability = getModelAvailability(provider, modelId);
+  if (!availability.available) throw new Error(availability.message);
+}
+
 /** Get models for a provider (codex → openai-codex) */
 export function getModelsForProvider(provider: string): ModelOption[] {
-  const key = provider === "codex" ? "openai-codex" : provider;
-  const models = MODEL_OPTIONS[key] || [];
-  if (provider === "codex" && !isCodexLunaEnabled()) {
-    return models.filter((model) => model.value !== CODEX_LUNA_MODEL_ID);
-  }
-  return models;
+  return (MODEL_OPTIONS[catalogKey(provider)] || [])
+    .filter((model) => !model.gate || model.gate.enabled())
+    .map(({ gate: _gate, ...model }) => model);
 }

@@ -1,23 +1,5 @@
-export type SupportedProvider =
-  | "anthropic"
-  | "codex"
-  | "grok-build"
-  | "openai"
-  | "google"
-  | "xai"
-  | "groq"
-  | "openrouter"
-  | "moonshot"
-  | "mistral"
-  | "cerebras"
-  | "zai"
-  | "minimax"
-  | "huggingface"
-  | "gocoon"
-  | "local";
-
 export interface ProviderMetadata {
-  id: SupportedProvider;
+  id: string;
   displayName: string;
   credentialMode: "api-key" | "cli-auto" | "none";
   envVar: string;
@@ -30,7 +12,7 @@ export interface ProviderMetadata {
   piAiProvider: string;
 }
 
-const PROVIDER_REGISTRY: Record<SupportedProvider, ProviderMetadata> = {
+const PROVIDER_REGISTRY = {
   codex: {
     id: "codex",
     displayName: "Codex (Auto)",
@@ -239,9 +221,12 @@ const PROVIDER_REGISTRY: Record<SupportedProvider, ProviderMetadata> = {
     toolLimit: 128,
     piAiProvider: "local",
   },
-};
+} as const satisfies Record<string, ProviderMetadata>;
 
-export function getProviderMetadata(provider: SupportedProvider): ProviderMetadata {
+export type SupportedProvider = keyof typeof PROVIDER_REGISTRY;
+type RegisteredProviderMetadata = (typeof PROVIDER_REGISTRY)[SupportedProvider];
+
+export function getProviderMetadata(provider: SupportedProvider): RegisteredProviderMetadata {
   const meta = PROVIDER_REGISTRY[provider];
   if (!meta) {
     throw new Error(`Unknown provider: ${provider}`);
@@ -249,7 +234,7 @@ export function getProviderMetadata(provider: SupportedProvider): ProviderMetada
   return meta;
 }
 
-export function getSupportedProviders(): ProviderMetadata[] {
+export function getSupportedProviders(): RegisteredProviderMetadata[] {
   return Object.values(PROVIDER_REGISTRY);
 }
 
