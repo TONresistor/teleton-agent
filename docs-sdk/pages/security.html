@@ -168,7 +168,7 @@
                 <p>Plugins that export a <code>migrate(db)</code> function receive their own SQLite database file (separate from the main <code>memory.db</code>). Plugins that use <code>sdk.storage</code> receive a key-value namespace scoped to their plugin name. No plugin has direct access to the main database tables.</p>
 
                 <h3>Secrets via Environment Variables</h3>
-                <p>Plugin secrets are declared in the <code>PluginManifest.secrets</code> field and resolved from environment variables at load time. The naming convention is <code>${PLUGIN_NAME_UPPER}_${KEY_UPPER}</code>. The raw environment is not passed to plugins; only explicitly declared secrets are surfaced through <code>sdk.secrets</code>.</p>
+                <p>Plugin secrets are declared in the <code>PluginManifest.secrets</code> field and resolved from environment variables at load time. The naming convention is <code>TELETON_PLUGIN_${PLUGIN_NAME_UPPER}_${KEY_UPPER}</code>. Overrides must stay under the same reserved plugin prefix. The raw environment is not passed to plugins; only explicitly declared secrets are surfaced through <code>sdk.secrets</code>.</p>
 
                 <h3>Sanitized Config</h3>
                 <p>Plugins receive a sanitized view of the application config via <code>sdk.config</code>, not the raw config object. Sensitive fields (API keys, admin IDs, wallet mnemonics) are not included in the plugin-facing config.</p>

@@ -591,7 +591,7 @@ Values are JSON-serialized. Expired entries are lazily cleaned up with a 5% prob
 
 Secure access to API keys, tokens, and credentials. The resolution order is:
 
-1. **Environment variable**: the manifest `env` override, or `PLUGINNAME_KEY` by default (e.g., `MY_PLUGIN_API_KEY`)
+1. **Environment variable**: the manifest `env` override, or `TELETON_PLUGIN_PLUGINNAME_KEY` by default (e.g., `TELETON_PLUGIN_MY_PLUGIN_API_KEY`)
 2. **Secrets store**: Set via `/plugin set my-plugin api_key <value>` admin command
 3. **Plugin config**: From `config.yaml` under `plugins.my_plugin.api_key`
 
@@ -601,7 +601,7 @@ Secure access to API keys, tokens, and credentials. The resolution order is:
 | `require(key)` | `string` | Get a secret or throw `PluginSDKError` |
 | `has(key)` | `boolean` | Check if a secret is available |
 
-Manifest overrides must be uppercase environment variable names (`^[A-Z_][A-Z0-9_]*$`):
+Manifest overrides must be uppercase and start with the reserved plugin namespace (`TELETON_PLUGIN_MY_PLUGIN_` for `my-plugin`):
 
 ```javascript
 export const manifest = {
@@ -611,7 +611,7 @@ export const manifest = {
     api_key: {
       required: true,
       description: "External API key",
-      env: "SHARED_API_KEY",
+      env: "TELETON_PLUGIN_MY_PLUGIN_SHARED_API_KEY",
     },
   },
 };

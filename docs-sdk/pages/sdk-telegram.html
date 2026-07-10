@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>sdk.telegram, Telegram - Teleton Agent Documentation</title>
-    <meta name="description" content="Complete reference for the 50 Telegram methods in the Teleton Plugin SDK: messaging, media, moderation, stars, gifts, collectibles, and more.">
+    <meta name="description" content="Complete reference for the 51 Telegram methods in the Teleton Plugin SDK: messaging, media, moderation, stars, gifts, collectibles, and more.">
     <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg">
     <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
     <link href="https://cdn.jsdelivr.net/npm/geist@1.3.1/dist/fonts/geist-sans/style.min.css" rel="stylesheet">
@@ -37,7 +37,7 @@
         <main class="main"><article class="content">
 
             <h1>sdk.telegram: Telegram</h1>
-            <p class="lead">Complete reference for the 50 Telegram methods: messaging, media, moderation, stars, gifts, collectibles, and more. Access via <code>sdk.telegram</code> in any plugin tool executor or lifecycle hook.</p>
+            <p class="lead">Complete reference for the 51 Telegram methods: messaging, media, moderation, stars, gifts, collectibles, and more. Access via <code>sdk.telegram</code> in any plugin tool executor or lifecycle hook.</p>
 
             <!-- ────────────────────────────────────────────────── -->
             <section class="section" id="quick-example">
@@ -641,19 +641,21 @@ if (storyId) {
 
             <!-- ────────────────────────────────────────────────── -->
             <section class="section" id="advanced">
-                <h2>Advanced (2 methods)</h2>
-                <p>Connection-status and typing-indicator utilities.</p>
+                <h2>Advanced (3 methods)</h2>
+                <p>Runtime-mode, connection-status, and typing-indicator utilities.</p>
 
                 <div class="table-wrapper"><table>
                     <thead><tr><th>Method</th><th>Returns</th><th>Description</th></tr></thead>
                     <tbody>
+                        <tr><td><code>getMode()</code></td><td><code>"user" | "bot"</code></td><td>Return the active Telegram runtime mode.</td></tr>
                         <tr><td><code>setTyping(chatId)</code></td><td><code>Promise&lt;void&gt;</code></td><td>Show "typing..." indicator in a chat. Automatically expires after ~5 seconds.</td></tr>
                         <tr><td><code>isAvailable()</code></td><td><code>boolean</code></td><td>Check if the Telegram bridge is connected and ready.</td></tr>
                     </tbody>
                 </table></div>
 
                 <h3>Signatures</h3>
-                <div class="code-block"><div class="code-header"><span>Advanced method signatures</span></div><pre><code class="language-typescript">setTyping(chatId: string): Promise&lt;void&gt;
+                <div class="code-block"><div class="code-header"><span>Advanced method signatures</span></div><pre><code class="language-typescript">getMode(): "user" | "bot"
+setTyping(chatId: string): Promise&lt;void&gt;
 isAvailable(): boolean</code></pre></div>
 
                 <div class="code-block"><div class="code-header"><span>Example: connection and typing</span></div><pre><code class="language-typescript">// Always check availability first
@@ -964,7 +966,7 @@ return { success: true };</code></pre></div>
             <!-- ────────────────────────────────────────────────── -->
             <section class="section" id="method-index">
                 <h2>Full Method Index</h2>
-                <p>All 50 methods on <code>sdk.telegram</code> at a glance, grouped by category.</p>
+                <p>All 51 methods on <code>sdk.telegram</code> at a glance, grouped by category.</p>
 
                 <div class="table-wrapper"><table>
                     <thead><tr><th>#</th><th>Method</th><th>Returns</th><th>Category</th></tr></thead>
@@ -1019,6 +1021,7 @@ return { success: true };</code></pre></div>
                         <tr><td>48</td><td><code>sendGiftOffer(userId, giftSlug, price, opts?)</code></td><td><code>Promise&lt;void&gt;</code></td><td>Collectibles</td></tr>
                         <tr><td>49</td><td><code>setTyping(chatId)</code></td><td><code>Promise&lt;void&gt;</code></td><td>Advanced</td></tr>
                         <tr><td>50</td><td><code>isAvailable()</code></td><td><code>boolean</code></td><td>Advanced</td></tr>
+                        <tr><td>51</td><td><code>getMode()</code></td><td><code>"user" | "bot"</code></td><td>Advanced</td></tr>
                     </tbody>
                 </table></div>
             </section>

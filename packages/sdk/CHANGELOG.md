@@ -16,6 +16,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Plugin tool scopes are validated against the canonical SDK scope list.
 - `start(ctx)` now receives `ctx.sdk` instead of the raw Telegram bridge.
 - `PluginToolContext.bridge` and `sdk.telegram.getRawClient()` were removed; plugins use the typed SDK capabilities instead.
+- Secret environment overrides are restricted to the declaring plugin's namespace.
 
 ### Security
 

@@ -82,9 +82,15 @@ describe("createDexSDK", () => {
   });
 
   it.each(["quote", "quoteSTONfi", "quoteDeDust", "swap", "swapSTONfi", "swapDeDust"] as const)(
-    "validates amount and slippage for %s",
+    "validates pair, amount, and slippage for %s",
     async (method) => {
       const sdk = createDexSDK(log);
+      await expect(sdk[method]({ ...params, fromAsset: " " })).rejects.toMatchObject({
+        code: "INVALID_INPUT",
+      });
+      await expect(sdk[method]({ ...params, toAsset: "ton" })).rejects.toMatchObject({
+        code: "INVALID_INPUT",
+      });
       await expect(sdk[method]({ ...params, amount: 0 })).rejects.toBeInstanceOf(PluginSDKError);
       await expect(sdk[method]({ ...params, slippage: 1.01 })).rejects.toBeInstanceOf(
         PluginSDKError

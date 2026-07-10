@@ -11,7 +11,7 @@ export interface SecretDeclaration {
   required: boolean;
   /** Human-readable description shown when prompting admin */
   description: string;
-  /** Environment variable name override (uppercase letters, digits, and underscores) */
+  /** Namespaced override (must start with TELETON_PLUGIN_PLUGIN_NAME_) */
   env?: string;
 }
 
@@ -19,7 +19,7 @@ export interface SecretDeclaration {
  * Secure access to plugin secrets (API keys, tokens, credentials).
  *
  * Resolution order:
- * 1. Declared environment variable override, or PLUGINNAME_KEY
+ * 1. Declared environment variable override, or TELETON_PLUGIN_PLUGINNAME_KEY
  * 2. Secrets store (set via /plugin set command)
  * 3. pluginConfig from config.yaml
  *
@@ -555,7 +555,7 @@ export interface PluginManifest {
   dependencies?: string[];
   /** Default plugin config (merged with config.yaml plugins section) */
   defaultConfig?: Record<string, unknown>;
-  /** Required SDK version range (e.g. ">=1.0.0", "^1.0.0") */
+  /** Required SDK version range (e.g. ">=2.0.0", "^2.0.0") */
   sdkVersion?: string;
   /**
    * Secrets required by this plugin (API keys, tokens, etc.)
@@ -582,7 +582,7 @@ export interface PluginManifest {
 export interface PluginHookDeclaration {
   /** Hook name supported by the current SDK. */
   name: HookName;
-  /** Per-hook execution priority, clamped to -1000..1000. */
+  /** Per-hook execution priority, restricted to -1000..1000. */
   priority?: number;
   /** Human-readable purpose of the hook. */
   description?: string;
@@ -612,7 +612,7 @@ export interface PluginHookDeclaration {
  * ```
  */
 export interface PluginSDK {
-  /** SDK version (semver, e.g. "1.0.0") */
+  /** SDK version (semver, e.g. "2.0.0") */
   readonly version: string;
 
   /** TON blockchain operations */

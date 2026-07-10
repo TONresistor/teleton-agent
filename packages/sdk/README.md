@@ -545,6 +545,7 @@ await sdk.ton.dns.setSiteRecord("mysite.ton", "aabbccdd...64hex");
 
 | Method | Returns | Description |
 |--------|---------|-------------|
+| `getMode()` | `"user" \| "bot"` | Active Telegram runtime mode |
 | `sendMessage(chatId, text, opts?)` | `Promise<number>` | Send message, returns message ID |
 | `editMessage(chatId, messageId, text, opts?)` | `Promise<number>` | Edit existing message |
 | `sendDice(chatId, emoticon, replyToId?)` | `Promise<DiceResult>` | Send dice/slot animation |
@@ -850,7 +851,7 @@ sdk.log.info(`Transferred to ${result.transferredTo}, paid: ${result.paidTransfe
 
 #### `SecretsSDK`
 
-Secure access to plugin secrets (API keys, tokens, credentials). Resolution order: declared environment variable override (or derived `PLUGINNAME_KEY`) > secrets store (`/plugin set`) > `pluginConfig`.
+Secure access to plugin secrets (API keys, tokens, credentials). Resolution order: declared environment variable override (or derived `TELETON_PLUGIN_PLUGINNAME_KEY`) > secrets store (`/plugin set`) > `pluginConfig`.
 
 | Method | Returns | Description |
 |--------|---------|-------------|
@@ -871,7 +872,7 @@ Used in `PluginManifest.secrets` to declare required secrets.
 |-------|------|-------------|
 | `required` | `boolean` | Whether the plugin needs this secret to function |
 | `description` | `string` | Human-readable description |
-| `env` | `string?` | Environment variable name override (`^[A-Z_][A-Z0-9_]*$`) |
+| `env` | `string?` | Namespaced environment override starting with `TELETON_PLUGIN_PLUGIN_NAME_` |
 
 ---
 

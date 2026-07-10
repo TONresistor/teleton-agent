@@ -37,7 +37,7 @@ export const tools = (sdk: PluginSDK): SimpleToolDef[] => [{
 interface PluginSDK {
   readonly version: string;           // "2.0.0"
   readonly ton: TonSDK;              // TON blockchain (18 methods + dex + dns)
-  readonly telegram: TelegramSDK;    // Telegram (50 methods)
+  readonly telegram: TelegramSDK;    // Telegram (51 methods)
   readonly db: Database | null;      // Isolated SQLite (null only on initialization failure)
   readonly config: Record<string, unknown>;      // Sanitized app config
   readonly pluginConfig: Record<string, unknown>; // Plugin-specific config
@@ -121,7 +121,7 @@ NOTE: DnsCheckResult.auction field exists in types but is NOT populated by imple
 
 ---
 
-## sdk.telegram — Telegram (50 methods)
+## sdk.telegram — Telegram (51 methods)
 
 ### Core
 - `sendMessage(chatId: string, text: string, opts?: SendMessageOptions): Promise<number>` — Send text message. opts: { replyToId?, inlineKeyboard? }. Returns message ID.
@@ -216,7 +216,7 @@ Styled buttons (green/red/blue) only work with .toTL() (GramJS Layer 222). .toGr
 
 ## sdk.secrets — Secrets (3 methods)
 
-Resolution order: 1. Manifest `env` override or derived ${PLUGIN_NAME_UPPER}_${KEY_UPPER}, 2. Secrets store (/plugin set), 3. pluginConfig.
+Resolution order: 1. Manifest `env` override or derived TELETON_PLUGIN_${PLUGIN_NAME_UPPER}_${KEY_UPPER}, 2. Secrets store (/plugin set), 3. pluginConfig. Overrides must use the same reserved TELETON_PLUGIN_ namespace.
 
 - `get(key: string): string | undefined` — Get secret value.
 - `require(key: string): string` — Get or throw SECRET_NOT_FOUND.
@@ -343,7 +343,7 @@ export const onCallbackQuery = async (event: PluginCallbackEvent) => {
 6. Float precision: SDK uses string-based decimal conversion, NOT Math.floor(amount * 10**d).
 7. verifyPayment() requires `used_transactions` table for replay protection.
 8. sendStory() has path allowlist: /tmp, Downloads/, Pictures/, Videos/, teleton workspace.
-9. Secrets env naming uses the manifest `env` override when declared, otherwise ${PLUGIN_NAME_UPPER}_${KEY_UPPER}.
+9. Secrets env naming uses TELETON_PLUGIN_${PLUGIN_NAME_UPPER}_${KEY_UPPER}. Overrides must stay under the same reserved plugin prefix; cross-plugin/global env access is rejected.
 10. DnsCheckResult.auction field exists in types but is NOT populated (reserved).
 11. Bot SDK callback data is auto-prefixed with plugin name.
 12. Styled buttons (colors) only work with .toTL() (GramJS), .toGrammy() falls back to standard.

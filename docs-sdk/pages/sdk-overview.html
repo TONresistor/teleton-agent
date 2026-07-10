@@ -37,7 +37,7 @@
         <main class="main"><article class="content">
 
             <h1>SDK Reference Overview</h1>
-            <p class="lead">The <code>@teleton-agent/sdk</code> package provides 103 methods across 9 namespaces for building Teleton Agent plugins.</p>
+            <p class="lead">The <code>@teleton-agent/sdk</code> package provides a typed, namespaced API for building Teleton Agent plugins.</p>
 
             <section class="section" id="installation">
                 <h2>Installation</h2>
@@ -286,7 +286,7 @@ export const manifest: PluginManifest = {
                     <li><strong><code>sdk.bot</code> is <code>null</code> if your manifest does not declare <code>bot</code>.</strong> You must include a <code>bot: { inline: true }</code> or <code>bot: { callbacks: true }</code> declaration in your manifest to receive a <code>BotSDK</code> instance.</li>
                     <li><strong><code>sdk.db</code> is isolated for every plugin.</strong> A <code>migrate(db)</code> export is optional and only needed to create custom tables. The property is <code>null</code> only if database initialization fails.</li>
                     <li><strong><code>sdk.storage</code> is <code>null</code> if no database is available.</strong> This only happens if the core platform cannot create a plugin database at all (rare edge case).</li>
-                    <li><strong>Secret environment variable naming.</strong> A manifest <code>env</code> override is used when declared; otherwise secrets use <code>${PLUGIN_NAME_UPPER}_${KEY_UPPER}</code>.</li>
+                    <li><strong>Secret environment variable naming.</strong> A manifest <code>env</code> override is used when declared, but it must stay under the reserved plugin prefix; otherwise secrets use <code>TELETON_PLUGIN_${PLUGIN_NAME_UPPER}_${KEY_UPPER}</code>.</li>
                     <li><strong>All async SDK methods can throw <code>PluginSDKError</code>.</strong> Always wrap SDK calls in try/catch blocks or handle errors at the tool level. See the <a href="sdk-errors.html">Error Handling</a> guide.</li>
                 </ul>
             </section>

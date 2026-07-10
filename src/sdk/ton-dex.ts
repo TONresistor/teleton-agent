@@ -10,11 +10,21 @@ import type {
 import { PluginSDKError } from "@teleton-agent/sdk";
 import { getDedustQuote, getStonfiQuote, validateDexParams } from "./ton/dex-quotes.js";
 import { executeDedustSwap, executeStonfiSwap } from "./ton/dex-swaps.js";
+import { requireNonEmpty } from "./validation.js";
+
+function validatePair(params: DexQuoteParams): void {
+  const fromAsset = requireNonEmpty(params.fromAsset, "Source asset");
+  const toAsset = requireNonEmpty(params.toAsset, "Destination asset");
+  if (fromAsset.toLowerCase() === toAsset.toLowerCase()) {
+    throw new PluginSDKError("Source and destination assets must differ", "INVALID_INPUT");
+  }
+  validateDexParams(params.amount, params.slippage);
+}
 
 export function createDexSDK(log: PluginLogger): DexSDK {
   return {
     async quote(params: DexQuoteParams): Promise<DexQuoteResult> {
-      validateDexParams(params.amount, params.slippage);
+      validatePair(params);
       const slippage = params.slippage ?? 0.01;
       const [stonfi, dedust] = await Promise.all([
         getStonfiQuote(params.fromAsset, params.toAsset, params.amount, slippage, log),
@@ -58,7 +68,7 @@ export function createDexSDK(log: PluginLogger): DexSDK {
     },
 
     async quoteSTONfi(params: DexQuoteParams): Promise<DexSingleQuote | null> {
-      validateDexParams(params.amount, params.slippage);
+      validatePair(params);
       return getStonfiQuote(
         params.fromAsset,
         params.toAsset,
@@ -69,7 +79,7 @@ export function createDexSDK(log: PluginLogger): DexSDK {
     },
 
     async quoteDeDust(params: DexQuoteParams): Promise<DexSingleQuote | null> {
-      validateDexParams(params.amount, params.slippage);
+      validatePair(params);
       return getDedustQuote(
         params.fromAsset,
         params.toAsset,
@@ -80,7 +90,7 @@ export function createDexSDK(log: PluginLogger): DexSDK {
     },
 
     async swap(params: DexSwapParams): Promise<DexSwapResult> {
-      validateDexParams(params.amount, params.slippage);
+      validatePair(params);
       if (params.dex === "stonfi") return executeStonfiSwap(params);
       if (params.dex === "dedust") return executeDedustSwap(params);
 
@@ -91,12 +101,12 @@ export function createDexSDK(log: PluginLogger): DexSDK {
     },
 
     async swapSTONfi(params: DexSwapParams): Promise<DexSwapResult> {
-      validateDexParams(params.amount, params.slippage);
+      validatePair(params);
       return executeStonfiSwap(params);
     },
 
     async swapDeDust(params: DexSwapParams): Promise<DexSwapResult> {
-      validateDexParams(params.amount, params.slippage);
+      validatePair(params);
       return executeDedustSwap(params);
     },
   };

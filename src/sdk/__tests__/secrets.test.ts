@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { join } from "path";
-import { mkdirSync, readFileSync, writeFileSync, rmSync, statSync } from "fs";
+import { chmodSync, mkdirSync, readFileSync, writeFileSync, rmSync, statSync } from "fs";
 import { tmpdir } from "os";
 import { randomBytes } from "crypto";
 
@@ -72,7 +72,7 @@ afterEach(() => {
 describe("SecretsSDK resolution chain", () => {
   it("returns env var first (highest priority)", () => {
     // All three sources have the value
-    setEnv("MYPLUGIN_API_KEY", "from-env");
+    setEnv("TELETON_PLUGIN_MYPLUGIN_API_KEY", "from-env");
     writeFileSync(secretsPath("myplugin"), JSON.stringify({ API_KEY: "from-file" }), {
       mode: 0o600,
     });
@@ -83,31 +83,43 @@ describe("SecretsSDK resolution chain", () => {
   });
 
   it("uses the manifest environment variable override", () => {
-    setEnv("SHARED_WEATHER_TOKEN", "from-custom-env");
-    setEnv("MYPLUGIN_API_KEY", "from-derived-env");
+    setEnv("TELETON_PLUGIN_MYPLUGIN_SHARED_WEATHER_TOKEN", "from-custom-env");
+    setEnv("TELETON_PLUGIN_MYPLUGIN_API_KEY", "from-derived-env");
 
     const sdk = createSecretsSDK("myplugin", {}, mockLog, {
       API_KEY: {
         required: true,
         description: "Weather API key",
-        env: "SHARED_WEATHER_TOKEN",
+        env: "TELETON_PLUGIN_MYPLUGIN_SHARED_WEATHER_TOKEN",
       },
     });
 
     expect(sdk.get("API_KEY")).toBe("from-custom-env");
     expect(mockLog.debug).toHaveBeenCalledWith(
-      'Secret "API_KEY" resolved from env var SHARED_WEATHER_TOKEN'
+      'Secret "API_KEY" resolved from env var TELETON_PLUGIN_MYPLUGIN_SHARED_WEATHER_TOKEN'
     );
   });
 
   it("keeps the derived environment variable when no override is declared", () => {
-    setEnv("MYPLUGIN_API_KEY", "from-derived-env");
+    setEnv("TELETON_PLUGIN_MYPLUGIN_API_KEY", "from-derived-env");
 
     const sdk = createSecretsSDK("myplugin", {}, mockLog, {
       API_KEY: { required: true, description: "Weather API key" },
     });
 
     expect(sdk.get("API_KEY")).toBe("from-derived-env");
+  });
+
+  it("rejects environment overrides outside the plugin namespace", () => {
+    expect(() =>
+      createSecretsSDK("myplugin", {}, mockLog, {
+        API_KEY: {
+          required: true,
+          description: "Weather API key",
+          env: "AGENT_API_KEY",
+        },
+      })
+    ).toThrowError(/must start with TELETON_PLUGIN_MYPLUGIN_/);
   });
 
   it("falls back to secrets file when no env var", () => {
@@ -135,7 +147,7 @@ describe("SecretsSDK resolution chain", () => {
 
   it("env var wins over file, file wins over config (priority order)", () => {
     // Set up all three with different values
-    setEnv("MYPLUGIN_TOKEN", "env-token");
+    setEnv("TELETON_PLUGIN_MYPLUGIN_TOKEN", "env-token");
     writeFileSync(
       secretsPath("myplugin"),
       JSON.stringify({ TOKEN: "file-token", DB_URL: "file-db" }),
@@ -161,7 +173,7 @@ describe("SecretsSDK resolution chain", () => {
 // ---------------------------------------------------------------------------
 describe("SecretsSDK.require()", () => {
   it("returns value when found", () => {
-    setEnv("MYPLUGIN_TOKEN", "secret-value");
+    setEnv("TELETON_PLUGIN_MYPLUGIN_TOKEN", "secret-value");
     const sdk = createSecretsSDK("myplugin", {}, mockLog);
 
     expect(sdk.require("TOKEN")).toBe("secret-value");
@@ -188,7 +200,7 @@ describe("SecretsSDK.require()", () => {
 // ---------------------------------------------------------------------------
 describe("SecretsSDK.has()", () => {
   it("returns true when secret exists", () => {
-    setEnv("MYPLUGIN_KEY", "value");
+    setEnv("TELETON_PLUGIN_MYPLUGIN_KEY", "value");
     const sdk = createSecretsSDK("myplugin", {}, mockLog);
 
     expect(sdk.has("KEY")).toBe(true);
@@ -227,6 +239,24 @@ describe("writePluginSecret()", () => {
 
     const mode = statSync(filePath).mode & 0o777;
     expect(mode).toBe(0o600);
+  });
+
+  it("repairs permissive file permissions on update", () => {
+    writePluginSecret("testplugin", "KEY", "old");
+    const filePath = secretsPath("testplugin");
+    chmodSync(filePath, 0o644);
+
+    writePluginSecret("testplugin", "KEY", "new");
+
+    expect(statSync(filePath).mode & 0o777).toBe(0o600);
+  });
+
+  it.each([
+    ["../escape", "KEY"],
+    ["testplugin", "../KEY"],
+    ["testplugin", "__proto__"],
+  ])("rejects unsafe storage identifiers: %s / %s", (pluginName, key) => {
+    expect(() => writePluginSecret(pluginName, key, "value")).toThrowError(PluginSDKError);
   });
 
   it("merges with existing secrets", () => {
@@ -322,14 +352,14 @@ describe("listPluginSecretKeys()", () => {
 // ---------------------------------------------------------------------------
 describe("Edge cases", () => {
   it("plugin name with hyphens converts to uppercase underscores for env prefix", () => {
-    setEnv("MY_COOL_PLUGIN_SECRET", "hyphen-env-value");
+    setEnv("TELETON_PLUGIN_MY_COOL_PLUGIN_SECRET", "hyphen-env-value");
     const sdk = createSecretsSDK("my-cool-plugin", {}, mockLog);
 
     expect(sdk.get("SECRET")).toBe("hyphen-env-value");
   });
 
   it("empty string env var is treated as falsy — falls through to next source", () => {
-    setEnv("MYPLUGIN_KEY", "");
+    setEnv("TELETON_PLUGIN_MYPLUGIN_KEY", "");
     writeFileSync(secretsPath("myplugin"), JSON.stringify({ KEY: "from-file" }), { mode: 0o600 });
     const sdk = createSecretsSDK("myplugin", {}, mockLog);
 
@@ -358,7 +388,7 @@ describe("Edge cases", () => {
   });
 
   it("require() throws on empty string from all sources", () => {
-    setEnv("MYPLUGIN_KEY", "");
+    setEnv("TELETON_PLUGIN_MYPLUGIN_KEY", "");
     const sdk = createSecretsSDK("myplugin", { KEY: "" }, mockLog);
 
     // get() returns undefined since all values are empty/falsy

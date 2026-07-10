@@ -58,7 +58,7 @@
                 <h3>Secret Resolution Order</h3>
                 <p>When you call <code>sdk.secrets.get("api_key")</code>, the SDK checks these sources in order:</p>
                 <ol>
-                    <li><strong>Environment variable</strong>: the manifest <code>env</code> override, or <code>${PLUGIN_NAME_UPPER}_${KEY_UPPER}</code> by default (e.g. <code>WEATHER_REPORT_API_KEY</code>)</li>
+                    <li><strong>Environment variable</strong>: the manifest <code>env</code> override, or <code>TELETON_PLUGIN_${PLUGIN_NAME_UPPER}_${KEY_UPPER}</code> by default (e.g. <code>TELETON_PLUGIN_WEATHER_REPORT_API_KEY</code>)</li>
                     <li><strong>Secrets store</strong>: Set via the Telegram admin command <code>/plugin set &lt;plugin&gt; &lt;key&gt; &lt;value&gt;</code></li>
                     <li><strong>pluginConfig</strong>: From the <code>plugins:</code> section in <code>config.yaml</code></li>
                 </ol>
@@ -71,7 +71,7 @@
   description: string;     // Human-readable description for admin
   env?: string;            // Optional uppercase environment variable override
 }</code></pre></div>
-                <p>The optional <code>env</code> override must match <code>^[A-Z_][A-Z0-9_]*$</code>. Without it, the runtime derives <code>${PLUGIN_NAME_UPPER}_${KEY_UPPER}</code>.</p>
+                <p>The optional <code>env</code> override must be uppercase and stay under the reserved plugin prefix (for example, <code>TELETON_PLUGIN_WEATHER_REPORT_</code>). This prevents plugins from reading unrelated agent secrets. Without an override, the runtime derives <code>TELETON_PLUGIN_${PLUGIN_NAME_UPPER}_${KEY_UPPER}</code>.</p>
 
                 <div class="code-block"><div class="code-header"><span>Weather Plugin Secrets</span></div><pre><code class="language-typescript">import type { PluginSDK, SimpleToolDef, PluginManifest } from "@teleton-agent/sdk";
 
@@ -98,7 +98,7 @@ export const tools = (sdk: PluginSDK): SimpleToolDef[] =&gt; [
       required: ["city"],
     },
     async execute(params) {
-      // Throws SECRET_NOT_FOUND if WEATHER_REPORT_API_KEY is not set
+      // Throws SECRET_NOT_FOUND if TELETON_PLUGIN_WEATHER_REPORT_API_KEY is not set
       const apiKey = sdk.secrets.require("api_key");
       const city = params.city as string;
 

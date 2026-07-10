@@ -65,12 +65,14 @@ export async function fetchJettonMeta(
 
   const data = await response.json();
   const metadata = data.metadata || {};
+  const parsedDecimals = Number.parseInt(metadata.decimals || "9", 10);
+  const decimals = Number.isSafeInteger(parsedDecimals) && parsedDecimals >= 0 ? parsedDecimals : 9;
   return {
     ok: true,
     status: response.status,
     meta: {
       address: metadata.address || jettonAddress,
-      decimals: parseInt(metadata.decimals || "9"),
+      decimals,
       symbol: metadata.symbol || "UNKNOWN",
       name: metadata.name || "Unknown",
       totalSupply: data.total_supply || "0",

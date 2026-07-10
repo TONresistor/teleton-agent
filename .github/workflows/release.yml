@@ -35,6 +35,9 @@ jobs:
       - name: Run tests
         run: npx vitest run
 
+      - name: Enforce SDK coverage
+        run: npm run test:sdk:coverage
+
       - uses: actions/upload-artifact@v4
         with:
           name: dist

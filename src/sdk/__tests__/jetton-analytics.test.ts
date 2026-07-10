@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi, type Mock } from "vitest";
-import type { PluginLogger } from "@teleton-agent/sdk";
+import { PluginSDKError, type PluginLogger } from "@teleton-agent/sdk";
 
 vi.mock("../../constants/api-endpoints.js", () => ({
   GECKOTERMINAL_API_URL: "https://gecko.test/api/v2",
@@ -32,6 +32,15 @@ describe("jetton analytics SDK", () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  it("rejects empty addresses and invalid limits before any network call", async () => {
+    await expect(sdk.getJettonPrice(" ")).rejects.toBeInstanceOf(PluginSDKError);
+    await expect(sdk.getJettonHolders("EQJETTON", 0)).rejects.toMatchObject({
+      code: "INVALID_INPUT",
+    });
+    await expect(sdk.getJettonHistory("")).rejects.toMatchObject({ code: "INVALID_INPUT" });
+    expect(tonapiFetch).not.toHaveBeenCalled();
   });
 
   it("maps price rates and returns null for missing or failed data", async () => {
@@ -94,6 +103,16 @@ describe("jetton analytics SDK", () => {
       },
     ]);
     expect(tonapiFetch).toHaveBeenCalledWith(expect.stringContaining("limit=100"));
+  });
+
+  it("falls back to 9 decimals when metadata is malformed", async () => {
+    (tonapiFetch as Mock)
+      .mockResolvedValueOnce(
+        response({ addresses: [{ address: "EQOWNER", balance: "1000000000" }] })
+      )
+      .mockResolvedValueOnce(response({ metadata: { decimals: "invalid" } }));
+
+    await expect(sdk.getJettonHolders("EQJETTON")).resolves.toMatchObject([{ balance: "1" }]);
   });
 
   it("fails holders reads closed to an empty list", async () => {

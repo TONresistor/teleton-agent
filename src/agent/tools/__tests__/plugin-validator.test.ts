@@ -43,12 +43,12 @@ describe("validateManifest", () => {
         api_key: {
           required: true,
           description: "External API key",
-          env: "SHARED_API_KEY_2",
+          env: "TELETON_PLUGIN_CONTRACT_TEST_SHARED_API_KEY_2",
         },
       },
     });
 
-    expect(manifest.secrets?.api_key?.env).toBe("SHARED_API_KEY_2");
+    expect(manifest.secrets?.api_key?.env).toBe("TELETON_PLUGIN_CONTRACT_TEST_SHARED_API_KEY_2");
   });
 
   it.each(["lowercase_key", "1INVALID", "HAS-DASH", "HAS SPACE", ""])(
@@ -65,6 +65,34 @@ describe("validateManifest", () => {
       ).toThrow();
     }
   );
+
+  it("rejects a valid environment name outside the plugin namespace", () => {
+    expect(() =>
+      validateManifest({
+        name: "contract-test",
+        version: "2.0.0",
+        secrets: {
+          api_key: {
+            required: true,
+            description: "External API key",
+            env: "AGENT_API_KEY",
+          },
+        },
+      })
+    ).toThrow();
+  });
+
+  it.each(["api-key", "../key", "__proto__", "1KEY"])("rejects unsafe secret key %j", (key) => {
+    expect(() =>
+      validateManifest({
+        name: "contract-test",
+        version: "2.0.0",
+        secrets: {
+          [key]: { required: true, description: "External API key" },
+        },
+      })
+    ).toThrow();
+  });
 });
 
 describe("validateToolDefs", () => {
