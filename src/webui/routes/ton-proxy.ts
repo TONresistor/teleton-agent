@@ -28,6 +28,7 @@ export function createTonProxyRoutes(deps: WebUIServerDeps) {
 
   // POST /api/ton-proxy/start — enable + start (awaits download & startup)
   app.post("/start", async (c) => {
+    let candidate: TonProxyManager | null = null;
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any -- runtime config is dynamic
       const runtimeConfig = deps.agent.getConfig() as Record<string, any>;
@@ -36,25 +37,35 @@ export function createTonProxyRoutes(deps: WebUIServerDeps) {
 
       // Stop existing if running
       const existing = getTonProxyManager();
-      if (existing?.isRunning()) await existing.stop();
+      if (existing) {
+        if (existing.isRunning()) await existing.stop();
+        setTonProxyManager(null);
+      }
 
-      const mgr = new TonProxyManager({ enabled: true, port, binary_path: binaryPath });
-      setTonProxyManager(mgr);
-      await mgr.start();
+      candidate = new TonProxyManager({ enabled: true, port, binary_path: binaryPath });
+      await candidate.start();
 
       // Persist enabled=true to YAML
       const raw = readRawConfig(deps.configPath);
       setNestedValue(raw, "ton_proxy.enabled", true);
       writeRawConfig(raw, deps.configPath);
       setNestedValue(runtimeConfig, "ton_proxy.enabled", true);
+      setTonProxyManager(candidate);
 
       log.info(`TON Proxy started on port ${port} (WebUI)`);
 
       return c.json({
         success: true,
-        data: { ...mgr.getStatus(), enabled: true },
+        data: { ...candidate.getStatus(), enabled: true },
       } as APIResponse);
     } catch (error: unknown) {
+      if (candidate) {
+        try {
+          await candidate.stop();
+        } catch (stopError: unknown) {
+          log.error({ error: stopError }, "Failed to clean up TON Proxy after start failure");
+        }
+      }
       log.error({ error }, "Failed to start TON Proxy");
       return c.json(
         {
