@@ -1,7 +1,7 @@
 import { describe, it, expect } from "vitest";
 import Database from "better-sqlite3";
 import { stripSqlComments } from "../index.js";
-import { createPluginSDK, type SDKDependencies } from "../index.js";
+import { createPluginSDK, createSafePluginDb, type SDKDependencies } from "../index.js";
 
 function createTestDb() {
   const db = new Database(":memory:");
@@ -47,6 +47,12 @@ describe("stripSqlComments", () => {
 });
 
 describe("createSafeDb", () => {
+  it("is idempotent", () => {
+    const db = createTestDb();
+    const safe = createSafePluginDb(db);
+    expect(createSafePluginDb(safe)).toBe(safe);
+  });
+
   // ─── Blocked operations ───────────────────────────────────
 
   it("blocks ATTACH DATABASE via exec", () => {

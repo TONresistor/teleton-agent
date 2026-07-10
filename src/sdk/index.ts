@@ -65,8 +65,18 @@ function isSqlBlocked(sql: string): boolean {
   return BLOCKED_SQL_RE.test(stripSqlComments(sql));
 }
 
-function createSafeDb(db: Database.Database): Database.Database {
-  return new Proxy(db, {
+const safePluginDbs = new WeakSet<object>();
+
+/**
+ * Restrict a plugin-facing database handle to its own SQLite connection.
+ *
+ * The helper is idempotent so the loader and SDK factory can both enforce the
+ * boundary without stacking proxies around the same handle.
+ */
+export function createSafePluginDb(db: Database.Database): Database.Database {
+  if (safePluginDbs.has(db)) return db;
+
+  const safeDb = new Proxy(db, {
     get(target, prop, receiver) {
       const value = Reflect.get(target, prop, receiver);
       if (prop === "exec") {
@@ -88,12 +98,15 @@ function createSafeDb(db: Database.Database): Database.Database {
       return typeof value === "function" ? value.bind(target) : value;
     },
   });
+
+  safePluginDbs.add(safeDb);
+  return safeDb;
 }
 
 export function createPluginSDK(deps: SDKDependencies, opts: CreatePluginSDKOptions): PluginSDK {
   const log = createLogger(opts.pluginName);
 
-  const safeDb = opts.db ? createSafeDb(opts.db) : null;
+  const safeDb = opts.db ? createSafePluginDb(opts.db) : null;
   const ton = Object.freeze(createTonSDK(log, safeDb));
   const telegram = Object.freeze(createTelegramSDK(deps.bridge, log));
   const secrets = Object.freeze(createSecretsSDK(opts.pluginName, opts.pluginConfig, log));

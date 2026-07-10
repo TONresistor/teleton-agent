@@ -4,6 +4,15 @@ import { sanitizeConfigForPlugins } from "../plugin-validator.js";
 import { SDK_VERSION } from "@teleton-agent/sdk";
 import type { Config } from "../../../config/schema.js";
 
+const moduleDbMocks = vi.hoisted(() => ({
+  pluginDb: {
+    kind: "plugin",
+    close: vi.fn(),
+    exec: vi.fn(),
+    prepare: vi.fn(() => ({ all: () => [] })),
+  },
+}));
+
 // ─── Mocks ──────────────────────────────────────────────────────
 
 vi.mock("../../../utils/logger.js", () => ({
@@ -16,8 +25,15 @@ vi.mock("../../../utils/logger.js", () => ({
 }));
 
 vi.mock("../../../utils/module-db.js", () => ({
-  openModuleDb: () => ({ close: vi.fn(), exec: vi.fn(), prepare: vi.fn() }),
-  createDbWrapper: () => (executor: unknown) => executor,
+  openModuleDb: () => moduleDbMocks.pluginDb,
+  createDbWrapper:
+    (getDb: () => unknown) =>
+    (executor: (params: unknown, context: Record<string, unknown>) => unknown) =>
+    (params: unknown, context: Record<string, unknown>) => {
+      const db = getDb();
+      if (!db) return Promise.resolve({ success: false, error: "plugin module not started" });
+      return executor(params, { ...context, db });
+    },
   migrateFromMainDb: vi.fn(),
 }));
 
@@ -336,5 +352,74 @@ describe("sanitizeConfigForPlugins — config isolation", () => {
     const tools = module.tools();
     expect(tools.length).toBe(1);
     expect(tools[0].tool.name).toBe("test_tool");
+  });
+});
+
+describe("adaptPlugin — database isolation", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("always replaces the agent database for plugins without migrate()", async () => {
+    const agentDb = { kind: "agent" };
+    let receivedDb: unknown;
+    const raw = makeRawPlugin({
+      tools: [
+        {
+          name: "db_probe",
+          description: "Inspect the injected database",
+          execute: async (_params: unknown, context: { db: unknown }) => {
+            receivedDb = context.db;
+            return { success: true };
+          },
+        },
+      ],
+    });
+
+    const module = adaptPlugin(raw, "db-probe", makeConfig(), [], minimalSdkDeps);
+    module.migrate?.();
+    const [tool] = module.tools(makeConfig());
+    await tool.executor({}, { db: agentDb } as never);
+
+    expect(receivedDb).not.toBe(agentDb);
+    expect((receivedDb as { kind: string }).kind).toBe("plugin");
+  });
+
+  it("uses the protected plugin database for migrate(), tools, and start()", async () => {
+    const agentDb = { kind: "agent" };
+    const received: Record<string, unknown> = {};
+    const raw = makeRawPlugin({
+      migrate: (db: unknown) => {
+        received.migrate = db;
+      },
+      tools: [
+        {
+          name: "db_probe",
+          description: "Inspect the injected database",
+          execute: async (_params: unknown, context: { db: unknown }) => {
+            received.tool = context.db;
+            return { success: true };
+          },
+        },
+      ],
+      start: async (context: { db: unknown }) => {
+        received.start = context.db;
+      },
+    });
+
+    const module = adaptPlugin(raw, "db-probe", makeConfig(), [], minimalSdkDeps);
+    module.migrate?.();
+    const [tool] = module.tools(makeConfig());
+    await tool.executor({}, { db: agentDb } as never);
+    await module.start?.({
+      bridge: minimalSdkDeps.bridge,
+      db: agentDb,
+      config: makeConfig(),
+    } as never);
+
+    for (const db of Object.values(received)) {
+      expect(db).not.toBe(agentDb);
+      expect((db as { kind: string }).kind).toBe("plugin");
+    }
   });
 });

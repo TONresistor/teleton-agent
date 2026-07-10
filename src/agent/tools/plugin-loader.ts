@@ -34,6 +34,7 @@ import {
 } from "./plugin-validator.js";
 import {
   createPluginSDK,
+  createSafePluginDb,
   SDK_VERSION,
   semverSatisfies,
   type SDKDependencies,
@@ -177,7 +178,8 @@ export function adaptPlugin(
 
   const hasMigrate = typeof raw.migrate === "function";
   let pluginDb: Database.Database | null = null;
-  const getDb = () => pluginDb;
+  let exposedPluginDb: Database.Database | null = null;
+  const getDb = () => exposedPluginDb;
   const withPluginDb = createDbWrapper(getDb, pluginName);
 
   const sanitizedConfig = sanitizeConfigForPlugins(config);
@@ -197,10 +199,11 @@ export function adaptPlugin(
         // Always create plugin DB (needed for sdk.storage even without migrate())
         const dbPath = join(PLUGIN_DATA_DIR, `${pluginName}.db`);
         pluginDb = openModuleDb(dbPath);
+        exposedPluginDb = createSafePluginDb(pluginDb);
 
         // Run plugin's custom migrations if provided
         if (hasMigrate) {
-          raw.migrate?.(pluginDb);
+          raw.migrate?.(exposedPluginDb);
 
           const pluginTables = (
             pluginDb
@@ -225,6 +228,7 @@ export function adaptPlugin(
           }
           pluginDb = null;
         }
+        exposedPluginDb = null;
       }
     },
 
@@ -234,7 +238,7 @@ export function adaptPlugin(
         if (typeof raw.tools === "function") {
           const sdk = createPluginSDK(sdkDeps, {
             pluginName,
-            db: pluginDb,
+            db: exposedPluginDb,
             sanitizedConfig,
             pluginConfig,
             botManifest: manifest?.bot,
@@ -271,7 +275,9 @@ export function adaptPlugin(
               },
               ...(def.category ? { category: def.category } : {}),
             } as Tool,
-            executor: pluginDb && hasMigrate ? withPluginDb(sandboxedExecutor) : sandboxedExecutor,
+            // Always replace the agent DB from ToolContext with the plugin's
+            // isolated handle. Failing closed also covers DB startup errors.
+            executor: withPluginDb(sandboxedExecutor),
             scope: def.scope as ToolScope | undefined,
           };
         });
@@ -287,7 +293,7 @@ export function adaptPlugin(
       try {
         const enhancedContext: EnhancedPluginContext = {
           bridge: context.bridge,
-          db: pluginDb ?? null,
+          db: exposedPluginDb,
           config: sanitizedConfig,
           pluginConfig,
           log: logFn,
@@ -311,6 +317,7 @@ export function adaptPlugin(
             /* ignore */
           }
           pluginDb = null;
+          exposedPluginDb = null;
         }
       }
     },
