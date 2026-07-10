@@ -99,6 +99,7 @@ export class ToolRegistry {
       executor: ToolExecutor;
       scope?: ToolScope;
       minimumAccess?: ToolAccessLevel;
+      allowFrom?: readonly number[];
       requiresApproval?: boolean;
       mode: ToolMode;
       module: string;
@@ -111,6 +112,7 @@ export class ToolRegistry {
       scope:
         entry.scope && entry.scope !== "always" && entry.scope !== "open" ? entry.scope : undefined,
       minimumAccess: entry.minimumAccess ?? scopeToLevel(entry.scope),
+      allowFrom: entry.allowFrom ? new Set(entry.allowFrom) : undefined,
       requiresApproval: entry.requiresApproval ?? false,
       mode: entry.mode,
       module: entry.module,
@@ -125,7 +127,8 @@ export class ToolRegistry {
     mode: ToolMode = "both",
     tags?: string[],
     minimumAccess?: ToolAccessLevel,
-    requiresApproval = false
+    requiresApproval = false,
+    allowFrom?: readonly number[]
   ): void {
     if (this.tools.has(tool.name)) {
       throw new Error(`Tool "${tool.name}" is already registered`);
@@ -139,6 +142,7 @@ export class ToolRegistry {
       tags,
       minimumAccess,
       requiresApproval,
+      allowFrom,
     });
     this.toolArrayCache = null;
   }
@@ -223,7 +227,8 @@ export class ToolRegistry {
     if (level === "off") return { ok: false, reason: { kind: "disabled" } };
     if (level === "admin" && !ctx.isAdmin) return { ok: false, reason: { kind: "admin-only" } };
     if (level === "allowlist" && !ctx.isAdmin) {
-      if (!ctx.senderId || !this.allowFrom.has(ctx.senderId)) {
+      const allowedSenders = this.tools.get(name)?.allowFrom ?? this.allowFrom;
+      if (!ctx.senderId || !allowedSenders.has(ctx.senderId)) {
         return { ok: false, reason: { kind: "allowlist" } };
       }
     }

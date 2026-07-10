@@ -108,6 +108,8 @@ export interface RegisteredTool {
   scope?: ToolScope;
   /** Hard authority floor. Runtime configuration may only make access stricter. */
   minimumAccess: ToolAccessLevel;
+  /** Optional per-tool allowlist. When present, it replaces telegram.allow_from. */
+  allowFrom?: ReadonlySet<number>;
   /** Whether execution requires a separate, human-authenticated approval step. */
   requiresApproval: boolean;
   /** Telegram mode this tool runs in. */
@@ -129,6 +131,8 @@ export interface ToolEntry {
   scope?: ToolScope;
   /** Hard authority floor, independent from the DM/group channel scope. */
   minimumAccess?: ToolAccessLevel;
+  /** Optional per-tool allowlist. When present, it replaces telegram.allow_from. */
+  allowFrom?: readonly number[];
   /** Require a separate owner command before executing this tool. */
   requiresApproval?: boolean;
   /** Telegram mode(s) this tool runs in. Mandatory — every tool must declare it. */
@@ -155,6 +159,8 @@ export interface PluginModule {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- tool executors accept varied param shapes
     executor: ToolExecutor<any>;
     scope?: ToolScope;
+    /** Optional per-tool allowlist. When present, it replaces telegram.allow_from. */
+    allowFrom?: readonly number[];
     /** Telegram mode(s) this module tool runs in. Defaults to "both" when omitted. */
     mode?: ToolMode;
   }>;

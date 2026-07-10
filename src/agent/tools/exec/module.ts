@@ -54,13 +54,14 @@ const execModule: PluginModule = {
     }
 
     const scope = resolveScope(execCfg.scope);
+    const allowFrom = execCfg.scope === "allowlist" ? execCfg.allowlist : undefined;
     const db = moduleDb;
 
     return [
-      { tool: execRunTool, executor: createExecRunExecutor(db, execCfg), scope },
-      { tool: execInstallTool, executor: createExecInstallExecutor(db, execCfg), scope },
-      { tool: execServiceTool, executor: createExecServiceExecutor(db, execCfg), scope },
-      { tool: execStatusTool, executor: createExecStatusExecutor(db, execCfg), scope },
+      { tool: execRunTool, executor: createExecRunExecutor(db, execCfg), scope, allowFrom },
+      { tool: execInstallTool, executor: createExecInstallExecutor(db, execCfg), scope, allowFrom },
+      { tool: execServiceTool, executor: createExecServiceExecutor(db, execCfg), scope, allowFrom },
+      { tool: execStatusTool, executor: createExecStatusExecutor(db, execCfg), scope, allowFrom },
     ];
   },
 

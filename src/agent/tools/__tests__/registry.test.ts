@@ -384,6 +384,35 @@ describe("ToolRegistry", () => {
     });
   });
 
+  describe("tool-specific allowlist", () => {
+    it("uses a tool-specific allowlist instead of the global Telegram allowlist", async () => {
+      const tool = createMockTool("exec_run", "action");
+      registry.setAllowFrom([222]);
+      registry.register(
+        tool,
+        createMockExecutor(),
+        "allowlist",
+        "both",
+        [],
+        "allowlist",
+        false,
+        [111]
+      );
+
+      expect(registry.getForContext(false, null, "dm", false, 111)).toContainEqual(tool);
+      expect(registry.getForContext(false, null, "dm", false, 222)).not.toContainEqual(tool);
+
+      const denied = await registry.execute(
+        { type: "toolCall", id: "exec-denied", name: tool.name, arguments: { message: "x" } },
+        { ...mockContext, senderId: 222 }
+      );
+      expect(denied).toMatchObject({
+        success: false,
+        error: expect.stringMatching(/allowed users/),
+      });
+    });
+  });
+
   // ---------- Tool execution ----------
 
   describe("execute()", () => {

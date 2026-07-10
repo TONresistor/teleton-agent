@@ -30,8 +30,8 @@ export function loadModules(
       mod.migrate?.(db);
 
       const tools = mod.tools(config);
-      for (const { tool, executor, scope, mode } of tools) {
-        registry.register(tool, executor, scope, mode);
+      for (const { tool, executor, scope, mode, allowFrom } of tools) {
+        registry.register(tool, executor, scope, mode, undefined, undefined, false, allowFrom);
       }
 
       loaded.push(mod);
