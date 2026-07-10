@@ -39,6 +39,17 @@ function docsSdkFiles(): string[] {
     .filter((path) => [".html", ".md", ".txt"].includes(extname(path)));
 }
 
+function usesUnsupportedLightLottieFeature(value: unknown): boolean {
+  if (Array.isArray(value)) return value.some(usesUnsupportedLightLottieFeature);
+  if (typeof value !== "object" || value === null) return false;
+
+  const entry = value as Record<string, unknown>;
+  if (typeof entry.x === "string") return true; // Expressions require eval in the full player.
+  if (Array.isArray(entry.ef) && entry.ef.length > 0) return true;
+  if (entry.ty === 2) return true; // Image layers are excluded from the light player.
+  return Object.values(entry).some(usesUnsupportedLightLottieFeature);
+}
+
 describe("current product surfaces", () => {
   it("keeps documented built-in category counts anchored to the registry", () => {
     const baseToolCount =
@@ -130,5 +141,27 @@ describe("current product surfaces", () => {
     const strategyPath = join(ROOT, "src/templates/STRATEGY.md");
     expect(existsSync(strategyPath)).toBe(true);
     expect(readFileSync(strategyPath, "utf8")).toContain("# STRATEGY.md");
+  });
+
+  it("keeps setup animations on the eval-free light Lottie player", () => {
+    const webPackage = JSON.parse(readFileSync(join(ROOT, "web/package.json"), "utf8")) as {
+      dependencies: Record<string, string>;
+    };
+    expect(webPackage.dependencies["lottie-react"]).toBeUndefined();
+    expect(webPackage.dependencies["lottie-web"]).toBeDefined();
+
+    const player = readFileSync(join(ROOT, "web/src/components/setup/LottiePlayer.tsx"), "utf8");
+    expect(player).toContain("lottie-web/build/player/lottie_light");
+    expect(player).not.toMatch(/from ['"]lottie-web['"]/);
+
+    for (const file of ["complete.json", "login-telegram.json", "run.json"]) {
+      const animation = JSON.parse(
+        readFileSync(join(ROOT, "web/src/assets", file), "utf8")
+      ) as unknown;
+      expect(
+        usesUnsupportedLightLottieFeature(animation),
+        `${file} requires a feature excluded from the light player`
+      ).toBe(false);
+    }
   });
 });

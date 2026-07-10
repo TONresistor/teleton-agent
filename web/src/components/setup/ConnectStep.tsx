@@ -4,9 +4,9 @@ import { setup } from '../../lib/api';
 import type { StepProps } from '../../pages/Setup';
 import { errMsg } from '../../lib/utils';
 
-const Lottie = lazy(() => import('lottie-react'));
+const Lottie = lazy(() => import('./LottiePlayer'));
 
-// Dynamic imports so Vite code-splits the heavy JSON + lottie-web
+// Dynamic imports so Vite code-splits the heavy JSON + light Lottie player.
 const runAnimation = () => import('../../assets/run.json').then((m) => m.default);
 const codeAnimation = () => import('../../assets/login-telegram.json').then((m) => m.default);
 
@@ -20,7 +20,6 @@ function LottiePlayer({ loader, size }: { loader: () => Promise<object>; size: n
     </Suspense>
   );
 }
-
 export function ConnectStep({ data, onChange }: StepProps) {
   const [phase, setPhase] = useState<'idle' | 'code_sent' | 'qr_waiting' | '2fa' | 'done'>('idle');
   const [loading, setLoading] = useState(false);
