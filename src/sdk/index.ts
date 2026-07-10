@@ -4,6 +4,7 @@ import type {
   PluginSDK,
   PluginLogger,
   BotManifest,
+  SecretDeclaration,
   PluginHookDeclaration,
   HookName,
   HookHandlerMap,
@@ -44,6 +45,8 @@ export interface CreatePluginSDKOptions {
   pluginConfig: Record<string, unknown>;
   /** Bot manifest from plugin (if plugin declares bot capabilities) */
   botManifest?: BotManifest;
+  /** Secret declarations, including optional environment variable overrides. */
+  secretDeclarations?: Readonly<Record<string, SecretDeclaration>>;
   /** Hook registry for sdk.on() support */
   hookRegistry?: HookRegistry;
   /** Declared hooks from manifest (if present, enforces registration) */
@@ -110,7 +113,9 @@ export function createPluginSDK(deps: SDKDependencies, opts: CreatePluginSDKOpti
   const safeDb = opts.db ? createSafePluginDb(opts.db) : null;
   const ton = Object.freeze(createTonSDK(log, safeDb));
   const telegram = Object.freeze(createTelegramSDK(deps.bridge, log));
-  const secrets = Object.freeze(createSecretsSDK(opts.pluginName, opts.pluginConfig, log));
+  const secrets = Object.freeze(
+    createSecretsSDK(opts.pluginName, opts.pluginConfig, log, opts.secretDeclarations)
+  );
   const storage = safeDb ? Object.freeze(createStorageSDK(safeDb)) : null;
   const frozenLog = Object.freeze(log);
   const frozenConfig = Object.freeze(JSON.parse(JSON.stringify(opts.sanitizedConfig ?? {})));

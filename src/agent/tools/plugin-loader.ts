@@ -22,7 +22,7 @@ import { promisify } from "util";
 const execFileAsync = promisify(execFile);
 import { WORKSPACE_PATHS, TELETON_ROOT } from "../../workspace/paths.js";
 import { openModuleDb, createDbWrapper, migrateFromMainDb } from "../../utils/module-db.js";
-import type { PluginModule, PluginContext, Tool, ToolExecutor, ToolScope } from "./types.js";
+import type { PluginModule, Tool, ToolExecutor, ToolScope } from "./types.js";
 import type { Config } from "../../config/schema.js";
 import type Database from "better-sqlite3";
 import {
@@ -39,7 +39,7 @@ import {
   semverSatisfies,
   type SDKDependencies,
 } from "../../sdk/index.js";
-import type { PluginSDK } from "@teleton-agent/sdk";
+import type { PluginSDK, PluginToolContext, StartContext } from "@teleton-agent/sdk";
 import { HookRegistry } from "../../sdk/hooks/registry.js";
 import { createSecretsSDK } from "../../sdk/secrets.js";
 import type {
@@ -58,7 +58,7 @@ interface RawPluginExports {
   tools?: SimpleToolDef[] | ((sdk: PluginSDK) => SimpleToolDef[]);
   manifest?: unknown;
   migrate?: (db: Database.Database) => void;
-  start?: (ctx: EnhancedPluginContext) => Promise<void>;
+  start?: (ctx: StartContext) => Promise<void>;
   stop?: () => Promise<void>;
   onMessage?: (event: PluginMessageEvent) => Promise<void>;
   onCallbackQuery?: (event: PluginCallbackEvent) => Promise<void>;
@@ -68,13 +68,6 @@ interface RawPluginExports {
 export interface PluginModuleWithHooks extends PluginModule {
   onMessage?: (event: PluginMessageEvent) => Promise<void>;
   onCallbackQuery?: (event: PluginCallbackEvent) => Promise<void>;
-}
-
-interface EnhancedPluginContext extends Omit<PluginContext, "db" | "config"> {
-  db: Database.Database | null;
-  config: Record<string, unknown>;
-  pluginConfig: Record<string, unknown>;
-  log: (...args: unknown[]) => void;
 }
 
 // ─── Plugin Adapter ─────────────────────────────────────────────────
@@ -148,8 +141,6 @@ export function adaptPlugin(
   const pluginConfig = { ...manifest?.defaultConfig, ...rawPluginConfig };
 
   const pluginLog = createLogger(`Plugin:${pluginName}`);
-  const logFn = (...args: unknown[]) => pluginLog.info(args.map(String).join(" "));
-
   // Validate declared secrets and warn if missing
   if (manifest?.secrets) {
     const dummyLogger = {
@@ -158,7 +149,7 @@ export function adaptPlugin(
       error: (...a: unknown[]) => pluginLog.error(a.map(String).join(" ")),
       debug: () => {},
     };
-    const secretsCheck = createSecretsSDK(pluginName, pluginConfig, dummyLogger);
+    const secretsCheck = createSecretsSDK(pluginName, pluginConfig, dummyLogger, manifest.secrets);
     const missing: string[] = [];
     for (const [key, decl] of Object.entries(
       manifest.secrets as Record<string, SecretDeclaration>
@@ -183,6 +174,21 @@ export function adaptPlugin(
   const withPluginDb = createDbWrapper(getDb, pluginName);
 
   const sanitizedConfig = sanitizeConfigForPlugins(config);
+  let pluginSdk: PluginSDK | null = null;
+  const getSdk = (): PluginSDK => {
+    pluginSdk ??= createPluginSDK(sdkDeps, {
+      pluginName,
+      db: exposedPluginDb,
+      sanitizedConfig,
+      pluginConfig,
+      botManifest: manifest?.bot,
+      secretDeclarations: manifest?.secrets,
+      hookRegistry,
+      declaredHooks: manifest?.hooks,
+      globalPriority,
+    });
+    return pluginSdk;
+  };
 
   const module: PluginModuleWithHooks = {
     name: pluginName,
@@ -236,17 +242,7 @@ export function adaptPlugin(
       try {
         let toolDefs: SimpleToolDef[];
         if (typeof raw.tools === "function") {
-          const sdk = createPluginSDK(sdkDeps, {
-            pluginName,
-            db: exposedPluginDb,
-            sanitizedConfig,
-            pluginConfig,
-            botManifest: manifest?.bot,
-            hookRegistry,
-            declaredHooks: manifest?.hooks,
-            globalPriority,
-          });
-          toolDefs = raw.tools(sdk);
+          toolDefs = raw.tools(getSdk());
         } else if (Array.isArray(raw.tools)) {
           toolDefs = raw.tools;
         } else {
@@ -256,13 +252,16 @@ export function adaptPlugin(
         const validDefs = validateToolDefs(toolDefs, pluginName);
 
         return validDefs.map((def) => {
-          const rawExecutor = def.execute as ToolExecutor;
+          const rawExecutor = def.execute;
           const sandboxedExecutor: ToolExecutor = (params, context) => {
-            const sanitizedContext = {
-              ...context,
+            const sanitizedContext: PluginToolContext = {
+              chatId: context.chatId,
+              senderId: context.senderId,
+              isGroup: context.isGroup,
+              db: context.db,
               config: context.config ? sanitizeConfigForPlugins(context.config) : undefined,
-            } as typeof context;
-            return rawExecutor(params, sanitizedContext);
+            };
+            return rawExecutor(params as Record<string, unknown>, sanitizedContext);
           };
 
           return {
@@ -288,16 +287,16 @@ export function adaptPlugin(
       }
     },
 
-    async start(context) {
+    async start(_context) {
       if (!raw.start) return;
 
       try {
-        const enhancedContext: EnhancedPluginContext = {
-          bridge: context.bridge,
+        const enhancedContext: StartContext = {
+          sdk: getSdk(),
           db: exposedPluginDb,
           config: sanitizedConfig,
           pluginConfig,
-          log: logFn,
+          log: getSdk().log,
         };
         await raw.start(enhancedContext);
       } catch (error: unknown) {
@@ -317,9 +316,10 @@ export function adaptPlugin(
           } catch {
             /* ignore */
           }
-          pluginDb = null;
-          exposedPluginDb = null;
         }
+        pluginDb = null;
+        exposedPluginDb = null;
+        pluginSdk = null;
       }
     },
   };

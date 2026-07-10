@@ -58,7 +58,7 @@
                 <h3>Secret Resolution Order</h3>
                 <p>When you call <code>sdk.secrets.get("api_key")</code>, the SDK checks these sources in order:</p>
                 <ol>
-                    <li><strong>Environment variable</strong>: <code>${PLUGIN_NAME_UPPER}_${KEY_UPPER}</code> (e.g. <code>WEATHER_REPORT_API_KEY</code>)</li>
+                    <li><strong>Environment variable</strong>: the manifest <code>env</code> override, or <code>${PLUGIN_NAME_UPPER}_${KEY_UPPER}</code> by default (e.g. <code>WEATHER_REPORT_API_KEY</code>)</li>
                     <li><strong>Secrets store</strong>: Set via the Telegram admin command <code>/plugin set &lt;plugin&gt; &lt;key&gt; &lt;value&gt;</code></li>
                     <li><strong>pluginConfig</strong>: From the <code>plugins:</code> section in <code>config.yaml</code></li>
                 </ol>
@@ -69,9 +69,9 @@
                 <div class="code-block"><div class="code-header"><span>SecretDeclaration Interface</span></div><pre><code class="language-typescript">interface SecretDeclaration {
   required: boolean;       // Is this secret mandatory?
   description: string;     // Human-readable description for admin
-  env?: string;            // Environment variable name (IGNORED at runtime)
+  env?: string;            // Optional uppercase environment variable override
 }</code></pre></div>
-                <p><strong>Gotcha:</strong> The <code>env</code> field in <code>SecretDeclaration</code> is defined in the Zod schema but is <strong>ignored at runtime</strong>. The actual environment variable name is always auto-derived from the plugin name and key: <code>${PLUGIN_NAME_UPPER}_${KEY_UPPER}</code>. The <code>env</code> field exists only for documentation purposes.</p>
+                <p>The optional <code>env</code> override must match <code>^[A-Z_][A-Z0-9_]*$</code>. Without it, the runtime derives <code>${PLUGIN_NAME_UPPER}_${KEY_UPPER}</code>.</p>
 
                 <div class="code-block"><div class="code-header"><span>Weather Plugin Secrets</span></div><pre><code class="language-typescript">import type { PluginSDK, SimpleToolDef, PluginManifest } from "@teleton-agent/sdk";
 
@@ -272,7 +272,7 @@ sdk.log.debug("Raw API response", { status: response.status, body: data });
             <section class="section" id="database">
                 <h2>sdk.db</h2>
                 <p>The <code>sdk.db</code> property exposes a <a href="https://github.com/WiseLibs/better-sqlite3" target="_blank" rel="noopener">better-sqlite3</a> <code>Database</code> instance for plugins that need full SQL capabilities beyond key-value storage.</p>
-                <p><strong>Important:</strong> <code>sdk.db</code> is <code>null</code> unless your plugin exports a <code>migrate()</code> function. Each plugin gets its own isolated SQLite database file: plugins cannot access each other's data.</p>
+                <p><strong>Important:</strong> Each plugin gets its own isolated SQLite database file even without a <code>migrate()</code> export. <code>sdk.db</code> is <code>null</code> only if database initialization fails.</p>
 
                 <h3>The migrate() Pattern</h3>
                 <p>Export a <code>migrate</code> function from your plugin entry point. It receives the raw <code>better-sqlite3</code> database instance and runs once when the plugin is loaded:</p>

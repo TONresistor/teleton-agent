@@ -1,5 +1,3 @@
-import type { PluginLogger } from "./common.js";
-
 // ─── Telegram Extension Types ───────────────────────────────────
 
 /** Dialog/conversation from getDialogs */
@@ -283,20 +281,6 @@ export interface ReceivedGift {
   messageId?: number;
 }
 
-/** Context passed to plugin start() hook */
-export interface StartContext {
-  /** Telegram bridge for advanced operations */
-  bridge: unknown;
-  /** Plugin's isolated SQLite database (null if unavailable) */
-  db: unknown;
-  /** Sanitized application config (no API keys) */
-  config: Record<string, unknown>;
-  /** Plugin-specific config from config.yaml */
-  pluginConfig: Record<string, unknown>;
-  /** Prefixed logger */
-  log: PluginLogger;
-}
-
 /**
  * Telegram messaging and user operations.
  *
@@ -386,30 +370,6 @@ export interface TelegramSDK {
    * Check if the Telegram bridge is connected and ready.
    */
   isAvailable(): boolean;
-
-  /**
-   * Get the raw GramJS TelegramClient for advanced MTProto operations.
-   *
-   * Use this when the SDK methods don't cover your use case
-   * (e.g., inline bots, voice transcription, WebApp auth).
-   *
-   * The returned object is a `TelegramClient` from the `telegram` package.
-   * Cast it to the appropriate type in your plugin.
-   *
-   * @returns Raw GramJS client, or null if bridge not connected.
-   *
-   * @example
-   * ```typescript
-   * const client = sdk.telegram.getRawClient();
-   * if (!client) return { success: false, error: "Not connected" };
-   *
-   * const { Api } = require("telegram");
-   * const results = await client.invoke(
-   *   new Api.messages.GetInlineBotResults({ bot: "@pic", query: "cat", peer: chatId })
-   * );
-   * ```
-   */
-  getRawClient(): unknown | null;
 
   // ─── Messages ──────────────────────────────────────────────
 

@@ -59,6 +59,11 @@ type SDKErrorCode =
   | "BRIDGE_NOT_CONNECTED"
   | "WALLET_NOT_INITIALIZED"
   | "INVALID_ADDRESS"
+  | "INVALID_INPUT"
+  | "NOT_AVAILABLE"
+  | "RATE_LIMITED"
+  | "TRANSACTION_FAILED"
+  | "PERMISSION_DENIED"
   | "OPERATION_FAILED"
   | "SECRET_NOT_FOUND";</code></pre></div>
                 <p>Import the error class and type from the SDK package:</p>
@@ -87,6 +92,31 @@ import type { SDKErrorCode } from "@teleton-agent/sdk";</code></pre></div>
                             <td><code>INVALID_ADDRESS</code></td>
                             <td><code>sdk.ton.sendTON()</code>, <code>sdk.ton.sendJetton()</code></td>
                             <td>A malformed TON address was passed to a method. Valid addresses start with <code>EQ</code> or <code>UQ</code> followed by a base64-encoded string.</td>
+                        </tr>
+                        <tr>
+                            <td><code>INVALID_INPUT</code></td>
+                            <td>SDK parameter validation</td>
+                            <td>A required argument is empty, out of range, or otherwise invalid.</td>
+                        </tr>
+                        <tr>
+                            <td><code>NOT_AVAILABLE</code></td>
+                            <td>Mode-specific Telegram capabilities</td>
+                            <td>The requested capability is unavailable in the current bot or user runtime mode.</td>
+                        </tr>
+                        <tr>
+                            <td><code>RATE_LIMITED</code></td>
+                            <td>Rate-limited platform operations</td>
+                            <td>The operation exceeded its configured rate limit.</td>
+                        </tr>
+                        <tr>
+                            <td><code>TRANSACTION_FAILED</code></td>
+                            <td>TON write operations</td>
+                            <td>A blockchain transaction could not be completed or confirmed.</td>
+                        </tr>
+                        <tr>
+                            <td><code>PERMISSION_DENIED</code></td>
+                            <td>Protected platform operations</td>
+                            <td>The caller is not authorized to perform the operation.</td>
                         </tr>
                         <tr>
                             <td><code>OPERATION_FAILED</code></td>
@@ -306,7 +336,7 @@ async execute(params, context) {
 }</code></pre></div>
 
                 <h3>sdk.db Can Be null</h3>
-                <p>If your plugin does not export a <code>migrate()</code> function, <code>sdk.db</code> is <code>null</code>. Attempting to call methods on it will cause a runtime <code>TypeError</code>, not a <code>PluginSDKError</code>:</p>
+                <p>The platform creates a database for every plugin, but <code>sdk.db</code> can be <code>null</code> if initialization fails. Attempting to call methods on it will cause a runtime <code>TypeError</code>, not a <code>PluginSDKError</code>:</p>
                 <div class="code-block"><div class="code-header"><span>Null DB Guard</span></div><pre><code class="language-typescript">async execute(params) {
   // This will throw TypeError: Cannot read properties of null
   // sdk.db.prepare("SELECT * FROM scores");
@@ -418,7 +448,7 @@ node bin/teleton.js start 2&gt;&amp;1 | npx pino-pretty --minimumLevel error</co
                         <tr>
                             <td><code>TypeError: Cannot read properties of null</code></td>
                             <td>Accessing <code>sdk.db</code>, <code>sdk.storage</code>, or <code>sdk.bot</code> when they are null</td>
-                            <td>Add null checks; export <code>migrate()</code> for db; add <code>bot</code> manifest for bot SDK</td>
+                            <td>Add null checks; inspect database initialization logs; add <code>bot</code> manifest for bot SDK</td>
                         </tr>
                         <tr>
                             <td><code>OPERATION_FAILED</code> on swap</td>

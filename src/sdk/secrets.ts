@@ -13,7 +13,7 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync } from "fs";
 import { join } from "path";
 import { TELETON_ROOT } from "../workspace/paths.js";
 import { PluginSDKError } from "@teleton-agent/sdk";
-import type { SecretsSDK, PluginLogger } from "@teleton-agent/sdk";
+import type { SecretsSDK, PluginLogger, SecretDeclaration } from "@teleton-agent/sdk";
 
 const SECRETS_DIR = join(TELETON_ROOT, "plugins", "data");
 
@@ -71,13 +71,14 @@ export function listPluginSecretKeys(pluginName: string): string[] {
 export function createSecretsSDK(
   pluginName: string,
   pluginConfig: Record<string, unknown>,
-  log: PluginLogger
+  log: PluginLogger,
+  declarations: Readonly<Record<string, SecretDeclaration>> = {}
 ): SecretsSDK {
   const envPrefix = pluginName.replace(/-/g, "_").toUpperCase();
 
   function get(key: string): string | undefined {
     // 1. Environment variable (highest priority — Docker/CI)
-    const envKey = `${envPrefix}_${key.toUpperCase()}`;
+    const envKey = declarations[key]?.env ?? `${envPrefix}_${key.toUpperCase()}`;
     const envValue = process.env[envKey];
     if (envValue) {
       log.debug(`Secret "${key}" resolved from env var ${envKey}`);

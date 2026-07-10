@@ -403,7 +403,7 @@ Plugins export a `tools` function (recommended) or array, plus optional lifecycl
 export const manifest = {
   name: "weather",
   version: "1.0.0",
-  sdkVersion: "^1.0.0",
+  sdkVersion: "^2.0.0",
 };
 
 // Optional: creates an isolated database at ~/.teleton/plugins/data/weather.db
@@ -454,7 +454,7 @@ The SDK provides namespaced access to core services:
 |                    | **Interactive**: `sendDice()`, `sendReaction()`, `createPoll()`, `createQuiz()`                                                                                                                                                                                                                      |
 |                    | **Moderation**: `banUser()`, `unbanUser()`, `muteUser()`, `kickUser()`                                                                                                                                                                                                                               |
 |                    | **Stars & Gifts**: `getStarsBalance()`, `sendGift()`, `getAvailableGifts()`, `getMyGifts()`, `getResaleGifts()`, `buyResaleGift()`, `getStarsTransactions()`, `transferCollectible()`, `setCollectiblePrice()`, `getCollectibleInfo()`, `getUniqueGift()`, `getUniqueGiftValue()`, `sendGiftOffer()` |
-|                    | **Advanced**: `getMe()`, `getMessages()`, `isAvailable()`, `getRawClient()`, `setTyping()`, `sendStory()`                                                                                                                                                                                            |
+|                    | **Advanced**: `getMe()`, `getMessages()`, `isAvailable()`, `setTyping()`, `sendStory()`                                                                                                                                                                                                             |
 | `sdk.bot`          | `onInlineQuery()`, `onCallback()`, `onChosenResult()`, `editInlineMessage()`, `keyboard()`, `isAvailable`, `username`                                                                                                                                                                                |
 | `sdk.secrets`      | `get()`, `require()`, `has()`                                                                                                                                                                                                                                                                        |
 | `sdk.storage`      | `get()`, `set()`, `delete()`, `has()`, `clear()` (KV with TTL)                                                                                                                                                                                                                                       |
@@ -464,7 +464,7 @@ The SDK provides namespaced access to core services:
 | `sdk.log`          | `info()`, `warn()`, `error()`, `debug()`                                                                                                                                                                                                                                                             |
 | `sdk.on()`         | Register hooks: `tool:before`, `tool:after`, `tool:error`, `prompt:before`, `prompt:after`, `session:start`, `session:end`, `message:receive`, `response:before`, `response:after`, `response:error`, `agent:start`, `agent:stop`                                                                    |
 
-**Lifecycle hooks**: `migrate(db)`, `start(ctx)`, `stop()`, `onMessage(event)`, `onCallbackQuery(event)`
+**Lifecycle hooks**: `migrate(db)`, `start(ctx)` (with `ctx.sdk`), `stop()`, `onMessage(event)`, `onCallbackQuery(event)`
 
 **Security**: all SDK objects are frozen. Plugins never see API keys or other plugins' data.
 
@@ -541,7 +541,7 @@ src/
 │   ├── manager.ts         # Binary download, start/stop, PID file, health checks
 │   ├── module.ts          # Module lifecycle integration
 │   └── tools.ts           # ton_proxy_status tool
-├── sdk/                    # Plugin SDK (v1.0.0)
+├── sdk/                    # Plugin SDK (v2.0.0)
 │   ├── index.ts            # SDK factory (createPluginSDK, all objects frozen)
 │   ├── ton.ts              # TON service for plugins
 │   ├── telegram.ts         # Telegram service for plugins

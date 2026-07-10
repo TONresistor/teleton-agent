@@ -294,17 +294,4 @@ describe("createTelegramSDK — core", () => {
       expect(sdk.isAvailable()).toBe(false);
     });
   });
-
-  // ─── getRawClient ───────────────────────────────────────────
-  describe("getRawClient()", () => {
-    it("returns GramJS client when bridge is available", () => {
-      const result = sdk.getRawClient();
-      expect(result).toBe(mockBridgeClient);
-    });
-
-    it("returns null when bridge is unavailable", () => {
-      mockBridge.isAvailable.mockReturnValue(false);
-      expect(sdk.getRawClient()).toBeNull();
-    });
-  });
 });

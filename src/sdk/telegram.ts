@@ -3,9 +3,9 @@ import { isUserBridge } from "../telegram/bridge-guards.js";
 import type { TelegramSDK, TelegramUser, SimpleMessage, PluginLogger } from "@teleton-agent/sdk";
 import { PluginSDKError } from "@teleton-agent/sdk";
 import { getErrorMessage } from "../utils/errors.js";
-import { requireBridge as requireBridgeUtil } from "./telegram-utils.js";
 import { createTelegramMessagesSDK } from "./telegram-messages.js";
 import { createTelegramSocialSDK } from "./telegram-social.js";
+import { createTelegramRuntime } from "./telegram/runtime.js";
 
 export function createTelegramSDK(
   bridge: ITelegramBridge,
@@ -13,19 +13,7 @@ export function createTelegramSDK(
   mode?: "user" | "bot"
 ): TelegramSDK {
   const telegramMode = mode ?? bridge.getMode();
-
-  function requireBridge(): void {
-    requireBridgeUtil(bridge);
-  }
-
-  function requireUserMode(methodName: string): void {
-    if (telegramMode === "bot") {
-      throw new PluginSDKError(
-        `sdk.telegram.${methodName}() requires user mode`,
-        "OPERATION_FAILED"
-      );
-    }
-  }
+  const { requireBridge, requireUserMode } = createTelegramRuntime(bridge, telegramMode);
 
   return {
     getMode() {
@@ -133,17 +121,6 @@ export function createTelegramSDK(
 
     isAvailable(): boolean {
       return bridge.isAvailable();
-    },
-
-    getRawClient(): unknown | null {
-      requireUserMode("getRawClient");
-      log.warn("getRawClient() called — this bypasses SDK sandbox guarantees");
-      if (!bridge.isAvailable()) return null;
-      try {
-        return isUserBridge(bridge) ? bridge.getClient() : null;
-      } catch {
-        return null;
-      }
     },
 
     // Spread extended methods from sub-modules

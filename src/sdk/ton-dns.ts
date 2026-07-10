@@ -22,6 +22,7 @@ import {
   setDnsSite,
   unlinkDnsWallet,
 } from "../ton/dns-service.js";
+import { boundedLimit, requirePositiveNumber } from "./validation.js";
 
 interface TonApiDnsAuction {
   domain: string;
@@ -153,13 +154,9 @@ export function createDnsSDK(log: PluginLogger): DnsSDK {
     },
 
     async getAuctions(limit?: number): Promise<DnsAuction[]> {
-      if (limit !== undefined && (!Number.isInteger(limit) || limit < 1)) {
-        throw new PluginSDKError("Auction limit must be a positive integer", "INVALID_INPUT");
-      }
+      const bounded = boundedLimit(limit, 20, 100);
       try {
-        const response = await tonapiFetch(
-          `/dns/auctions?tld=ton&limit=${Math.min(limit ?? 20, 100)}`
-        );
+        const response = await tonapiFetch(`/dns/auctions?tld=ton&limit=${bounded}`);
         if (!response.ok) {
           log.debug(`dns.getAuctions() TonAPI error: ${response.status}`);
           return [];
@@ -209,9 +206,7 @@ export function createDnsSDK(log: PluginLogger): DnsSDK {
 
     async bid(domain: string, amount: number): Promise<DnsBidResult> {
       const normalized = normalizeDomain(domain);
-      if (!Number.isFinite(amount) || amount <= 0) {
-        throw new PluginSDKError("Bid amount must be positive", "INVALID_INPUT");
-      }
+      requirePositiveNumber(amount, "Bid amount");
 
       const walletData = loadWallet();
       if (!walletData) {

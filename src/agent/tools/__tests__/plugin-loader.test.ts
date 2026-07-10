@@ -393,14 +393,14 @@ describe("adaptPlugin — database isolation", () => {
 
   it("always replaces the agent database for plugins without migrate()", async () => {
     const agentDb = { kind: "agent" };
-    let receivedDb: unknown;
+    let receivedContext: Record<string, unknown> | undefined;
     const raw = makeRawPlugin({
       tools: [
         {
           name: "db_probe",
           description: "Inspect the injected database",
-          execute: async (_params: unknown, context: { db: unknown }) => {
-            receivedDb = context.db;
+          execute: async (_params: unknown, context: Record<string, unknown>) => {
+            receivedContext = context;
             return { success: true };
           },
         },
@@ -410,15 +410,17 @@ describe("adaptPlugin — database isolation", () => {
     const module = adaptPlugin(raw, "db-probe", makeConfig(), [], minimalSdkDeps);
     module.migrate?.();
     const [tool] = module.tools(makeConfig());
-    await tool.executor({}, { db: agentDb } as never);
+    await tool.executor({}, { db: agentDb, bridge: minimalSdkDeps.bridge } as never);
 
-    expect(receivedDb).not.toBe(agentDb);
-    expect((receivedDb as { kind: string }).kind).toBe("plugin");
+    expect(receivedContext?.db).not.toBe(agentDb);
+    expect((receivedContext?.db as { kind: string }).kind).toBe("plugin");
+    expect(receivedContext).not.toHaveProperty("bridge");
   });
 
   it("uses the protected plugin database for migrate(), tools, and start()", async () => {
     const agentDb = { kind: "agent" };
     const received: Record<string, unknown> = {};
+    let startContext: Record<string, unknown> | undefined;
     const raw = makeRawPlugin({
       migrate: (db: unknown) => {
         received.migrate = db;
@@ -433,7 +435,8 @@ describe("adaptPlugin — database isolation", () => {
           },
         },
       ],
-      start: async (context: { db: unknown }) => {
+      start: async (context: Record<string, unknown>) => {
+        startContext = context;
         received.start = context.db;
       },
     });
@@ -452,5 +455,7 @@ describe("adaptPlugin — database isolation", () => {
       expect(db).not.toBe(agentDb);
       expect((db as { kind: string }).kind).toBe("plugin");
     }
+    expect(startContext).toHaveProperty("sdk");
+    expect(startContext).not.toHaveProperty("bridge");
   });
 });

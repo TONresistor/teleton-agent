@@ -4,12 +4,9 @@ import type { Api } from "telegram";
 import type { PluginLogger, SimpleMessage, MediaSendOptions } from "@teleton-agent/sdk";
 import { PluginSDKError } from "@teleton-agent/sdk";
 import { getErrorMessage } from "../utils/errors.js";
-import {
-  requireBridge as requireBridgeUtil,
-  getClient as getClientUtil,
-  getApi,
-  toSimpleMessage,
-} from "./telegram-utils.js";
+import { getApi, toSimpleMessage } from "./telegram-utils.js";
+import { boundedLimit, requireNonEmpty, requirePositiveInteger } from "./validation.js";
+import { createTelegramRuntime } from "./telegram/runtime.js";
 
 /**
  * Creates the Telegram messages, media, and advanced SDK methods.
@@ -20,24 +17,7 @@ export function createTelegramMessagesSDK(
   log: PluginLogger,
   mode?: "user" | "bot"
 ) {
-  const telegramMode = mode ?? bridge.getMode();
-
-  function requireBridge(): void {
-    requireBridgeUtil(bridge);
-  }
-
-  function requireUserMode(methodName: string): void {
-    if (telegramMode === "bot") {
-      throw new PluginSDKError(
-        `sdk.telegram.${methodName}() requires user mode`,
-        "OPERATION_FAILED"
-      );
-    }
-  }
-
-  function getClient() {
-    return getClientUtil(bridge);
-  }
+  const { requireBridge, requireUserMode, getClient } = createTelegramRuntime(bridge, mode);
 
   return {
     // ─── Messages ──────────────────────────────────────────────
@@ -45,6 +25,8 @@ export function createTelegramMessagesSDK(
     async deleteMessage(chatId: string, messageId: number, revoke = true): Promise<void> {
       requireUserMode("deleteMessage");
       requireBridge();
+      requireNonEmpty(chatId, "Chat ID");
+      requirePositiveInteger(messageId, "Message ID");
       try {
         const gramJsClient = getClient();
         const Api = await getApi();
@@ -82,6 +64,9 @@ export function createTelegramMessagesSDK(
     ): Promise<number | null> {
       requireUserMode("forwardMessage");
       requireBridge();
+      requireNonEmpty(fromChatId, "Source chat ID");
+      requireNonEmpty(toChatId, "Destination chat ID");
+      requirePositiveInteger(messageId, "Message ID");
       try {
         const gramJsClient = getClient();
         const Api = await getApi();
@@ -123,6 +108,8 @@ export function createTelegramMessagesSDK(
     ): Promise<void> {
       requireUserMode("pinMessage");
       requireBridge();
+      requireNonEmpty(chatId, "Chat ID");
+      requirePositiveInteger(messageId, "Message ID");
       try {
         const gramJsClient = getClient();
         const Api = await getApi();
@@ -147,6 +134,9 @@ export function createTelegramMessagesSDK(
     async searchMessages(chatId: string, query: string, limit = 20): Promise<SimpleMessage[]> {
       requireUserMode("searchMessages");
       requireBridge();
+      requireNonEmpty(chatId, "Chat ID");
+      const normalizedQuery = requireNonEmpty(query, "Search query");
+      const bounded = boundedLimit(limit, 20, 100);
       try {
         const gramJsClient = getClient();
         const Api = await getApi();
@@ -156,9 +146,9 @@ export function createTelegramMessagesSDK(
         const result = await gramJsClient.invoke(
           new Api.messages.Search({
             peer: entity,
-            q: query,
+            q: normalizedQuery,
             filter: new Api.InputMessagesFilterEmpty(),
-            limit,
+            limit: bounded,
           })
         );
 
@@ -183,11 +173,14 @@ export function createTelegramMessagesSDK(
     ): Promise<number | null> {
       requireUserMode("scheduleMessage");
       requireBridge();
+      requireNonEmpty(chatId, "Chat ID");
+      const normalizedText = requireNonEmpty(text, "Message text");
+      requirePositiveInteger(scheduleDate, "Schedule date");
       try {
         const gramJsClient = getClient();
 
         const result = await gramJsClient.sendMessage(chatId, {
-          message: text,
+          message: normalizedText,
           schedule: scheduleDate,
         });
 
@@ -204,6 +197,9 @@ export function createTelegramMessagesSDK(
     async getReplies(chatId: string, messageId: number, limit = 50): Promise<SimpleMessage[]> {
       requireUserMode("getReplies");
       requireBridge();
+      requireNonEmpty(chatId, "Chat ID");
+      requirePositiveInteger(messageId, "Message ID");
+      const bounded = boundedLimit(limit, 50, 100);
       try {
         const gramJsClient = getClient();
         const Api = await getApi();
@@ -216,7 +212,7 @@ export function createTelegramMessagesSDK(
             offsetId: 0,
             offsetDate: 0,
             addOffset: 0,
-            limit,
+            limit: bounded,
             maxId: 0,
             minId: 0,
             hash: toLong(0n),
@@ -420,6 +416,8 @@ export function createTelegramMessagesSDK(
     async downloadMedia(chatId: string, messageId: number): Promise<Buffer | null> {
       requireUserMode("downloadMedia");
       requireBridge();
+      requireNonEmpty(chatId, "Chat ID");
+      requirePositiveInteger(messageId, "Message ID");
       const MAX_DOWNLOAD_SIZE = 50 * 1024 * 1024; // 50 MB
       try {
         const gramJsClient = getClient();
@@ -459,6 +457,7 @@ export function createTelegramMessagesSDK(
     async getScheduledMessages(chatId: string): Promise<SimpleMessage[]> {
       requireUserMode("getScheduledMessages");
       requireBridge();
+      requireNonEmpty(chatId, "Chat ID");
       try {
         const gramJsClient = getClient();
         const Api = await getApi();
@@ -490,6 +489,8 @@ export function createTelegramMessagesSDK(
     async deleteScheduledMessage(chatId: string, messageId: number): Promise<void> {
       requireUserMode("deleteScheduledMessage");
       requireBridge();
+      requireNonEmpty(chatId, "Chat ID");
+      requirePositiveInteger(messageId, "Message ID");
       try {
         const gramJsClient = getClient();
         const Api = await getApi();
@@ -513,6 +514,8 @@ export function createTelegramMessagesSDK(
     async sendScheduledNow(chatId: string, messageId: number): Promise<void> {
       requireUserMode("sendScheduledNow");
       requireBridge();
+      requireNonEmpty(chatId, "Chat ID");
+      requirePositiveInteger(messageId, "Message ID");
       try {
         const gramJsClient = getClient();
         const Api = await getApi();
@@ -537,6 +540,7 @@ export function createTelegramMessagesSDK(
 
     async setTyping(chatId: string): Promise<void> {
       requireBridge();
+      requireNonEmpty(chatId, "Chat ID");
       try {
         await bridge.setTyping(chatId);
       } catch (error) {

@@ -14,6 +14,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `getResaleGifts(giftId, limit?)` now requires the collection `giftId`; the previous signature could not query the Telegram API correctly.
 - Invalid exported plugin manifests now fail closed instead of being silently ignored.
 - Plugin tool scopes are validated against the canonical SDK scope list.
+- `start(ctx)` now receives `ctx.sdk` instead of the raw Telegram bridge.
+- `PluginToolContext.bridge` and `sdk.telegram.getRawClient()` were removed; plugins use the typed SDK capabilities instead.
 
 ### Security
 

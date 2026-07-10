@@ -40,7 +40,11 @@ const ManifestSchema: z.ZodType<PluginManifest> = z.object({
       z.object({
         required: z.boolean(),
         description: z.string().max(256),
-        env: z.string().max(128).optional(),
+        env: z
+          .string()
+          .max(128)
+          .regex(/^[A-Z_][A-Z0-9_]*$/, "Must be an uppercase environment variable name")
+          .optional(),
       })
     )
     .optional(),

@@ -11,7 +11,7 @@ export interface SecretDeclaration {
   required: boolean;
   /** Human-readable description shown when prompting admin */
   description: string;
-  /** Environment variable name (e.g. "SWIFTGIFTS_API_KEY") */
+  /** Environment variable name override (uppercase letters, digits, and underscores) */
   env?: string;
 }
 
@@ -19,7 +19,7 @@ export interface SecretDeclaration {
  * Secure access to plugin secrets (API keys, tokens, credentials).
  *
  * Resolution order:
- * 1. Environment variable (PLUGINNAME_KEY)
+ * 1. Declared environment variable override, or PLUGINNAME_KEY
  * 2. Secrets store (set via /plugin set command)
  * 3. pluginConfig from config.yaml
  *
@@ -364,10 +364,8 @@ export interface PluginToolContext {
   senderId: number;
   /** Whether this is a group chat (vs DM) */
   isGroup: boolean;
-  /** TelegramBridge instance for Telegram operations */
-  bridge: unknown;
-  /** Plugin's isolated SQLite database */
-  db: unknown;
+  /** Plugin's isolated SQLite database. */
+  db: Database.Database | null;
   /** Sanitized bot config (no API keys) */
   config?: Record<string, unknown>;
 }
@@ -650,4 +648,18 @@ export interface PluginSDK {
     handler: HookHandlerMap[K],
     opts?: { priority?: number }
   ): void;
+}
+
+/** Context passed to a plugin's start() lifecycle hook. */
+export interface StartContext {
+  /** The same capability-scoped SDK exposed to tools(sdk). */
+  sdk: PluginSDK;
+  /** Plugin's isolated SQLite database (null only if initialization failed). */
+  db: Database.Database | null;
+  /** Sanitized application config (no credentials). */
+  config: Record<string, unknown>;
+  /** Plugin-specific config merged with manifest defaults. */
+  pluginConfig: Record<string, unknown>;
+  /** Prefixed plugin logger. */
+  log: PluginLogger;
 }

@@ -11,7 +11,7 @@
 ## Install
 
 ```bash
-npm install @teleton-agent/sdk
+npm install @teleton-agent/sdk@^2
 ```
 
 The package ships type definitions and the `PluginSDKError` class. It has an optional peer dependency on `better-sqlite3` (used only if your plugin needs a database).
@@ -72,7 +72,7 @@ The core platform loads plugins in a defined order. Each export is optional exce
 | `onMessage` | `(event: PluginMessageEvent) => Promise<void>` | Every incoming message | React to messages without LLM involvement |
 | `onCallbackQuery` | `(event: PluginCallbackEvent) => Promise<void>` | Inline button press | Handle callback queries from inline keyboards |
 
-The `tools` export can be either a static array or a factory function receiving the SDK. The `start` function receives a context object with `db`, `config`, `pluginConfig`, and `log`. The SDK object passed to `tools` is **frozen** -- plugins cannot modify or extend it. Each plugin receives its own isolated database (if `migrate` is exported) and a sanitized config object with no API keys.
+The `tools` export can be either a static array or a factory function receiving the SDK. The `start` function receives a context object with `sdk`, `db`, `config`, `pluginConfig`, and `log`. The SDK object passed to plugins is **frozen** -- plugins cannot modify or extend it. Each plugin receives its own isolated database and a sanitized config object with no API keys.
 
 ### Event Hooks
 
@@ -132,7 +132,7 @@ Root SDK object passed to plugin functions.
 | `telegram` | `TelegramSDK` | Telegram messaging and user operations |
 | `secrets` | `SecretsSDK` | Secure access to plugin secrets (API keys, tokens) |
 | `storage` | `StorageSDK \| null` | Simple key-value storage (null if no DB) |
-| `db` | `Database \| null` | Isolated SQLite database (null if no `migrate` exported) |
+| `db` | `Database \| null` | Isolated SQLite database (null only if database initialization failed) |
 | `config` | `Record<string, unknown>` | Sanitized app config (no secrets) |
 | `pluginConfig` | `Record<string, unknown>` | Plugin-specific config from `config.yaml` |
 | `log` | `PluginLogger` | Prefixed logger |
@@ -170,6 +170,11 @@ type SDKErrorCode =
   | "BRIDGE_NOT_CONNECTED"   // Telegram bridge not ready
   | "WALLET_NOT_INITIALIZED" // TON wallet not configured
   | "INVALID_ADDRESS"        // Malformed TON address
+  | "INVALID_INPUT"          // Invalid SDK method argument
+  | "NOT_AVAILABLE"          // Capability unavailable in this runtime mode
+  | "RATE_LIMITED"           // Platform rate limit reached
+  | "TRANSACTION_FAILED"     // Blockchain transaction failed
+  | "PERMISSION_DENIED"      // Operation is not authorized
   | "SECRET_NOT_FOUND"       // Required secret not configured
   | "OPERATION_FAILED";      // Generic failure
 ```
@@ -547,7 +552,6 @@ await sdk.ton.dns.setSiteRecord("mysite.ton", "aabbccdd...64hex");
 | `getMessages(chatId, limit?)` | `Promise<SimpleMessage[]>` | Fetch recent messages (default 50) |
 | `getMe()` | `TelegramUser \| null` | Bot's user info |
 | `isAvailable()` | `boolean` | Whether the bridge is connected |
-| `getRawClient()` | `unknown \| null` | Raw GramJS client for advanced MTProto |
 
 **Messages**
 
@@ -846,7 +850,7 @@ sdk.log.info(`Transferred to ${result.transferredTo}, paid: ${result.paidTransfe
 
 #### `SecretsSDK`
 
-Secure access to plugin secrets (API keys, tokens, credentials). Resolution order: environment variable > secrets store (`/plugin set`) > `pluginConfig`.
+Secure access to plugin secrets (API keys, tokens, credentials). Resolution order: declared environment variable override (or derived `PLUGINNAME_KEY`) > secrets store (`/plugin set`) > `pluginConfig`.
 
 | Method | Returns | Description |
 |--------|---------|-------------|
@@ -867,7 +871,7 @@ Used in `PluginManifest.secrets` to declare required secrets.
 |-------|------|-------------|
 | `required` | `boolean` | Whether the plugin needs this secret to function |
 | `description` | `string` | Human-readable description |
-| `env` | `string?` | Environment variable name override |
+| `env` | `string?` | Environment variable name override (`^[A-Z_][A-Z0-9_]*$`) |
 
 ---
 
@@ -1195,6 +1199,7 @@ export const tools = (sdk: PluginSDK): SimpleToolDef[] => {
 | `execute` | `(params, context) => Promise<ToolResult>` | Tool handler |
 | `scope` | `ToolScope?` | Visibility scope (default: `"always"`) |
 | `category` | `ToolCategory?` | Masking category |
+| `requiresApproval` | `boolean?` | Require authenticated owner approval before execution |
 
 #### `PluginManifest`
 
@@ -1206,9 +1211,10 @@ export const tools = (sdk: PluginSDK): SimpleToolDef[] => {
 | `description` | `string?` | Short description (max 256 chars) |
 | `dependencies` | `string[]?` | Required built-in modules |
 | `defaultConfig` | `Record<string, unknown>?` | Default config values |
-| `sdkVersion` | `string?` | Required SDK version range (e.g. `">=1.0.0"`) |
+| `sdkVersion` | `string?` | Required SDK version range (e.g. `">=2.0.0"`) |
 | `secrets` | `Record<string, SecretDeclaration>?` | Secrets required by this plugin |
 | `bot` | `BotManifest?` | Bot capabilities — enables `sdk.bot` (see [Bot SDK](#bot-sdk-sdkbot)) |
+| `hooks` | `PluginHookDeclaration[]?` | Hooks the plugin is allowed to register |
 
 #### `ToolResult`
 
@@ -1221,7 +1227,14 @@ export const tools = (sdk: PluginSDK): SimpleToolDef[] => {
 #### `ToolScope`
 
 ```typescript
-type ToolScope = "always" | "dm-only" | "group-only" | "admin-only";
+type ToolScope =
+  | "open"
+  | "always"
+  | "dm-only"
+  | "group-only"
+  | "admin-only"
+  | "allowlist"
+  | "disabled";
 ```
 
 #### `ToolCategory`
@@ -1232,14 +1245,16 @@ type ToolCategory = "data-bearing" | "action";
 
 `data-bearing` tool results are subject to observation masking (token reduction on older results). `action` tool results are always preserved in full.
 
+External `action` tools are admin-only and require authenticated owner approval by default. A `data-bearing` tool remains read-only/public according to its scope, but can opt into approval with `requiresApproval: true`.
+
 #### `StartContext`
 
 Context passed to the `start(ctx)` lifecycle hook.
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `bridge` | `unknown` | Telegram bridge for advanced operations |
-| `db` | `unknown` | Plugin's isolated SQLite database |
+| `sdk` | `PluginSDK` | Capability-scoped SDK for background work |
+| `db` | `Database \| null` | Plugin's isolated SQLite database |
 | `config` | `Record<string, unknown>` | Sanitized app config (no API keys) |
 | `pluginConfig` | `Record<string, unknown>` | Plugin-specific config from `config.yaml` |
 | `log` | `PluginLogger` | Prefixed logger |
@@ -1253,8 +1268,7 @@ Runtime context passed to tool `execute` functions.
 | `chatId` | `string` | Telegram chat ID where tool was invoked |
 | `senderId` | `number` | Telegram user ID of the sender |
 | `isGroup` | `boolean` | Whether this is a group chat |
-| `bridge` | `unknown` | TelegramBridge for advanced operations |
-| `db` | `unknown` | Plugin's isolated SQLite database |
+| `db` | `Database \| null` | Plugin's isolated SQLite database |
 | `config` | `Record<string, unknown>?` | Sanitized bot config |
 
 ---
@@ -1313,7 +1327,7 @@ async execute(params, context) {
 }
 ```
 
-Always check `telegram.isAvailable()` before calling Telegram methods in `start()`, since the bridge may not be connected yet.
+Always check `ctx.sdk.telegram.isAvailable()` before calling Telegram methods in `start()`, since the bridge may not be connected yet.
 
 ## License
 

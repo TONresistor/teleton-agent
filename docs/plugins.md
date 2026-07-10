@@ -36,7 +36,7 @@ A Teleton plugin is a JavaScript module (ESM) placed in `~/.teleton/plugins/`. I
 
 Key facts:
 - Plugins receive a **frozen SDK** object -- they cannot modify or extend it
-- Each plugin gets an **isolated SQLite database** (if `migrate` is exported)
+- Each plugin gets an **isolated SQLite database**; `migrate` is optional
 - Plugins see a **sanitized config** with no API keys or secrets
 - The official SDK package is `@teleton-agent/sdk` on npm
 
@@ -134,7 +134,7 @@ export const manifest = {
   author: "Your Name",         // Optional: max 128 chars
   description: "What it does", // Optional: max 256 chars
   dependencies: ["ton-proxy"], // Optional: required built-in modules
-  sdkVersion: ">=1.0.0",       // Optional: minimum SDK version (supports ^, >=, exact)
+  sdkVersion: ">=2.0.0",       // Optional: minimum SDK version (supports ^, >=, exact)
   defaultConfig: {             // Optional: merged with user's plugin config
     max_results: 10,
     cooldown_ms: 5000,
@@ -149,6 +149,9 @@ export const manifest = {
       description: "Optional webhook for notifications",
     },
   },
+  hooks: [                     // Optional: hooks this plugin may register
+    { name: "agent:start", priority: 10 },
+  ],
 };
 ```
 
@@ -157,7 +160,7 @@ export const manifest = {
 - `name`: Must match `/^[a-z0-9][a-z0-9-]*$/` (lowercase, starts with letter or number)
 - `version`: Must be valid semver (`1.0.0`, not `v1.0.0`)
 - `dependencies`: Array of built-in module names that must be loaded before this plugin
-- `sdkVersion`: Supports `>=1.0.0`, `^1.0.0`, or exact `1.0.0` version matching
+- `sdkVersion`: Supports `>=2.0.0`, `^2.0.0`, or exact `2.0.0` version matching
 
 ### Plugin Config Resolution
 
@@ -366,14 +369,6 @@ await sdk.telegram.sendStory("/tmp/promo.mp4", {
 
 > **Path restriction**: `sendStory` only accepts files from `/tmp`, `Downloads/`, `Pictures/`, `Videos/`, or the teleton workspace directory. Other paths are rejected for security.
 
-#### Raw Client
-
-| Method | Returns | Description |
-|--------|---------|-------------|
-| `getRawClient()` | `unknown \| null` | Raw GramJS client for advanced MTProto operations |
-
-> **Warning**: `getRawClient()` exposes the raw GramJS `TelegramClient`. Use this only when the SDK doesn't provide what you need. Incorrect usage can break the agent's connection.
-
 ### sdk.ton
 
 Interact with the TON blockchain.
@@ -569,7 +564,7 @@ For the complete Bot SDK API reference and type definitions, see the [SDK README
 
 ### sdk.storage
 
-Simple key-value persistence without SQL boilerplate. Available only when `migrate` is exported (the plugin has a database).
+Simple key-value persistence without SQL boilerplate. The platform creates the plugin database even when no `migrate` function is exported.
 
 | Method | Returns | Description |
 |--------|---------|-------------|
@@ -596,7 +591,7 @@ Values are JSON-serialized. Expired entries are lazily cleaned up with a 5% prob
 
 Secure access to API keys, tokens, and credentials. The resolution order is:
 
-1. **Environment variable**: `PLUGINNAME_KEY` (e.g., `MY_PLUGIN_API_KEY`)
+1. **Environment variable**: the manifest `env` override, or `PLUGINNAME_KEY` by default (e.g., `MY_PLUGIN_API_KEY`)
 2. **Secrets store**: Set via `/plugin set my-plugin api_key <value>` admin command
 3. **Plugin config**: From `config.yaml` under `plugins.my_plugin.api_key`
 
@@ -605,6 +600,22 @@ Secure access to API keys, tokens, and credentials. The resolution order is:
 | `get(key)` | `string \| undefined` | Get a secret value |
 | `require(key)` | `string` | Get a secret or throw `PluginSDKError` |
 | `has(key)` | `boolean` | Check if a secret is available |
+
+Manifest overrides must be uppercase environment variable names (`^[A-Z_][A-Z0-9_]*$`):
+
+```javascript
+export const manifest = {
+  name: "my-plugin",
+  version: "1.0.0",
+  secrets: {
+    api_key: {
+      required: true,
+      description: "External API key",
+      env: "SHARED_API_KEY",
+    },
+  },
+};
+```
 
 ```javascript
 export const tools = (sdk) => [
@@ -763,9 +774,9 @@ Each tool in the `tools` array (or returned by the tools factory function) must 
 async execute(params, context) {
   // params: parsed parameters matching your JSON Schema
   // context.chatId: current chat ID
-  // context.userId: user who triggered the tool
+  // context.senderId: user who triggered the tool
   // context.config: sanitized app config (no secrets)
-  // context.db: plugin's isolated database (if migrate was exported)
+  // context.db: plugin's isolated database
 
   return {
     success: true,           // Required: whether execution succeeded
@@ -778,14 +789,19 @@ async execute(params, context) {
 ### Scope
 
 - `"always"` -- Tool is available in all contexts (default)
+- `"open"` -- Explicitly available to all users
 - `"dm-only"` -- Only available in direct messages
 - `"group-only"` -- Only available in group chats
 - `"admin-only"` -- Only available to users in `telegram.admin_ids`
+- `"allowlist"` -- Only available to configured allowlisted users
+- `"disabled"` -- Never exposed
 
 ### Category
 
 - `"data-bearing"` -- Tool results are subject to observation masking. After a few agentic iterations, older results from data-bearing tools are summarized to reduce token usage (~90% reduction).
 - `"action"` -- Tool results are always preserved in full across all iterations. Use for tools whose output must remain visible (e.g., transaction confirmations).
+
+External `action` tools are forced to `admin-only` and require owner approval by default. Read-only `data-bearing` tools may opt into approval with `requiresApproval: true`.
 
 ---
 
@@ -842,7 +858,7 @@ For plugins with dependencies, publish as an npm package:
   "version": "1.0.0",
   "main": "index.js",
   "peerDependencies": {
-    "@teleton-agent/sdk": ">=1.0.0"
+    "@teleton-agent/sdk": "^2.0.0"
   }
 }
 ```
@@ -877,7 +893,7 @@ cp dist/index.js ~/.teleton/plugins/my-plugin/index.js
 Install `@teleton-agent/sdk` as a dev dependency for type definitions:
 
 ```bash
-npm install -D @teleton-agent/sdk
+npm install -D @teleton-agent/sdk@^2
 ```
 
 ---
@@ -892,7 +908,7 @@ npm install -D @teleton-agent/sdk
 
 4. **Use sdk.secrets for credentials**: Never hardcode API keys. Declare them in `manifest.secrets` and access via `sdk.secrets.get()` or `sdk.secrets.require()`.
 
-5. **Check telegram availability in start()**: The bridge may not be connected when `start()` runs. Use `sdk.telegram.isAvailable()` before calling Telegram methods.
+5. **Check telegram availability in start()**: The bridge may not be connected when `start()` runs. Use `ctx.sdk.telegram.isAvailable()` before calling Telegram methods.
 
 6. **Clean up in stop()**: Clear intervals, close connections, and release resources. This is called on shutdown and on hot-reload.
 
@@ -918,7 +934,7 @@ npm install -D @teleton-agent/sdk
 
 3. **Using `require()` instead of `import`**: Plugins must be ESM modules. Use `import` syntax (or dynamic `import()` for conditional loads).
 
-4. **Accessing `sdk` outside of `tools` factory**: The SDK is only available inside the `tools` function and within tool `execute` functions (via closure). It is not passed to `migrate`, `start`, or `stop`.
+4. **Accessing `sdk` outside of `tools` factory**: The SDK is passed to the `tools` factory and to `start(ctx)` as `ctx.sdk`. It is not passed to `migrate` or `stop`.
 
 5. **Mutating the SDK object**: The SDK is frozen with `Object.freeze()`. Attempting to add properties or modify methods will silently fail (or throw in strict mode).
 
@@ -926,7 +942,7 @@ npm install -D @teleton-agent/sdk
 
 7. **Missing `package-lock.json`**: If your plugin has a `package.json` but no `package-lock.json`, dependencies are NOT installed. The platform requires a lockfile for deterministic installs.
 
-8. **Database access without `migrate`**: `sdk.db` is `null` if you do not export a `migrate` function. However, `sdk.storage` (KV store) is available as long as the plugin has a database, since the platform always creates a DB file for plugins that export `migrate`.
+8. **Database initialization failures**: The platform creates an isolated database for every plugin, even without a `migrate` export. `sdk.db` and `sdk.storage` are null only if that database cannot be initialized.
 
 9. **Calling `sdk.ton.verifyPayment` without `used_transactions` table**: This method requires a `used_transactions` table in your plugin's database. Create it in your `migrate` function.
 

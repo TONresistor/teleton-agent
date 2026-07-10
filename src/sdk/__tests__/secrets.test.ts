@@ -82,6 +82,34 @@ describe("SecretsSDK resolution chain", () => {
     expect(mockLog.debug).toHaveBeenCalledWith(expect.stringContaining("env var"));
   });
 
+  it("uses the manifest environment variable override", () => {
+    setEnv("SHARED_WEATHER_TOKEN", "from-custom-env");
+    setEnv("MYPLUGIN_API_KEY", "from-derived-env");
+
+    const sdk = createSecretsSDK("myplugin", {}, mockLog, {
+      API_KEY: {
+        required: true,
+        description: "Weather API key",
+        env: "SHARED_WEATHER_TOKEN",
+      },
+    });
+
+    expect(sdk.get("API_KEY")).toBe("from-custom-env");
+    expect(mockLog.debug).toHaveBeenCalledWith(
+      'Secret "API_KEY" resolved from env var SHARED_WEATHER_TOKEN'
+    );
+  });
+
+  it("keeps the derived environment variable when no override is declared", () => {
+    setEnv("MYPLUGIN_API_KEY", "from-derived-env");
+
+    const sdk = createSecretsSDK("myplugin", {}, mockLog, {
+      API_KEY: { required: true, description: "Weather API key" },
+    });
+
+    expect(sdk.get("API_KEY")).toBe("from-derived-env");
+  });
+
   it("falls back to secrets file when no env var", () => {
     writeFileSync(secretsPath("myplugin"), JSON.stringify({ API_KEY: "from-file" }), {
       mode: 0o600,

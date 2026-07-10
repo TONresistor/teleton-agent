@@ -19,69 +19,26 @@ import type {
   GiftOfferOptions,
 } from "@teleton-agent/sdk";
 import { PluginSDKError } from "@teleton-agent/sdk";
-import { getErrorMessage } from "../utils/errors.js";
 import { randomLong, toLong } from "../utils/gramjs-bigint.js";
+import { getApi, toSimpleMessage } from "./telegram-utils.js";
 import {
-  requireBridge as requireBridgeUtil,
-  getClient as getClientUtil,
-  getApi,
-  toSimpleMessage,
-} from "./telegram-utils.js";
+  boundedLimit,
+  requireNonEmpty,
+  requireNonNegativeInteger,
+  requirePositiveInteger,
+} from "./validation.js";
+import { createTelegramRuntime, type TelegramUserOpContext } from "./telegram/runtime.js";
 
 export function createTelegramSocialSDK(
   bridge: ITelegramBridge,
   log: PluginLogger,
   mode?: "user" | "bot"
 ) {
-  const telegramMode = mode ?? bridge.getMode();
-
-  function requireBridge(): void {
-    requireBridgeUtil(bridge);
-  }
-
-  function requireUserMode(methodName: string): void {
-    if (telegramMode === "bot") {
-      throw new PluginSDKError(
-        `sdk.telegram.${methodName}() requires user mode`,
-        "OPERATION_FAILED"
-      );
-    }
-  }
-
-  function getClient() {
-    return getClientUtil(bridge);
-  }
-
-  type UserOpContext = { client: ReturnType<typeof getClient>; Api: typeof Api };
-
-  /**
-   * Shared preamble + catch for user-mode operations whose failure is a thrown
-   * PluginSDKError (the ~17 throw-on-error methods). Applies requireUserMode +
-   * requireBridge, resolves {client, Api}, runs `fn`, and normalizes the catch:
-   * PluginSDKError passes through, anything else is wrapped as
-   * `Failed to ${label}: …` / OPERATION_FAILED. Methods with graceful
-   * return-default catches (null/[]) keep their own try/catch and do NOT use this.
-   */
-  async function userOp<T>(
-    name: string,
-    label: string,
-    fn: (ctx: UserOpContext) => Promise<T>
-  ): Promise<T> {
-    requireUserMode(name);
-    requireBridge();
-    try {
-      const client = getClient();
-      const Api = await getApi();
-      return await fn({ client, Api });
-    } catch (error) {
-      if (error instanceof PluginSDKError) throw error;
-      throw new PluginSDKError(`Failed to ${label}: ${getErrorMessage(error)}`, "OPERATION_FAILED");
-    }
-  }
+  const { requireBridge, requireUserMode, getClient, userOp } = createTelegramRuntime(bridge, mode);
 
   /** Issue an EditBanned with the given rights — shared by ban/unban/mute. */
   async function editBanned(
-    ctx: UserOpContext,
+    ctx: TelegramUserOpContext,
     chatId: string,
     userId: number | string,
     bannedRights: Api.ChatBannedRights
@@ -93,6 +50,17 @@ export function createTelegramSocialSDK(
         bannedRights,
       })
     );
+  }
+
+  function validatePoll(question: string, answers: string[], label: "Poll" | "Quiz"): void {
+    requireNonEmpty(question, `${label} question`);
+    if (!answers || answers.length < 2) {
+      throw new PluginSDKError(`${label} must have at least 2 answers`, "INVALID_INPUT");
+    }
+    if (answers.length > 10) {
+      throw new PluginSDKError(`${label} cannot have more than 10 answers`, "INVALID_INPUT");
+    }
+    answers.forEach((answer, index) => requireNonEmpty(answer, `${label} answer ${index + 1}`));
   }
 
   return {
@@ -259,6 +227,7 @@ export function createTelegramSocialSDK(
     async getParticipants(chatId: string, limit?: number): Promise<UserInfo[]> {
       requireUserMode("getParticipants");
       requireBridge();
+      const bounded = boundedLimit(limit, 100, 200);
       try {
         const client = getClient();
         const Api = await getApi();
@@ -270,7 +239,7 @@ export function createTelegramSocialSDK(
             channel: entity,
             filter: new Api.ChannelParticipantsRecent(),
             offset: 0,
-            limit: limit ?? 100,
+            limit: bounded,
             hash: toLong(0),
           })
         );
@@ -308,12 +277,7 @@ export function createTelegramSocialSDK(
       opts?: PollOptions
     ): Promise<number | null> {
       return userOp("createPoll", "create poll", async ({ client, Api }) => {
-        if (!answers || answers.length < 2) {
-          throw new PluginSDKError("Poll must have at least 2 answers", "OPERATION_FAILED");
-        }
-        if (answers.length > 10) {
-          throw new PluginSDKError("Poll cannot have more than 10 answers", "OPERATION_FAILED");
-        }
+        validatePoll(question, answers, "Poll");
         const anonymous = opts?.isAnonymous ?? true;
         const multipleChoice = opts?.multipleChoice ?? false;
 
@@ -365,16 +329,15 @@ export function createTelegramSocialSDK(
       explanation?: string
     ): Promise<number | null> {
       return userOp("createQuiz", "create quiz", async ({ client, Api }) => {
-        if (!answers || answers.length < 2) {
-          throw new PluginSDKError("Quiz must have at least 2 answers", "OPERATION_FAILED");
-        }
-        if (answers.length > 10) {
-          throw new PluginSDKError("Quiz cannot have more than 10 answers", "OPERATION_FAILED");
-        }
-        if (correctIndex < 0 || correctIndex >= answers.length) {
+        validatePoll(question, answers, "Quiz");
+        if (
+          !Number.isSafeInteger(correctIndex) ||
+          correctIndex < 0 ||
+          correctIndex >= answers.length
+        ) {
           throw new PluginSDKError(
             `correctIndex ${correctIndex} is out of bounds (0-${answers.length - 1})`,
-            "OPERATION_FAILED"
+            "INVALID_INPUT"
           );
         }
         const poll = new Api.Poll({
@@ -482,6 +445,7 @@ export function createTelegramSocialSDK(
       opts?: { message?: string; anonymous?: boolean }
     ): Promise<void> {
       return userOp("sendGift", "send gift", async ({ client, Api }) => {
+        requireNonEmpty(giftId, "Gift ID");
         const user = await client.getInputEntity(userId.toString());
 
         const invoiceData = {
@@ -537,7 +501,7 @@ export function createTelegramSocialSDK(
           new Api.payments.GetSavedStarGifts({
             peer: new Api.InputPeerSelf(),
             offset: "",
-            limit: limit ?? 50,
+            limit: boundedLimit(limit, 50, 100),
           })
         );
 
@@ -557,11 +521,12 @@ export function createTelegramSocialSDK(
 
     async getResaleGifts(giftId: string, limit?: number): Promise<StarGift[]> {
       return userOp("getResaleGifts", "get resale gifts", async ({ client, Api }) => {
+        requireNonEmpty(giftId, "Gift collection ID");
         const result = await client.invoke(
           new Api.payments.GetResaleStarGifts({
             giftId: toLong(giftId),
             offset: "",
-            limit: limit ?? 50,
+            limit: boundedLimit(limit, 50, 100),
           })
         );
 
@@ -577,6 +542,7 @@ export function createTelegramSocialSDK(
 
     async buyResaleGift(giftId: string): Promise<void> {
       return userOp("buyResaleGift", "buy resale gift", async ({ client, Api }) => {
+        requireNonEmpty(giftId, "Gift ID");
         const toId = new Api.InputPeerSelf();
         const invoice = new Api.InputInvoiceStarGiftResale({
           slug: giftId,
@@ -599,9 +565,10 @@ export function createTelegramSocialSDK(
     async getDialogs(limit?: number): Promise<Dialog[]> {
       requireUserMode("getDialogs");
       requireBridge();
+      const bounded = boundedLimit(limit, 50, 100);
       try {
         const client = getClient();
-        const dialogs = await client.getDialogs({ limit: Math.min(limit ?? 50, 100) });
+        const dialogs = await client.getDialogs({ limit: bounded });
 
         return dialogs.map((dialog: any) => ({
           id: dialog.id?.toString() || null,
@@ -624,10 +591,11 @@ export function createTelegramSocialSDK(
     async getHistory(chatId: string, limit?: number): Promise<SimpleMessage[]> {
       requireUserMode("getHistory");
       requireBridge();
+      const bounded = boundedLimit(limit, 50, 100);
       try {
         const client = getClient();
         const messages = await client.getMessages(chatId, {
-          limit: Math.min(limit ?? 50, 100),
+          limit: bounded,
         });
 
         return messages.map(toSimpleMessage);
@@ -652,6 +620,7 @@ export function createTelegramSocialSDK(
     async getStarsTransactions(limit?: number): Promise<StarsTransaction[]> {
       requireUserMode("getStarsTransactions");
       requireBridge();
+      const bounded = boundedLimit(limit, 50, 100);
       try {
         const client = getClient();
         const Api = await getApi();
@@ -660,7 +629,7 @@ export function createTelegramSocialSDK(
           new Api.payments.GetStarsTransactions({
             peer: new Api.InputPeerSelf(),
             offset: "",
-            limit: limit ?? 50,
+            limit: bounded,
           })
         );
 
@@ -680,6 +649,7 @@ export function createTelegramSocialSDK(
 
     async transferCollectible(msgId: number, toUserId: number | string): Promise<TransferResult> {
       return userOp("transferCollectible", "transfer collectible", async ({ client, Api }) => {
+        requirePositiveInteger(msgId, "Gift message ID");
         const toUser = await client.getInputEntity(toUserId.toString());
         const stargiftInput = new Api.InputSavedStarGiftUser({ msgId });
 
@@ -717,6 +687,8 @@ export function createTelegramSocialSDK(
 
     async setCollectiblePrice(msgId: number, price: number): Promise<void> {
       return userOp("setCollectiblePrice", "set collectible price", async ({ client, Api }) => {
+        requirePositiveInteger(msgId, "Gift message ID");
+        requireNonNegativeInteger(price, "Gift price");
         await client.invoke(
           new Api.payments.UpdateStarGiftPrice({
             stargift: new Api.InputSavedStarGiftUser({ msgId }),
@@ -732,6 +704,7 @@ export function createTelegramSocialSDK(
     async getCollectibleInfo(slug: string): Promise<CollectibleInfo | null> {
       requireUserMode("getCollectibleInfo");
       requireBridge();
+      requireNonEmpty(slug, "Collectible slug");
       try {
         const client = getClient();
         const Api = await getApi();
@@ -791,6 +764,7 @@ export function createTelegramSocialSDK(
     async getUniqueGift(slug: string): Promise<UniqueGift | null> {
       requireUserMode("getUniqueGift");
       requireBridge();
+      requireNonEmpty(slug, "Gift slug");
       try {
         const client = getClient();
         const Api = await getApi();
@@ -852,6 +826,7 @@ export function createTelegramSocialSDK(
     async getUniqueGiftValue(slug: string): Promise<GiftValue | null> {
       requireUserMode("getUniqueGiftValue");
       requireBridge();
+      requireNonEmpty(slug, "Gift slug");
       try {
         const client = getClient();
         const Api = await getApi();
@@ -889,8 +864,10 @@ export function createTelegramSocialSDK(
       opts?: GiftOfferOptions
     ): Promise<void> {
       return userOp("sendGiftOffer", "send gift offer", async ({ client, Api }) => {
+        requireNonEmpty(giftSlug, "Gift slug");
+        requirePositiveInteger(price, "Offer price");
         const peer = await client.getInputEntity(userId.toString());
-        const duration = opts?.duration ?? 86400;
+        const duration = requirePositiveInteger(opts?.duration ?? 86400, "Offer duration");
 
         await client.invoke(
           new Api.payments.SendStarGiftOffer({
@@ -908,6 +885,7 @@ export function createTelegramSocialSDK(
 
     async sendStory(mediaPath: string, opts?: { caption?: string }): Promise<number | null> {
       return userOp("sendStory", "send story", async ({ client, Api }) => {
+        requireNonEmpty(mediaPath, "Story media path");
         const { helpers } = await import("telegram");
         const { CustomFile } = await import("telegram/client/uploads.js");
         const { readFileSync, statSync } = await import("fs");

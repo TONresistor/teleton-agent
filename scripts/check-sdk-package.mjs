@@ -78,6 +78,7 @@ try {
   type PluginManifest,
   type PluginSDK,
   type SimpleToolDef,
+  type StartContext,
 } from "@teleton-agent/sdk";
 
 const manifest: PluginManifest = {
@@ -101,6 +102,11 @@ const tools: SimpleToolDef<{ name: string }>[] = [{
 
 export function acceptsSdk(sdk: PluginSDK): string {
   return sdk.version;
+}
+
+export function start(context: StartContext): void {
+  void context.sdk.telegram.isAvailable();
+  void context.db;
 }
 
 void manifest;

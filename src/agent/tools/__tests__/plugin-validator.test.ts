@@ -34,6 +34,37 @@ describe("validateManifest", () => {
       })
     ).toThrow();
   });
+
+  it("accepts uppercase secret environment variable overrides", () => {
+    const manifest = validateManifest({
+      name: "contract-test",
+      version: "2.0.0",
+      secrets: {
+        api_key: {
+          required: true,
+          description: "External API key",
+          env: "SHARED_API_KEY_2",
+        },
+      },
+    });
+
+    expect(manifest.secrets?.api_key?.env).toBe("SHARED_API_KEY_2");
+  });
+
+  it.each(["lowercase_key", "1INVALID", "HAS-DASH", "HAS SPACE", ""])(
+    "rejects invalid secret environment variable override %j",
+    (env) => {
+      expect(() =>
+        validateManifest({
+          name: "contract-test",
+          version: "2.0.0",
+          secrets: {
+            api_key: { required: true, description: "External API key", env },
+          },
+        })
+      ).toThrow();
+    }
+  );
 });
 
 describe("validateToolDefs", () => {
