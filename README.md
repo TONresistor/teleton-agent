@@ -84,7 +84,7 @@
 
 ## Prerequisites
 
-- **Node.js 20.0.0+** - [Download](https://nodejs.org/)
+- **Node.js 22.22.2+ LTS** - [Download](https://nodejs.org/) (Node 24 requires 24.15.0+)
 - **LLM API Key** - One of: [Anthropic](https://console.anthropic.com/) (recommended), [OpenAI](https://platform.openai.com/), [Google](https://aistudio.google.com/), [xAI](https://console.x.ai/), [Groq](https://console.groq.com/), [OpenRouter](https://openrouter.ai/), [Moonshot](https://platform.moonshot.ai/), [Mistral](https://console.mistral.ai/), [Cerebras](https://cloud.cerebras.ai/), [ZAI](https://open.bigmodel.cn/), [MiniMax](https://platform.minimaxi.com/), [Hugging Face](https://huggingface.co/settings/tokens) — or keyless: Codex (auto-detect), Gocoon (TON), Local (Ollama/vLLM)
 - **Telegram Account** - Dedicated account recommended for security
 - **Telegram API Credentials** - From [my.telegram.org/apps](https://my.telegram.org/apps)
@@ -486,7 +486,7 @@ The SDK provides namespaced access to core services:
 | Embeddings | [@huggingface/transformers](https://www.npmjs.com/package/@huggingface/transformers) (local ONNX) or Voyage AI |
 | MCP Client | [@modelcontextprotocol/sdk](https://modelcontextprotocol.io/) (stdio + SSE + Streamable HTTP) |
 | WebUI | [Hono](https://hono.dev/) (API) + React + Vite (frontend) |
-| Language | TypeScript 5.7, Node.js 20+ |
+| Language | TypeScript 5.7, Node.js 22.22.2+ LTS |
 
 ### Project Structure
 

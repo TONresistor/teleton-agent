@@ -9,6 +9,7 @@ import {
   type SupportedProvider,
 } from "../../config/providers.js";
 import { getErrorMessage } from "../../utils/errors.js";
+import { SUPPORTED_NODE_RANGE, isNodeVersionSupported } from "../../constants/runtime.js";
 import { GREEN, YELLOW, RED } from "../prompts.js";
 
 interface CheckResult {
@@ -397,13 +398,12 @@ async function checkAdmins(workspaceDir: string): Promise<CheckResult> {
 
 async function checkNodeVersion(): Promise<CheckResult> {
   const version = process.version;
-  const major = parseInt(version.slice(1).split(".")[0]);
 
-  if (major < 20) {
+  if (!isNodeVersionSupported(version)) {
     return {
       name: "Node.js",
       status: "error",
-      message: `${version} (requires >= 20.0.0)`,
+      message: `${version} (requires ${SUPPORTED_NODE_RANGE})`,
     };
   }
 

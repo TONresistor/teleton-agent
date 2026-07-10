@@ -58,6 +58,7 @@
     "circular": "madge --circular --no-spinner --no-color --extensions ts --ts-config tsconfig.json src/",
     "dupcheck": "jscpd --config .jscpd.json src/",
     "audit:ci": "audit-ci --config ./audit-ci.jsonc",
+    "check:runtime": "node scripts/check-runtime-contract.mjs",
     "prepublishOnly": "npm run build",
     "prepare": "husky"
   },
@@ -116,7 +117,7 @@
     "vitest": "^4.1.1"
   },
   "engines": {
-    "node": ">=20.0.0"
+    "node": "^22.22.2 || ^24.15.0 || >=26.0.0"
   },
   "lint-staged": {
     "src/**/*.ts": [
