@@ -1,6 +1,6 @@
 {
   "name": "@teleton-agent/sdk",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "description": "Plugin SDK types for Teleton Agent — TypeScript autocompletion and type safety for plugin developers",
   "type": "module",
   "main": "dist/index.js",
@@ -39,11 +39,14 @@
     "directory": "packages/sdk"
   },
   "devDependencies": {
+    "@ton/core": "^0.63.1",
+    "@types/node": "^22.0.0",
     "better-sqlite3": "^12.0.0",
     "tsup": "^8.5.0",
     "typescript": "^5.8.0"
   },
   "peerDependencies": {
+    "@ton/core": ">=0.63.0 <1.0.0",
     "better-sqlite3": ">=9.0.0"
   },
   "peerDependenciesMeta": {

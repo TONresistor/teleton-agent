@@ -94,13 +94,13 @@ export function adaptPlugin(
     try {
       manifest = validateManifest(raw.manifest);
     } catch (error: unknown) {
-      log.warn(`[${entryName}] invalid manifest, ignoring: ${getErrorMessage(error)}`);
+      throw new Error(`Plugin "${entryName}" has an invalid manifest: ${getErrorMessage(error)}`);
     }
   }
 
-  // Fallback: read version from manifest.json on disk (display names / object authors
-  // don't pass Zod validation, but we still need the version for marketplace comparison)
-  if (!manifest) {
+  // Legacy plugins may only ship manifest.json on disk. Use its display metadata
+  // when the executable module does not export a manifest.
+  if (!raw.manifest && !manifest) {
     const manifestPath = join(WORKSPACE_PATHS.PLUGINS_DIR, entryName, "manifest.json");
     try {
       if (existsSync(manifestPath)) {

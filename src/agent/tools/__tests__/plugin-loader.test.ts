@@ -269,6 +269,19 @@ describe("adaptPlugin — SDK version + dependency check", () => {
     expect(module.name).toBe("my-cool-plugin");
     expect(module.version).toBe("0.0.0");
   });
+
+  it("fails closed when an exported manifest is invalid", () => {
+    const raw = makeRawPlugin({
+      manifest: {
+        name: "INVALID NAME",
+        version: "1.0.0",
+      },
+    });
+
+    expect(() => adaptPlugin(raw, "invalid-plugin", makeConfig(), [], minimalSdkDeps)).toThrow(
+      /invalid manifest/
+    );
+  });
 });
 
 // ─── T4: Plugin config isolation (sanitizeConfigForPlugins) ─────

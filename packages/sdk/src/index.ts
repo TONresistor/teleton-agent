@@ -29,6 +29,8 @@
  * @packageDocumentation
  */
 
+import packageJson from "../package.json" with { type: "json" };
+
 // ─── Types ───────────────────────────────────────────────────────
 
 export type {
@@ -105,6 +107,7 @@ export type {
   // Plugin definitions
   SimpleToolDef,
   PluginManifest,
+  PluginHookDeclaration,
   PluginToolContext,
   ToolResult,
   ToolScope,
@@ -142,6 +145,8 @@ export type {
   AgentStopEvent,
 } from "./types.js";
 
+export { PLUGIN_HOOK_NAMES, TOOL_SCOPES, TOOL_CATEGORIES } from "./types.js";
+
 // ─── Errors ──────────────────────────────────────────────────────
 
 export { PluginSDKError, type SDKErrorCode } from "./errors.js";
@@ -149,4 +154,4 @@ export { PluginSDKError, type SDKErrorCode } from "./errors.js";
 // ─── Constants ───────────────────────────────────────────────────
 
 /** Current SDK version (semver) */
-export const SDK_VERSION = "1.0.0";
+export const SDK_VERSION = packageJson.version;

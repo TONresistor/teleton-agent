@@ -254,7 +254,27 @@ export interface AgentStopEvent {
   readonly timestamp: number;
 }
 
-/** Maps hook names to their handler signatures */
+/** Hook names supported by the Teleton plugin runtime. */
+export const PLUGIN_HOOK_NAMES = [
+  "tool:before",
+  "tool:after",
+  "tool:error",
+  "prompt:before",
+  "prompt:after",
+  "session:start",
+  "session:end",
+  "message:receive",
+  "response:before",
+  "response:after",
+  "response:error",
+  "agent:start",
+  "agent:stop",
+] as const;
+
+/** Available hook names. */
+export type HookName = (typeof PLUGIN_HOOK_NAMES)[number];
+
+/** Maps hook names to their handler signatures. */
 export interface HookHandlerMap {
   "tool:before": (event: BeforeToolCallEvent) => void | Promise<void>;
   "tool:after": (event: AfterToolCallEvent) => void | Promise<void>;
@@ -270,9 +290,6 @@ export interface HookHandlerMap {
   "agent:start": (event: AgentStartEvent) => void | Promise<void>;
   "agent:stop": (event: AgentStopEvent) => void | Promise<void>;
 }
-
-/** Available hook names */
-export type HookName = keyof HookHandlerMap;
 
 // ─── Plugin Event Types ─────────────────────────────────────────
 
@@ -316,11 +333,25 @@ export interface PluginCallbackEvent {
 
 // ─── Plugin Definition Types ────────────────────────────────────
 
-/** Tool visibility scope for context-based filtering */
-export type ToolScope = "always" | "dm-only" | "group-only" | "admin-only";
+/** Tool visibility scopes supported by the runtime. */
+export const TOOL_SCOPES = [
+  "open",
+  "always",
+  "dm-only",
+  "group-only",
+  "admin-only",
+  "allowlist",
+  "disabled",
+] as const;
 
-/** Tool category for observation masking behavior */
-export type ToolCategory = "data-bearing" | "action";
+/** Tool visibility scope for context-based filtering. */
+export type ToolScope = (typeof TOOL_SCOPES)[number];
+
+/** Tool categories supported by the runtime. */
+export const TOOL_CATEGORIES = ["data-bearing", "action"] as const;
+
+/** Tool category for observation masking behavior. */
+export type ToolCategory = (typeof TOOL_CATEGORIES)[number];
 
 /**
  * Context passed to plugin tool executors at runtime.
@@ -357,7 +388,7 @@ export interface ToolResult {
  * This is the format plugins use to define their tools.
  * The core platform converts these into full Tool definitions.
  */
-export interface SimpleToolDef {
+export interface SimpleToolDef<TParams extends Record<string, unknown> = Record<string, unknown>> {
   /** Unique tool name (e.g. "casino_spin") */
   name: string;
   /** Human-readable description for the LLM */
@@ -365,7 +396,7 @@ export interface SimpleToolDef {
   /** JSON Schema for parameters (defaults to empty object) */
   parameters?: Record<string, unknown>;
   /** Tool executor function */
-  execute: (params: Record<string, unknown>, context: PluginToolContext) => Promise<ToolResult>;
+  execute: (params: TParams, context: PluginToolContext) => Promise<ToolResult>;
   /** Visibility scope (default: "always") */
   scope?: ToolScope;
   /** Tool category for masking behavior */
@@ -543,6 +574,18 @@ export interface PluginManifest {
   secrets?: Record<string, SecretDeclaration>;
   /** Bot capabilities (inline mode, callbacks) */
   bot?: BotManifest;
+  /** Agent lifecycle hooks this plugin is allowed to register. */
+  hooks?: PluginHookDeclaration[];
+}
+
+/** Hook declaration in a plugin manifest. */
+export interface PluginHookDeclaration {
+  /** Hook name supported by the current SDK. */
+  name: HookName;
+  /** Per-hook execution priority, clamped to -1000..1000. */
+  priority?: number;
+  /** Human-readable purpose of the hook. */
+  description?: string;
 }
 
 // ─── Root SDK ────────────────────────────────────────────────────
@@ -578,7 +621,7 @@ export interface PluginSDK {
   /** Telegram messaging and user operations */
   readonly telegram: TelegramSDK;
 
-  /** Plugin's isolated SQLite database (null if no migrate() exported) */
+  /** Plugin's isolated SQLite database (null only if DB initialization failed). */
   readonly db: Database.Database | null;
 
   /** Sanitized application config (no API keys or secrets) */
@@ -590,7 +633,7 @@ export interface PluginSDK {
   /** Secure access to plugin secrets (API keys, tokens) */
   readonly secrets: SecretsSDK;
 
-  /** Simple key-value storage (null if no DB — use migrate() or storage auto-creates _kv table) */
+  /** Simple key-value storage (null only if DB initialization failed). */
   readonly storage: StorageSDK | null;
 
   /** Prefixed logger */

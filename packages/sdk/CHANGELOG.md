@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-07-10
+
+### Breaking
+
+- `getResaleGifts(giftId, limit?)` now requires the collection `giftId`; the previous signature could not query the Telegram API correctly.
+- Invalid exported plugin manifests now fail closed instead of being silently ignored.
+- Plugin tool scopes are validated against the canonical SDK scope list.
+
+### Security
+
+- Plugin lifecycle methods and tool executors always receive the isolated plugin database handle, never the agent database.
+- `ATTACH DATABASE` and `DETACH DATABASE` remain blocked on every plugin-facing database surface.
+
+### Changed
+
+- `PluginManifest`, hook names, tool scopes, and tool categories are aligned with runtime validation.
+- SDK version compatibility parsing is strict and follows caret semantics for `0.0.x` releases.
+- SDK types are split by TON, Telegram, plugin, and common domains while preserving the root import path.
+
 ### Added
 
 #### TON — Jetton Analytics
@@ -54,10 +73,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `sendGiftOffer(userId, giftSlug, price, opts?)` — Make buy offer
 - Types: `StarsTransaction`, `TransferResult`, `CollectibleInfo`, `UniqueGift`, `GiftValue`, `GiftOfferOptions`
 
-### Fixed
-- `getResaleGifts` signature: first param is `giftId` (collection ID), not omitted
-
-## [1.0.0] - 2025-06-15
+## [1.0.0] - 2026-02-16
 
 ### Added
 - Initial release

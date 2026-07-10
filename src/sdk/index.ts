@@ -4,6 +4,7 @@ import type {
   PluginSDK,
   PluginLogger,
   BotManifest,
+  PluginHookDeclaration,
   HookName,
   HookHandlerMap,
 } from "@teleton-agent/sdk";
@@ -46,7 +47,7 @@ export interface CreatePluginSDKOptions {
   /** Hook registry for sdk.on() support */
   hookRegistry?: HookRegistry;
   /** Declared hooks from manifest (if present, enforces registration) */
-  declaredHooks?: Array<{ name: string; priority?: number; description?: string }>;
+  declaredHooks?: PluginHookDeclaration[];
   /** Plugin-level global priority (from plugin_config DB table). Default 0. */
   globalPriority?: number;
 }
@@ -157,14 +158,14 @@ export function createPluginSDK(deps: SDKDependencies, opts: CreatePluginSDKOpti
         return;
       }
       // Enforce manifest declarations: if hooks[] is declared, only allow listed hooks
+      const declaration = opts.declaredHooks?.find((hook) => hook.name === hookName);
       if (opts.declaredHooks) {
-        const declared = opts.declaredHooks.some((h) => h.name === hookName);
-        if (!declared) {
+        if (!declaration) {
           log.warn(`Hook "${hookName}" not declared in manifest — registration rejected`);
           return;
         }
       }
-      const rawPriority = Number(onOpts?.priority) || 0;
+      const rawPriority = Number(onOpts?.priority ?? declaration?.priority) || 0;
       const clampedPriority = Math.max(-1000, Math.min(1000, rawPriority));
       if (rawPriority !== clampedPriority) {
         log.debug(`Hook "${hookName}" priority ${rawPriority} clamped to ${clampedPriority}`);
@@ -204,7 +205,7 @@ interface SemVer {
 }
 
 function parseSemver(v: string): SemVer | null {
-  const match = v.match(/(\d+)\.(\d+)\.(\d+)/);
+  const match = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)$/.exec(v);
   if (!match) return null;
   return {
     major: parseInt(match[1]),
@@ -240,6 +241,9 @@ export function semverSatisfies(current: string, range: string): boolean {
     if (!req) {
       sdkLog.warn(`[SDK] Malformed sdkVersion range "${range}", rejecting`);
       return false;
+    }
+    if (req.major === 0 && req.minor === 0) {
+      return cur.major === 0 && cur.minor === 0 && cur.patch === req.patch;
     }
     if (req.major === 0) {
       return cur.major === 0 && cur.minor === req.minor && semverGte(cur, req);

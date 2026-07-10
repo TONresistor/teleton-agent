@@ -9,10 +9,17 @@
 import { z } from "zod";
 import type { Config } from "../../config/schema.js";
 import { createLogger } from "../../utils/logger.js";
+import {
+  PLUGIN_HOOK_NAMES,
+  TOOL_CATEGORIES,
+  TOOL_SCOPES,
+  type PluginManifest,
+  type SimpleToolDef,
+} from "@teleton-agent/sdk";
 
 const log = createLogger("PluginValidator");
 
-const ManifestSchema = z.object({
+const ManifestSchema: z.ZodType<PluginManifest> = z.object({
   name: z
     .string()
     .min(1)
@@ -52,36 +59,23 @@ const ManifestSchema = z.object({
   hooks: z
     .array(
       z.object({
-        name: z.string().min(1).max(64),
-        priority: z.number().optional(),
+        name: z.enum(PLUGIN_HOOK_NAMES),
+        priority: z.number().min(-1000).max(1000).optional(),
         description: z.string().max(256).optional(),
       })
     )
     .optional(),
 });
 
-export type PluginManifest = z.infer<typeof ManifestSchema>;
+export type { PluginManifest, SimpleToolDef } from "@teleton-agent/sdk";
 
 export function validateManifest(raw: unknown): PluginManifest {
   return ManifestSchema.parse(raw);
 }
 
-export interface SimpleToolDef {
-  name: string;
-  description: string;
-  parameters?: Record<string, unknown>;
-  /* eslint-disable @typescript-eslint/no-explicit-any -- plugin tool params/context are untyped */
-  execute: (
-    params: any,
-    context: any
-  ) => Promise<{ success: boolean; data?: unknown; error?: string }>;
-  /* eslint-enable @typescript-eslint/no-explicit-any */
-  scope?: "always" | "dm-only" | "group-only" | "admin-only" | "open" | "allowlist" | "disabled";
-  category?: "data-bearing" | "action";
-}
-
 export function validateToolDefs(defs: unknown[], pluginName: string): SimpleToolDef[] {
   const valid: SimpleToolDef[] = [];
+  const names = new Set<string>();
 
   for (const def of defs) {
     if (!def || typeof def !== "object") {
@@ -96,7 +90,17 @@ export function validateToolDefs(defs: unknown[], pluginName: string): SimpleToo
       continue;
     }
 
-    if (!t.description || typeof t.description !== "string") {
+    if (!/^[a-z][a-z0-9_]{0,63}$/.test(t.name)) {
+      log.warn(`[${pluginName}] tool "${t.name}" has an invalid name, skipping`);
+      continue;
+    }
+
+    if (names.has(t.name)) {
+      log.warn(`[${pluginName}] tool "${t.name}" is declared more than once, skipping`);
+      continue;
+    }
+
+    if (!t.description || typeof t.description !== "string" || t.description.length > 1024) {
       log.warn(`[${pluginName}] tool "${t.name}" missing 'description', skipping`);
       continue;
     }
@@ -106,6 +110,25 @@ export function validateToolDefs(defs: unknown[], pluginName: string): SimpleToo
       continue;
     }
 
+    if (
+      t.parameters !== undefined &&
+      (!t.parameters || typeof t.parameters !== "object" || Array.isArray(t.parameters))
+    ) {
+      log.warn(`[${pluginName}] tool "${t.name}" has invalid parameters, skipping`);
+      continue;
+    }
+
+    if (t.scope !== undefined && !TOOL_SCOPES.includes(t.scope as never)) {
+      log.warn(`[${pluginName}] tool "${t.name}" has invalid scope, skipping`);
+      continue;
+    }
+
+    if (t.category !== undefined && !TOOL_CATEGORIES.includes(t.category as never)) {
+      log.warn(`[${pluginName}] tool "${t.name}" has invalid category, skipping`);
+      continue;
+    }
+
+    names.add(t.name);
     valid.push(t as unknown as SimpleToolDef);
   }
 
