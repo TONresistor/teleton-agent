@@ -919,6 +919,31 @@ describe("ToolRegistry", () => {
   });
 
   describe("registerPluginTools()", () => {
+    it("defaults external action tools to the Telegram allowlist", () => {
+      const action = createMockTool("plugin_mutate", "action");
+
+      registry.registerPluginTools("test-plugin", [
+        { tool: action, executor: createMockExecutor() },
+      ]);
+
+      expect(registry.getToolConfig(action.name)).toEqual({ level: "allowlist" });
+      expect(registry.getForContext(false, null, "dm", false, 12345)).not.toContainEqual(action);
+
+      registry.setAllowFrom([12345]);
+      expect(registry.getForContext(false, null, "dm", false, 12345)).toContainEqual(action);
+    });
+
+    it("keeps external data-bearing tools public by default", () => {
+      const readOnly = createMockTool("plugin_lookup", "data-bearing");
+
+      registry.registerPluginTools("test-plugin", [
+        { tool: readOnly, executor: createMockExecutor() },
+      ]);
+
+      expect(registry.getToolConfig(readOnly.name)).toEqual({ level: "all" });
+      expect(registry.getForContext(false, null, "dm", false, 12345)).toContainEqual(readOnly);
+    });
+
     it("should register multiple plugin tools", () => {
       const tools = [
         {

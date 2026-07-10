@@ -31,6 +31,21 @@ import { createLogger } from "../../utils/logger.js";
 const log = createLogger("Registry");
 const APPROVAL_TTL_MS = 5 * 60 * 1000;
 
+/**
+ * External plugins and MCP servers are not part of the reviewed built-in policy.
+ * Their actions therefore require an explicitly trusted Telegram identity even
+ * when the plugin omits a scope or declares the legacy "always" scope. Authors
+ * can keep genuinely read-only tools public by marking them data-bearing.
+ */
+function getExternalMinimumAccess(
+  tool: Tool,
+  scope?: ToolScope,
+  declaredMinimum?: ToolAccessLevel
+): ToolAccessLevel {
+  const declared = declaredMinimum ?? scopeToLevel(scope);
+  return tool.category === "data-bearing" ? declared : enforceMinimumAccess(declared, "allowlist");
+}
+
 interface PendingApproval {
   id: string;
   toolName: string;
@@ -632,7 +647,7 @@ export class ToolRegistry {
         scope,
         mode: mode ?? "both",
         module: pluginName,
-        minimumAccess,
+        minimumAccess: getExternalMinimumAccess(tool, scope, minimumAccess),
       });
       names.push(tool.name);
     }
@@ -684,7 +699,7 @@ export class ToolRegistry {
         scope,
         mode: mode ?? "both",
         module: pluginName,
-        minimumAccess,
+        minimumAccess: getExternalMinimumAccess(tool, scope, minimumAccess),
       });
       names.push(tool.name);
     }
