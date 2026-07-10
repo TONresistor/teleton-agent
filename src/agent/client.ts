@@ -15,6 +15,7 @@ import { createLogger } from "../utils/logger.js";
 import { getCodexApiKey, refreshCodexApiKey } from "../providers/codex-credentials.js";
 import { getGrokBuildApiKey, refreshGrokBuildApiKey } from "../providers/grok-build-credentials.js";
 import { getProviderModel } from "../providers/model-resolver.js";
+import { TELEGRAM_SEND_TOOLS } from "../constants/tools.js";
 
 // Model resolution + provider model registration live in the neutral providers/
 // layer so non-agent consumers (e.g. memory) can resolve models without importing
@@ -55,6 +56,23 @@ function providerSupportsTemperature(provider: string): boolean {
 
 function getCacheRetention(provider: string): "none" | "long" {
   return provider === "grok-build" ? "none" : "long";
+}
+
+function prepareToolsForProvider(tools: Tool[] | undefined): Tool[] | undefined {
+  if (!tools) return tools;
+
+  return tools.map((tool) =>
+    TELEGRAM_SEND_TOOLS.has(tool.name)
+      ? {
+          ...tool,
+          description:
+            `${tool.description} This action sends immediately. ` +
+            "Do not use this tool to reply to the current inbound message or for progress updates; " +
+            "return normal assistant text instead, which Teleton delivers automatically. " +
+            "Use it for intentional separate Telegram messages.",
+        }
+      : tool
+  );
 }
 
 function getProviderPayloadOptions(provider: SupportedProvider): Record<string, unknown> {
@@ -123,8 +141,9 @@ export async function chatWithContext(
 ): Promise<ChatResponse> {
   const provider = (config.provider || "anthropic") as SupportedProvider;
   const model = getProviderModel(provider, config.model);
+  const preparedTools = prepareToolsForProvider(options.tools);
   const tools =
-    provider === "google" && options.tools ? sanitizeToolsForGemini(options.tools) : options.tools;
+    provider === "google" && preparedTools ? sanitizeToolsForGemini(preparedTools) : preparedTools;
 
   const systemPrompt = options.systemPrompt || options.context.systemPrompt || "";
 
@@ -169,9 +188,10 @@ export interface StreamResult {
 export function streamWithContext(config: AgentConfig, options: ChatOptions): StreamResult {
   const provider = (config.provider || "anthropic") as SupportedProvider;
   const model = getProviderModel(provider, config.model);
+  const preparedTools = prepareToolsForProvider(options.tools);
 
   const tools =
-    provider === "google" && options.tools ? sanitizeToolsForGemini(options.tools) : options.tools;
+    provider === "google" && preparedTools ? sanitizeToolsForGemini(preparedTools) : preparedTools;
 
   const systemPrompt = options.systemPrompt || options.context.systemPrompt || "";
 

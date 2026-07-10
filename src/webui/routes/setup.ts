@@ -16,7 +16,7 @@ import {
   validateApiKeyFormat,
   type SupportedProvider,
 } from "../../config/providers.js";
-import { ConfigSchema } from "../../config/schema.js";
+import { ConfigSchema, DEFAULT_TOOL_RAG_ALWAYS_INCLUDE } from "../../config/schema.js";
 import { ensureWorkspace, isNewWorkspace } from "../../workspace/manager.js";
 import { TELETON_ROOT } from "../../workspace/paths.js";
 import {
@@ -520,14 +520,7 @@ export function createSetupRoutes(options?: { keyHash?: string }): Hono {
         tool_rag: {
           enabled: false,
           top_k: 25,
-          always_include: [
-            "telegram_send_message",
-            "telegram_quote_reply",
-            "telegram_send_photo",
-            "journal_*",
-            "workspace_*",
-            "web_*",
-          ],
+          always_include: [...DEFAULT_TOOL_RAG_ALWAYS_INCLUDE],
           skip_unlimited_providers: false,
         },
         capabilities: {

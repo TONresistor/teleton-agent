@@ -131,6 +131,7 @@ vi.mock("../../utils/logger.js", () => ({
 
 vi.mock("../../config/schema.js", () => ({
   ConfigSchema: { parse: vi.fn((v: unknown) => v) },
+  DEFAULT_TOOL_RAG_ALWAYS_INCLUDE: ["journal_*", "workspace_*", "web_*"],
   DealsConfigSchema: { parse: vi.fn((v: unknown) => v) },
 }));
 
@@ -930,6 +931,18 @@ describe("Setup API Routes", () => {
       expect(data.data.path).toBe("/tmp/teleton-test/config.yaml");
       expect(writeFileSync).toHaveBeenCalled();
       expect(ConfigSchema.parse).toHaveBeenCalled();
+    });
+
+    it("keeps Telegram send tools out of the generated default tool context", async () => {
+      await post(app, "/config/save", validInput);
+
+      const yaml = (writeFileSync as Mock).mock.calls[0][1] as string;
+      expect(yaml).not.toContain("telegram_send_message");
+      expect(yaml).not.toContain("telegram_quote_reply");
+      expect(yaml).not.toContain("telegram_send_photo");
+      expect(yaml).toContain("journal_*");
+      expect(yaml).toContain("workspace_*");
+      expect(yaml).toContain("web_*");
     });
 
     it("includes gocoon config when provided", async () => {

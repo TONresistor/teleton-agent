@@ -36,7 +36,7 @@ import { TELETON_ROOT } from "../../workspace/paths.js";
 import { TelegramUserClient } from "../../telegram/client.js";
 import { maskSecret } from "../../utils/mask.js";
 import YAML from "yaml";
-import { type Config } from "../../config/schema.js";
+import { DEFAULT_TOOL_RAG_ALWAYS_INCLUDE, type Config } from "../../config/schema.js";
 import { getModelsForProvider } from "../../config/model-catalog.js";
 import {
   generateWallet,
@@ -347,14 +347,7 @@ function buildConfig(input: BuildConfigInput): Config {
     tool_rag: {
       enabled: true,
       top_k: 25,
-      always_include: [
-        "telegram_send_message",
-        "telegram_quote_reply",
-        "telegram_send_photo",
-        "journal_*",
-        "workspace_*",
-        "web_*",
-      ],
+      always_include: [...DEFAULT_TOOL_RAG_ALWAYS_INCLUDE],
       skip_unlimited_providers: false,
     },
     tool_search: { enabled: true },

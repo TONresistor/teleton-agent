@@ -214,6 +214,20 @@ export class MessageHandler {
       }
     }
 
+    const ownSenderId = this.ownUserId ? Number(this.ownUserId) : undefined;
+    if (
+      ownSenderId !== undefined &&
+      Number.isFinite(ownSenderId) &&
+      message.senderId === ownSenderId
+    ) {
+      return {
+        message,
+        isAdmin,
+        shouldRespond: false,
+        reason: "Sender is self",
+      };
+    }
+
     if (message.isBot) {
       return {
         message,

@@ -280,6 +280,16 @@ describe("MessageHandler", () => {
       expect(ctx.reason).toBe("Sender is a bot");
     });
 
+    it("own user messages → shouldRespond=false", () => {
+      const { handler } = createHandler({ dm_policy: "open" });
+      handler.setOwnUserId("222");
+
+      const ctx = handler.analyzeMessage(makeMessage({ senderId: 222 }));
+
+      expect(ctx.shouldRespond).toBe(false);
+      expect(ctx.reason).toBe("Sender is self");
+    });
+
     it("message.id <= chatOffset → shouldRespond=false (already processed)", () => {
       mockReadOffset.mockReturnValue(100);
       const { handler } = createHandler({ dm_policy: "open" });

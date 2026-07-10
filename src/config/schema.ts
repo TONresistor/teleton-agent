@@ -11,6 +11,8 @@ export const GroupPolicy = z.enum(["open", "allowlist", "admin-only", "disabled"
 export const ExecMode = z.enum(["off", "yolo"]);
 export const ExecScope = z.enum(["admin-only", "allowlist", "all"]);
 
+export const DEFAULT_TOOL_RAG_ALWAYS_INCLUDE = ["journal_*", "workspace_*", "web_*"] as const;
+
 export const SessionResetPolicySchema = z.object({
   daily_reset_enabled: z.boolean().default(true).describe("Enable daily session reset"),
   daily_reset_hour: z
@@ -273,13 +275,7 @@ const _ToolRagObject = z.object({
   top_k: z.number().default(35).describe("Max tools to retrieve per LLM call"),
   always_include: z
     .array(z.string())
-    .default([
-      "telegram_send_message",
-      "telegram_quote_reply",
-      "telegram_send_photo",
-      "journal_*",
-      "workspace_*",
-    ])
+    .default([...DEFAULT_TOOL_RAG_ALWAYS_INCLUDE])
     .describe("Tool name patterns always included (prefix glob with *)"),
   skip_unlimited_providers: z
     .boolean()

@@ -35,13 +35,13 @@ export const tools: ToolEntry[] = [
     tool: telegramSendMessageTool,
     executor: telegramSendMessageExecutor,
     mode: "both",
-    tags: ["core"],
+    tags: ["social"],
   },
   {
     tool: telegramQuoteReplyTool,
     executor: telegramQuoteReplyExecutor,
     mode: "user",
-    tags: ["core"],
+    tags: ["social"],
   },
   {
     tool: telegramGetRepliesTool,
@@ -53,7 +53,7 @@ export const tools: ToolEntry[] = [
     tool: telegramEditMessageTool,
     executor: telegramEditMessageExecutor,
     mode: "both",
-    tags: ["core"],
+    tags: ["social"],
   },
   {
     tool: telegramScheduleMessageTool,
@@ -107,7 +107,7 @@ export const tools: ToolEntry[] = [
     tool: telegramDeleteMessageTool,
     executor: telegramDeleteMessageExecutor,
     mode: "both",
-    tags: ["core"],
+    tags: ["admin"],
   },
   {
     tool: botInlineSendTool,

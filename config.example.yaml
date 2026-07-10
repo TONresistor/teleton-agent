@@ -79,10 +79,6 @@ webui:
 #   top_k: 35                          # Max tools to retrieve per LLM call
 #   skip_unlimited_providers: false    # RAG applies to ALL providers (including Anthropic)
 #   always_include:                    # Tools always included regardless of query
-#     - telegram_send_message
-#     - telegram_reply_message
-#     - telegram_send_photo
-#     - telegram_send_document
 #     - "journal_*"                    # Prefix glob: all journal_ tools
 #     - "workspace_*"
 #     - "web_*"
