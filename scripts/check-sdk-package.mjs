@@ -93,6 +93,7 @@ const tools: SimpleToolDef<{ name: string }>[] = [{
   parameters: { type: "object" },
   scope: "allowlist",
   category: "action",
+  requiresApproval: true,
   async execute(params, context) {
     return { success: true, data: { name: params.name, chatId: context.chatId } };
   },

@@ -128,6 +128,11 @@ export function validateToolDefs(defs: unknown[], pluginName: string): SimpleToo
       continue;
     }
 
+    if (t.requiresApproval !== undefined && typeof t.requiresApproval !== "boolean") {
+      log.warn(`[${pluginName}] tool "${t.name}" has invalid approval policy, skipping`);
+      continue;
+    }
+
     names.add(t.name);
     valid.push(t as unknown as SimpleToolDef);
   }

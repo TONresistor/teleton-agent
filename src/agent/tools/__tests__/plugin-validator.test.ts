@@ -56,6 +56,7 @@ describe("validateToolDefs", () => {
     { name: "valid_name", description: "Invalid scope", scope: "private", execute },
     { name: "valid_name", description: "Invalid category", category: "read", execute },
     { name: "valid_name", description: "Invalid parameters", parameters: [], execute },
+    { name: "valid_name", description: "Invalid approval", requiresApproval: "yes", execute },
   ])("rejects invalid tool contracts: $description", (definition) => {
     expect(validateToolDefs([definition], "contract-test")).toEqual([]);
   });

@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Plugin lifecycle methods and tool executors always receive the isolated plugin database handle, never the agent database.
 - `ATTACH DATABASE` and `DETACH DATABASE` remain blocked on every plugin-facing database surface.
+- External action tools require authenticated owner approval by default; data-bearing tools can opt in with `requiresApproval`.
 
 ### Changed
 

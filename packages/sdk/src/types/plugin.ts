@@ -401,6 +401,8 @@ export interface SimpleToolDef<TParams extends Record<string, unknown> = Record<
   scope?: ToolScope;
   /** Tool category for masking behavior */
   category?: ToolCategory;
+  /** Require an authenticated owner approval before execution. */
+  requiresApproval?: boolean;
 }
 
 // ─── Bot SDK ─────────────────────────────────────────────────────

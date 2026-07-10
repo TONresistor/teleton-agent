@@ -40,10 +40,18 @@ const APPROVAL_TTL_MS = 5 * 60 * 1000;
 function getExternalMinimumAccess(
   tool: Tool,
   scope?: ToolScope,
-  declaredMinimum?: ToolAccessLevel
+  declaredMinimum?: ToolAccessLevel,
+  requiresApproval = false
 ): ToolAccessLevel {
   const declared = declaredMinimum ?? scopeToLevel(scope);
-  return tool.category === "data-bearing" ? declared : enforceMinimumAccess(declared, "allowlist");
+  const externalFloor =
+    tool.category === "data-bearing" ? declared : enforceMinimumAccess(declared, "allowlist");
+  return requiresApproval ? enforceMinimumAccess(externalFloor, "admin") : externalFloor;
+}
+
+/** External actions fail closed; plugin authors may only add approval to reads. */
+function requiresExternalApproval(tool: Tool, declared?: boolean): boolean {
+  return tool.category !== "data-bearing" || declared === true;
 }
 
 interface PendingApproval {
@@ -641,18 +649,21 @@ export class ToolRegistry {
       scope?: ToolScope;
       mode?: ToolMode;
       minimumAccess?: ToolAccessLevel;
+      requiresApproval?: boolean;
     }>
   ): number {
     const names: string[] = [];
-    for (const { tool, executor, scope, mode, minimumAccess } of tools) {
+    for (const { tool, executor, scope, mode, minimumAccess, requiresApproval } of tools) {
       if (this.tools.has(tool.name)) continue;
+      const approvalRequired = requiresExternalApproval(tool, requiresApproval);
       this.insertTool(tool.name, {
         tool,
         executor,
         scope,
         mode: mode ?? "both",
         module: pluginName,
-        minimumAccess: getExternalMinimumAccess(tool, scope, minimumAccess),
+        minimumAccess: getExternalMinimumAccess(tool, scope, minimumAccess, approvalRequired),
+        requiresApproval: approvalRequired,
       });
       names.push(tool.name);
     }
@@ -684,13 +695,14 @@ export class ToolRegistry {
       scope?: ToolScope;
       mode?: ToolMode;
       minimumAccess?: ToolAccessLevel;
+      requiresApproval?: boolean;
     }>
   ): void {
     // Collect old tool names before removal (allowed to re-register these)
     const previousNames = new Set(this.pluginToolNames.get(pluginName) ?? []);
     this.removePluginTools(pluginName);
     const names: string[] = [];
-    for (const { tool, executor, scope, mode, minimumAccess } of newTools) {
+    for (const { tool, executor, scope, mode, minimumAccess, requiresApproval } of newTools) {
       // Prevent overwriting core/other-plugin tools
       if (this.tools.has(tool.name) && !previousNames.has(tool.name)) {
         log.warn(
@@ -698,13 +710,15 @@ export class ToolRegistry {
         );
         continue;
       }
+      const approvalRequired = requiresExternalApproval(tool, requiresApproval);
       this.insertTool(tool.name, {
         tool,
         executor,
         scope,
         mode: mode ?? "both",
         module: pluginName,
-        minimumAccess: getExternalMinimumAccess(tool, scope, minimumAccess),
+        minimumAccess: getExternalMinimumAccess(tool, scope, minimumAccess, approvalRequired),
+        requiresApproval: approvalRequired,
       });
       names.push(tool.name);
     }

@@ -282,6 +282,24 @@ describe("adaptPlugin — SDK version + dependency check", () => {
       /invalid manifest/
     );
   });
+
+  it("propagates an explicit approval requirement from the public tool contract", () => {
+    const raw = makeRawPlugin({
+      tools: [
+        {
+          name: "sensitive_read",
+          description: "Read sensitive plugin data",
+          category: "data-bearing",
+          requiresApproval: true,
+          execute: async () => ({ success: true }),
+        },
+      ],
+    });
+    const module = adaptPlugin(raw, "approval-plugin", makeConfig(), [], minimalSdkDeps);
+    module.migrate?.();
+
+    expect(module.tools(makeConfig())[0].requiresApproval).toBe(true);
+  });
 });
 
 // ─── T4: Plugin config isolation (sanitizeConfigForPlugins) ─────

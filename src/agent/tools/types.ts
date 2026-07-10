@@ -163,6 +163,8 @@ export interface PluginModule {
     allowFrom?: readonly number[];
     /** Telegram mode(s) this module tool runs in. Defaults to "both" when omitted. */
     mode?: ToolMode;
+    /** Require an authenticated owner approval before execution. */
+    requiresApproval?: boolean;
   }>;
   /** Start background jobs (polling, timers, etc.) */
   start?(context: PluginContext): Promise<void>;

@@ -948,18 +948,19 @@ describe("ToolRegistry", () => {
   });
 
   describe("registerPluginTools()", () => {
-    it("defaults external action tools to the Telegram allowlist", () => {
+    it("defaults external action tools to admin-only approval", () => {
       const action = createMockTool("plugin_mutate", "action");
 
       registry.registerPluginTools("test-plugin", [
         { tool: action, executor: createMockExecutor() },
       ]);
 
-      expect(registry.getToolConfig(action.name)).toEqual({ level: "allowlist" });
+      expect(registry.getToolConfig(action.name)).toEqual({ level: "admin" });
       expect(registry.getForContext(false, null, "dm", false, 12345)).not.toContainEqual(action);
 
       registry.setAllowFrom([12345]);
-      expect(registry.getForContext(false, null, "dm", false, 12345)).toContainEqual(action);
+      expect(registry.getForContext(false, null, "dm", false, 12345)).not.toContainEqual(action);
+      expect(registry.getForContext(false, null, "dm", true, 99999)).toContainEqual(action);
     });
 
     it("keeps external data-bearing tools public by default", () => {
@@ -971,6 +972,61 @@ describe("ToolRegistry", () => {
 
       expect(registry.getToolConfig(readOnly.name)).toEqual({ level: "all" });
       expect(registry.getForContext(false, null, "dm", false, 12345)).toContainEqual(readOnly);
+    });
+
+    it("requires owner approval for every external action", async () => {
+      const action = createMockTool("plugin_mutate", "action");
+      const executor = createMockExecutor();
+      const sendMessage = vi.fn(async () => ({ id: 1, date: 1, chatId: "test-chat" }));
+      registry.setAllowFrom([99999]);
+      registry.registerPluginTools("test-plugin", [{ tool: action, executor }]);
+
+      const result = await registry.execute(
+        {
+          type: "toolCall",
+          id: "plugin-approval",
+          name: action.name,
+          arguments: { message: "mutate" },
+        },
+        {
+          ...mockContext,
+          senderId: 99999,
+          bridge: { getMode: () => "user", sendMessage } as never,
+        }
+      );
+
+      expect(result).toMatchObject({
+        success: false,
+        data: { approvalRequired: true },
+      });
+      expect(executor).not.toHaveBeenCalled();
+      expect(sendMessage).toHaveBeenCalledOnce();
+    });
+
+    it("allows a data-bearing external tool to opt into approval", async () => {
+      const readOnly = createMockTool("plugin_private_lookup", "data-bearing");
+      const executor = createMockExecutor();
+      const sendMessage = vi.fn(async () => ({ id: 1, date: 1, chatId: "test-chat" }));
+      registry.registerPluginTools("test-plugin", [
+        { tool: readOnly, executor, requiresApproval: true },
+      ]);
+
+      const result = await registry.execute(
+        {
+          type: "toolCall",
+          id: "plugin-read-approval",
+          name: readOnly.name,
+          arguments: { message: "read" },
+        },
+        {
+          ...mockContext,
+          senderId: 99999,
+          bridge: { getMode: () => "user", sendMessage } as never,
+        }
+      );
+
+      expect(result).toMatchObject({ data: { approvalRequired: true } });
+      expect(executor).not.toHaveBeenCalled();
     });
 
     it("should register multiple plugin tools", () => {

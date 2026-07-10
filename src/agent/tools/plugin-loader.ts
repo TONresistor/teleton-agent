@@ -279,6 +279,7 @@ export function adaptPlugin(
             // isolated handle. Failing closed also covers DB startup errors.
             executor: withPluginDb(sandboxedExecutor),
             scope: def.scope as ToolScope | undefined,
+            requiresApproval: def.requiresApproval,
           };
         });
       } catch (error: unknown) {
