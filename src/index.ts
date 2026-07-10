@@ -80,6 +80,9 @@ export class TeletonApp {
   private messagesProcessed: number = 0;
   private heartbeatRunner: HeartbeatRunner;
   private scheduledTaskHandler: ScheduledTaskHandler;
+  private inlineRouter = new InlineRouter();
+  private pluginRateLimiter = new PluginRateLimiter();
+  private inlineMiddlewareBridge: ITelegramBridge | null = null;
 
   private configPath: string;
 
@@ -384,6 +387,7 @@ ${blue}  ┌──────────────────────�
 
     // Truncate stale external plugins from previous run (keep builtins only)
     this.modules.length = this.builtinModuleCount;
+    this.preparePluginBotRuntime();
 
     const builtinNames = this.modules.map((m) => m.name);
     const moduleNames = this.modules
@@ -449,25 +453,21 @@ ${blue}  ┌──────────────────────�
     const username = await this.bridge.getUsername();
     const walletAddress = getWalletAddress();
 
-    // Set up inline router and rate limiter
-    const inlineRouter = new InlineRouter();
-    const rateLimiter = new PluginRateLimiter();
-
     // Start module background jobs (after bridge connect)
     const pluginContext = await this.startModules();
 
-    // Wire mode-specific SDK deps, handlers, and polling
+    // Register every middleware and dynamic plugin hook before polling starts.
     const firstStart = !this.messageHandlersRegistered;
+    this.installMessagePipeline();
+    if (hookRegistry.hasAnyHooks()) this.installHookRunner(hookRegistry);
+    this.wirePluginEventHooks();
+
+    // Wire mode-specific handlers and start polling last.
     if (isBotBridge(this.bridge)) {
-      this.wireBotMode(inlineRouter, rateLimiter, firstStart);
+      this.wireBotMode(firstStart);
     } else {
       this.wireUserMode(firstStart);
     }
-
-    // Create hook runner if any plugins registered hooks
-    if (hookRegistry.hasAnyHooks()) this.installHookRunner(hookRegistry);
-
-    this.wirePluginEventHooks();
 
     // Start plugin hot-reload watcher (dev mode)
     if (this.config.dev.hot_reload) {
@@ -512,8 +512,30 @@ ${blue}  ┌──────────────────────�
         this.heartbeatRunner.start(adminChatId, this.config.heartbeat.interval_ms);
       }
     }
+  }
 
-    this.installMessagePipeline();
+  private preparePluginBotRuntime(): void {
+    this.inlineRouter.clearPlugins();
+    this.inlineRouter.setCallbackObserver(null);
+    this.pluginRateLimiter = new PluginRateLimiter();
+
+    if (isBotBridge(this.bridge)) {
+      this.sdkDeps.inlineRouter = this.inlineRouter;
+      this.sdkDeps.gramjsBot = null;
+      this.sdkDeps.grammyBot = this.bridge.getBot();
+      this.sdkDeps.rateLimiter = this.pluginRateLimiter;
+
+      if (this.inlineMiddlewareBridge !== this.bridge) {
+        this.bridge.useMiddleware(this.inlineRouter.middleware());
+        this.inlineMiddlewareBridge = this.bridge;
+      }
+      return;
+    }
+
+    this.sdkDeps.inlineRouter = null;
+    this.sdkDeps.gramjsBot = null;
+    this.sdkDeps.grammyBot = null;
+    this.sdkDeps.rateLimiter = null;
   }
 
   /** Create and install the plugin hook runner; log which hooks are active. */
@@ -640,6 +662,7 @@ ${blue}  ┌──────────────────────�
     // New bridge = new message listeners needed
     this.messageHandlersRegistered = false;
     this.callbackHandlerRegistered = false;
+    this.inlineMiddlewareBridge = null;
   }
 
   // ─── Mode-specific wiring ──────────────────────────────────────────────
@@ -647,14 +670,7 @@ ${blue}  ┌──────────────────────�
   /**
    * Wire bot-mode SDK deps, callback handler, and Grammy polling.
    */
-  private wireBotMode(
-    inlineRouter: InlineRouter,
-    rateLimiter: PluginRateLimiter,
-    firstStart: boolean
-  ): void {
-    this.sdkDeps.inlineRouter = inlineRouter;
-    this.sdkDeps.gramjsBot = null;
-    this.sdkDeps.rateLimiter = rateLimiter;
+  private wireBotMode(firstStart: boolean): void {
     log.info("Bot mode: using main Grammy bridge");
 
     if (isBotBridge(this.bridge)) {
@@ -684,8 +700,10 @@ ${blue}  ┌──────────────────────�
           });
           return response.content;
         });
-        this.bridge.startPolling();
       }
+      // The middleware tree survives a WebUI stop/start, but long-polling does
+      // not. Restart polling on every successful agent start.
+      this.bridge.startPolling();
       void this.bridge.syncCommands();
     }
   }
@@ -1074,16 +1092,7 @@ ${blue}  ┌──────────────────────�
           answer,
         };
 
-        for (const mod of this.modules) {
-          const withHooks = mod as PluginModuleWithHooks;
-          if (withHooks.onCallbackQuery) {
-            try {
-              await withHooks.onCallbackQuery(event);
-            } catch (error: unknown) {
-              log.error(`❌ [${mod.name}] onCallbackQuery error: ${getErrorMessage(error)}`);
-            }
-          }
-        }
+        await this.dispatchPluginCallback(event);
       });
       this.callbackHandlerRegistered = true;
 
@@ -1093,10 +1102,28 @@ ${blue}  ┌──────────────────────�
       if (cbCount > 0) {
         log.info(`${cbCount} plugin onCallbackQuery hook(s) registered`);
       }
-    } else if (!this.callbackHandlerRegistered && this.bridge.getMode() === "bot") {
-      // In bot mode, callback queries are handled by GrammyBotBridge's callback_query:data handler
-      // TODO: dispatch plugin onCallbackQuery hooks from Grammy callback handler
+    } else if (!this.callbackHandlerRegistered && isBotBridge(this.bridge)) {
+      this.inlineRouter.setCallbackObserver((event) => this.dispatchPluginCallback(event));
       this.callbackHandlerRegistered = true;
+
+      const cbCount = this.modules.filter(
+        (m) => (m as PluginModuleWithHooks).onCallbackQuery
+      ).length;
+      if (cbCount > 0) {
+        log.info(`${cbCount} plugin onCallbackQuery hook(s) registered`);
+      }
+    }
+  }
+
+  private async dispatchPluginCallback(event: PluginCallbackEvent): Promise<void> {
+    for (const mod of this.modules) {
+      const withHooks = mod as PluginModuleWithHooks;
+      if (!withHooks.onCallbackQuery) continue;
+      try {
+        await withHooks.onCallbackQuery(event);
+      } catch (error: unknown) {
+        log.error(`❌ [${mod.name}] onCallbackQuery error: ${getErrorMessage(error)}`);
+      }
     }
   }
 

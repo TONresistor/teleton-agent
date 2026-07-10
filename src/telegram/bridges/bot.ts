@@ -1,4 +1,4 @@
-import { Bot, InlineKeyboard, InputFile, type Context } from "grammy";
+import { Bot, InlineKeyboard, InputFile, type Context, type MiddlewareFn } from "grammy";
 import { markdownToTelegramHtml } from "../formatting.js";
 import { TELEGRAM_MAX_MESSAGE_LENGTH } from "../../constants/limits.js";
 import { classifyMedia } from "../bridge-interface.js";
@@ -14,6 +14,7 @@ import type {
 import type { TelegramMessage, InlineButton } from "../bridge.js";
 import { createLogger } from "../../utils/logger.js";
 import { callbackRouter } from "../../bot/callback-router.js";
+import { answerCallbackOnce } from "../../bot/callback-answer.js";
 
 const log = createLogger("BotBridge");
 
@@ -90,6 +91,14 @@ export class GrammyBotBridge implements ITelegramBridge {
 
   getUsername(): string | undefined {
     return this.botInfo?.username;
+  }
+
+  getBot(): Bot {
+    return this.bot;
+  }
+
+  useMiddleware(middleware: MiddlewareFn<Context>): void {
+    this.bot.use(middleware);
   }
 
   /**
@@ -497,7 +506,7 @@ export class GrammyBotBridge implements ITelegramBridge {
 
     // Callback handler — resolves nonces from telegram_send_buttons, reinjects as synthetic messages
     this.bot.on("callback_query:data", async (ctx) => {
-      await ctx.answerCallbackQuery();
+      await answerCallbackOnce(ctx);
 
       const data = ctx.callbackQuery.data;
       if (data?.startsWith("btn:") && this.callbackHandler) {

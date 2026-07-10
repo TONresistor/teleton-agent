@@ -145,6 +145,28 @@ describe("InlineRouter", () => {
   });
 
   describe("callback_query routing", () => {
+    it("dispatches the legacy callback observer and answers only once", async () => {
+      const observer = vi.fn(async (event: any) => {
+        await event.answer("observed");
+      });
+      const handler = vi.fn(async (ctx: any) => {
+        await ctx.answer("plugin");
+      });
+      router.setCallbackObserver(observer);
+      router.registerPlugin("cats", {
+        onCallback: [{ pattern: "like:*", regex: compileGlob("like:*"), handler }],
+      });
+
+      const ctx = createCallbackCtx("cats:like:42");
+      await router.middleware()(ctx, vi.fn());
+
+      expect(observer).toHaveBeenCalledWith(
+        expect.objectContaining({ data: "cats:like:42", action: "cats", params: ["like", "42"] })
+      );
+      expect(handler).toHaveBeenCalled();
+      expect(ctx.answerCallbackQuery).toHaveBeenCalledTimes(1);
+    });
+
     it("routes callback with known prefix to plugin", async () => {
       const handler = vi.fn(async (ctx: any) => {
         await ctx.answer("liked!");
@@ -263,6 +285,14 @@ describe("InlineRouter", () => {
       router.registerPlugin("cats", { onInlineQuery: vi.fn(async () => []) });
       expect(router.hasPlugin("cats")).toBe(true);
       router.unregisterPlugin("cats");
+      expect(router.hasPlugin("cats")).toBe(false);
+    });
+
+    it("clears stale plugin handlers before a runtime reload", () => {
+      router.registerPlugin("cats", { onInlineQuery: vi.fn(async () => []) });
+
+      router.clearPlugins();
+
       expect(router.hasPlugin("cats")).toBe(false);
     });
   });
