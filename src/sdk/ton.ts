@@ -12,9 +12,6 @@ import type {
   JettonSendResult,
   SignedTransfer,
   NftItem,
-  JettonPrice,
-  JettonHolder,
-  JettonHistory,
   PluginLogger,
   TonMessage,
   TonSendOptions,
@@ -37,8 +34,7 @@ import { sendTon } from "../ton/transfer.js";
 import { sendWalletTx } from "../ton/confirm.js";
 import { PAYMENT_TOLERANCE_RATIO } from "../constants/limits.js";
 import { withBlockchainRetry } from "../utils/retry.js";
-import { tonapiFetch, GECKOTERMINAL_API_URL } from "../constants/api-endpoints.js";
-import { fetchWithTimeout } from "../utils/fetch.js";
+import { tonapiFetch } from "../constants/api-endpoints.js";
 import { createDexSDK } from "./ton-dex.js";
 import { createDnsSDK } from "./ton-dns.js";
 import {
@@ -53,6 +49,9 @@ import type { TupleItem, Cell as TonCell } from "@ton/core";
 import { withTxLock } from "../ton/tx-lock.js";
 import { formatTransactions } from "../ton/format-transactions.js";
 import { isHttpError } from "../utils/errors.js";
+import { fetchJettonMeta, findJettonBalance, formatTokenBalance } from "./ton/jetton-api.js";
+import { mapNftItem, type TonApiNftItem } from "./ton/nft-api.js";
+import { createJettonAnalyticsSDK } from "./ton/jetton-analytics.js";
 
 /**
  * Drop the cached TON node when an error is a 429 or 5xx, so the next attempt
@@ -66,90 +65,11 @@ function invalidateOnTransientHttpError(error: unknown): void {
   }
 }
 
-/** Format a raw BigInt token balance to a human-readable string. */
-function formatTokenBalance(rawBalance: bigint, decimals: number): string {
-  const divisor = BigInt(10) ** BigInt(decimals);
-  const wholePart = rawBalance / divisor;
-  const fractionalPart = rawBalance % divisor;
-  return fractionalPart === 0n
-    ? wholePart.toString()
-    : `${wholePart}.${fractionalPart.toString().padStart(decimals, "0").replace(/0+$/, "")}`;
-}
-
 const DEFAULT_MAX_AGE_MINUTES = 10;
 
 const DEFAULT_TX_RETENTION_DAYS = 30;
 
 const CLEANUP_PROBABILITY = 0.1;
-
-interface TonApiJettonBalance {
-  jetton: { address: string; name?: string; symbol?: string; decimals?: number; image?: string };
-  balance: string;
-  wallet_address?: { address: string };
-  price?: { prices?: Record<string, string> };
-}
-
-/** Match a jetton in a balances array by raw address or parsed canonical form. */
-function findJettonBalance(
-  balances: TonApiJettonBalance[],
-  jettonAddress: string
-): TonApiJettonBalance | undefined {
-  return balances.find((b) => {
-    if (b.jetton.address.toLowerCase() === jettonAddress.toLowerCase()) return true;
-    try {
-      return (
-        TonAddress.parse(b.jetton.address).toString() === TonAddress.parse(jettonAddress).toString()
-      );
-    } catch {
-      return false;
-    }
-  });
-}
-
-/** Normalized jetton metadata from the TonAPI `/jettons/{addr}` endpoint. */
-interface JettonMeta {
-  address: string;
-  decimals: number;
-  symbol: string;
-  name: string;
-  totalSupply: string;
-  holdersCount: number;
-  verified: boolean;
-  description?: string;
-  image?: string;
-}
-
-/**
- * Fetch jetton metadata from TonAPI `/jettons/{addr}` with a SINGLE decimals parse.
- * Returns the HTTP `ok`/`status` so each caller keeps its own graceful error policy;
- * `meta` is only populated when the response was ok.
- */
-async function fetchJettonMeta(
-  jettonAddress: string
-): Promise<{ ok: boolean; status: number; meta: JettonMeta | null }> {
-  const response = await tonapiFetch(`/jettons/${encodeURIComponent(jettonAddress)}`);
-  if (!response.ok) {
-    return { ok: false, status: response.status, meta: null };
-  }
-
-  const data = await response.json();
-  const metadata = data.metadata || {};
-  return {
-    ok: true,
-    status: response.status,
-    meta: {
-      address: metadata.address || jettonAddress,
-      decimals: parseInt(metadata.decimals || "9"),
-      symbol: metadata.symbol || "UNKNOWN",
-      name: metadata.name || "Unknown",
-      totalSupply: data.total_supply || "0",
-      holdersCount: data.holders_count || 0,
-      verified: data.verification === "whitelist",
-      description: metadata.description || undefined,
-      image: data.preview || metadata.image || undefined,
-    },
-  };
-}
 
 /** Seconds a signed transfer remains valid (`validUntil` window). */
 const TX_VALID_UNTIL_SECONDS = 120;
@@ -883,149 +803,7 @@ export function createTonSDK(log: PluginLogger, db: Database.Database | null): T
 
     // ─── Jetton Analytics ─────────────────────────────────────────
 
-    async getJettonPrice(jettonAddress: string): Promise<JettonPrice | null> {
-      try {
-        const response = await tonapiFetch(
-          `/rates?tokens=${encodeURIComponent(jettonAddress)}&currencies=usd,ton`
-        );
-        if (!response.ok) {
-          log.debug(`ton.getJettonPrice() TonAPI error: ${response.status}`);
-          return null;
-        }
-
-        const data = await response.json();
-        const rateData = data.rates?.[jettonAddress];
-        if (!rateData) return null;
-
-        return {
-          priceUSD: rateData.prices?.USD ?? null,
-          priceTON: rateData.prices?.TON ?? null,
-          change24h: rateData.diff_24h?.USD ?? null,
-          change7d: rateData.diff_7d?.USD ?? null,
-          change30d: rateData.diff_30d?.USD ?? null,
-        };
-      } catch (error) {
-        log.debug("ton.getJettonPrice() failed:", error);
-        return null;
-      }
-    },
-
-    async getJettonHolders(jettonAddress: string, limit?: number): Promise<JettonHolder[]> {
-      try {
-        const effectiveLimit = Math.min(limit ?? 10, 100);
-
-        // Parallel fetch: holders + decimals info
-        const [holdersResponse, info] = await Promise.all([
-          tonapiFetch(
-            `/jettons/${encodeURIComponent(jettonAddress)}/holders?limit=${effectiveLimit}`
-          ),
-          fetchJettonMeta(jettonAddress),
-        ]);
-
-        if (!holdersResponse.ok) {
-          log.debug(`ton.getJettonHolders() TonAPI error: ${holdersResponse.status}`);
-          return [];
-        }
-
-        const data = await holdersResponse.json();
-        const addresses = data.addresses || [];
-
-        const decimals = info.meta?.decimals ?? 9;
-
-        return addresses.map((h: TonApiJettonHolder, index: number) => {
-          return {
-            rank: index + 1,
-            address: h.owner?.address || h.address,
-            name: h.owner?.name || null,
-            balance: formatTokenBalance(BigInt(h.balance || "0"), decimals),
-            balanceRaw: h.balance || "0",
-          };
-        });
-      } catch (error) {
-        log.debug("ton.getJettonHolders() failed:", error);
-        return [];
-      }
-    },
-
-    async getJettonHistory(jettonAddress: string): Promise<JettonHistory | null> {
-      try {
-        const [ratesResponse, geckoResponse, infoResponse] = await Promise.all([
-          tonapiFetch(`/rates?tokens=${encodeURIComponent(jettonAddress)}&currencies=usd,ton`),
-          fetchWithTimeout(`${GECKOTERMINAL_API_URL}/networks/ton/tokens/${jettonAddress}`, {
-            headers: { Accept: "application/json" },
-          }),
-          tonapiFetch(`/jettons/${encodeURIComponent(jettonAddress)}`),
-        ]);
-
-        let symbol = "TOKEN";
-        let name = "Unknown Token";
-        let holdersCount = 0;
-
-        if (infoResponse.ok) {
-          const infoData = await infoResponse.json();
-          symbol = infoData.metadata?.symbol || symbol;
-          name = infoData.metadata?.name || name;
-          holdersCount = infoData.holders_count || 0;
-        }
-
-        let priceUSD: number | null = null;
-        let priceTON: number | null = null;
-        let change24h: string | null = null;
-        let change7d: string | null = null;
-        let change30d: string | null = null;
-
-        if (ratesResponse.ok) {
-          const ratesData = await ratesResponse.json();
-          const rateInfo = ratesData.rates?.[jettonAddress];
-          if (rateInfo) {
-            priceUSD = rateInfo.prices?.USD || null;
-            priceTON = rateInfo.prices?.TON || null;
-            change24h = rateInfo.diff_24h?.USD || null;
-            change7d = rateInfo.diff_7d?.USD || null;
-            change30d = rateInfo.diff_30d?.USD || null;
-          }
-        }
-
-        let volume24h: string = "N/A";
-        let fdv: string = "N/A";
-        let marketCap: string = "N/A";
-
-        if (geckoResponse.ok) {
-          const geckoData = await geckoResponse.json();
-          const attrs = geckoData.data?.attributes;
-          if (attrs) {
-            const fmtUsd = (raw: string): string => {
-              const val = parseFloat(raw);
-              return Number.isFinite(val)
-                ? `$${val.toLocaleString(undefined, { maximumFractionDigits: 0 })}`
-                : "N/A";
-            };
-            if (attrs.volume_usd?.h24) volume24h = fmtUsd(attrs.volume_usd.h24);
-            if (attrs.fdv_usd) fdv = fmtUsd(attrs.fdv_usd);
-            if (attrs.market_cap_usd) marketCap = fmtUsd(attrs.market_cap_usd);
-          }
-        }
-
-        return {
-          symbol,
-          name,
-          currentPrice: priceUSD ? `$${priceUSD.toFixed(6)}` : "N/A",
-          currentPriceTON: priceTON ? `${priceTON.toFixed(6)} TON` : "N/A",
-          changes: {
-            "24h": change24h || "N/A",
-            "7d": change7d || "N/A",
-            "30d": change30d || "N/A",
-          },
-          volume24h,
-          fdv,
-          marketCap,
-          holders: holdersCount,
-        };
-      } catch (error) {
-        log.debug("ton.getJettonHistory() failed:", error);
-        return null;
-      }
-    },
+    ...createJettonAnalyticsSDK(log),
 
     // ─── Low-level Transfer ─────────────────────────────────────────
 
@@ -1213,49 +991,5 @@ export function createTonSDK(log: PluginLogger, db: Database.Database | null): T
 
     dex: Object.freeze(createDexSDK(log)),
     dns: Object.freeze(createDnsSDK(log)),
-  };
-}
-
-interface TonApiNftPreview {
-  resolution: string;
-  url: string;
-}
-
-interface TonApiNftItem {
-  address: string;
-  index?: number;
-  owner?: { address?: string };
-  collection?: { address?: string; name?: string };
-  metadata?: { name?: string; description?: string; image?: string };
-  previews?: TonApiNftPreview[];
-  trust?: string;
-  dns?: string;
-}
-
-interface TonApiJettonHolder {
-  address?: string;
-  owner?: { address?: string; name?: string };
-  balance: string;
-}
-
-function mapNftItem(item: TonApiNftItem): NftItem {
-  const meta = item.metadata || {};
-  const coll = item.collection || {};
-  const previews = item.previews || [];
-  const preview =
-    (previews.length > 1 && previews[1].url) ||
-    (previews.length > 0 && previews[0].url) ||
-    undefined;
-
-  return {
-    address: item.address,
-    index: item.index ?? 0,
-    ownerAddress: item.owner?.address || undefined,
-    collectionAddress: coll.address || undefined,
-    collectionName: coll.name || undefined,
-    name: meta.name || undefined,
-    description: meta.description ? meta.description.slice(0, 200) : undefined,
-    image: preview || meta.image || undefined,
-    verified: item.trust === "whitelist",
   };
 }

@@ -54,6 +54,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
+    "test:sdk:coverage": "vitest run --config vitest.sdk.config.ts --coverage",
     "typecheck": "tsc --noEmit",
     "knip": "knip",
     "circular": "madge --circular --no-spinner --no-color --extensions ts --ts-config tsconfig.json src/",
