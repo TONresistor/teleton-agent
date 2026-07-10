@@ -261,7 +261,7 @@ async function checkWallet(workspaceDir: string): Promise<CheckResult> {
 }
 
 async function checkSoul(workspaceDir: string): Promise<CheckResult> {
-  const soulPath = join(workspaceDir, "SOUL.md");
+  const soulPath = join(workspaceDir, "workspace", "SOUL.md");
 
   if (!existsSync(soulPath)) {
     return {
@@ -460,7 +460,7 @@ ${blue}  ┌──────────────────────�
   └─────────────────────────────────────────────────────────────┘${reset}
 `);
 
-  console.log(`  Workspace: ${workspaceDir}\n`);
+  console.log(`  Data directory: ${workspaceDir}\n`);
 
   // Run all checks
   const results: CheckResult[] = [];
