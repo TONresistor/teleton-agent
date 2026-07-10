@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import type { WebUIServerDeps, APIResponse } from "../types.js";
-import { getErrorMessage } from "../../utils/errors.js";
+import { apiError } from "../http.js";
 import {
   getWalletAddress,
   getWalletBalance,
@@ -34,11 +34,7 @@ export function createWalletRoutes(_deps: WebUIServerDeps) {
       };
       return c.json(response);
     } catch (error) {
-      const response: APIResponse = {
-        success: false,
-        error: getErrorMessage(error),
-      };
-      return c.json(response, 500);
+      return apiError(c, error, 500);
     }
   });
 
@@ -66,11 +62,7 @@ export function createWalletRoutes(_deps: WebUIServerDeps) {
       };
       return c.json(response);
     } catch (error) {
-      const response: APIResponse = {
-        success: false,
-        error: getErrorMessage(error),
-      };
-      return c.json(response, 500);
+      return apiError(c, error, 500);
     }
   });
 

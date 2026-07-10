@@ -1,3 +1,33 @@
+import type {
+  ConfigKeyData,
+  FileEntry,
+  LogEntry,
+  MarketplacePlugin,
+  McpServerInfo,
+  MemorySearchResult,
+  MemorySourceFile,
+  ModuleInfo,
+  StatusResponse,
+  ToolAccessLevel,
+  ToolInfo,
+  WorkspaceInfo,
+} from '../../../src/webui/contracts';
+
+export type {
+  ConfigKeyData,
+  FileEntry,
+  LogEntry,
+  MarketplacePlugin,
+  McpServerInfo,
+  MemorySourceFile,
+  ModuleInfo,
+  ToolAccessLevel,
+  ToolInfo,
+  WorkspaceInfo,
+};
+export type StatusData = StatusResponse;
+export type SearchResult = MemorySearchResult;
+
 const API_BASE = '/api';
 
 // ── Setup types ─────────────────────────────────────────────────────
@@ -91,36 +121,11 @@ export interface SetupConfig {
 
 // ── Response types ──────────────────────────────────────────────────
 
-export interface StatusData {
-  uptime: number;
-  model: string;
-  provider: string;
-  sessionCount: number;
-  toolCount: number;
-  tokenUsage?: { totalTokens: number; totalCost: number };
-  platform?: string;
-}
-
 export interface MemoryStats {
   knowledge: number;
   sessions: number;
   messages: number;
   chats: number;
-}
-
-export interface SearchResult {
-  id: string;
-  text: string;
-  source: string;
-  score: number;
-  vectorScore?: number;
-  keywordScore?: number;
-}
-
-export interface MemorySourceFile {
-  source: string;
-  entryCount: number;
-  lastUpdated: number;
 }
 
 export interface MemoryChunk {
@@ -173,28 +178,6 @@ export interface WalletTransaction {
   nftAddress?: string;
 }
 
-export type ToolAccessLevel = 'all' | 'allowlist' | 'admin' | 'off';
-
-export interface ToolInfo {
-  name: string;
-  description: string;
-  module: string;
-  /** Per-tool access: who may use this tool (context-independent). */
-  level: ToolAccessLevel;
-  category?: string;
-  /** Legacy single-value scope (derived) — present for backward compatibility. */
-  scope?: string;
-  /** Derived: false only when the tool is off. */
-  enabled?: boolean;
-}
-
-export interface ModuleInfo {
-  name: string;
-  toolCount: number;
-  tools: ToolInfo[];
-  isPlugin: boolean;
-}
-
 export interface PluginManifest {
   name: string;
   version: string;
@@ -222,20 +205,6 @@ export interface TaskData {
   dependents: string[];
 }
 
-export interface FileEntry {
-  name: string;
-  path: string;
-  isDirectory: boolean;
-  size: number;
-  mtime: string;
-}
-
-export interface WorkspaceInfo {
-  root: string;
-  totalFiles: number;
-  totalSize: number;
-}
-
 export interface ToolConfigData {
   tool: string;
   level: ToolAccessLevel;
@@ -250,53 +219,6 @@ export interface ToolRagStatus {
   totalTools: number;
   alwaysInclude?: string[];
   skipUnlimitedProviders?: boolean;
-}
-
-export interface McpServerInfo {
-  name: string;
-  type: 'stdio' | 'sse' | 'streamable-http';
-  target: string;
-  scope: string;
-  enabled: boolean;
-  connected: boolean;
-  toolCount: number;
-  tools: string[];
-  envKeys: string[];
-}
-
-export interface ConfigKeyData {
-  key: string;
-  label: string;
-  set: boolean;
-  value: string | null;
-  sensitive: boolean;
-  type: 'string' | 'number' | 'boolean' | 'enum' | 'array';
-  hotReload: 'instant' | 'restart';
-  itemType?: 'string' | 'number';
-  options?: string[];
-  optionLabels?: Record<string, string>;
-  category: string;
-  description: string;
-}
-
-export interface LogEntry {
-  level: 'log' | 'warn' | 'error';
-  message: string;
-  timestamp: number;
-}
-
-export interface MarketplacePlugin {
-  id: string;
-  name: string;
-  description: string;
-  author: string;
-  tags: string[];
-  remoteVersion: string;
-  installedVersion: string | null;
-  status: 'available' | 'installed' | 'updatable';
-  toolCount: number;
-  tools: Array<{ name: string; description: string }>;
-  secrets?: Record<string, { required: boolean; description: string; env?: string }>;
 }
 
 export interface SecretDeclaration {

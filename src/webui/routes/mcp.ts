@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import type { WebUIServerDeps, APIResponse, McpServerInfo } from "../types.js";
 import { readRawConfig, writeRawConfig } from "../../config/configurable-keys.js";
-import { getErrorMessage } from "../../utils/errors.js";
+import { apiError } from "../http.js";
 
 /** Strict validation for package names and args — blocks shell metacharacters */
 const SAFE_PACKAGE_RE = /^[@a-zA-Z0-9._\/-]+$/;
@@ -97,13 +97,7 @@ export function createMcpRoutes(deps: WebUIServerDeps) {
         data: { name: serverName, message: "Server added. Restart teleton to connect." },
       });
     } catch (error) {
-      return c.json(
-        {
-          success: false,
-          error: getErrorMessage(error),
-        } as APIResponse<never>,
-        500
-      );
+      return apiError(c, error, 500);
     }
   });
 
@@ -131,13 +125,7 @@ export function createMcpRoutes(deps: WebUIServerDeps) {
         data: { name, message: "Server removed. Restart teleton to apply." },
       });
     } catch (error) {
-      return c.json(
-        {
-          success: false,
-          error: getErrorMessage(error),
-        } as APIResponse<never>,
-        500
-      );
+      return apiError(c, error, 500);
     }
   });
 

@@ -5,7 +5,7 @@ import {
   setPluginPriority,
   resetPluginPriority,
 } from "../../agent/tools/plugin-config-store.js";
-import { getErrorMessage } from "../../utils/errors.js";
+import { apiError } from "../http.js";
 
 export function createPluginsRoutes(deps: WebUIServerDeps) {
   const app = new Hono();
@@ -32,7 +32,7 @@ export function createPluginsRoutes(deps: WebUIServerDeps) {
       }
       return c.json<APIResponse<Record<string, number>>>({ success: true, data });
     } catch (error: unknown) {
-      return c.json<APIResponse>({ success: false, error: getErrorMessage(error) }, 500);
+      return apiError(c, error, 500);
     }
   });
 
@@ -60,7 +60,7 @@ export function createPluginsRoutes(deps: WebUIServerDeps) {
         data: { pluginName, priority },
       });
     } catch (error: unknown) {
-      return c.json<APIResponse>({ success: false, error: getErrorMessage(error) }, 500);
+      return apiError(c, error, 500);
     }
   });
 
@@ -70,7 +70,7 @@ export function createPluginsRoutes(deps: WebUIServerDeps) {
       resetPluginPriority(deps.memory.db, name);
       return c.json<APIResponse<null>>({ success: true, data: null });
     } catch (error: unknown) {
-      return c.json<APIResponse>({ success: false, error: getErrorMessage(error) }, 500);
+      return apiError(c, error, 500);
     }
   });
 

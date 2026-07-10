@@ -4,7 +4,7 @@ import { getTonProxyManager, setTonProxyManager } from "../../ton-proxy/module.j
 import { TonProxyManager } from "../../ton-proxy/manager.js";
 import { readRawConfig, writeRawConfig, setNestedValue } from "../../config/configurable-keys.js";
 import { createLogger } from "../../utils/logger.js";
-import { getErrorMessage } from "../../utils/errors.js";
+import { apiError } from "../http.js";
 
 const log = createLogger("TonProxyRoute");
 
@@ -67,13 +67,7 @@ export function createTonProxyRoutes(deps: WebUIServerDeps) {
         }
       }
       log.error({ error }, "Failed to start TON Proxy");
-      return c.json(
-        {
-          success: false,
-          error: getErrorMessage(error),
-        } as APIResponse,
-        500
-      );
+      return apiError(c, error, 500);
     }
   });
 
@@ -102,13 +96,7 @@ export function createTonProxyRoutes(deps: WebUIServerDeps) {
       } as APIResponse);
     } catch (error: unknown) {
       log.error({ error }, "Failed to stop TON Proxy");
-      return c.json(
-        {
-          success: false,
-          error: getErrorMessage(error),
-        } as APIResponse,
-        500
-      );
+      return apiError(c, error, 500);
     }
   });
 
@@ -145,13 +133,7 @@ export function createTonProxyRoutes(deps: WebUIServerDeps) {
       } as APIResponse);
     } catch (error: unknown) {
       log.error({ error }, "Failed to uninstall TON Proxy");
-      return c.json(
-        {
-          success: false,
-          error: getErrorMessage(error),
-        } as APIResponse,
-        500
-      );
+      return apiError(c, error, 500);
     }
   });
 

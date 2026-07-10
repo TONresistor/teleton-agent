@@ -11,7 +11,7 @@ import {
 } from "node:fs";
 import { readFile } from "node:fs/promises";
 import { join, relative } from "node:path";
-import type { WebUIServerDeps, APIResponse } from "../types.js";
+import type { WebUIServerDeps, APIResponse, FileEntry, WorkspaceInfo } from "../types.js";
 import { WORKSPACE_ROOT } from "../../workspace/paths.js";
 import {
   validatePath,
@@ -20,31 +20,14 @@ import {
   validateDirectory,
   WorkspaceSecurityError,
 } from "../../workspace/validator.js";
-import { getErrorMessage } from "../../utils/errors.js";
-
-interface FileEntry {
-  name: string;
-  path: string;
-  isDirectory: boolean;
-  size: number;
-  mtime: string;
-}
-
-interface WorkspaceInfo {
-  root: string;
-  totalFiles: number;
-  totalSize: number;
-  truncated?: boolean;
-}
+import { apiError } from "../http.js";
 
 const MAX_SCAN_DEPTH = 10;
 const MAX_SCAN_ENTRIES = 5000;
 
 function errorResponse(c: Context, error: unknown, status: ContentfulStatusCode = 500) {
-  const message = getErrorMessage(error);
   const code: ContentfulStatusCode = error instanceof WorkspaceSecurityError ? 403 : status;
-  const response: APIResponse = { success: false, error: message };
-  return c.json(response, code);
+  return apiError(c, error, code);
 }
 
 const IMAGE_MIME_TYPES: Record<string, string> = {
