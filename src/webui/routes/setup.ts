@@ -31,6 +31,7 @@ import { TELEGRAM_MAX_MESSAGE_LENGTH } from "../../constants/limits.js";
 import { TelegramAuthManager } from "../setup-auth.js";
 import { createLogger } from "../../utils/logger.js";
 import { getErrorMessage } from "../../utils/errors.js";
+import { assertGrokBuildReady } from "../../providers/grok-build-credentials.js";
 
 const log = createLogger("Setup");
 
@@ -92,7 +93,8 @@ export function createSetupRoutes(options?: { keyHash?: string }): Hono {
       toolLimit: p.toolLimit,
       keyPrefix: p.keyPrefix,
       consoleUrl: p.consoleUrl,
-      requiresApiKey: p.id !== "gocoon" && p.id !== "local",
+      credentialMode: p.credentialMode,
+      requiresApiKey: p.credentialMode === "api-key",
       requiresBaseUrl: p.id === "local",
     }));
     return c.json({ success: true, data: providers });
@@ -449,6 +451,7 @@ export function createSetupRoutes(options?: { keyHash?: string }): Hono {
   app.post("/config/save", async (c) => {
     try {
       const input = await c.req.json();
+      if (input?.agent?.provider === "grok-build") assertGrokBuildReady();
       const workspace = await ensureWorkspace({ ensureTemplates: true });
 
       // Resolve provider default model (same as CLI)

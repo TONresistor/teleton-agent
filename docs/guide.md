@@ -1,7 +1,7 @@
 Deploy Your Own AI Agent on Telegram in 5 Minutes
 
 
-Teleton is an autonomous AI agent that runs as a real Telegram user account. Not a bot. It thinks, calls tools, remembers everything, and integrates the TON blockchain natively. 135+ tools, 15 LLM providers, open source.
+Teleton is an autonomous AI agent that runs as a real Telegram user account. Not a bot. It thinks, calls tools, remembers everything, and integrates the TON blockchain natively. 135+ tools, 16 LLM providers, open source.
 
 3 steps. Let's go.
 

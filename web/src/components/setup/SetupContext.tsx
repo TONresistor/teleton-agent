@@ -120,6 +120,7 @@ function validateStep(step: number, data: WizardData): boolean {
         try { new URL(data.localUrl); return true; }
         catch { return false; }
       }
+      if (data.provider === 'codex' || data.provider === 'grok-build') return true;
       return data.apiKey.length > 0;
     case 2: {
       // Config

@@ -3,7 +3,7 @@
 # Or run: teleton setup
 
 agent:
-  provider: "anthropic"              # anthropic | openai | google | xai | groq | openrouter
+  provider: "anthropic"              # anthropic | codex | grok-build | openai | google | xai | groq | openrouter
   api_key: "YOUR_API_KEY"
   model: "claude-haiku-4-5-20251001" # Model ID (varies by provider)
   # utility_model: "claude-3-5-haiku-20241022"  # Optional: cheap model for summarization

@@ -2,12 +2,39 @@ import { getModel, type Model, type Api } from "@earendil-works/pi-ai/compat";
 import { getProviderMetadata, type SupportedProvider } from "../config/providers.js";
 import { createLogger } from "../utils/logger.js";
 import { fetchWithTimeout } from "../utils/fetch.js";
+import { getGrokBuildCliVersion } from "./grok-build-credentials.js";
 
 const log = createLogger("LLM");
 
 const modelCache = new Map<string, Model<Api>>();
 
 const GOCOON_MODELS: Record<string, Model<"openai-completions">> = {};
+
+const GROK_BUILD_MODEL_ID = "grok-build";
+
+function createGrokBuildModel(): Model<"openai-responses"> {
+  return {
+    id: GROK_BUILD_MODEL_ID,
+    name: "Grok Build",
+    api: "openai-responses",
+    provider: "xai",
+    baseUrl: "https://cli-chat-proxy.grok.com/v1",
+    headers: {
+      "X-XAI-Token-Auth": "xai-grok-cli",
+      "x-grok-model-override": GROK_BUILD_MODEL_ID,
+      "x-grok-client-version": getGrokBuildCliVersion(),
+    },
+    reasoning: false,
+    input: ["text", "image"],
+    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+    contextWindow: 500_000,
+    maxTokens: 128_000,
+    compat: {
+      sendSessionIdHeader: false,
+      supportsLongCacheRetention: false,
+    },
+  };
+}
 
 /** Register models discovered from a running gocoon-runner (native OpenAI-compatible API). */
 export async function registerGocoonModels(httpPort: number): Promise<string[]> {
@@ -117,6 +144,15 @@ export function getProviderModel(provider: SupportedProvider, modelId: string): 
   if (cached) return cached;
 
   const meta = getProviderMetadata(provider);
+
+  if (meta.piAiProvider === "grok-build") {
+    const grokBuildModel = createGrokBuildModel();
+    if (modelId !== grokBuildModel.id) {
+      log.warn(`Grok Build model "${modelId}" not found, using "${grokBuildModel.id}"`);
+    }
+    modelCache.set(cacheKey, grokBuildModel);
+    return grokBuildModel;
+  }
 
   if (meta.piAiProvider === "gocoon") {
     let model = GOCOON_MODELS[modelId];

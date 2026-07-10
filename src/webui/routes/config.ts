@@ -335,8 +335,7 @@ export function createConfigRoutes(deps: WebUIServerDeps) {
     const provider = c.req.param("provider");
     try {
       const meta = getProviderMetadata(provider as SupportedProvider);
-      // codex authenticates via the Codex CLI (~/.codex/auth.json), no key to paste.
-      const needsKey = provider !== "gocoon" && provider !== "local" && provider !== "codex";
+      const needsKey = meta.credentialMode === "api-key";
       return c.json({
         success: true,
         data: {

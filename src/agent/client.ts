@@ -13,6 +13,7 @@ import type { SupportedProvider } from "../config/providers.js";
 import { sanitizeToolsForGemini } from "./schema-sanitizer.js";
 import { createLogger } from "../utils/logger.js";
 import { getCodexApiKey, refreshCodexApiKey } from "../providers/codex-credentials.js";
+import { getGrokBuildApiKey, refreshGrokBuildApiKey } from "../providers/grok-build-credentials.js";
 import { getProviderModel } from "../providers/model-resolver.js";
 
 // Model resolution + provider model registration live in the neutral providers/
@@ -36,6 +37,7 @@ function isUnauthorizedError(errorMessage?: string): boolean {
 /** Providers whose credentials can be refreshed once on a 401, then the call retried. */
 const RETRY_401_PROVIDERS: { provider: string; refresh: () => Promise<string | null> }[] = [
   { provider: "codex", refresh: refreshCodexApiKey },
+  { provider: "grok-build", refresh: refreshGrokBuildApiKey },
 ];
 
 /** Resolve the effective API key for a provider (local/gocoon need no real key) */
@@ -43,7 +45,27 @@ export function getEffectiveApiKey(provider: string, rawKey: string): string {
   if (provider === "local") return "local";
   if (provider === "gocoon") return "gocoon";
   if (provider === "codex") return getCodexApiKey(rawKey);
+  if (provider === "grok-build") return getGrokBuildApiKey();
   return rawKey;
+}
+
+function providerSupportsTemperature(provider: string): boolean {
+  return provider !== "codex" && provider !== "grok-build";
+}
+
+function getCacheRetention(provider: string): "none" | "long" {
+  return provider === "grok-build" ? "none" : "long";
+}
+
+function getProviderPayloadOptions(provider: SupportedProvider): Record<string, unknown> {
+  if (provider !== "grok-build") return {};
+
+  return {
+    onPayload: (payload: unknown) => ({
+      ...(payload && typeof payload === "object" ? payload : {}),
+      parallel_tool_calls: false,
+    }),
+  };
 }
 
 export interface ChatOptions {
@@ -117,9 +139,10 @@ export async function chatWithContext(
   const completeOptions: Record<string, unknown> = {
     apiKey: getEffectiveApiKey(provider, config.api_key),
     maxTokens: options.maxTokens ?? config.max_tokens,
-    ...(provider !== "codex" && { temperature }),
+    ...(providerSupportsTemperature(provider) && { temperature }),
     sessionId: options.sessionId,
-    cacheRetention: "long",
+    cacheRetention: getCacheRetention(provider),
+    ...getProviderPayloadOptions(provider),
   };
 
   let response = await complete(model, context, completeOptions as ProviderStreamOptions);
@@ -163,9 +186,10 @@ export function streamWithContext(config: AgentConfig, options: ChatOptions): St
   const streamOptions: Record<string, unknown> = {
     apiKey: getEffectiveApiKey(provider, config.api_key),
     maxTokens: options.maxTokens ?? config.max_tokens,
-    ...(provider !== "codex" && { temperature }),
+    ...(providerSupportsTemperature(provider) && { temperature }),
     sessionId: options.sessionId,
-    cacheRetention: "long",
+    cacheRetention: getCacheRetention(provider),
+    ...getProviderPayloadOptions(provider),
   };
 
   const eventStream = stream(model, context, streamOptions as ProviderStreamOptions);
@@ -185,7 +209,19 @@ export function streamWithContext(config: AgentConfig, options: ChatOptions): St
 
   // Result promise: wait for the stream to complete and build ChatResponse
   const resultPromise = (async (): Promise<ChatResponse> => {
-    const response = await eventStream.result();
+    let response = await eventStream.result();
+
+    // A streaming auth failure happens before text is emitted. Refresh the CLI
+    // credential and finish this turn through the one-shot path.
+    const retry401 = RETRY_401_PROVIDERS.find((e) => e.provider === provider);
+    if (retry401 && response.stopReason === "error" && isUnauthorizedError(response.errorMessage)) {
+      log.warn(`${provider} token rejected (401), refreshing credentials and retrying...`);
+      const refreshedKey = await retry401.refresh();
+      if (refreshedKey) {
+        streamOptions.apiKey = refreshedKey;
+        response = await complete(model, context, streamOptions as ProviderStreamOptions);
+      }
+    }
     return finalizeResponse(response, context, options);
   })();
 

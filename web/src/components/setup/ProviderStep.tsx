@@ -139,6 +139,12 @@ export function ProviderStep({ data, onChange }: StepProps) {
         </div>
       )}
 
+      {selected && selected.credentialMode === 'cli-auto' && (
+        <div className="info-panel" style={{ marginTop: '16px' }}>
+          Credentials are read automatically from your local {selected.id === 'codex' ? 'Codex' : 'Grok'} CLI session.
+        </div>
+      )}
+
       {selected && !selected.requiresApiKey && selected.id === 'gocoon' && (
         <div style={{ marginTop: '16px' }}>
           <div className="info-panel">

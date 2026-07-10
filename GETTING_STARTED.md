@@ -9,7 +9,7 @@ Complete guide to installing, configuring, and running your Teleton AI agent.
 | Requirement | Details |
 |-------------|---------|
 | **Node.js 22.22.2+ LTS** | [Download](https://nodejs.org/) - Node 24 requires 24.15.0+; check with `node --version` |
-| **LLM API Key** | [Anthropic](https://console.anthropic.com/) (recommended), [OpenAI](https://platform.openai.com/), [Google](https://aistudio.google.com/), [xAI](https://console.x.ai/), [Groq](https://console.groq.com/), [OpenRouter](https://openrouter.ai/), or any of 15 supported providers |
+| **LLM API Key** | [Anthropic](https://console.anthropic.com/) (recommended), [OpenAI](https://platform.openai.com/), [Google](https://aistudio.google.com/), [xAI](https://console.x.ai/), [Groq](https://console.groq.com/), [OpenRouter](https://openrouter.ai/), or any of 16 supported providers |
 | **Telegram Account** | Dedicated account recommended (agent has full control) |
 | **Telegram API Credentials** | `api_id` + `api_hash` from [my.telegram.org/apps](https://my.telegram.org/apps) |
 | **Telegram User ID** | Message [@userinfobot](https://t.me/userinfobot) to get yours |
@@ -52,7 +52,7 @@ teleton setup
 
 The interactive wizard configures everything:
 
-1. **LLM Provider** - Choose between 15 providers (Anthropic, OpenAI, Google, xAI, Groq, OpenRouter, Moonshot, Mistral, Cerebras, ZAI, MiniMax, Hugging Face, and more)
+1. **LLM Provider** - Choose between 16 providers (Anthropic, Codex, Grok Build, OpenAI, Google, xAI, Groq, OpenRouter, Moonshot, Mistral, Cerebras, ZAI, MiniMax, Hugging Face, and more)
 2. **Telegram Auth** - API credentials, phone number, login code, 2FA password
 3. **Access Policies** - DM policy (open/allowlist/pairing/disabled), group policy, mention rules
 4. **Admin** - Your Telegram User ID, owner name/username
@@ -113,7 +113,7 @@ Configuration is in `~/.teleton/config.yaml`. The setup wizard generates everyth
 
 ```yaml
 agent:
-  provider: "anthropic"              # anthropic | openai | google | xai | groq | openrouter | moonshot | mistral | cerebras | zai | minimax | huggingface | gocoon | local
+  provider: "anthropic"              # anthropic | codex | grok-build | openai | google | xai | groq | openrouter | moonshot | mistral | cerebras | zai | minimax | huggingface | gocoon | local
   model: "claude-opus-4-5-20251101"
   max_tokens: 4096
   temperature: 0.7
@@ -142,7 +142,7 @@ agent:
   model: "gpt-4o"
 ```
 
-Supported: `anthropic`, `openai`, `google`, `xai`, `groq`, `openrouter`, `moonshot`, `mistral`, `cerebras`, `zai`, `minimax`, `huggingface`, `gocoon`, `local`
+Supported: `anthropic`, `codex`, `grok-build`, `openai`, `google`, `xai`, `groq`, `openrouter`, `moonshot`, `mistral`, `cerebras`, `zai`, `minimax`, `huggingface`, `gocoon`, `local`
 
 ---
 

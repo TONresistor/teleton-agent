@@ -49,6 +49,7 @@ import {
 import {
   getSupportedProviders,
   getProviderMetadata,
+  providerNeedsApiKey,
   validateApiKeyFormat,
   type SupportedProvider,
 } from "../../config/providers.js";
@@ -57,6 +58,12 @@ import { fetchWithTimeout } from "../../utils/fetch.js";
 import { getErrorMessage } from "../../utils/errors.js";
 import ora from "ora";
 import { getCodexApiKey, isCodexTokenValid } from "../../providers/codex-credentials.js";
+import {
+  assertGrokBuildReady,
+  getGrokBuildCliVersion,
+  getGrokBuildApiKey,
+  isGrokBuildTokenValid,
+} from "../../providers/grok-build-credentials.js";
 
 export interface OnboardOptions {
   workspace?: string;
@@ -114,7 +121,7 @@ async function handleAutoDetectedProvider(opts: {
   statusExpiredMsg: string;
   noteFooterMsg: string;
   notFoundHint: string;
-  fallbackKeyLabel: string;
+  fallbackKeyLabel?: string;
   prompter: ReturnType<typeof createPrompter>;
 }): Promise<{ apiKey: string; stepValue: string }> {
   let apiKey = "";
@@ -141,6 +148,9 @@ async function handleAutoDetectedProvider(opts: {
   } catch (error) {
     if (error instanceof CancelledError) throw error;
     opts.prompter.warn(opts.notFoundHint);
+    if (!opts.fallbackKeyLabel) {
+      throw new CancelledError();
+    }
     const useFallback = await confirm({
       message: "Enter an API key manually instead?",
       default: true,
@@ -691,6 +701,24 @@ async function stepProvider(
       notFoundHint:
         "Codex credentials not found. Make sure Codex CLI is installed and authenticated.",
       fallbackKeyLabel: "OpenAI API Key (fallback)",
+      prompter,
+    });
+    apiKey = result.apiKey;
+    STEPS[1].value = result.stepValue;
+  } else if (selectedProvider === "grok-build") {
+    const grokCliVersion = getGrokBuildCliVersion();
+    const result = await handleAutoDetectedProvider({
+      getKey: getGrokBuildApiKey,
+      isValid: isGrokBuildTokenValid,
+      displayName: providerMeta.displayName,
+      noteTitle: "Grok Build",
+      detectedFromMsg: "Credentials auto-detected from Grok CLI",
+      statusExpiredMsg: "expired (run grok login to re-authenticate)",
+      noteFooterMsg:
+        `Grok CLI ${grokCliVersion}\n` +
+        "Token read from $GROK_HOME/auth.json (default: ~/.grok/auth.json)",
+      notFoundHint:
+        "Grok Build credentials not found. Make sure Grok CLI is installed and authenticated.",
       prompter,
     });
     apiKey = result.apiKey;
@@ -1418,7 +1446,7 @@ async function runNonInteractiveOnboarding(
 ): Promise<void> {
   const selectedProvider = options.provider || "anthropic";
   const nonInteractiveMode = options.mode || "user";
-  const needsApiKey = selectedProvider !== "gocoon" && selectedProvider !== "local";
+  const needsApiKey = providerNeedsApiKey(selectedProvider);
   if (nonInteractiveMode === "bot") {
     if (!options.botToken) {
       prompter.error("Non-interactive bot mode requires: --bot-token");
@@ -1445,6 +1473,14 @@ async function runNonInteractiveOnboarding(
   if (selectedProvider === "local" && !options.baseUrl) {
     prompter.error("Non-interactive mode requires --base-url for local provider");
     process.exit(1);
+  }
+  if (selectedProvider === "grok-build") {
+    try {
+      assertGrokBuildReady();
+    } catch (error: unknown) {
+      prompter.error(getErrorMessage(error));
+      process.exit(1);
+    }
   }
 
   const workspace = await ensureWorkspace({

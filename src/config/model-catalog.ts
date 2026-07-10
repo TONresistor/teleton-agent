@@ -95,6 +95,13 @@ export const MODEL_OPTIONS: Record<string, ModelOption[]> = {
       description: "Coding, preview, free",
     },
   ],
+  "grok-build": [
+    {
+      value: "grok-build",
+      name: "Grok Build",
+      description: "Coding model via your Grok CLI subscription, 500K ctx",
+    },
+  ],
   google: [
     {
       value: "gemini-3.1-pro-preview",

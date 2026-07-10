@@ -25,6 +25,7 @@ export interface SetupProvider {
   toolLimit: number | null;
   keyPrefix: string | null;
   consoleUrl: string | null;
+  credentialMode: 'api-key' | 'cli-auto' | 'none';
   requiresApiKey: boolean;
 }
 
