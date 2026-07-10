@@ -1,7 +1,7 @@
 import { writeFile, mkdir, readdir, readFile } from "fs/promises";
 import { mkdirSync, renameSync } from "fs";
 import { join } from "path";
-import { complete, type Context } from "@earendil-works/pi-ai";
+import { complete, type Context } from "@earendil-works/pi-ai/compat";
 import {
   summarizeViaClaude,
   summarizeWithFallback,

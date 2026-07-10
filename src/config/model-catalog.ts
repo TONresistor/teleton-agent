@@ -70,7 +70,22 @@ export const MODEL_OPTIONS: Record<string, ModelOption[]> = {
     { value: "gpt-4.1-mini", name: "GPT-4.1 Mini", description: "1M ctx, cheap, $0.40/$1.60" },
   ],
   "openai-codex": [
-    { value: "gpt-5.5", name: "GPT-5.5", description: "Latest frontier, reasoning, 272K ctx" },
+    { value: "gpt-5.5", name: "GPT-5.5", description: "Latest stable, reasoning, 272K ctx" },
+    {
+      value: "gpt-5.6-sol",
+      name: "GPT-5.6 Sol",
+      description: "Latest frontier agentic coding model, preview, 372K ctx",
+    },
+    {
+      value: "gpt-5.6-terra",
+      name: "GPT-5.6 Terra",
+      description: "Balanced agentic coding model, preview, 372K ctx",
+    },
+    {
+      value: "gpt-5.6-luna",
+      name: "GPT-5.6 Luna",
+      description: "Fast and affordable agentic coding model, preview, 372K ctx",
+    },
     { value: "gpt-5.4", name: "GPT-5.4", description: "Reasoning, 272K ctx" },
     { value: "gpt-5.4-mini", name: "GPT-5.4 Mini", description: "Fast & cheap, reasoning" },
     { value: "gpt-5.3-codex", name: "GPT-5.3 Codex", description: "Coding specialist, 272K ctx" },

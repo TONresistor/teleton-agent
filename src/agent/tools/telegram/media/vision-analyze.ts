@@ -5,7 +5,7 @@ import {
   type UserMessage,
   type ImageContent,
   type TextContent,
-} from "@earendil-works/pi-ai";
+} from "@earendil-works/pi-ai/compat";
 import { getProviderModel, getEffectiveApiKey } from "../../../client.js";
 import { getProviderMetadata, type SupportedProvider } from "../../../../config/providers.js";
 import { readFileSync, existsSync } from "fs";
