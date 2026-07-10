@@ -7,14 +7,14 @@ import {
 } from "../../../ton/wallet-service.js";
 import { fromNano, internal } from "@ton/ton";
 import { dexFactory } from "@ston-fi/sdk";
-import { StonApiClient } from "@ston-fi/api";
 import { withTxLock } from "../../../ton/tx-lock.js";
 import { openWallet } from "../../../ton/wallet-open.js";
 import { sendWalletTx, tonExplorerTxUrl } from "../../../ton/confirm.js";
 import { getErrorMessage, isHttpError } from "../../../utils/errors.js";
 import { createLogger } from "../../../utils/logger.js";
-import { toUnits } from "../../../ton/units.js";
+import { fromUnits } from "../../../ton/units.js";
 import { STONFI_PTON_ADDRESS as NATIVE_TON_ADDRESS } from "../../../ton/dex-constants.js";
+import { isStonfiTonAsset, simulateStonfiSwap } from "../../../ton/dex-service.js";
 
 const log = createLogger("Tools");
 interface JettonSwapParams {
@@ -65,8 +65,8 @@ export const stonfiSwapExecutor: ToolExecutor<JettonSwapParams> = async (
     }
 
     // STON.fi API requires the native TON address, not the string "ton"
-    const isTonInput = from_asset.toLowerCase() === "ton" || from_asset === NATIVE_TON_ADDRESS;
-    const isTonOutput = to_asset.toLowerCase() === "ton" || to_asset === NATIVE_TON_ADDRESS;
+    const isTonInput = isStonfiTonAsset(from_asset);
+    const isTonOutput = isStonfiTonAsset(to_asset);
     const fromAddress = isTonInput ? NATIVE_TON_ADDRESS : from_asset;
     const toAddress = isTonOutput ? NATIVE_TON_ADDRESS : to_asset;
 
@@ -84,27 +84,21 @@ export const stonfiSwapExecutor: ToolExecutor<JettonSwapParams> = async (
     }
 
     const tonClient = await getCachedTonClient();
-    const stonApiClient = new StonApiClient();
-
-    // Fetch decimals for accurate conversion (TON=9, USDT=6, WBTC=8, etc.)
-    const fromAssetInfo = await stonApiClient.getAsset(fromAddress);
-    const fromDecimals = fromAssetInfo?.decimals ?? 9;
-    const offerUnits = toUnits(amount, fromDecimals).toString();
 
     log.info(`Simulating swap: ${amount} ${fromAddress} → ${toAddress}`);
-    const simulationResult = await stonApiClient.simulateSwap({
-      offerAddress: fromAddress,
-      askAddress: toAddress,
-      offerUnits,
-      slippageTolerance: slippage.toString(),
+    const simulation = await simulateStonfiSwap({
+      fromAsset: from_asset,
+      toAsset: to_asset,
+      amount,
+      slippage,
     });
-
-    if (!simulationResult || !simulationResult.router) {
+    if (!simulation?.simulation.router) {
       return {
         success: false,
         error: "Failed to simulate swap. Pool may not exist or have insufficient liquidity.",
       };
     }
+    const { simulation: simulationResult, toDecimals } = simulation;
 
     const { router: routerInfo } = simulationResult;
     const contracts = dexFactory(routerInfo);
@@ -181,11 +175,8 @@ export const stonfiSwapExecutor: ToolExecutor<JettonSwapParams> = async (
         };
       }
 
-      // Fetch ask asset decimals for accurate output conversion
-      const toAssetInfo = await stonApiClient.getAsset(toAddress);
-      const askDecimals = toAssetInfo?.decimals ?? 9;
-      const expectedOutput = Number(simulationResult.askUnits) / 10 ** askDecimals;
-      const minOutput = Number(simulationResult.minAskUnits) / 10 ** askDecimals;
+      const expectedOutput = fromUnits(BigInt(simulationResult.askUnits), toDecimals);
+      const minOutput = fromUnits(BigInt(simulationResult.minAskUnits), toDecimals);
 
       return {
         success: true,

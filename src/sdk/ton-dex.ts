@@ -12,47 +12,14 @@ import { WalletContractV5R1, toNano, internal } from "@ton/ton";
 import { Address } from "@ton/core";
 import { getCachedTonClient, loadWallet, getKeyPair } from "../ton/wallet-service.js";
 import { sendWalletTx, walletTxLt, confirmWalletTx } from "../ton/confirm.js";
-import { StonApiClient } from "@ston-fi/api";
 import { dexFactory } from "@ston-fi/sdk";
-import { Factory, Asset, PoolType, ReadinessStatus, JettonRoot, VaultJetton } from "@dedust/sdk";
-import type { Pool } from "@dedust/sdk";
-import { DEDUST_FACTORY_MAINNET, DEDUST_GAS } from "../ton/dex-constants.js";
-import { getDecimals } from "../ton/dedust-assets.js";
-import { toUnits, fromUnits } from "../ton/units.js";
+import { JettonRoot, VaultJetton } from "@dedust/sdk";
+import { DEDUST_GAS } from "../ton/dex-constants.js";
+import { fromUnits } from "../ton/units.js";
 import { withTxLock } from "../ton/tx-lock.js";
-import { STONFI_PTON_ADDRESS } from "../ton/dex-constants.js";
+import { estimateDedustSwap, simulateStonfiSwap } from "../ton/dex-service.js";
 
 import type { OpenedContract } from "@ton/ton";
-
-/** Find the best DeDust pool (volatile first, then stable fallback). */
-async function findDedustPool(
-  tonClient: Awaited<ReturnType<typeof getCachedTonClient>>,
-  factory: OpenedContract<Factory>,
-  fromAsset: ReturnType<typeof Asset.native>,
-  toAsset: ReturnType<typeof Asset.native>
-): Promise<{ pool: OpenedContract<Pool>; poolType: string } | null> {
-  try {
-    const pool = tonClient.open(await factory.getPool(PoolType.VOLATILE, [fromAsset, toAsset]));
-    const status = await pool.getReadinessStatus();
-    if (status === ReadinessStatus.READY) return { pool, poolType: "volatile" };
-
-    const stablePool = tonClient.open(await factory.getPool(PoolType.STABLE, [fromAsset, toAsset]));
-    const stableStatus = await stablePool.getReadinessStatus();
-    if (stableStatus === ReadinessStatus.READY) return { pool: stablePool, poolType: "stable" };
-
-    return null;
-  } catch {
-    return null;
-  }
-}
-
-const STONFI_NATIVE_TON = STONFI_PTON_ADDRESS;
-
-const stonApiClient = new StonApiClient();
-
-function isTon(asset: string): boolean {
-  return asset.toLowerCase() === "ton";
-}
 
 async function getStonfiQuote(
   fromAsset: string,
@@ -62,21 +29,9 @@ async function getStonfiQuote(
   log: PluginLogger
 ): Promise<DexSingleQuote | null> {
   try {
-    const isTonInput = isTon(fromAsset);
-    const isTonOutput = isTon(toAsset);
-    const fromAddress = isTonInput ? STONFI_NATIVE_TON : fromAsset;
-    const toAddress = isTonOutput ? STONFI_NATIVE_TON : toAsset;
-    const fromDecimals = await getDecimals(fromAsset);
-    const toDecimals = await getDecimals(toAsset);
-
-    const simulationResult = await stonApiClient.simulateSwap({
-      offerAddress: fromAddress,
-      askAddress: toAddress,
-      offerUnits: toUnits(amount, fromDecimals).toString(),
-      slippageTolerance: slippage.toString(),
-    });
-
-    if (!simulationResult) return null;
+    const quote = await simulateStonfiSwap({ fromAsset, toAsset, amount, slippage });
+    if (!quote) return null;
+    const { simulation: simulationResult, toDecimals } = quote;
 
     const askUnits = BigInt(simulationResult.askUnits);
     const minAskUnits = BigInt(simulationResult.minAskUnits);
@@ -109,32 +64,9 @@ async function getDedustQuote(
   log: PluginLogger
 ): Promise<DexSingleQuote | null> {
   try {
-    const isTonInput = isTon(fromAsset);
-    const isTonOutput = isTon(toAsset);
-
-    const tonClient = await getCachedTonClient();
-    const factory = tonClient.open(
-      Factory.createFromAddress(Address.parse(DEDUST_FACTORY_MAINNET))
-    );
-
-    const fromAssetObj = isTonInput ? Asset.native() : Asset.jetton(Address.parse(fromAsset));
-    const toAssetObj = isTonOutput ? Asset.native() : Asset.jetton(Address.parse(toAsset));
-
-    // Try volatile pool first, then stable
-    const poolResult = await findDedustPool(tonClient, factory, fromAssetObj, toAssetObj);
-    if (!poolResult) return null;
-    const { pool, poolType } = poolResult;
-
-    const fromDecimals = await getDecimals(isTonInput ? "ton" : fromAsset);
-    const toDecimals = await getDecimals(isTonOutput ? "ton" : toAsset);
-
-    const amountIn = toUnits(amount, fromDecimals);
-    const { amountOut, tradeFee } = await pool.getEstimatedSwapOut({
-      assetIn: fromAssetObj,
-      amountIn,
-    });
-
-    const minAmountOut = amountOut - (amountOut * BigInt(Math.floor(slippage * 10000))) / 10000n;
+    const quote = await estimateDedustSwap({ fromAsset, toAsset, amount, slippage });
+    if (!quote) return null;
+    const { amountOut, tradeFee, minAmountOut, toDecimals, poolType } = quote;
 
     const expectedOutput = fromUnits(amountOut, toDecimals);
     const minOutput = fromUnits(minAmountOut, toDecimals);
@@ -194,26 +126,19 @@ async function executeSTONfiSwap(
     throw new PluginSDKError("Wallet not initialized", "WALLET_NOT_INITIALIZED");
   }
 
-  const isTonInput = isTon(fromAsset);
-  const isTonOutput = isTon(toAsset);
-  const fromAddress = isTonInput ? STONFI_NATIVE_TON : fromAsset;
-  const toAddress = isTonOutput ? STONFI_NATIVE_TON : toAsset;
-
   const tonClient = await getCachedTonClient();
-
-  const fromDecimals = await getDecimals(isTonInput ? "ton" : fromAsset);
-  const offerUnits = toUnits(amount, fromDecimals).toString();
-
-  const simulationResult = await stonApiClient.simulateSwap({
-    offerAddress: fromAddress,
-    askAddress: toAddress,
-    offerUnits,
-    slippageTolerance: slippage.toString(),
-  });
-
-  if (!simulationResult?.router) {
+  const simulation = await simulateStonfiSwap({ fromAsset, toAsset, amount, slippage });
+  if (!simulation?.simulation.router) {
     throw new PluginSDKError("No liquidity for this pair on STON.fi", "OPERATION_FAILED");
   }
+  const {
+    simulation: simulationResult,
+    isTonInput,
+    isTonOutput,
+    fromAddress,
+    toAddress,
+    toDecimals,
+  } = simulation;
 
   const { router: routerInfo } = simulationResult;
   const contracts = dexFactory(routerInfo);
@@ -269,7 +194,6 @@ async function executeSTONfiSwap(
       );
     }
 
-    const toDecimals = await getDecimals(isTonOutput ? "ton" : toAsset);
     const expectedOutput = fromUnits(BigInt(simulationResult.askUnits), toDecimals);
     const minOutput = fromUnits(BigInt(simulationResult.minAskUnits), toDecimals);
 
@@ -297,30 +221,21 @@ async function executeDedustSwap(
     throw new PluginSDKError("Wallet not initialized", "WALLET_NOT_INITIALIZED");
   }
 
-  const isTonInput = isTon(fromAsset);
-  const isTonOutput = isTon(toAsset);
-
-  const tonClient = await getCachedTonClient();
-  const factory = tonClient.open(Factory.createFromAddress(Address.parse(DEDUST_FACTORY_MAINNET)));
-
-  const fromAssetObj = isTonInput ? Asset.native() : Asset.jetton(Address.parse(fromAsset));
-  const toAssetObj = isTonOutput ? Asset.native() : Asset.jetton(Address.parse(toAsset));
-
-  const poolResult = await findDedustPool(tonClient, factory, fromAssetObj, toAssetObj);
-  if (!poolResult) {
+  const estimate = await estimateDedustSwap({ fromAsset, toAsset, amount, slippage });
+  if (!estimate) {
     throw new PluginSDKError("DeDust pool not ready for this pair", "OPERATION_FAILED");
   }
-  const { pool } = poolResult;
-
-  const fromDecimals = await getDecimals(isTonInput ? "ton" : fromAsset);
-  const toDecimals = await getDecimals(isTonOutput ? "ton" : toAsset);
-  const amountIn = toUnits(amount, fromDecimals);
-
-  const { amountOut } = await pool.getEstimatedSwapOut({
-    assetIn: fromAssetObj,
+  const {
+    tonClient,
+    factory,
+    pool,
+    isTonInput,
+    toDecimals,
     amountIn,
-  });
-  const minAmountOut = amountOut - (amountOut * BigInt(Math.floor(slippage * 10000))) / 10000n;
+    amountOut,
+    minAmountOut,
+    fromAddress,
+  } = estimate;
 
   return withSwapWallet(tonClient, async ({ keyPair, walletContract }) => {
     const sender = walletContract.sender(keyPair.secretKey);
@@ -337,7 +252,7 @@ async function executeDedustSwap(
           gasAmount: toNano(DEDUST_GAS.SWAP_TON_TO_JETTON),
         });
       } else {
-        const jettonAddress = Address.parse(fromAsset);
+        const jettonAddress = Address.parse(fromAddress);
         const jettonVault = tonClient.open(await factory.getJettonVault(jettonAddress));
         const jettonRoot = tonClient.open(JettonRoot.createFromAddress(jettonAddress));
         const jettonWallet = tonClient.open(

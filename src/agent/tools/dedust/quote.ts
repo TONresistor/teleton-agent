@@ -1,12 +1,11 @@
 import { Type } from "@sinclair/typebox";
 import type { Tool, ToolExecutor, ToolResult } from "../types.js";
 import { Address } from "@ton/core";
-import { getCachedTonClient } from "../../../ton/wallet-service.js";
-import { Factory, Asset, PoolType, ReadinessStatus } from "@dedust/sdk";
-import { DEDUST_FACTORY_MAINNET, NATIVE_TON_ADDRESS } from "./constants.js";
-import { getDecimals, toUnits, fromUnits } from "./asset-cache.js";
+import { NATIVE_TON_ADDRESS } from "./constants.js";
+import { fromUnits } from "./asset-cache.js";
 import { getErrorMessage } from "../../../utils/errors.js";
 import { createLogger } from "../../../utils/logger.js";
+import { estimateDedustSwap } from "../../../ton/dex-service.js";
 
 const log = createLogger("Tools");
 interface DedustQuoteParams {
@@ -86,44 +85,21 @@ export const dedustQuoteExecutor: ToolExecutor<DedustQuoteParams> = async (
       }
     }
 
-    const tonClient = await getCachedTonClient();
-
-    const factory = tonClient.open(
-      Factory.createFromAddress(Address.parse(DEDUST_FACTORY_MAINNET))
+    const estimate = await estimateDedustSwap(
+      { fromAsset: fromAssetAddr, toAsset: toAssetAddr, amount, slippage },
+      { preferredPoolType: pool_type }
     );
-
-    const fromAsset = isTonInput ? Asset.native() : Asset.jetton(Address.parse(fromAssetAddr));
-    const toAsset = isTonOutput ? Asset.native() : Asset.jetton(Address.parse(toAssetAddr));
-
-    const poolTypeEnum = pool_type === "stable" ? PoolType.STABLE : PoolType.VOLATILE;
-
-    const pool = tonClient.open(await factory.getPool(poolTypeEnum, [fromAsset, toAsset]));
-
-    const readinessStatus = await pool.getReadinessStatus();
-    if (readinessStatus !== ReadinessStatus.READY) {
+    if (!estimate) {
       return {
         success: false,
-        error: `Pool not ready. Status: ${readinessStatus}. Try the other pool type (${pool_type === "volatile" ? "stable" : "volatile"}) or check if the pool exists.`,
+        error: "No DeDust pool ready for this pair (tried volatile and stable).",
       };
     }
+    const { pool, poolType, fromDecimals, toDecimals, amountOut, tradeFee, minAmountOut } =
+      estimate;
 
     // Get reserves for additional info
     const reserves = await pool.getReserves();
-
-    // Resolve correct decimals using normalized addresses (friendly format)
-    const fromDecimals = await getDecimals(isTonInput ? "ton" : fromAssetAddr);
-    const toDecimals = await getDecimals(isTonOutput ? "ton" : toAssetAddr);
-
-    // Convert amount using correct decimals
-    const amountIn = toUnits(amount, fromDecimals);
-
-    const { amountOut, tradeFee } = await pool.getEstimatedSwapOut({
-      assetIn: fromAsset,
-      amountIn,
-    });
-
-    // Calculate minimum output with slippage
-    const minAmountOut = amountOut - (amountOut * BigInt(Math.floor(slippage * 10000))) / 10000n;
 
     // Calculate rate using correct decimals
     const expectedOutput = fromUnits(amountOut, toDecimals);
@@ -147,7 +123,7 @@ export const dedustQuoteExecutor: ToolExecutor<DedustQuoteParams> = async (
       rate: rate.toFixed(6),
       slippage: `${(slippage * 100).toFixed(2)}%`,
       fee: feeAmount.toFixed(6),
-      poolType: pool_type,
+      poolType,
       poolAddress: pool.address.toString(),
       reserves: {
         asset0: fromUnits(reserves[0], fromDecimals).toString(),
@@ -160,7 +136,7 @@ export const dedustQuoteExecutor: ToolExecutor<DedustQuoteParams> = async (
     message += `Minimum output: ${quote.minOutput} (with ${quote.slippage} slippage)\n`;
     message += `Rate: 1 ${fromSymbol} = ${quote.rate} ${toSymbol}\n`;
     message += `Trade fee: ${quote.fee}\n`;
-    message += `Pool type: ${pool_type}\n\n`;
+    message += `Pool type: ${poolType}\n\n`;
     message += `Use dedust_swap to execute this trade.`;
 
     return {
