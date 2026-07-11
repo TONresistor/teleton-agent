@@ -7,15 +7,15 @@ import {
 } from "../../../ton/wallet-service.js";
 import { toNano, fromNano } from "@ton/ton";
 import { Address } from "@ton/core";
-import { Factory, Asset, ReadinessStatus, JettonRoot, VaultJetton } from "@dedust/sdk";
-import { DEDUST_FACTORY_MAINNET, DEDUST_GAS, NATIVE_TON_ADDRESS } from "./constants.js";
-import { findDedustPool } from "./pool.js";
-import { getDecimals, toUnits, fromUnits } from "./asset-cache.js";
+import { ReadinessStatus, JettonRoot, VaultJetton } from "@dedust/sdk";
+import { DEDUST_GAS, NATIVE_TON_ADDRESS } from "./constants.js";
+import { fromUnits } from "./asset-cache.js";
 import { withTxLock } from "../../../ton/tx-lock.js";
 import { openWallet } from "../../../ton/wallet-open.js";
 import { walletTxLt, confirmWalletTx, tonExplorerTxUrl } from "../../../ton/confirm.js";
 import { getErrorMessage, isHttpError } from "../../../utils/errors.js";
 import { createLogger } from "../../../utils/logger.js";
+import { estimateDedustSwap } from "../../../ton/dex-service.js";
 
 const log = createLogger("Tools");
 interface DedustSwapParams {
@@ -103,43 +103,18 @@ export const dedustSwapExecutor: ToolExecutor<DedustSwapParams> = async (
     }
 
     const tonClient = await getCachedTonClient();
-
-    const factory = tonClient.open(
-      Factory.createFromAddress(Address.parse(DEDUST_FACTORY_MAINNET))
+    const estimate = await estimateDedustSwap(
+      { fromAsset: fromAssetAddr, toAsset: toAssetAddr, amount, slippage },
+      { tonClient, preferredPoolType: pool_type }
     );
-
-    const fromAssetObj = isTonInput ? Asset.native() : Asset.jetton(Address.parse(fromAssetAddr));
-    const toAssetObj = isTonOutput ? Asset.native() : Asset.jetton(Address.parse(toAssetAddr));
-
-    const poolMatch = await findDedustPool(
-      tonClient,
-      factory,
-      fromAssetObj,
-      toAssetObj,
-      pool_type === "stable" ? "stable" : "volatile"
-    );
-    if (!poolMatch) {
+    if (!estimate) {
       return {
         success: false,
         error: "No DeDust pool ready for this pair (tried volatile and stable).",
       };
     }
-    const pool = poolMatch.pool;
-
-    // Resolve correct decimals using normalized addresses (friendly format)
-    const fromDecimals = await getDecimals(isTonInput ? "ton" : fromAssetAddr);
-    const toDecimals = await getDecimals(isTonOutput ? "ton" : toAssetAddr);
-
-    // Convert amount using correct decimals
-    const amountIn = toUnits(amount, fromDecimals);
-
-    const { amountOut, tradeFee } = await pool.getEstimatedSwapOut({
-      assetIn: fromAssetObj,
-      amountIn,
-    });
-
-    // Calculate minimum output with slippage
-    const minAmountOut = amountOut - (amountOut * BigInt(Math.floor(slippage * 10000))) / 10000n;
+    const { factory, pool, poolType, toDecimals, amountIn, amountOut, tradeFee, minAmountOut } =
+      estimate;
 
     // Prepare wallet and sender — wrapped in tx lock to prevent seqno races
     // with concurrent StonFi or other DeDust swaps
@@ -254,7 +229,7 @@ export const dedustSwapExecutor: ToolExecutor<DedustSwapParams> = async (
           minOutput: minOutput.toFixed(6),
           slippage: `${(slippage * 100).toFixed(2)}%`,
           tradeFee: feeAmount.toFixed(6),
-          poolType: pool_type,
+          poolType,
           poolAddress: pool.address.toString(),
           txHash: confirmed.hash,
           message: `Swapped ${amount} ${fromSymbol} for ~${expectedOutput.toFixed(4)} ${toSymbol} on DeDust — confirmed on-chain\n  Minimum output: ${minOutput.toFixed(4)}\n  Slippage: ${(slippage * 100).toFixed(2)}%\n  tx ${confirmed.hash}\n  ${tonExplorerTxUrl(confirmed.hash)}`,

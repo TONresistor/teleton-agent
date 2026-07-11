@@ -221,6 +221,36 @@ describe("Workspace Path Validator", () => {
           rmSync(linkPath, { force: true });
         }
       });
+
+      it("should reject paths traversing a symbolic-link directory", () => {
+        const externalDir = mkdtempSync(join(tmpdir(), "teleton-external-"));
+        const linkPath = join(tempWorkspace, "escape");
+
+        try {
+          writeFileSync(join(externalDir, "secret.txt"), "outside");
+          symlinkSync(externalDir, linkPath, "dir");
+
+          expect(() => validatePath("escape/secret.txt")).toThrow(WorkspaceSecurityError);
+          expect(() => validatePath("escape/secret.txt")).toThrow("Symbolic links are not allowed");
+        } finally {
+          rmSync(linkPath, { force: true });
+          rmSync(externalDir, { recursive: true, force: true });
+        }
+      });
+
+      it("should reject creating files through a symbolic-link directory", () => {
+        const externalDir = mkdtempSync(join(tmpdir(), "teleton-external-"));
+        const linkPath = join(tempWorkspace, "escape-create");
+
+        try {
+          symlinkSync(externalDir, linkPath, "dir");
+
+          expect(() => validatePath("escape-create/new.txt", true)).toThrow(WorkspaceSecurityError);
+        } finally {
+          rmSync(linkPath, { force: true });
+          rmSync(externalDir, { recursive: true, force: true });
+        }
+      });
     });
 
     describe("Non-existent path handling", () => {

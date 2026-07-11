@@ -11,7 +11,6 @@ Run `teleton setup` to generate a config file interactively, or copy `config.exa
 - [agent](#agent)
 - [telegram](#telegram)
 - [embedding](#embedding)
-- [deals](#deals)
 - [webui](#webui)
 - [storage](#storage)
 - [logging](#logging)
@@ -38,7 +37,7 @@ LLM provider and agentic loop configuration.
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| `agent.provider` | `enum` | `"anthropic"` | LLM provider. One of: `anthropic`, `codex`, `openai`, `google`, `xai`, `groq`, `openrouter`, `moonshot`, `mistral`, `cerebras`, `zai`, `minimax`, `huggingface`, `gocoon`, `local`. |
+| `agent.provider` | `enum` | `"anthropic"` | LLM provider. One of: `anthropic`, `codex`, `grok-build`, `openai`, `google`, `xai`, `groq`, `openrouter`, `moonshot`, `mistral`, `cerebras`, `zai`, `minimax`, `huggingface`, `gocoon`, `local`. |
 | `agent.api_key` | `string` | `""` | API key for the chosen provider. Can be overridden with `TELETON_API_KEY` env var. |
 | `agent.model` | `string` | `"claude-haiku-4-5-20251001"` | Primary model ID. Auto-detected from provider if not set (only for non-Anthropic providers). |
 | `agent.utility_model` | `string` | *auto-detected* | Cheap/fast model used for summarization and compaction. If omitted, the platform selects one based on the provider (e.g., `claude-haiku-4-5-20251001` for Anthropic, `gpt-4o-mini` for OpenAI). |
@@ -85,6 +84,7 @@ When you change the `provider` and omit `model`, the platform auto-selects:
 |----------|--------------|----------------------|
 | `anthropic` | `claude-haiku-4-5-20251001` | `claude-haiku-4-5-20251001` |
 | `codex` | `gpt-5.5` | `gpt-5.1-codex-mini` |
+| `grok-build` | `grok-build` | `grok-build` |
 | `openai` | `gpt-5.5` | `gpt-4o-mini` |
 | `google` | `gemini-2.5-flash` | `gemini-2.0-flash-lite` |
 | `xai` | `grok-3` | `grok-3-mini-fast` |
@@ -98,6 +98,14 @@ When you change the `provider` and omit `model`, the platform auto-selects:
 | `huggingface` | `deepseek-ai/DeepSeek-V3.2` | `Qwen/Qwen3-Next-80B-A3B-Instruct` |
 | `gocoon` | `Qwen/Qwen3-32B` | `Qwen/Qwen3-32B` |
 | `local` | `auto` | `auto` |
+
+`grok-build` reads the browser/OIDC session created by `grok login` from
+`$GROK_HOME/auth.json` (default: `~/.grok/auth.json`) and connects directly to
+the Grok Build CLI proxy. The session token is not stored in Teleton's config.
+
+Codex model `gpt-5.6-luna` is hidden and rejected by default because the live
+backend does not currently advertise it. Keep production on `gpt-5.6-terra`;
+`TELETON_ENABLE_CODEX_LUNA=true` exists only for controlled backend revalidation.
 
 ---
 
@@ -127,8 +135,8 @@ Telegram client and messaging behavior.
 | `telegram.owner_username` | `string` | *optional* | Owner's Telegram username without `@` (e.g., `"zkproof"`). |
 | `telegram.owner_id` | `number` | *optional* | Owner's Telegram user ID. |
 | `telegram.debounce_ms` | `number` | `1500` | Debounce delay in milliseconds for group messages. When multiple messages arrive in quick succession, they are batched into a single processing cycle. Set to `0` to disable. |
-| `telegram.bot_token` | `string` | *optional* | Telegram Bot token from @BotFather. Required for the deals system's inline buttons. |
-| `telegram.bot_username` | `string` | *optional* | Bot username without `@` (e.g., `"teleton_deals_bot"`). Required when `bot_token` is set. |
+| `telegram.bot_token` | `string` | *optional in user mode* | Telegram Bot token from @BotFather. Required in bot mode; enables plugin inline cards and callbacks in user mode. |
+| `telegram.bot_username` | `string` | *optional* | Bot username without `@` (e.g., `"teleton_agent_bot"`). Used with `bot_token` for inline queries. |
 
 ### DM Policies
 
@@ -163,7 +171,7 @@ telegram:
   owner_username: "zkproof"
   debounce_ms: 1500
   # bot_token: "123456:ABC-DEF..."
-  # bot_username: "my_deals_bot"
+  # bot_username: "my_agent_bot"
 ```
 
 ---
@@ -186,33 +194,6 @@ embedding:
 ```
 
 The `"local"` provider uses ONNX Runtime with the `@huggingface/transformers` library and requires no external API calls. The `"none"` provider disables vector search entirely and uses only SQLite FTS5 for memory retrieval.
-
----
-
-## deals
-
-Configuration for the peer-to-peer deals/escrow system.
-
-| Key | Type | Default | Description |
-|-----|------|---------|-------------|
-| `deals.enabled` | `boolean` | `true` | Enable the deals module. |
-| `deals.expiry_seconds` | `number` | `120` | Time in seconds before an unaccepted deal expires. |
-| `deals.buy_max_floor_percent` | `number` | `95` | Maximum price as a percentage of floor price for buy deals. |
-| `deals.sell_min_floor_percent` | `number` | `105` | Minimum price as a percentage of floor price for sell deals. |
-| `deals.poll_interval_ms` | `number` | `5000` | How frequently (in milliseconds) the system polls for payment verification on active deals. |
-| `deals.max_verification_retries` | `number` | `12` | Maximum number of payment verification attempts before timing out. |
-| `deals.expiry_check_interval_ms` | `number` | `60000` | How frequently (in milliseconds) expired deals are cleaned up. |
-
-### Example
-
-```yaml
-deals:
-  enabled: true
-  expiry_seconds: 120
-  buy_max_floor_percent: 80
-  sell_min_floor_percent: 115
-  poll_interval_ms: 5000
-```
 
 ---
 
@@ -314,7 +295,7 @@ Semantic tool retrieval configuration. When enabled, the agent uses embedding-ba
 |-----|------|---------|-------------|
 | `tool_rag.enabled` | `boolean` | `true` | Enable semantic tool retrieval (Tool RAG). |
 | `tool_rag.top_k` | `number` | `35` | Maximum number of tools to retrieve per LLM call. |
-| `tool_rag.always_include` | `string[]` | `["telegram_send_message", "telegram_quote_reply", "telegram_send_photo", "journal_*", "workspace_*"]` | Tool name patterns always included regardless of relevance score. Supports prefix glob with `*`. |
+| `tool_rag.always_include` | `string[]` | `["journal_*", "workspace_*", "web_*"]` | Tool name patterns always included regardless of relevance score. Supports prefix glob with `*`. Telegram send tools remain searchable but are excluded by default to prevent duplicate replies and progress messages. |
 | `tool_rag.skip_unlimited_providers` | `boolean` | `false` | Skip Tool RAG for providers with no tool limit (e.g., Anthropic). When `true`, all tools are sent to those providers. |
 
 ### Example
@@ -324,11 +305,9 @@ tool_rag:
   enabled: true
   top_k: 35
   always_include:
-    - "telegram_send_message"
-    - "telegram_quote_reply"
-    - "telegram_send_photo"
     - "journal_*"
     - "workspace_*"
+    - "web_*"
   skip_unlimited_providers: false
 ```
 
@@ -683,10 +662,6 @@ telegram:
 
 embedding:
   provider: "local"
-
-deals:
-  enabled: true
-  expiry_seconds: 120
 
 webui:
   enabled: false

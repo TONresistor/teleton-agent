@@ -7,7 +7,7 @@ import {
   isToolAccessLevel,
   type ToolAccessLevel,
 } from "../../agent/tools/scope.js";
-import { getErrorMessage } from "../../utils/errors.js";
+import { apiError } from "../http.js";
 import { readRawConfig, setNestedValue, writeRawConfig } from "../../config/configurable-keys.js";
 
 const VALID_SCOPES: readonly ToolScope[] = [
@@ -67,11 +67,7 @@ export function createToolsRoutes(deps: WebUIServerDeps) {
 
       return c.json(response);
     } catch (error) {
-      const response: APIResponse = {
-        success: false,
-        error: getErrorMessage(error),
-      };
-      return c.json(response, 500);
+      return apiError(c, error, 500);
     }
   });
 
@@ -95,7 +91,7 @@ export function createToolsRoutes(deps: WebUIServerDeps) {
       };
       return c.json(response);
     } catch (error) {
-      return c.json({ success: false, error: String(error) }, 500);
+      return apiError(c, error, 500);
     }
   });
 
@@ -162,7 +158,7 @@ export function createToolsRoutes(deps: WebUIServerDeps) {
       };
       return c.json(response);
     } catch (error) {
-      return c.json({ success: false, error: String(error) }, 500);
+      return apiError(c, error, 500);
     }
   });
 
@@ -228,11 +224,7 @@ export function createToolsRoutes(deps: WebUIServerDeps) {
         },
       });
     } catch (error) {
-      const response: APIResponse = {
-        success: false,
-        error: getErrorMessage(error),
-      };
-      return c.json(response, 500);
+      return apiError(c, error, 500);
     }
   });
 
@@ -256,11 +248,7 @@ export function createToolsRoutes(deps: WebUIServerDeps) {
         },
       });
     } catch (error) {
-      const response: APIResponse = {
-        success: false,
-        error: getErrorMessage(error),
-      };
-      return c.json(response, 500);
+      return apiError(c, error, 500);
     }
   });
 
@@ -274,11 +262,7 @@ export function createToolsRoutes(deps: WebUIServerDeps) {
       };
       return c.json(response);
     } catch (error) {
-      const response: APIResponse = {
-        success: false,
-        error: getErrorMessage(error),
-      };
-      return c.json(response, 500);
+      return apiError(c, error, 500);
     }
   });
 

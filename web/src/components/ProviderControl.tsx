@@ -1,7 +1,7 @@
 import type { ProviderMeta } from '../hooks/useConfigState';
 
-export const PROVIDER_OPTIONS = ['anthropic', 'openai', 'codex', 'google', 'xai', 'groq', 'openrouter', 'moonshot', 'mistral', 'cerebras', 'zai', 'minimax', 'huggingface', 'gocoon', 'local'];
-export const PROVIDER_LABELS = ['Anthropic', 'OpenAI', 'Codex (Auto)', 'Google', 'xAI', 'Groq', 'OpenRouter', 'Moonshot', 'Mistral', 'Cerebras', 'ZAI (Zhipu)', 'MiniMax', 'HuggingFace', 'Gocoon', 'Local'];
+export const PROVIDER_OPTIONS = ['anthropic', 'openai', 'codex', 'grok-build', 'google', 'xai', 'groq', 'openrouter', 'moonshot', 'mistral', 'cerebras', 'zai', 'minimax', 'huggingface', 'gocoon', 'local'];
+export const PROVIDER_LABELS = ['Anthropic', 'OpenAI', 'Codex (Auto)', 'Grok Build (Auto)', 'Google', 'xAI', 'Groq', 'OpenRouter', 'Moonshot', 'Mistral', 'Cerebras', 'ZAI (Zhipu)', 'MiniMax', 'HuggingFace', 'Gocoon', 'Local'];
 
 interface ProviderSwitchZoneProps {
   pendingMeta: ProviderMeta;

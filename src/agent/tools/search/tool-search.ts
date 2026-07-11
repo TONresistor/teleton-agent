@@ -1,6 +1,6 @@
 import { Type } from "@sinclair/typebox";
 import type { TSchema } from "@sinclair/typebox";
-import type { Tool as PiAiTool } from "@mariozechner/pi-ai";
+import type { Tool as PiAiTool } from "@earendil-works/pi-ai";
 import type { Tool, ToolExecutor, ToolResult } from "../types.js";
 import type { ToolRegistry } from "../registry.js";
 import { createLogger } from "../../../utils/logger.js";
@@ -105,11 +105,11 @@ export function createToolSearchExecutor(
     // ── 5. Logging (T8) ───────────────────────────────────────────────────
     const latencyMs = Date.now() - start;
     if (tools.length === 0) {
-      log.warn(`tool_search: no results for query="${query}" (${latencyMs}ms)`);
+      log.warn(`tool_search: no results (queryLength=${query.length}, ${latencyMs}ms)`);
     } else {
       const names = tools.map((t) => t.name).join(", ");
       log.info(
-        `tool_search query="${query}" results=${tools.length} tools=[${names}] latency=${latencyMs}ms`
+        `tool_search queryLength=${query.length} results=${tools.length} tools=[${names}] latency=${latencyMs}ms`
       );
     }
 

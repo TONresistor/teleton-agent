@@ -4,6 +4,7 @@ import type { NewMessageEvent } from "telegram/events/NewMessage.js";
 import { createLogger } from "../../utils/logger.js";
 import { withFloodRetry } from "../flood-retry.js";
 import { randomLong } from "../../utils/gramjs-bigint.js";
+import { classifyMedia } from "../bridge-interface.js";
 import type {
   ITelegramBridge,
   TelegramMessage,
@@ -31,6 +32,15 @@ export class GramJSUserBridge implements ITelegramBridge {
 
   constructor(config: TelegramClientConfig) {
     this.client = new TelegramUserClient(config);
+  }
+
+  /** Cache a chat's peer for later resolution, evicting the oldest past a cap. */
+  private cachePeer(chatId: string, peer: Api.TypePeer): void {
+    this.peerCache.set(chatId, peer);
+    if (this.peerCache.size > 5000) {
+      const oldest = this.peerCache.keys().next().value;
+      if (oldest !== undefined) this.peerCache.delete(oldest);
+    }
   }
 
   getMode(): "user" | "bot" {
@@ -558,31 +568,18 @@ export class GramJSUserBridge implements ITelegramBridge {
     const isChannel = msg.post ?? false;
     const isGroup = !isChannel && chatId.startsWith("-");
 
-    if (msg.peerId) {
-      this.peerCache.set(chatId, msg.peerId);
-      if (this.peerCache.size > 5000) {
-        const oldest = this.peerCache.keys().next().value;
-        if (oldest !== undefined) this.peerCache.delete(oldest);
-      }
-    }
+    if (msg.peerId) this.cachePeer(chatId, msg.peerId);
 
     const { senderUsername, senderFirstName, isBot } = await this.resolveSender(msg);
 
-    const hasMedia = !!(
-      msg.photo ||
-      msg.document ||
-      msg.video ||
-      msg.audio ||
-      msg.voice ||
-      msg.sticker
-    );
-    let mediaType: TelegramMessage["mediaType"];
-    if (msg.photo) mediaType = "photo";
-    else if (msg.video) mediaType = "video";
-    else if (msg.audio) mediaType = "audio";
-    else if (msg.voice) mediaType = "voice";
-    else if (msg.sticker) mediaType = "sticker";
-    else if (msg.document) mediaType = "document";
+    const { hasMedia, mediaType } = classifyMedia({
+      photo: msg.photo,
+      video: msg.video,
+      audio: msg.audio,
+      voice: msg.voice,
+      sticker: msg.sticker,
+      document: msg.document,
+    });
 
     const replyToMsgId = msg.replyToMsgId;
 
@@ -711,13 +708,7 @@ export class GramJSUserBridge implements ITelegramBridge {
 
     if (!text) return null;
 
-    if (msg.peerId) {
-      this.peerCache.set(chatId, msg.peerId);
-      if (this.peerCache.size > 5000) {
-        const oldest = this.peerCache.keys().next().value;
-        if (oldest !== undefined) this.peerCache.delete(oldest);
-      }
-    }
+    if (msg.peerId) this.cachePeer(chatId, msg.peerId);
 
     return {
       id: msg.id,

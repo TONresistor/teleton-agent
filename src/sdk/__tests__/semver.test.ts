@@ -116,7 +116,7 @@ describe("semverSatisfies", () => {
 
     it("handles ^0.0.x (locks to exact patch in implementation)", () => {
       expect(semverSatisfies("0.0.1", "^0.0.1")).toBe(true);
-      expect(semverSatisfies("0.0.2", "^0.0.1")).toBe(true);
+      expect(semverSatisfies("0.0.2", "^0.0.1")).toBe(false);
       expect(semverSatisfies("0.0.0", "^0.0.1")).toBe(false);
       expect(semverSatisfies("0.1.0", "^0.0.1")).toBe(false);
     });
@@ -145,12 +145,8 @@ describe("semverSatisfies", () => {
       expect(semverSatisfies("1.0.0", "^")).toBe(false);
     });
 
-    it("returns true for '~1.0.0' (tilde not supported but parseable)", () => {
-      // parseSemver("1.0.0") from "~1.0.0" — tilde is not handled,
-      // falls through to exact match path, which parses "~1.0.0" as-is.
-      // parseSemver will try to match \d+\.\d+\.\d+ in "~1.0.0" — it finds "1.0.0".
-      // So this becomes an exact match check, NOT a malformed rejection.
-      expect(semverSatisfies("1.0.0", "~1.0.0")).toBe(true);
+    it("rejects unsupported tilde ranges", () => {
+      expect(semverSatisfies("1.0.0", "~1.0.0")).toBe(false);
       expect(semverSatisfies("1.0.1", "~1.0.0")).toBe(false);
     });
 
@@ -176,9 +172,8 @@ describe("semverSatisfies", () => {
       expect(semverSatisfies("100.200.300", "^100.0.0")).toBe(true);
     });
 
-    it("version embedded in string is still parsed by regex", () => {
-      // parseSemver uses regex match, so "v1.2.3" extracts "1.2.3"
-      expect(semverSatisfies("v1.2.3", "1.2.3")).toBe(true);
+    it("rejects versions embedded in another string", () => {
+      expect(semverSatisfies("v1.2.3", "1.2.3")).toBe(false);
     });
   });
 });

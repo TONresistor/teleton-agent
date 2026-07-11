@@ -7,6 +7,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.1.0] - 2026-07-11
+
+### Added
+
+- `telegram.sendInlineBotResult(chatId, botUsername, query, index?)` safely queries a third-party inline bot and sends the selected result without exposing the raw Telegram client.
+- `InlineBotResult` describes the normalized result metadata returned to plugins.
+- `ton.highload` preserves Highload Wallet v3 addresses while core owns signing, transaction serialization, and persistent query IDs.
+
+## [2.0.0] - 2026-07-10
+
+### Breaking
+
+- `getResaleGifts(giftId, limit?)` now requires the collection `giftId`; the previous signature could not query the Telegram API correctly.
+- Invalid exported plugin manifests now fail closed instead of being silently ignored.
+- Plugin tool scopes are validated against the canonical SDK scope list.
+- `start(ctx)` now receives `ctx.sdk` instead of the raw Telegram bridge.
+- `PluginToolContext.bridge` and `sdk.telegram.getRawClient()` were removed; plugins use the typed SDK capabilities instead.
+- Secret environment overrides are restricted to the declaring plugin's namespace.
+
+### Security
+
+- Plugin lifecycle methods and tool executors always receive the isolated plugin database handle, never the agent database.
+- `ATTACH DATABASE` and `DETACH DATABASE` remain blocked on every plugin-facing database surface.
+- External action tools require authenticated owner approval by default; data-bearing tools can opt in with `requiresApproval`.
+
+### Changed
+
+- `PluginManifest`, hook names, tool scopes, and tool categories are aligned with runtime validation.
+- SDK version compatibility parsing is strict and follows caret semantics for `0.0.x` releases.
+- SDK types are split by TON, Telegram, plugin, and common domains while preserving the root import path.
+
 ### Added
 
 #### TON — Jetton Analytics
@@ -54,10 +85,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `sendGiftOffer(userId, giftSlug, price, opts?)` — Make buy offer
 - Types: `StarsTransaction`, `TransferResult`, `CollectibleInfo`, `UniqueGift`, `GiftValue`, `GiftOfferOptions`
 
-### Fixed
-- `getResaleGifts` signature: first param is `giftId` (collection ID), not omitted
-
-## [1.0.0] - 2025-06-15
+## [1.0.0] - 2026-02-16
 
 ### Added
 - Initial release

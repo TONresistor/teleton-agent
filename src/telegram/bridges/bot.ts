@@ -1,6 +1,7 @@
-import { Bot, InlineKeyboard, InputFile, type Context } from "grammy";
+import { Bot, InlineKeyboard, InputFile, type Context, type MiddlewareFn } from "grammy";
 import { markdownToTelegramHtml } from "../formatting.js";
 import { TELEGRAM_MAX_MESSAGE_LENGTH } from "../../constants/limits.js";
+import { classifyMedia } from "../bridge-interface.js";
 import type {
   ITelegramBridge,
   SentMessage,
@@ -13,6 +14,7 @@ import type {
 import type { TelegramMessage, InlineButton } from "../bridge.js";
 import { createLogger } from "../../utils/logger.js";
 import { callbackRouter } from "../../bot/callback-router.js";
+import { answerCallbackOnce } from "../../bot/callback-answer.js";
 
 const log = createLogger("BotBridge");
 
@@ -89,6 +91,14 @@ export class GrammyBotBridge implements ITelegramBridge {
 
   getUsername(): string | undefined {
     return this.botInfo?.username;
+  }
+
+  getBot(): Bot {
+    return this.bot;
+  }
+
+  useMiddleware(middleware: MiddlewareFn<Context>): void {
+    this.bot.use(middleware);
   }
 
   /**
@@ -434,22 +444,14 @@ export class GrammyBotBridge implements ITelegramBridge {
       mentionsMe = true;
     }
 
-    const hasMedia = !!(
-      msg.photo ||
-      msg.voice ||
-      msg.audio ||
-      msg.document ||
-      msg.video ||
-      msg.sticker
-    );
-
-    let mediaType: TelegramMessage["mediaType"];
-    if (msg.photo) mediaType = "photo";
-    else if (msg.video) mediaType = "video";
-    else if (msg.voice) mediaType = "voice";
-    else if (msg.audio) mediaType = "audio";
-    else if (msg.sticker) mediaType = "sticker";
-    else if (msg.document) mediaType = "document";
+    const { hasMedia, mediaType } = classifyMedia({
+      photo: msg.photo,
+      video: msg.video,
+      audio: msg.audio,
+      voice: msg.voice,
+      sticker: msg.sticker,
+      document: msg.document,
+    });
 
     return {
       id: msg.message_id,
@@ -504,7 +506,7 @@ export class GrammyBotBridge implements ITelegramBridge {
 
     // Callback handler — resolves nonces from telegram_send_buttons, reinjects as synthetic messages
     this.bot.on("callback_query:data", async (ctx) => {
-      await ctx.answerCallbackQuery();
+      await answerCallbackOnce(ctx);
 
       const data = ctx.callbackQuery.data;
       if (data?.startsWith("btn:") && this.callbackHandler) {
@@ -578,10 +580,11 @@ export class GrammyBotBridge implements ITelegramBridge {
       { command: "model", description: "Switch LLM model" },
       { command: "loop", description: "Set max agentic iterations" },
       { command: "policy", description: "Change access policy" },
-      { command: "strategy", description: "View/change trading thresholds" },
       { command: "modules", description: "Manage module permissions" },
       { command: "plugin", description: "Manage plugin secrets" },
       { command: "wallet", description: "Check TON wallet balance" },
+      { command: "approve", description: "Approve a pending financial action" },
+      { command: "reject", description: "Reject a pending financial action" },
       { command: "verbose", description: "Toggle verbose logging" },
       { command: "rag", description: "Toggle Tool RAG or view status" },
       { command: "guest", description: "Toggle guest mode" },

@@ -1,4 +1,4 @@
-import type { Context, TextContent, Usage } from "@mariozechner/pi-ai";
+import type { Context, TextContent, Usage } from "@earendil-works/pi-ai";
 import { extractToolNames, stripEnvelopePrefix, truncate } from "../utils/pi-message.js";
 
 /** Per-turn usage accumulator (input/output/cache + cost), summed across loop iterations. */

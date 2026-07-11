@@ -10,13 +10,7 @@ import { startHonoServer, stopHonoServer } from "../utils/http-server.js";
 import { createLogger } from "../utils/logger.js";
 
 const log = createLogger("WebUI");
-import {
-  generateToken,
-  maskToken,
-  safeCompare,
-  COOKIE_NAME,
-  COOKIE_MAX_AGE,
-} from "./middleware/auth.js";
+import { generateToken, safeCompare, COOKIE_NAME, COOKIE_MAX_AGE } from "./middleware/auth.js";
 import { logInterceptor } from "./log-interceptor.js";
 import { SHARED_ROUTE_FACTORIES } from "./routes/shared.js";
 import { createAgentRoutes } from "../api/routes/agent.js";
@@ -300,8 +294,8 @@ export class WebUIServer {
           const url = `http://${info.address}:${info.port}`;
 
           log.info(`WebUI server running`);
-          log.info(`URL: ${url}/auth/exchange?token=${this.authToken}`);
-          log.info(`Token: ${maskToken(this.authToken)} (use Bearer header for API access)`);
+          log.info(`URL: ${url}`);
+          log.info("Authentication token loaded; use the configured Bearer token for API access");
         },
       });
     } catch (error) {

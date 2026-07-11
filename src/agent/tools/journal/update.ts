@@ -8,7 +8,6 @@ import { getDatabase } from "../../../memory/database.js";
 import { JournalStore } from "../../../memory/journal-store.js";
 import type { JournalOutcome } from "../../../memory/journal-store.js";
 import type { Tool, ToolExecutor } from "../types.js";
-import { withToolErrors } from "../wrap.js";
 import { outcomeEmoji, formatAssetFlow, formatTxHash } from "./format.js";
 
 interface JournalUpdateParams {
@@ -49,76 +48,75 @@ export const journalUpdateTool: Tool = {
   }),
 };
 
-export const journalUpdateExecutor: ToolExecutor<JournalUpdateParams> =
-  withToolErrors<JournalUpdateParams>(async (params) => {
-    const db = getDatabase().getDb();
-    const store = new JournalStore(db);
+export const journalUpdateExecutor: ToolExecutor<JournalUpdateParams> = async (params) => {
+  const db = getDatabase().getDb();
+  const store = new JournalStore(db);
 
-    // Check if entry exists
-    const existing = store.getEntryById(params.id);
-    if (!existing) {
-      return {
-        success: false,
-        error: `Journal entry #${params.id} not found`,
-      };
-    }
-
-    // Auto-set closed_at if outcome is being changed to non-pending
-    const closed_at =
-      params.outcome && params.outcome !== "pending" && !existing.closed_at
-        ? Math.floor(Date.now() / 1000)
-        : undefined;
-
-    const updated = store.updateEntry({
-      id: params.id,
-      outcome: params.outcome,
-      pnl_ton: params.pnl_ton,
-      pnl_pct: params.pnl_pct,
-      tx_hash: params.tx_hash,
-      closed_at,
-    });
-
-    if (!updated) {
-      return {
-        success: false,
-        error: "Failed to update entry",
-      };
-    }
-
-    // Format output
-    const lines: string[] = [
-      `✏️ Journal Entry #${updated.id} updated`,
-      ``,
-      `**Type**: ${updated.type} - ${updated.action}`,
-    ];
-
-    const assetFlow = formatAssetFlow(updated);
-    if (assetFlow) {
-      lines.push(`**Assets**: ${assetFlow}`);
-    }
-
-    lines.push(`**Outcome**: ${outcomeEmoji(updated.outcome)} ${updated.outcome}`);
-
-    if (updated.pnl_ton !== null && updated.pnl_ton !== undefined) {
-      const sign = updated.pnl_ton >= 0 ? "+" : "";
-      lines.push(
-        `**P&L**: ${sign}${updated.pnl_ton.toFixed(2)} TON (${sign}${updated.pnl_pct?.toFixed(1) ?? "?"}%)`
-      );
-    }
-
-    if (updated.tx_hash) {
-      lines.push(`**TX**: ${formatTxHash(updated.tx_hash)}`);
-    }
-
-    if (updated.closed_at) {
-      lines.push(``, `_Closed at ${new Date(updated.closed_at * 1000).toISOString()}_`);
-    }
-
+  // Check if entry exists
+  const existing = store.getEntryById(params.id);
+  if (!existing) {
     return {
-      success: true,
-      data: {
-        entry: updated,
-        message: lines.join("\n"),
-      },
+      success: false,
+      error: `Journal entry #${params.id} not found`,
     };
+  }
+
+  // Auto-set closed_at if outcome is being changed to non-pending
+  const closed_at =
+    params.outcome && params.outcome !== "pending" && !existing.closed_at
+      ? Math.floor(Date.now() / 1000)
+      : undefined;
+
+  const updated = store.updateEntry({
+    id: params.id,
+    outcome: params.outcome,
+    pnl_ton: params.pnl_ton,
+    pnl_pct: params.pnl_pct,
+    tx_hash: params.tx_hash,
+    closed_at,
   });
+
+  if (!updated) {
+    return {
+      success: false,
+      error: "Failed to update entry",
+    };
+  }
+
+  // Format output
+  const lines: string[] = [
+    `✏️ Journal Entry #${updated.id} updated`,
+    ``,
+    `**Type**: ${updated.type} - ${updated.action}`,
+  ];
+
+  const assetFlow = formatAssetFlow(updated);
+  if (assetFlow) {
+    lines.push(`**Assets**: ${assetFlow}`);
+  }
+
+  lines.push(`**Outcome**: ${outcomeEmoji(updated.outcome)} ${updated.outcome}`);
+
+  if (updated.pnl_ton !== null && updated.pnl_ton !== undefined) {
+    const sign = updated.pnl_ton >= 0 ? "+" : "";
+    lines.push(
+      `**P&L**: ${sign}${updated.pnl_ton.toFixed(2)} TON (${sign}${updated.pnl_pct?.toFixed(1) ?? "?"}%)`
+    );
+  }
+
+  if (updated.tx_hash) {
+    lines.push(`**TX**: ${formatTxHash(updated.tx_hash)}`);
+  }
+
+  if (updated.closed_at) {
+    lines.push(``, `_Closed at ${new Date(updated.closed_at * 1000).toISOString()}_`);
+  }
+
+  return {
+    success: true,
+    data: {
+      entry: updated,
+      message: lines.join("\n"),
+    },
+  };
+};

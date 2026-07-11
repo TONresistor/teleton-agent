@@ -29,7 +29,7 @@
         <aside class="sidebar" id="sidebar"><nav class="sidebar-nav">
             <div class="nav-section"><div class="nav-section-title">Start Here</div><ul class="nav-list"><div class="nav-list-inner"><li><a href="/index.html" class="nav-link">Introduction</a></li><li><a href="installation.html" class="nav-link">Installation</a></li><li><a href="quickstart.html" class="nav-link">Quick Start</a></li><li><a href="configuration.html" class="nav-link">Configuration</a></li></div></ul></div>
 <div class="nav-section"><div class="nav-section-title">Understand</div><ul class="nav-list"><div class="nav-list-inner"><li><a href="architecture.html" class="nav-link">Architecture</a></li><li><a href="agentic-loop.html" class="nav-link">Agentic Loop</a></li><li><a href="memory-system.html" class="nav-link">Memory System</a></li><li><a href="security.html" class="nav-link">Security</a></li></div></ul></div>
-<div class="nav-section"><div class="nav-section-title">Tools</div><ul class="nav-list"><div class="nav-list-inner"><li><a href="tools-telegram.html" class="nav-link">Telegram (76)</a></li><li><a href="tools-ton.html" class="nav-link">TON Blockchain (15)</a></li><li><a href="tools-dex.html" class="nav-link">DEX Trading (10)</a></li><li><a href="tools-dns.html" class="nav-link">DNS &amp; Domains (8)</a></li><li><a href="tools-deals.html" class="nav-link">Deals &amp; Escrow (5)</a></li><li><a href="tools-other.html" class="nav-link">Utilities</a></li></div></ul></div>
+<div class="nav-section"><div class="nav-section-title">Tools</div><ul class="nav-list"><div class="nav-list-inner"><li><a href="tools-telegram.html" class="nav-link">Telegram (83)</a></li><li><a href="tools-ton.html" class="nav-link">TON Blockchain (15)</a></li><li><a href="tools-dex.html" class="nav-link">DEX Trading (10)</a></li><li><a href="tools-dns.html" class="nav-link">DNS &amp; Domains (8)</a></li><li><a href="tools-other.html" class="nav-link">Utilities</a></li></div></ul></div>
 <div class="nav-section"><div class="nav-section-title">Build Plugins</div><ul class="nav-list"><div class="nav-list-inner"><li><a href="plugin-sdk.html" class="nav-link">Plugin SDK</a></li></div></ul></div>
 <div class="nav-section"><div class="nav-section-title">SDK Reference</div><ul class="nav-list"><div class="nav-list-inner"><li><a href="sdk-overview.html" class="nav-link">Overview</a></li><li><a href="sdk-ton.html" class="nav-link">TON Blockchain</a></li><li><a href="sdk-dex.html" class="nav-link">DEX Trading</a></li><li><a href="sdk-dns.html" class="nav-link">DNS &amp; Domains</a></li><li><a href="sdk-telegram.html" class="nav-link">Telegram</a></li><li><a href="sdk-bot.html" class="nav-link">Bot SDK</a></li><li><a href="sdk-utilities.html" class="nav-link">Utilities</a></li><li><a href="sdk-errors.html" class="nav-link">Error Handling</a></li><li><a href="tutorial-payment-bot.html" class="nav-link">Tutorial: Payment Bot</a></li><li><a href="tutorial-dex-bot.html" class="nav-link">Tutorial: DEX Bot</a></li><li><a href="tutorial-inline-bot.html" class="nav-link">Tutorial: Inline Bot</a></li></div></ul></div>
 <div class="nav-section"><div class="nav-section-title">Deploy &amp; Manage</div><ul class="nav-list"><div class="nav-list-inner"><li><a href="deploy-docker.html" class="nav-link">Docker</a></li><li><a href="cli-reference.html" class="nav-link">CLI Reference</a></li></div></ul></div>
@@ -104,8 +104,8 @@ docker run -d -v teleton-data:/data ghcr.io/tonresistor/teleton-agent</code></pr
                 <h2>Bot Token (Optional)</h2>
                 <p>A regular Telegram Bot token (from @BotFather) is optionally used alongside the user client for:</p>
                 <ul>
-                    <li><strong>Inline keyboard buttons</strong> in the deals system</li>
-                    <li><strong>Callback query handling</strong> for interactive UI elements</li>
+                    <li><strong>Plugin inline cards</strong> inserted into regular chats</li>
+                    <li><strong>Callback query handling</strong> for interactive plugin UI elements</li>
                 </ul>
                 <p>The bot token is <strong>NOT</strong> used for primary message sending/receiving: that is handled by the user client.</p>
                 <div class="code-block"><div class="code-header"><span>config.yaml</span></div><pre><code class="language-yaml">telegram:
@@ -162,23 +162,26 @@ docker run -d -v teleton-data:/data ghcr.io/tonresistor/teleton-agent</code></pr
                 <h2>Admin Commands</h2>
                 <p>All admin commands require the sender's Telegram user ID to be listed in <code>admin_ids</code>. Commands can be prefixed with <code>/</code>, <code>!</code>, or <code>.</code>.</p>
                 <div class="table-wrapper"><table>
-                    <thead><tr><th>#</th><th>Command</th><th>Syntax</th><th>Description</th></tr></thead>
+                    <thead><tr><th>Command</th><th>Syntax</th><th>Description</th></tr></thead>
                     <tbody>
-                        <tr><td>1</td><td><code>/status</code></td><td><code>/status</code></td><td>View agent status: provider, model, policies, paused state.</td></tr>
-                        <tr><td>2</td><td><code>/model</code></td><td><code>/model [model_name]</code></td><td>View or switch the LLM model at runtime.</td></tr>
-                        <tr><td>3</td><td><code>/loop</code></td><td><code>/loop [1-50]</code></td><td>View or set max agentic loop iterations.</td></tr>
-                        <tr><td>4</td><td><code>/policy</code></td><td><code>/policy &lt;dm|group&gt; &lt;value&gt;</code></td><td>View or change access policies.</td></tr>
-                        <tr><td>5</td><td><code>/strategy</code></td><td><code>/strategy [buy|sell &lt;percent&gt;]</code></td><td>View or change trading strategy thresholds.</td></tr>
-                        <tr><td>6</td><td><code>/modules</code></td><td><code>/modules [set|info|reset] ...</code></td><td>Manage per-group module permissions.</td></tr>
-                        <tr><td>7</td><td><code>/plugin</code></td><td><code>/plugin &lt;set|unset|keys&gt; ...</code></td><td>Manage plugin secrets (API keys, tokens).</td></tr>
-                        <tr><td>8</td><td><code>/wallet</code></td><td><code>/wallet</code></td><td>Check TON wallet balance and address.</td></tr>
-                        <tr><td>9</td><td><code>/verbose</code></td><td><code>/verbose</code></td><td>Toggle verbose debug logging on/off.</td></tr>
-                        <tr><td>10</td><td><code>/pause</code></td><td><code>/pause</code></td><td>Pause the agent (ignores non-admin messages).</td></tr>
-                        <tr><td>11</td><td><code>/resume</code></td><td><code>/resume</code></td><td>Resume the agent after pause.</td></tr>
-                        <tr><td>12</td><td><code>/stop</code></td><td><code>/stop</code></td><td>Emergency shutdown (terminates process).</td></tr>
-                        <tr><td>13</td><td><code>/clear</code></td><td><code>/clear [chat_id]</code></td><td>Clear conversation history for a chat.</td></tr>
-                        <tr><td>14</td><td><code>/ping</code></td><td><code>/ping</code></td><td>Health check (returns "Pong!").</td></tr>
-                        <tr><td>15</td><td><code>/help</code></td><td><code>/help</code></td><td>Display all available commands.</td></tr>
+                        <tr><td><code>/status</code></td><td><code>/status</code></td><td>View provider, model, policies, and paused state.</td></tr>
+                        <tr><td><code>/model</code></td><td><code>/model [model_name]</code></td><td>View or switch the LLM model.</td></tr>
+                        <tr><td><code>/loop</code></td><td><code>/loop [1-50]</code></td><td>View or set max agentic iterations.</td></tr>
+                        <tr><td><code>/policy</code></td><td><code>/policy &lt;dm|group&gt; &lt;value&gt;</code></td><td>View or change access policies.</td></tr>
+                        <tr><td><code>/modules</code></td><td><code>/modules [set|info|reset] ...</code></td><td>Manage per-group module permissions.</td></tr>
+                        <tr><td><code>/plugin</code></td><td><code>/plugin &lt;set|unset|keys&gt; ...</code></td><td>Manage plugin secrets.</td></tr>
+                        <tr><td><code>/wallet</code></td><td><code>/wallet</code></td><td>Check TON wallet balance and address.</td></tr>
+                        <tr><td><code>/approve</code></td><td><code>/approve &lt;request_id&gt;</code></td><td>Approve a pending financial action.</td></tr>
+                        <tr><td><code>/reject</code></td><td><code>/reject &lt;request_id&gt;</code></td><td>Reject a pending financial action.</td></tr>
+                        <tr><td><code>/verbose</code></td><td><code>/verbose</code></td><td>Toggle verbose logging.</td></tr>
+                        <tr><td><code>/rag</code></td><td><code>/rag [status|topk &lt;n&gt;]</code></td><td>Toggle Tool RAG or view status.</td></tr>
+                        <tr><td><code>/guest</code></td><td><code>/guest [on|off]</code></td><td>View or toggle guest mode.</td></tr>
+                        <tr><td><code>/pause</code></td><td><code>/pause</code></td><td>Pause the agent.</td></tr>
+                        <tr><td><code>/resume</code></td><td><code>/resume</code></td><td>Resume the agent.</td></tr>
+                        <tr><td><code>/stop</code></td><td><code>/stop</code></td><td>Emergency shutdown.</td></tr>
+                        <tr><td><code>/clear</code></td><td><code>/clear [chat_id]</code></td><td>Clear conversation history.</td></tr>
+                        <tr><td><code>/ping</code></td><td><code>/ping</code></td><td>Health check.</td></tr>
+                        <tr><td><code>/help</code></td><td><code>/help</code></td><td>Display available commands.</td></tr>
                     </tbody>
                 </table></div>
             </section>

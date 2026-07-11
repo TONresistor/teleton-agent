@@ -54,7 +54,7 @@ const tonProxyModule: PluginModule = {
     } catch (error) {
       log.error({ err: error }, "Failed to start TON Proxy");
       // Non-fatal: agent continues without proxy
-      manager = null;
+      setTonProxyManager(null);
     }
   },
 

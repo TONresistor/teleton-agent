@@ -4,27 +4,32 @@ import type { MemorySystem } from "../memory/index.js";
 import type { ToolRegistry } from "../agent/tools/registry.js";
 import type { WebUIConfig, Config } from "../config/schema.js";
 import type { Database } from "better-sqlite3";
-import type { PluginModule, PluginContext, ToolScope } from "../agent/tools/types.js";
-import type { ToolAccessLevel } from "../agent/tools/scope.js";
+import type { PluginModule, PluginContext } from "../agent/tools/types.js";
 import type { SDKDependencies } from "../sdk/index.js";
 import type { AgentLifecycle } from "../agent/lifecycle.js";
 import type { UserHookEvaluator } from "../agent/hooks/user-hook-evaluator.js";
+import type { McpServerInfo } from "./contracts.js";
+
+export type {
+  APIResponse,
+  ConfigKeyData,
+  FileEntry,
+  LogEntry,
+  MarketplacePlugin,
+  McpServerInfo,
+  MemorySearchResult,
+  MemorySourceFile,
+  ModuleInfo,
+  StatusResponse,
+  ToolAccessLevel,
+  ToolInfo,
+  ToolScope,
+  WorkspaceInfo,
+} from "./contracts.js";
 
 export interface LoadedPlugin {
   name: string;
   version: string;
-}
-
-export interface McpServerInfo {
-  name: string;
-  type: "stdio" | "sse" | "streamable-http";
-  target: string;
-  scope: string;
-  enabled: boolean;
-  connected: boolean;
-  toolCount: number;
-  tools: string[];
-  envKeys: string[];
 }
 
 export interface WebUIServerDeps {
@@ -58,20 +63,6 @@ export interface RegistryEntry {
   path: string;
 }
 
-export interface MarketplacePlugin {
-  id: string;
-  name: string;
-  description: string;
-  author: string;
-  tags: string[];
-  remoteVersion: string;
-  installedVersion: string | null;
-  status: "available" | "installed" | "updatable";
-  toolCount: number;
-  tools: Array<{ name: string; description: string }>;
-  secrets?: Record<string, { required: boolean; description: string; env?: string }>;
-}
-
 export interface MarketplaceDeps {
   modules: PluginModule[];
   config: Config;
@@ -81,67 +72,10 @@ export interface MarketplaceDeps {
   rewireHooks: () => void;
 }
 
-export interface LogEntry {
-  level: "log" | "warn" | "error";
-  message: string;
-  timestamp: number;
-}
-
-export interface APIResponse<T = unknown> {
-  success: boolean;
-  data?: T;
-  error?: string;
-}
-
-export interface StatusResponse {
-  uptime: number;
-  model: string;
-  provider: string;
-  sessionCount: number;
-  toolCount: number;
-  tokenUsage: { totalTokens: number; totalCost: number };
-  platform: string;
-}
-
-export interface ToolInfo {
-  name: string;
-  description: string;
-  module: string;
-  /** Per-tool access: who may use this tool (context-independent). */
-  level: ToolAccessLevel;
-  category?: string;
-  /** Legacy single-value scope (derived) — kept for backward compatibility. */
-  scope?: ToolScope;
-  /** Derived: false only when the tool is off. */
-  enabled?: boolean;
-}
-
-export interface ModuleInfo {
-  name: string;
-  toolCount: number;
-  tools: ToolInfo[];
-  isPlugin: boolean;
-}
-
-export interface MemorySearchResult {
-  id: string;
-  text: string;
-  source: string;
-  score: number;
-  vectorScore?: number;
-  keywordScore?: number;
-}
-
 export interface SessionInfo {
   chatId: string;
   sessionId: string;
   messageCount: number;
   contextTokens: number;
   lastActivity: number;
-}
-
-export interface MemorySourceFile {
-  source: string;
-  entryCount: number;
-  lastUpdated: number;
 }

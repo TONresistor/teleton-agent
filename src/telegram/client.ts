@@ -242,7 +242,8 @@ export class TelegramUserClient {
         const chatId = event.message.chatId?.toString() ?? "unknown";
         const isGroup = chatId.startsWith("-");
         log.debug(
-          `RAW EVENT: chatId=${chatId} isGroup=${isGroup} text="${event.message.message?.substring(0, 30) ?? ""}"`
+          { chatId, isGroup, messageLength: event.message.message?.length ?? 0 },
+          "RAW EVENT"
         );
       }
       await handler(event);

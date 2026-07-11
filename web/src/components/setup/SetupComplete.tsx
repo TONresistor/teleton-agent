@@ -1,7 +1,7 @@
 import { useState, useEffect, lazy, Suspense } from 'react';
 import { useSetup } from './SetupContext';
 
-const Lottie = lazy(() => import('lottie-react'));
+const Lottie = lazy(() => import('./LottiePlayer'));
 const completeAnimation = () => import('../../assets/complete.json').then((m) => m.default);
 
 function LottiePlayer() {
@@ -15,7 +15,6 @@ function LottiePlayer() {
     </Suspense>
   );
 }
-
 export function SetupComplete() {
   const { launching, launchError, handleLaunch } = useSetup();
 

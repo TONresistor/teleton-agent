@@ -8,11 +8,6 @@ export function getGramJSErrorMessage(err: unknown): string | undefined {
   return (err as { errorMessage?: string } | null | undefined)?.errorMessage;
 }
 
-/** Grammy errors carry a `.description`; read it from an unknown catch value. */
-export function getGrammyErrorDescription(err: unknown): string | undefined {
-  return (err as { description?: string } | null | undefined)?.description;
-}
-
 /** Structural type guard for HTTP-style errors (axios, ton-client, etc.) */
 export function isHttpError(
   err: unknown

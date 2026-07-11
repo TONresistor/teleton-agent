@@ -198,7 +198,10 @@ export function ensureSchema(db: Database.Database): void {
       scheduled_for INTEGER,
       payload TEXT,
       reason TEXT,
-      scheduled_message_id INTEGER
+      scheduled_message_id INTEGER,
+      origin_sender_id INTEGER,
+      origin_chat_id TEXT,
+      origin_is_group INTEGER CHECK(origin_is_group IN (0, 1))
     );
 
     CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
@@ -400,7 +403,7 @@ export function setSchemaVersion(db: Database.Database, version: string): void {
   ).run(version);
 }
 
-export const CURRENT_SCHEMA_VERSION = "1.19.0";
+export const CURRENT_SCHEMA_VERSION = "1.20.0";
 
 export function runMigrations(db: Database.Database): void {
   const currentVersion = getSchemaVersion(db);
@@ -781,6 +784,29 @@ export function runMigrations(db: Database.Database): void {
       log.info("Migration 1.19.0 complete: tool_config.scope_level added");
     } catch (error) {
       log.error({ err: error }, "Migration 1.19.0 failed");
+      throw error;
+    }
+  }
+
+  if (!currentVersion || versionLessThan(currentVersion, "1.20.0")) {
+    log.info("Running migration 1.20.0: Persist scheduled task creator authority");
+    try {
+      const tableExists = db
+        .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='tasks'")
+        .get();
+      if (tableExists) {
+        addColumnIfNotExists(db, "tasks", "origin_sender_id", "INTEGER");
+        addColumnIfNotExists(db, "tasks", "origin_chat_id", "TEXT");
+        addColumnIfNotExists(
+          db,
+          "tasks",
+          "origin_is_group",
+          "INTEGER CHECK(origin_is_group IN (0, 1))"
+        );
+      }
+      log.info("Migration 1.20.0 complete: Scheduled task authority persisted");
+    } catch (error) {
+      log.error({ err: error }, "Migration 1.20.0 failed");
       throw error;
     }
   }

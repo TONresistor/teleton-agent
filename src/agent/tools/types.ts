@@ -38,6 +38,9 @@ export interface ToolResult {
  */
 export type ToolCategory = "data-bearing" | "action";
 
+/** Runtime authority required to expose and execute a tool. */
+export type ToolAccessLevel = "all" | "allowlist" | "admin" | "off";
+
 /**
  * Tool scope for context-based filtering.
  * - "open": included in both DMs and groups (default, canonical form)
@@ -103,6 +106,12 @@ export interface RegisteredTool {
   executor: ToolExecutor;
   /** Declared non-trivial scope (undefined for the default always/open). */
   scope?: ToolScope;
+  /** Hard authority floor. Runtime configuration may only make access stricter. */
+  minimumAccess: ToolAccessLevel;
+  /** Optional per-tool allowlist. When present, it replaces telegram.allow_from. */
+  allowFrom?: ReadonlySet<number>;
+  /** Whether execution requires a separate, human-authenticated approval step. */
+  requiresApproval: boolean;
   /** Telegram mode this tool runs in. */
   mode: ToolMode;
   /** Module this tool belongs to (name prefix for built-ins, plugin name otherwise). */
@@ -120,6 +129,12 @@ export interface ToolEntry {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- tool executors accept varied param shapes
   executor: ToolExecutor<any>;
   scope?: ToolScope;
+  /** Hard authority floor, independent from the DM/group channel scope. */
+  minimumAccess?: ToolAccessLevel;
+  /** Optional per-tool allowlist. When present, it replaces telegram.allow_from. */
+  allowFrom?: readonly number[];
+  /** Require a separate owner command before executing this tool. */
+  requiresApproval?: boolean;
   /** Telegram mode(s) this tool runs in. Mandatory — every tool must declare it. */
   mode: ToolMode;
   /** Toolset tags for profile-based filtering (e.g. "core", "finance", "social") */
@@ -128,7 +143,7 @@ export interface ToolEntry {
 
 /**
  * Built-in plugin module interface.
- * Modules are self-contained feature packs (deals, etc.)
+ * Modules are self-contained feature packs (ton-proxy, exec, etc.)
  * that register their own tools, config, and migrations.
  */
 export interface PluginModule {
@@ -144,8 +159,12 @@ export interface PluginModule {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- tool executors accept varied param shapes
     executor: ToolExecutor<any>;
     scope?: ToolScope;
+    /** Optional per-tool allowlist. When present, it replaces telegram.allow_from. */
+    allowFrom?: readonly number[];
     /** Telegram mode(s) this module tool runs in. Defaults to "both" when omitted. */
     mode?: ToolMode;
+    /** Require an authenticated owner approval before execution. */
+    requiresApproval?: boolean;
   }>;
   /** Start background jobs (polling, timers, etc.) */
   start?(context: PluginContext): Promise<void>;

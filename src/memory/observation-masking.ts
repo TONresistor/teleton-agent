@@ -1,4 +1,4 @@
-import type { Message, ToolResultMessage, TextContent } from "@mariozechner/pi-ai";
+import type { Message, ToolResultMessage, TextContent } from "@earendil-works/pi-ai";
 import type { ToolRegistry } from "../agent/tools/registry.js";
 import {
   MASKING_KEEP_RECENT_COUNT,

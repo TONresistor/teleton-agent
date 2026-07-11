@@ -3,7 +3,6 @@ import type { AgentRuntime } from "../agent/runtime.js";
 import type { ITelegramBridge } from "./bridge-interface.js";
 import { getWalletAddress, getWalletBalance } from "../ton/wallet-service.js";
 import { Address } from "@ton/core";
-import { DEALS_CONFIG } from "../deals/config.js";
 import { loadTemplate } from "../workspace/manager.js";
 import { isVerbose, setVerbose, createLogger } from "../utils/logger.js";
 
@@ -106,8 +105,10 @@ export class AdminHandler {
         return this.handleResumeCommand();
       case "wallet":
         return await this.handleWalletCommand();
-      case "strategy":
-        return this.handleStrategyCommand(command);
+      case "approve":
+        return await this.handleApprovalCommand(command, true);
+      case "reject":
+        return await this.handleApprovalCommand(command, false);
       case "stop":
         return await this.handleStopCommand();
       case "verbose":
@@ -226,42 +227,6 @@ export class AdminHandler {
     return "▶️ Agent resumed.";
   }
 
-  private handleStrategyCommand(command: AdminCommand): string {
-    if (command.args.length === 0) {
-      const buy = Math.round(DEALS_CONFIG.strategy.buyMaxMultiplier * 100);
-      const sell = Math.round(DEALS_CONFIG.strategy.sellMinMultiplier * 100);
-      return (
-        `📊 **Trading Strategy**\n\n` +
-        `Buy: max **${buy}%** of floor\n` +
-        `Sell: min **${sell}%** of floor\n\n` +
-        `Usage:\n/strategy buy <percent>\n/strategy sell <percent>`
-      );
-    }
-
-    const [target, valueStr] = command.args;
-    const value = parseInt(valueStr, 10);
-
-    if (target === "buy") {
-      if (isNaN(value) || value < 50 || value > 150) {
-        return "❌ Buy threshold must be between 50 and 150";
-      }
-      const old = Math.round(DEALS_CONFIG.strategy.buyMaxMultiplier * 100);
-      DEALS_CONFIG.strategy.buyMaxMultiplier = value / 100;
-      return `📊 Buy threshold: **${old}%** → **${value}%** of floor`;
-    }
-
-    if (target === "sell") {
-      if (isNaN(value) || value < 100 || value > 200) {
-        return "❌ Sell threshold must be between 100 and 200";
-      }
-      const old = Math.round(DEALS_CONFIG.strategy.sellMinMultiplier * 100);
-      DEALS_CONFIG.strategy.sellMinMultiplier = value / 100;
-      return `📊 Sell threshold: **${old}%** → **${value}%** of floor`;
-    }
-
-    return `❌ Unknown target: ${target}. Use "buy" or "sell".`;
-  }
-
   private async handleStopCommand(): Promise<string> {
     log.info("🛑 [Admin] /stop command received - shutting down");
     setTimeout(() => process.kill(process.pid, "SIGTERM"), 1000);
@@ -277,6 +242,35 @@ export class AdminHandler {
 
     const friendly = Address.parse(address).toString({ bounceable: false });
     return `💎 **${result.balance} TON**\n📍 \`${friendly}\``;
+  }
+
+  private async handleApprovalCommand(command: AdminCommand, approve: boolean): Promise<string> {
+    const ownUserId = this.bridge.getOwnUserId?.();
+    if (ownUserId !== undefined && command.senderId === Number(ownUserId)) {
+      return "❌ Approval must come from a separate interactive admin account";
+    }
+
+    const approvalId = command.args[0];
+    if (!approvalId) {
+      return `❌ Usage: /${approve ? "approve" : "reject"} <request_id>`;
+    }
+    if (!this.registry) return "❌ Tool registry unavailable";
+
+    const result = approve
+      ? await this.registry.approvePendingAction(approvalId, command.senderId, command.chatId)
+      : await this.registry.rejectPendingAction(approvalId, command.senderId, command.chatId);
+
+    if (!result.success) return `❌ ${result.error ?? "Approval failed"}`;
+    if (!approve) return `🚫 Approval request ${approvalId} rejected.`;
+
+    const data = result.data;
+    const message =
+      data && typeof data === "object" && "message" in data && typeof data.message === "string"
+        ? data.message
+        : data === undefined
+          ? "Action completed."
+          : JSON.stringify(data);
+    return `✅ Approved action completed\n\n${message}`;
   }
 
   getBootstrapContent(): string | null {
@@ -566,9 +560,6 @@ Set max agentic iterations
 **/policy** <dm|group> <value>
 Change access policy
 
-**/strategy** [buy|sell <percent>]
-View or change trading thresholds
-
 **/modules** [set|info|reset]
 Manage per-group module permissions
 
@@ -577,6 +568,9 @@ Manage plugin secrets (API keys, tokens)
 
 **/wallet**
 Check TON wallet balance
+
+**/approve** <request_id> / **/reject** <request_id>
+Approve or reject a pending financial action
 
 **/verbose**
 Toggle verbose debug logging

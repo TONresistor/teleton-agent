@@ -29,7 +29,6 @@ const TABS = [
 const API_KEY_KEYS = ['agent.api_key', 'telegram.bot_token', 'tavily_api_key', 'tonapi_key', 'toncenter_api_key'];
 const ADVANCED_KEYS = [
   'embedding.provider', 'embedding.model', 'webui.port', 'webui.log_requests',
-  'deals.enabled', 'deals.expiry_seconds', 'deals.buy_max_floor_percent', 'deals.sell_min_floor_percent',
   'agent.base_url', 'dev.hot_reload',
 ];
 const SESSION_KEYS = [

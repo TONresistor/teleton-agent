@@ -29,7 +29,7 @@
         <aside class="sidebar" id="sidebar"><nav class="sidebar-nav">
             <div class="nav-section"><div class="nav-section-title">Start Here</div><ul class="nav-list"><div class="nav-list-inner"><li><a href="/index.html" class="nav-link">Introduction</a></li><li><a href="installation.html" class="nav-link">Installation</a></li><li><a href="quickstart.html" class="nav-link">Quick Start</a></li><li><a href="configuration.html" class="nav-link">Configuration</a></li></div></ul></div>
 <div class="nav-section"><div class="nav-section-title">Understand</div><ul class="nav-list"><div class="nav-list-inner"><li><a href="architecture.html" class="nav-link">Architecture</a></li><li><a href="agentic-loop.html" class="nav-link">Agentic Loop</a></li><li><a href="memory-system.html" class="nav-link">Memory System</a></li><li><a href="security.html" class="nav-link">Security</a></li></div></ul></div>
-<div class="nav-section"><div class="nav-section-title">Tools</div><ul class="nav-list"><div class="nav-list-inner"><li><a href="tools-telegram.html" class="nav-link">Telegram (76)</a></li><li><a href="tools-ton.html" class="nav-link">TON Blockchain (15)</a></li><li><a href="tools-dex.html" class="nav-link">DEX Trading (10)</a></li><li><a href="tools-dns.html" class="nav-link">DNS &amp; Domains (8)</a></li><li><a href="tools-deals.html" class="nav-link">Deals &amp; Escrow (5)</a></li><li><a href="tools-other.html" class="nav-link">Utilities</a></li></div></ul></div>
+<div class="nav-section"><div class="nav-section-title">Tools</div><ul class="nav-list"><div class="nav-list-inner"><li><a href="tools-telegram.html" class="nav-link">Telegram (83)</a></li><li><a href="tools-ton.html" class="nav-link">TON Blockchain (15)</a></li><li><a href="tools-dex.html" class="nav-link">DEX Trading (10)</a></li><li><a href="tools-dns.html" class="nav-link">DNS &amp; Domains (8)</a></li><li><a href="tools-other.html" class="nav-link">Utilities</a></li></div></ul></div>
 <div class="nav-section"><div class="nav-section-title">Build Plugins</div><ul class="nav-list"><div class="nav-list-inner"><li><a href="plugin-sdk.html" class="nav-link">Plugin SDK</a></li></div></ul></div>
 <div class="nav-section"><div class="nav-section-title">SDK Reference</div><ul class="nav-list"><div class="nav-list-inner"><li><a href="sdk-overview.html" class="nav-link active">Overview</a></li><li><a href="sdk-ton.html" class="nav-link">TON Blockchain</a></li><li><a href="sdk-dex.html" class="nav-link">DEX Trading</a></li><li><a href="sdk-dns.html" class="nav-link">DNS &amp; Domains</a></li><li><a href="sdk-telegram.html" class="nav-link">Telegram</a></li><li><a href="sdk-bot.html" class="nav-link">Bot SDK</a></li><li><a href="sdk-utilities.html" class="nav-link">Utilities</a></li><li><a href="sdk-errors.html" class="nav-link">Error Handling</a></li><li><a href="tutorial-payment-bot.html" class="nav-link">Tutorial: Payment Bot</a></li><li><a href="tutorial-dex-bot.html" class="nav-link">Tutorial: DEX Bot</a></li><li><a href="tutorial-inline-bot.html" class="nav-link">Tutorial: Inline Bot</a></li></div></ul></div>
 <div class="nav-section"><div class="nav-section-title">Deploy &amp; Manage</div><ul class="nav-list"><div class="nav-list-inner"><li><a href="deploy-docker.html" class="nav-link">Docker</a></li><li><a href="cli-reference.html" class="nav-link">CLI Reference</a></li></div></ul></div>
@@ -37,20 +37,20 @@
         <main class="main"><article class="content">
 
             <h1>SDK Reference Overview</h1>
-            <p class="lead">The <code>@teleton-agent/sdk</code> package provides 103 methods across 9 namespaces for building Teleton Agent plugins.</p>
+            <p class="lead">The <code>@teleton-agent/sdk</code> package provides a typed, namespaced API for building Teleton Agent plugins.</p>
 
             <section class="section" id="installation">
                 <h2>Installation</h2>
                 <p>Install the SDK as a dependency in your plugin project:</p>
-                <div class="code-block"><div class="code-header"><span>Install the SDK</span></div><pre><code class="language-bash">npm install @teleton-agent/sdk</code></pre></div>
-                <p>The SDK package exports TypeScript type definitions only. There is no runtime code: the actual implementations are injected by the Teleton core platform when your plugin is loaded.</p>
+                <div class="code-block"><div class="code-header"><span>Install the SDK</span></div><pre><code class="language-bash">npm install @teleton-agent/sdk@^2</code></pre></div>
+                <p>The SDK package exports TypeScript definitions plus runtime version and error helpers. Platform capability implementations are injected when your plugin is loaded.</p>
             </section>
 
             <section class="section" id="architecture">
                 <h2>SDK Architecture</h2>
                 <p>The <code>PluginSDK</code> interface is the root object passed to your plugin's <code>tools(sdk)</code> function. It provides namespaced access to all platform capabilities:</p>
                 <div class="code-block"><div class="code-header"><span>PluginSDK Interface</span></div><pre><code class="language-typescript">interface PluginSDK {
-  readonly version: string;            // SDK version (e.g. "1.0.0")
+  readonly version: string;            // SDK version (e.g. "2.0.0")
   readonly ton: TonSDK;               // TON blockchain operations
   readonly telegram: TelegramSDK;     // Telegram messaging &amp; users
   readonly db: Database | null;        // Isolated SQLite database
@@ -152,11 +152,12 @@ export const tools = (sdk: PluginSDK): SimpleToolDef[] =&gt; [
   version: string;                     // Semver (e.g. "1.0.0")
   author?: string;                     // Plugin author
   description?: string;                // Short description (max 256 chars)
-  dependencies?: string[];             // Required built-in modules (e.g. ["deals"])
+  dependencies?: string[];             // Required built-in modules (e.g. ["ton-proxy"])
   defaultConfig?: Record&lt;string, unknown&gt;; // Default config values
-  sdkVersion?: string;                 // Required SDK version range (e.g. "&gt;=1.0.0")
+  sdkVersion?: string;                 // Required SDK version range (e.g. "&gt;=2.0.0")
   secrets?: Record&lt;string, SecretDeclaration&gt;; // Required API keys
   bot?: BotManifest;                   // Bot capabilities (inline, callbacks)
+  hooks?: PluginHookDeclaration[];     // Hooks the plugin may register
 }</code></pre></div>
                 <div class="code-block"><div class="code-header"><span>Full Manifest Example</span></div><pre><code class="language-typescript">import type { PluginManifest } from "@teleton-agent/sdk";
 
@@ -165,7 +166,7 @@ export const manifest: PluginManifest = {
   version: "2.1.0",
   author: "dev@example.com",
   description: "Real-time weather data via OpenWeatherMap API",
-  sdkVersion: "&gt;=1.0.0",
+  sdkVersion: "&gt;=2.0.0",
   defaultConfig: {
     units: "metric",
     defaultCity: "Paris",
@@ -204,6 +205,7 @@ export const manifest: PluginManifest = {
   ) =&gt; Promise&lt;ToolResult&gt;;    // Tool executor function
   scope?: ToolScope;           // Visibility scope (default: "always")
   category?: ToolCategory;     // "data-bearing" or "action"
+  requiresApproval?: boolean;  // Require authenticated owner approval
 }</code></pre></div>
 
                 <h3>ToolResult</h3>
@@ -220,8 +222,7 @@ export const manifest: PluginManifest = {
   chatId: string;      // Telegram chat ID where the tool was invoked
   senderId: number;    // Telegram user ID of the sender
   isGroup: boolean;    // Whether this is a group chat (vs DM)
-  bridge: unknown;     // TelegramBridge instance
-  db: unknown;         // Plugin's isolated SQLite database
+  db: Database | null; // Plugin's isolated SQLite database
   config?: Record&lt;string, unknown&gt;;  // Sanitized bot config
 }</code></pre></div>
 
@@ -256,9 +257,12 @@ export const manifest: PluginManifest = {
                     <thead><tr><th>Scope</th><th>Visibility</th><th>Use Case</th></tr></thead>
                     <tbody>
                         <tr><td><code>"always"</code></td><td>All chats (DMs and groups)</td><td>General-purpose tools with no restrictions</td></tr>
+                        <tr><td><code>"open"</code></td><td>All users</td><td>Explicitly public tools</td></tr>
                         <tr><td><code>"dm-only"</code></td><td>Direct messages only</td><td>Sensitive operations (wallet, private data)</td></tr>
                         <tr><td><code>"group-only"</code></td><td>Group chats only</td><td>Moderation, polls, group-specific features</td></tr>
                         <tr><td><code>"admin-only"</code></td><td>Admin users only</td><td>Configuration, dangerous operations</td></tr>
+                        <tr><td><code>"allowlist"</code></td><td>Configured allowlist only</td><td>Restricted integrations</td></tr>
+                        <tr><td><code>"disabled"</code></td><td>Never exposed</td><td>Administrative shutdown</td></tr>
                     </tbody>
                 </table></div>
                 <p>Scopes are enforced at three levels: tool registration, context filtering (<code>getForContext()</code>), and execution-time validation. An admin can override scopes per-tool via the <code>tool_config</code> database table.</p>
@@ -280,9 +284,9 @@ export const manifest: PluginManifest = {
                 <ul>
                     <li><strong>SDK is frozen and immutable.</strong> The <code>PluginSDK</code> object and all its namespaces are <code>Object.freeze()</code>-d at creation time. You cannot reassign properties, add new ones, or modify existing methods. This prevents plugins from interfering with each other.</li>
                     <li><strong><code>sdk.bot</code> is <code>null</code> if your manifest does not declare <code>bot</code>.</strong> You must include a <code>bot: { inline: true }</code> or <code>bot: { callbacks: true }</code> declaration in your manifest to receive a <code>BotSDK</code> instance.</li>
-                    <li><strong><code>sdk.db</code> is <code>null</code> if your plugin does not export <code>migrate()</code>.</strong> To use the raw SQLite database, you must export a <code>migrate(db)</code> function from your plugin entry point. The storage namespace (<code>sdk.storage</code>) auto-creates its own <code>_kv</code> table and does not require <code>migrate()</code>.</li>
+                    <li><strong><code>sdk.db</code> is isolated for every plugin.</strong> A <code>migrate(db)</code> export is optional and only needed to create custom tables. The property is <code>null</code> only if database initialization fails.</li>
                     <li><strong><code>sdk.storage</code> is <code>null</code> if no database is available.</strong> This only happens if the core platform cannot create a plugin database at all (rare edge case).</li>
-                    <li><strong>Secret environment variable naming.</strong> Secrets are resolved from environment variables using the pattern <code>${PLUGIN_NAME_UPPER}_${KEY_UPPER}</code>. For example, a plugin named <code>weather-report</code> with a secret key <code>api_key</code> would look for <code>WEATHER_REPORT_API_KEY</code> in the environment.</li>
+                    <li><strong>Secret environment variable naming.</strong> A manifest <code>env</code> override is used when declared, but it must stay under the reserved plugin prefix; otherwise secrets use <code>TELETON_PLUGIN_${PLUGIN_NAME_UPPER}_${KEY_UPPER}</code>.</li>
                     <li><strong>All async SDK methods can throw <code>PluginSDKError</code>.</strong> Always wrap SDK calls in try/catch blocks or handle errors at the tool level. See the <a href="sdk-errors.html">Error Handling</a> guide.</li>
                 </ul>
             </section>

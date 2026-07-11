@@ -5,20 +5,12 @@
  */
 let pending: Promise<void> = Promise.resolve();
 
-const TX_LOCK_TIMEOUT_MS = 60_000;
-
 export function withTxLock<T>(fn: () => Promise<T>): Promise<T> {
-  const guarded = () => {
-    let timerId: ReturnType<typeof setTimeout> | undefined;
-    const timeoutPromise = new Promise<never>((_, reject) => {
-      timerId = setTimeout(
-        () => reject(new Error("TON tx-lock timeout (60s)")),
-        TX_LOCK_TIMEOUT_MS
-      );
-    });
-    return Promise.race([fn(), timeoutPromise]).finally(() => clearTimeout(timerId));
-  };
-  const execute = pending.then(guarded, guarded);
+  // There is no safe way to time out fn(): wallet SDK calls do not expose a
+  // cancellation guarantee. Releasing the mutex early lets a second operation
+  // reuse seqno while the first one is still broadcasting. Hold it until the
+  // underlying operation actually settles; network calls own their timeouts.
+  const execute = pending.then(fn, fn);
   pending = execute.then(
     () => {},
     () => {}

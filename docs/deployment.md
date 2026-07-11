@@ -24,7 +24,7 @@ This guide covers every method of deploying Teleton Agent, from a quick global i
 
 Before deploying, make sure you have:
 
-1. **Node.js 20+** (required by the `engines` field in `package.json`)
+1. **Node.js 22.22.2+ LTS** (Node 24 requires 24.15.0+; enforced by `package.json`)
 2. **npm** (ships with Node.js)
 3. **Telegram API credentials** -- obtain `api_id` and `api_hash` from [my.telegram.org/apps](https://my.telegram.org/apps)
 4. **LLM API key** -- from your chosen provider (Anthropic, OpenAI, Google, xAI, Groq, OpenRouter, Moonshot, Mistral, Cerebras, ZAI, MiniMax, Hugging Face, or Gocoon)
@@ -78,8 +78,8 @@ docker run -d \
 
 The Docker image uses a multi-stage build:
 
-- **Build stage**: Node.js 20-slim with build tools (`python3`, `make`, `g++`), compiles the full project (SDK, backend via tsup, frontend via Vite)
-- **Runtime stage**: Node.js 20-slim with production dependencies only. Build tools are purged after native module compilation
+- **Build stage**: Node.js 22.22.2-slim with build tools (`python3`, `make`, `g++`), compiles the full project (SDK, backend via tsup, frontend via Vite)
+- **Runtime stage**: Node.js 22.22.2-slim with production dependencies only. Build tools are purged after native module compilation
 - **Data volume**: Mounted at `/data` (set via `TELETON_HOME=/data` in the image)
 - **Entrypoint**: `node dist/cli/index.js`
 - **Default command**: `start`

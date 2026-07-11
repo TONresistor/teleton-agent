@@ -1,7 +1,7 @@
 import type { Task } from "../memory/agent/tasks.js";
 import type { ToolContext } from "../agent/tools/types.js";
 import type { ToolRegistry } from "../agent/tools/registry.js";
-import type { ToolCall } from "@mariozechner/pi-ai";
+import type { ToolCall } from "@earendil-works/pi-ai";
 import type { AgentRuntime } from "../agent/runtime.js";
 import {
   MAX_JSON_FIELD_CHARS,
@@ -77,6 +77,20 @@ export async function executeScheduledTask(
   if (payload.type === "tool_call") {
     // Mode 1: Auto-execute tool, feed result to agent
     try {
+      // Scheduled direct calls are limited to read-only tools. Actions must run
+      // through an agent turn (and their normal approval/authorization gates).
+      if (toolRegistry.getToolCategory(payload.tool) !== "data-bearing") {
+        return buildAgentPrompt(
+          task,
+          {
+            toolExecuted: payload.tool,
+            toolParams: payload.params ?? {},
+            toolError: `Refused scheduled action tool "${payload.tool}"; only data-bearing tools can auto-execute.`,
+          },
+          parentResults
+        );
+      }
+
       const toolCall: ToolCall = {
         type: "toolCall",
         id: `scheduled-${task.id}`,

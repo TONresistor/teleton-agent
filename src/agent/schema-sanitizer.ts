@@ -11,7 +11,7 @@
  * without mutating the originals.
  */
 
-import type { Tool } from "@mariozechner/pi-ai";
+import type { Tool } from "@earendil-works/pi-ai";
 
 const UNSUPPORTED_KEYS: ReadonlySet<string> = new Set([
   "$schema",

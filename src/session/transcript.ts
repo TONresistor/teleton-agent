@@ -9,7 +9,7 @@ import {
 } from "fs";
 import { appendFile } from "fs/promises";
 import { join } from "path";
-import type { Message, AssistantMessage } from "@mariozechner/pi-ai";
+import type { Message, AssistantMessage } from "@earendil-works/pi-ai";
 import { TELETON_ROOT } from "../workspace/paths.js";
 import { createLogger } from "../utils/logger.js";
 

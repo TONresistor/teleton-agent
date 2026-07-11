@@ -4,7 +4,6 @@ import { Type } from "@sinclair/typebox";
 import type { Tool, ToolExecutor } from "../types.js";
 import { WEB_SEARCH_MAX_RESULTS } from "../../../constants/limits.js";
 import { sanitizeForContext } from "../../../utils/sanitize.js";
-import { withToolErrors } from "../wrap.js";
 import { resolveTavily } from "./tavily.js";
 
 interface WebSearchParams {
@@ -33,36 +32,34 @@ export const webSearchTool: Tool = {
   }),
 };
 
-export const webSearchExecutor: ToolExecutor<WebSearchParams> = withToolErrors<WebSearchParams>(
-  async (params, context) => {
-    const tav = resolveTavily(context);
-    if (!tav.ok) return tav.error;
+export const webSearchExecutor: ToolExecutor<WebSearchParams> = async (params, context) => {
+  const tav = resolveTavily(context);
+  if (!tav.ok) return tav.error;
 
-    const { query, count = 5, topic = "general" } = params;
-    const maxResults = Math.min(Math.max(1, count), WEB_SEARCH_MAX_RESULTS);
+  const { query, count = 5, topic = "general" } = params;
+  const maxResults = Math.min(Math.max(1, count), WEB_SEARCH_MAX_RESULTS);
 
-    const client = tav.client;
-    const response = await client.search(query, {
-      maxResults,
-      topic,
-      searchDepth: "basic",
-      includeAnswer: true,
-    });
+  const client = tav.client;
+  const response = await client.search(query, {
+    maxResults,
+    topic,
+    searchDepth: "basic",
+    includeAnswer: true,
+  });
 
-    const results = response.results.map((r) => ({
-      title: sanitizeForContext(r.title),
-      url: r.url,
-      content: sanitizeForContext(r.content),
-      score: r.score,
-    }));
+  const results = response.results.map((r) => ({
+    title: sanitizeForContext(r.title),
+    url: r.url,
+    content: sanitizeForContext(r.content),
+    score: r.score,
+  }));
 
-    return {
-      success: true,
-      data: {
-        query,
-        answer: response.answer || undefined,
-        results,
-      },
-    };
-  }
-);
+  return {
+    success: true,
+    data: {
+      query,
+      answer: response.answer || undefined,
+      results,
+    },
+  };
+};

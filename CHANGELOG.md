@@ -7,6 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-07-11
+
+### Added
+
+- **GPT-5.6 Codex support** with Sol and Terra model resolution. Luna support is available only behind `TELETON_ENABLE_CODEX_LUNA=true` for controlled backend revalidation.
+- **Validated Grok Build provider** with CLI authentication and runtime checks.
+- **Claude Opus 4.8** in the shared model catalog.
+- **Plugin SDK 2.1** with typed capability contracts, protected low-level TON sends, get-method execution, DeDust/STON.fi brokers, inline-bot operations, Highload Wallet support, isolated storage/secrets/database access, and explicit approval metadata for external actions.
+- SDK package verification, coverage enforcement, and independent npm publication through the release workflow.
+
+### Changed
+
+- Migrated the LLM client from deprecated `@mariozechner/pi-ai` to maintained `@earendil-works/pi-ai`.
+- Refactored the agent loop, application startup, onboarding, WebUI contracts, provider policy, DEX/DNS adapters, and SDK type surface into smaller shared modules.
+- **Breaking:** raised the supported runtime baseline to Node.js `^22.22.2`, `^24.15.0`, or `>=26.0.0`.
+- **Breaking:** removed the obsolete Deals trading module and its stale CLI/WebUI surfaces.
+- Plugin execution now enforces SDK capability boundaries, channel scopes, minimum access floors, creator authority for scheduled tasks, and approval gates for external actions.
+- CI Telegram notifications now batch every pushed commit into one expandable message.
+
+### Fixed
+
+- Provider quota and runtime failures now produce a clear Telegram error instead of leaving the user without a response.
+- Prevented Telegram self-replies, duplicate sends, and false send confirmations; restored bot inline runtime wiring.
+- Serialized side-effect operations and bounded stalled MCP/tool calls without retrying non-cancellable financial actions.
+- Hardened workspace symlink containment, exec sender allowlists, plugin databases, private reads, log redaction, TON Proxy lifecycle, DEX/DNS transactions, and remote MCP tool trust.
+- Bound gift purchases to the approved live price and protected owner-only financial data.
+- Replaced eval-based Lottie rendering and pinned patched dependency versions.
+
+### Removed
+
+- Dead helpers, exports, row/media duplicates, and the redundant tool-error wrapper.
+
 ## [0.9.0] - 2026-06-19
 
 ### Added
@@ -438,7 +470,14 @@ Git history rewritten to fix commit attribution (email update from `tonresistor@
 - Professional distribution (npm, Docker, CI/CD)
 - Pre-commit hooks and linting infrastructure
 
-[Unreleased]: https://github.com/TONresistor/teleton-agent/compare/v0.8.1...HEAD
+[Unreleased]: https://github.com/TONresistor/teleton-agent/compare/v0.10.0...HEAD
+[0.10.0]: https://github.com/TONresistor/teleton-agent/compare/v0.9.0...v0.10.0
+[0.9.0]: https://github.com/TONresistor/teleton-agent/compare/v0.8.6...v0.9.0
+[0.8.6]: https://github.com/TONresistor/teleton-agent/compare/v0.8.5...v0.8.6
+[0.8.5]: https://github.com/TONresistor/teleton-agent/compare/v0.8.4...v0.8.5
+[0.8.4]: https://github.com/TONresistor/teleton-agent/compare/v0.8.3...v0.8.4
+[0.8.3]: https://github.com/TONresistor/teleton-agent/compare/v0.8.2...v0.8.3
+[0.8.2]: https://github.com/TONresistor/teleton-agent/compare/v0.8.1...v0.8.2
 [0.8.1]: https://github.com/TONresistor/teleton-agent/compare/v0.8.0...v0.8.1
 [0.8.0]: https://github.com/TONresistor/teleton-agent/compare/v0.7.5...v0.8.0
 [0.7.5]: https://github.com/TONresistor/teleton-agent/compare/v0.7.4...v0.7.5

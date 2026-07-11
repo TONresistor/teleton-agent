@@ -1,4 +1,4 @@
-import type { Context, Message, TextContent } from "@mariozechner/pi-ai";
+import type { Context, Message, TextContent } from "@earendil-works/pi-ai";
 import { truncate } from "../utils/pi-message.js";
 import { appendToTranscript, readTranscript } from "../session/transcript.js";
 import { randomUUID } from "crypto";

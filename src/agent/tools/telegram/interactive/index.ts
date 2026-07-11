@@ -5,12 +5,6 @@ import { telegramReactTool, telegramReactExecutor } from "./react.js";
 import { telegramSendDiceTool, telegramSendDiceExecutor } from "./send-dice.js";
 import type { ToolEntry } from "../../types.js";
 
-export { telegramCreatePollTool, telegramCreatePollExecutor };
-export { telegramCreateQuizTool, telegramCreateQuizExecutor };
-export { telegramReplyKeyboardTool, telegramReplyKeyboardExecutor };
-export { telegramReactTool, telegramReactExecutor };
-export { telegramSendDiceTool, telegramSendDiceExecutor };
-
 export const tools: ToolEntry[] = [
   {
     tool: telegramCreatePollTool,
@@ -34,7 +28,7 @@ export const tools: ToolEntry[] = [
     tool: telegramReactTool,
     executor: telegramReactExecutor,
     mode: "both",
-    tags: ["core"],
+    tags: ["social"],
   },
   {
     tool: telegramSendDiceTool,

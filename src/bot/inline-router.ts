@@ -2,8 +2,7 @@
  * Inline router — Grammy middleware that routes inline queries and callbacks
  * to registered plugin handlers by prefix.
  *
- * Installed BEFORE DealBot handlers so plugins get first crack.
- * Queries/callbacks without a known prefix fall through to DealBot via next().
+ * Queries/callbacks without a known plugin prefix fall through via next().
  */
 
 import type { Context, MiddlewareFn } from "grammy";
@@ -15,12 +14,14 @@ import type {
   CallbackContext,
   ChosenResultContext,
   ButtonDef,
+  PluginCallbackEvent,
 } from "@teleton-agent/sdk";
 import type { GramJSBotClient } from "./gramjs-bot.js";
 import { splitPrefix } from "./types.js";
 import { createLogger } from "../utils/logger.js";
 import { toGrammyKeyboard, prefixButtons, stripCustomEmoji } from "../sdk/formatting.js";
 import { editInlineViaGramJS } from "./services/inline-transport.js";
+import { answerCallbackOnce, hasAnsweredCallback } from "./callback-answer.js";
 
 // Re-exported for callers that import the router's glob compiler (now shared).
 export { compileGlob } from "../sdk/formatting.js";
@@ -55,6 +56,7 @@ function globMatch(regex: RegExp, input: string): string[] | null {
 export class InlineRouter {
   private plugins = new Map<string, PluginBotHandlers>();
   private gramjsBot: GramJSBotClient | null = null;
+  private callbackObserver: ((event: PluginCallbackEvent) => Promise<void>) | null = null;
 
   /** Set GramJS bot reference for styled button edits in callbacks */
   setGramJSBot(bot: GramJSBotClient | null): void {
@@ -71,19 +73,23 @@ export class InlineRouter {
     log.info(`Unregistered plugin "${name}" from inline routing`);
   }
 
+  clearPlugins(): void {
+    this.plugins.clear();
+  }
+
+  setCallbackObserver(observer: ((event: PluginCallbackEvent) => Promise<void>) | null): void {
+    this.callbackObserver = observer;
+  }
+
   hasPlugin(name: string): boolean {
     return this.plugins.has(name);
   }
 
   // ── Prefix routing contract ──────────────────────────────────────────────
-  // This middleware is installed BEFORE DealBot in the Grammy chain. It peels a
-  // `prefix:rest` segment off inline queries / callback data / chosen-result ids
-  // (via splitPrefix) and dispatches to the matching registered plugin.
-  //
-  // A prefix is RESERVED for DealBot — accept · decline · sent · copy_addr ·
-  // copy_memo · refresh (see decodeCallback in types.ts) — and plugins must not
-  // register those names. Any prefix without a registered plugin handler (or no
-  // colon at all) falls through via next() to DealBot's own handlers.
+  // This middleware peels a `prefix:rest` segment off inline queries / callback
+  // data / chosen-result ids (via splitPrefix) and dispatches to the matching
+  // registered plugin. Any prefix without a registered plugin handler (or no
+  // colon at all) falls through via next().
   middleware(): MiddlewareFn<Context> {
     return async (ctx, next) => {
       // ── Inline Query ─────────────────────────────────
@@ -96,12 +102,13 @@ export class InlineRouter {
             return; // handled, don't fall through
           }
         }
-        // No match — fall through to DealBot
+        // No match — fall through
         return next();
       }
 
       // ── Callback Query ───────────────────────────────
       if (ctx.callbackQuery?.data) {
+        await this.notifyCallbackObserver(ctx);
         const split = splitPrefix(ctx.callbackQuery.data);
         if (split) {
           const plugin = this.plugins.get(split.prefix);
@@ -179,8 +186,6 @@ export class InlineRouter {
     strippedData: string,
     plugin: PluginBotHandlers
   ): Promise<void> {
-    let answered = false;
-
     try {
       // Find matching handler
       let matchedHandler: ((ctx: CallbackContext) => Promise<void>) | undefined;
@@ -197,7 +202,7 @@ export class InlineRouter {
 
       if (!matchedHandler) {
         // No pattern match — answer with empty and return
-        await ctx.answerCallbackQuery();
+        await answerCallbackOnce(ctx);
         return;
       }
 
@@ -215,10 +220,7 @@ export class InlineRouter {
         chatId: ctx.chat?.id?.toString(),
         messageId: callbackQuery.message?.message_id,
         async answer(text?: string, alert?: boolean) {
-          if (!answered) {
-            answered = true;
-            await ctx.answerCallbackQuery({ text, show_alert: alert });
-          }
+          await answerCallbackOnce(ctx, { text, show_alert: alert });
         },
         async editMessage(text: string, opts?: { keyboard?: ButtonDef[][]; parseMode?: string }) {
           const styledButtons = opts?.keyboard
@@ -260,18 +262,42 @@ export class InlineRouter {
       );
 
       // Auto-answer if plugin didn't
-      if (!answered) {
-        await ctx.answerCallbackQuery();
+      if (!hasAnsweredCallback(ctx)) {
+        await answerCallbackOnce(ctx);
       }
     } catch (error) {
       log.error({ err: error }, `Plugin "${pluginName}" callback handler failed`);
-      if (!answered) {
+      if (!hasAnsweredCallback(ctx)) {
         try {
-          await ctx.answerCallbackQuery({ text: "Error processing action" });
+          await answerCallbackOnce(ctx, { text: "Error processing action" });
         } catch {
           // ignore
         }
       }
+    }
+  }
+
+  private async notifyCallbackObserver(ctx: Context): Promise<void> {
+    if (!this.callbackObserver || !ctx.callbackQuery?.data) return;
+
+    const data = ctx.callbackQuery.data;
+    const parts = data.split(":");
+    const event: PluginCallbackEvent = {
+      data,
+      action: parts[0],
+      params: parts.slice(1),
+      chatId: ctx.callbackQuery.message?.chat.id?.toString() ?? "",
+      messageId: ctx.callbackQuery.message?.message_id ?? 0,
+      userId: ctx.callbackQuery.from.id,
+      answer: async (text?: string, alert = false) => {
+        await answerCallbackOnce(ctx, { text, show_alert: alert });
+      },
+    };
+
+    try {
+      await this.callbackObserver(event);
+    } catch (error) {
+      log.error({ err: error }, "Plugin callback observer failed");
     }
   }
 

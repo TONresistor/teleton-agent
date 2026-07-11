@@ -101,4 +101,20 @@ describe("execModule", () => {
     if (origPlatform) Object.defineProperty(process, "platform", origPlatform);
     else Object.defineProperty(process, "platform", { value: "linux" });
   });
+
+  it("attaches the dedicated exec allowlist to every exec tool", () => {
+    const origPlatform = Object.getOwnPropertyDescriptor(process, "platform");
+    Object.defineProperty(process, "platform", { value: "linux" });
+
+    const config = makeConfig({ scope: "allowlist", allowlist: [111, 333] });
+    execModule.configure!(config);
+    execModule.migrate!(db);
+    const tools = execModule.tools(config);
+
+    expect(tools).toHaveLength(4);
+    expect(tools.every((tool) => tool.allowFrom?.join(",") === "111,333")).toBe(true);
+
+    if (origPlatform) Object.defineProperty(process, "platform", origPlatform);
+    else Object.defineProperty(process, "platform", { value: "linux" });
+  });
 });

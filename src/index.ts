@@ -1,5 +1,3 @@
-import type { Api } from "telegram";
-import type { PluginMessageEvent, PluginCallbackEvent } from "@teleton-agent/sdk";
 import { loadConfig, getDefaultConfigPath, type Config } from "./config/index.js";
 import { loadSoul } from "./soul/index.js";
 import { AgentRuntime } from "./agent/runtime.js";
@@ -17,22 +15,17 @@ import { setTonapiKey } from "./constants/api-endpoints.js";
 import { setToncenterApiKey } from "./ton/endpoint.js";
 import { TELETON_ROOT } from "./workspace/paths.js";
 import { join } from "path";
-import { existsSync } from "fs";
-import type { GocoonSupervisor, GocoonSseProxy } from "./gocoon/index.js";
 import { ToolRegistry } from "./agent/tools/registry.js";
 import { registerAllTools } from "./agent/tools/register-all.js";
-import { type PluginModuleWithHooks } from "./agent/tools/plugin-loader.js";
 import type { HookName, AgentStartEvent, AgentStopEvent } from "./sdk/hooks/types.js";
 import { createHookRunner } from "./sdk/hooks/runner.js";
+import type { HookRegistry } from "./sdk/hooks/registry.js";
 import type { SDKDependencies } from "./sdk/index.js";
 import type { SupportedProvider } from "./config/providers.js";
-import { readRawConfig, setNestedValue, writeRawConfig } from "./config/configurable-keys.js";
 import { loadModules } from "./agent/tools/module-loader.js";
 import { ModulePermissions } from "./agent/tools/module-permissions.js";
 import { SHUTDOWN_TIMEOUT_MS } from "./constants/timeouts.js";
 
-const PLUGIN_START_TIMEOUT_MS = 30_000;
-const PLUGIN_STOP_TIMEOUT_MS = 30_000;
 import type { PluginModule, PluginContext } from "./agent/tools/types.js";
 import { PluginWatcher } from "./agent/tools/plugin-watcher.js";
 import { loadMcpServers, closeMcpServers, type McpConnection } from "./agent/tools/mcp-loader.js";
@@ -42,13 +35,23 @@ import { createLogger, initLoggerFromConfig } from "./utils/logger.js";
 import { AgentLifecycle } from "./agent/lifecycle.js";
 import { InlineRouter } from "./bot/inline-router.js";
 import { PluginRateLimiter } from "./bot/rate-limiter.js";
-import { setBotPreMiddleware, getDealBot } from "./deals/module.js";
 import type { WebUIServer } from "./webui/server.js";
 import type { ApiServer } from "./api/server.js";
 import { HeartbeatRunner } from "./heartbeat.js";
 import { StartupMaintenance } from "./startup-maintenance.js";
 import { ScheduledTaskHandler } from "./scheduled-tasks.js";
 import { PluginOrchestrator } from "./plugin-orchestrator.js";
+import { PACKAGE_VERSION } from "./utils/package-info.js";
+import { ProviderRuntime } from "./app/provider-runtime.js";
+import {
+  countPluginEventHooks,
+  createUserPluginCallbackHandler,
+  dispatchPluginCallback,
+  dispatchPluginMessage,
+} from "./app/plugin-events.js";
+import { createServerDeps } from "./app/server-deps.js";
+import { startPluginModules, stopPluginModules } from "./app/plugin-lifecycle.js";
+import { resolveOwnerInfo } from "./app/owner-info.js";
 
 const log = createLogger("App");
 
@@ -68,8 +71,7 @@ export class TeletonApp {
   private webuiServer: WebUIServer | null = null;
   private apiServer: ApiServer | null = null;
   private pluginWatcher: PluginWatcher | null = null;
-  private gocoonSupervisor: GocoonSupervisor | null = null;
-  private gocoonProxy: GocoonSseProxy | null = null;
+  private providerRuntime: ProviderRuntime;
   private mcpConnections: McpConnection[] = [];
   private callbackHandlerRegistered = false;
   private messageHandlersRegistered = false;
@@ -80,67 +82,28 @@ export class TeletonApp {
   private messagesProcessed: number = 0;
   private heartbeatRunner: HeartbeatRunner;
   private scheduledTaskHandler: ScheduledTaskHandler;
+  private inlineRouter = new InlineRouter();
+  private pluginRateLimiter = new PluginRateLimiter();
+  private inlineMiddlewareBridge: ITelegramBridge | null = null;
 
   private configPath: string;
 
-  private getMcpServerInfo() {
-    return Object.entries(this.config.mcp.servers).map(([name, serverConfig]) => {
-      const type = serverConfig.command
-        ? ("stdio" as const)
-        : serverConfig.url
-          ? ("streamable-http" as const)
-          : ("sse" as const);
-      const target = serverConfig.command ?? serverConfig.url ?? "";
-      const connected = this.mcpConnections.some((c) => c.serverName === name);
-      const moduleName = `mcp_${name}`;
-      const moduleTools = this.toolRegistry.getModuleTools(moduleName);
-      return {
-        name,
-        type,
-        target,
-        scope: serverConfig.scope ?? "always",
-        enabled: serverConfig.enabled ?? true,
-        connected,
-        toolCount: moduleTools.length,
-        tools: moduleTools.map((t) => t.name),
-        envKeys: Object.keys(serverConfig.env ?? {}),
-      };
-    });
-  }
-
   private buildServerDeps() {
-    const mcpServers = () => this.getMcpServerInfo();
-    const builtinNames = this.modules.map((m) => m.name);
-    const pluginContext: PluginContext = {
-      bridge: this.bridge,
-      db: getDatabase().getDb(),
-      config: this.config,
-    };
-    return {
+    return createServerDeps({
       agent: this.agent,
       bridge: this.bridge,
       memory: this.memory,
       toolRegistry: this.toolRegistry,
-      plugins: this.modules
-        .filter((m) => this.toolRegistry.isPluginModule(m.name))
-        .map((m) => ({ name: m.name, version: m.version ?? "0.0.0" })),
-      mcpServers,
-      config: this.config.webui,
+      modules: this.modules,
+      mcpConnections: this.mcpConnections,
+      config: this.config,
       configPath: this.configPath,
       lifecycle: this.lifecycle,
-      marketplace: {
-        modules: this.modules,
-        config: this.config,
-        sdkDeps: this.sdkDeps,
-        pluginContext,
-        loadedModuleNames: builtinNames,
-        rewireHooks: () => this.wirePluginEventHooks(),
-      },
+      sdkDeps: this.sdkDeps,
       userHookEvaluator: this.userHookEvaluator,
-      gocoonControl: {
-        stopRunner: () => this.stopGocoonRunner(),
-      },
-    };
+      rewireHooks: () => this.wirePluginEventHooks(),
+      stopGocoonRunner: () => this.stopGocoonRunner(),
+    });
   }
 
   /**
@@ -149,31 +112,13 @@ export class TeletonApp {
    * stays up; gocoon inference is unavailable until the next restart.
    */
   stopGocoonRunner(): boolean {
-    let stopped = false;
-    if (this.gocoonProxy) {
-      try {
-        this.gocoonProxy.stop();
-      } catch (error: unknown) {
-        log.error({ err: error }, "gocoon sse-proxy stop failed");
-      }
-      this.gocoonProxy = null;
-      stopped = true;
-    }
-    if (this.gocoonSupervisor) {
-      try {
-        this.gocoonSupervisor.stop();
-      } catch (error: unknown) {
-        log.error({ err: error }, "gocoon supervisor stop failed");
-      }
-      this.gocoonSupervisor = null;
-      stopped = true;
-    }
-    return stopped;
+    return this.providerRuntime.stopGocoon();
   }
 
   constructor(configPath?: string) {
     this.configPath = configPath ?? getDefaultConfigPath();
     this.config = loadConfig(this.configPath);
+    this.providerRuntime = new ProviderRuntime(this.config);
 
     // Wire YAML logging config to pino (H2 fix)
     initLoggerFromConfig(this.config.logging);
@@ -376,45 +321,16 @@ ${blue}  ┌──────────────────────�
     const freshConfig = loadConfig(this.configPath);
     const modeChanged = freshConfig.telegram.mode !== this.config.telegram.mode;
     this.config = freshConfig;
+    this.providerRuntime.updateConfig(this.config);
 
     if (modeChanged) {
       log.info(`Mode changed to "${this.config.telegram.mode}", recreating bridge & registry`);
-
-      // Recreate bridge for the new mode
-      this.bridge = createBridge(this.config);
-      this.sdkDeps.bridge = this.bridge;
-
-      // Update tool registry mode (filters tools for user vs bot)
-      this.toolRegistry.setMode(this.config.telegram.mode);
-      if (this.config.telegram.allow_from?.length) {
-        this.toolRegistry.setAllowFrom(this.config.telegram.allow_from);
-      }
-
-      // Swap bridge ref in handlers that hold it
-      this.messageHandler.setBridge(this.bridge);
-
-      // Recreate handlers that don't support hot-swap
-      const db = getDatabase().getDb();
-      const modulePermissions = new ModulePermissions(db);
-      this.toolRegistry.setPermissions(modulePermissions);
-      this.adminHandler = new AdminHandler(
-        this.bridge,
-        this.config.telegram,
-        this.agent,
-        this.configPath,
-        modulePermissions,
-        this.toolRegistry
-      );
-      this.heartbeatRunner = new HeartbeatRunner(this.agent, this.bridge, this.config);
-      this.scheduledTaskHandler = new ScheduledTaskHandler(this.agent, this.bridge, this.config);
-
-      // New bridge = new message listeners needed
-      this.messageHandlersRegistered = false;
-      this.callbackHandlerRegistered = false;
+      this.recreateForModeChange();
     }
 
     // Truncate stale external plugins from previous run (keep builtins only)
     this.modules.length = this.builtinModuleCount;
+    this.preparePluginBotRuntime();
 
     const builtinNames = this.modules.map((m) => m.name);
     const moduleNames = this.modules
@@ -464,14 +380,14 @@ ${blue}  ┌──────────────────────�
     this.agent.initializeContextBuilder(this.memory.embedder, getDatabase().isVectorSearchReady());
 
     // Register provider-specific models (gocoon / local LLM)
-    await this.initializeProviders();
+    await this.providerRuntime.initialize();
 
     // Connect to Telegram
     await this.bridge.connect();
     if (!this.bridge.isAvailable()) {
       throw new Error("Failed to connect to Telegram");
     }
-    await this.resolveOwnerInfo();
+    await resolveOwnerInfo(this.config, this.bridge, this.configPath);
     const ownUserId = this.bridge.getOwnUserId();
     if (ownUserId) {
       this.messageHandler.setOwnUserId(ownUserId.toString());
@@ -480,51 +396,21 @@ ${blue}  ┌──────────────────────�
     const username = await this.bridge.getUsername();
     const walletAddress = getWalletAddress();
 
-    // Set up inline router and rate limiter
-    const inlineRouter = new InlineRouter();
-    const rateLimiter = new PluginRateLimiter();
-
-    // User mode: install DealBot middleware before modules start
-    if (isUserBridge(this.bridge)) {
-      setBotPreMiddleware(inlineRouter.middleware());
-    }
-
     // Start module background jobs (after bridge connect)
     const pluginContext = await this.startModules();
 
-    // Wire mode-specific SDK deps, handlers, and polling
+    // Register every middleware and dynamic plugin hook before polling starts.
     const firstStart = !this.messageHandlersRegistered;
-    if (isBotBridge(this.bridge)) {
-      this.wireBotMode(inlineRouter, rateLimiter, firstStart);
-    } else {
-      this.wireUserMode(inlineRouter, rateLimiter, firstStart);
-    }
-
-    // Create hook runner if any plugins registered hooks
-    if (hookRegistry.hasAnyHooks()) {
-      const hookRunner = createHookRunner(hookRegistry, { logger: log });
-      this.agent.setHookRunner(hookRunner);
-      this.hookRunner = hookRunner;
-      const activeHooks: HookName[] = [
-        "tool:before",
-        "tool:after",
-        "tool:error",
-        "prompt:before",
-        "prompt:after",
-        "session:start",
-        "session:end",
-        "message:receive",
-        "response:before",
-        "response:after",
-        "response:error",
-        "agent:start",
-        "agent:stop",
-      ];
-      const active = activeHooks.filter((n) => hookRegistry.hasHooks(n));
-      log.info(`🪝 Hook runner created (${active.join(", ")})`);
-    }
-
+    this.installMessagePipeline();
+    if (hookRegistry.hasAnyHooks()) this.installHookRunner(hookRegistry);
     this.wirePluginEventHooks();
+
+    // Wire mode-specific handlers and start polling last.
+    if (isBotBridge(this.bridge)) {
+      this.wireBotMode(firstStart);
+    } else {
+      this.wireUserMode(firstStart);
+    }
 
     // Start plugin hot-reload watcher (dev mode)
     if (this.config.dev.hot_reload) {
@@ -560,25 +446,7 @@ ${blue}  ┌──────────────────────�
     // Hook: agent:start
     this.startTime = Date.now();
     this.messagesProcessed = 0;
-    if (this.hookRunner) {
-      let version = "0.0.0";
-      try {
-        const { createRequire } = await import("module");
-        const req = createRequire(import.meta.url);
-        version = (req("../package.json") as { version: string }).version;
-      } catch {
-        /* ignore */
-      }
-      const agentStartEvent: AgentStartEvent = {
-        version,
-        provider,
-        model: this.config.agent.model,
-        pluginCount: pluginNames.length,
-        toolCount: this.toolCount,
-        timestamp: Date.now(),
-      };
-      await this.hookRunner.runObservingHook("agent:start", agentStartEvent);
-    }
+    await this.emitAgentStartHook(provider, pluginNames.length);
 
     // Start heartbeat timer if enabled
     if (this.config.heartbeat.enabled) {
@@ -587,8 +455,78 @@ ${blue}  ┌──────────────────────�
         this.heartbeatRunner.start(adminChatId, this.config.heartbeat.interval_ms);
       }
     }
+  }
 
-    // Initialize message debouncer
+  private preparePluginBotRuntime(): void {
+    this.inlineRouter.clearPlugins();
+    this.inlineRouter.setCallbackObserver(null);
+    this.pluginRateLimiter = new PluginRateLimiter();
+
+    if (isBotBridge(this.bridge)) {
+      this.sdkDeps.inlineRouter = this.inlineRouter;
+      this.sdkDeps.gramjsBot = null;
+      this.sdkDeps.grammyBot = this.bridge.getBot();
+      this.sdkDeps.rateLimiter = this.pluginRateLimiter;
+
+      if (this.inlineMiddlewareBridge !== this.bridge) {
+        this.bridge.useMiddleware(this.inlineRouter.middleware());
+        this.inlineMiddlewareBridge = this.bridge;
+      }
+      return;
+    }
+
+    this.sdkDeps.inlineRouter = null;
+    this.sdkDeps.gramjsBot = null;
+    this.sdkDeps.grammyBot = null;
+    this.sdkDeps.rateLimiter = null;
+  }
+
+  /** Create and install the plugin hook runner; log which hooks are active. */
+  private installHookRunner(hookRegistry: HookRegistry): void {
+    const hookRunner = createHookRunner(hookRegistry, { logger: log });
+    this.agent.setHookRunner(hookRunner);
+    this.hookRunner = hookRunner;
+    const activeHooks: HookName[] = [
+      "tool:before",
+      "tool:after",
+      "tool:error",
+      "prompt:before",
+      "prompt:after",
+      "session:start",
+      "session:end",
+      "message:receive",
+      "response:before",
+      "response:after",
+      "response:error",
+      "agent:start",
+      "agent:stop",
+    ];
+    const active = activeHooks.filter((n) => hookRegistry.hasHooks(n));
+    log.info(`🪝 Hook runner created (${active.join(", ")})`);
+  }
+
+  /** Emit the agent:start observing hook (no-op when no hook runner). */
+  private async emitAgentStartHook(
+    provider: SupportedProvider,
+    pluginCount: number
+  ): Promise<void> {
+    if (!this.hookRunner) return;
+    const agentStartEvent: AgentStartEvent = {
+      version: PACKAGE_VERSION,
+      provider,
+      model: this.config.agent.model,
+      pluginCount,
+      toolCount: this.toolCount,
+      timestamp: Date.now(),
+    };
+    await this.hookRunner.runObservingHook("agent:start", agentStartEvent);
+  }
+
+  /**
+   * Initialize the message debouncer and register the (one-time) new-message
+   * listener that feeds it. Idempotent across agent restarts via the WebUI.
+   */
+  private installMessagePipeline(): void {
     this.debouncer = new MessageDebouncer(
       { debounceMs: this.config.telegram.debounce_ms },
       (msg) => {
@@ -623,20 +561,52 @@ ${blue}  ┌──────────────────────�
     }
   }
 
+  /**
+   * Recreate the bridge, registry mode, and non-hot-swappable handlers after a
+   * user/bot mode switch. Caller logs the switch and guards on modeChanged.
+   */
+  private recreateForModeChange(): void {
+    // Recreate bridge for the new mode
+    this.bridge = createBridge(this.config);
+    this.sdkDeps.bridge = this.bridge;
+
+    // Update tool registry mode (filters tools for user vs bot)
+    this.toolRegistry.setMode(this.config.telegram.mode);
+    if (this.config.telegram.allow_from?.length) {
+      this.toolRegistry.setAllowFrom(this.config.telegram.allow_from);
+    }
+
+    // Swap bridge ref in handlers that hold it
+    this.messageHandler.setBridge(this.bridge);
+
+    // Recreate handlers that don't support hot-swap
+    const db = getDatabase().getDb();
+    const modulePermissions = new ModulePermissions(db);
+    this.toolRegistry.setPermissions(modulePermissions);
+    this.adminHandler = new AdminHandler(
+      this.bridge,
+      this.config.telegram,
+      this.agent,
+      this.configPath,
+      modulePermissions,
+      this.toolRegistry
+    );
+    this.heartbeatRunner = new HeartbeatRunner(this.agent, this.bridge, this.config);
+    this.scheduledTaskHandler = new ScheduledTaskHandler(this.agent, this.bridge, this.config);
+
+    // New bridge = new message listeners needed
+    this.messageHandlersRegistered = false;
+    this.callbackHandlerRegistered = false;
+    this.inlineMiddlewareBridge = null;
+  }
+
   // ─── Mode-specific wiring ──────────────────────────────────────────────
 
   /**
    * Wire bot-mode SDK deps, callback handler, and Grammy polling.
    */
-  private wireBotMode(
-    inlineRouter: InlineRouter,
-    rateLimiter: PluginRateLimiter,
-    firstStart: boolean
-  ): void {
-    this.sdkDeps.inlineRouter = inlineRouter;
-    this.sdkDeps.gramjsBot = null;
-    this.sdkDeps.rateLimiter = rateLimiter;
-    log.info("Bot mode: using main Grammy bridge (no DealBot)");
+  private wireBotMode(firstStart: boolean): void {
+    log.info("Bot mode: using main Grammy bridge");
 
     if (isBotBridge(this.bridge)) {
       this.bridge.setCallbackHandler((msg) => {
@@ -665,30 +635,19 @@ ${blue}  ┌──────────────────────�
           });
           return response.content;
         });
-        this.bridge.startPolling();
       }
+      // The middleware tree survives a WebUI stop/start, but long-polling does
+      // not. Restart polling on every successful agent start.
+      this.bridge.startPolling();
       void this.bridge.syncCommands();
     }
   }
 
   /**
-   * Wire user-mode SDK deps from DealBot and register service message handler.
+   * Wire user-mode handlers. Registers the service message handler on first
+   * start. (User mode has no Grammy bot, so the plugin bot SDK stays inactive.)
    */
-  private wireUserMode(
-    inlineRouter: InlineRouter,
-    rateLimiter: PluginRateLimiter,
-    firstStart: boolean
-  ): void {
-    const activeDealBot = getDealBot();
-    if (activeDealBot) {
-      this.sdkDeps.inlineRouter = inlineRouter;
-      this.sdkDeps.gramjsBot = activeDealBot.getGramJSBot();
-      this.sdkDeps.grammyBot = activeDealBot.getBot();
-      this.sdkDeps.rateLimiter = rateLimiter;
-      inlineRouter.setGramJSBot(activeDealBot.getGramJSBot());
-      log.info("Bot SDK: inline router installed");
-    }
-
+  private wireUserMode(firstStart: boolean): void {
     if (firstStart && isUserBridge(this.bridge)) {
       this.bridge.onServiceMessage(async (message) => {
         try {
@@ -702,207 +661,16 @@ ${blue}  ┌──────────────────────�
   }
 
   /**
-   * Register provider-specific models (gocoon / local LLM).
-   */
-  private async initializeProviders(): Promise<void> {
-    if (this.config.agent.provider === "gocoon") {
-      const port = this.config.gocoon?.port ?? 10000;
-      const autoStart = this.config.gocoon?.auto_start ?? true;
-      try {
-        if (autoStart) {
-          const {
-            ensureGocoonBinaries,
-            GocoonSupervisor,
-            runnerBaseUrl,
-            clientConfigPath,
-            walletInfo,
-          } = await import("./gocoon/index.js");
-          if (!existsSync(clientConfigPath())) {
-            throw new Error(
-              "gocoon is not set up yet; run `teleton gocoon init` (or use the Gocoon page) first"
-            );
-          }
-          await ensureGocoonBinaries();
-          // Opening the channel needs free TON on-chain; fail clearly instead of a health timeout.
-          const wallet = await walletInfo();
-          if (wallet.balanceNano < 2_000_000_000n) {
-            throw new Error(
-              `COCOON wallet has ${wallet.balanceTon} TON; gocoon needs at least 2 TON free to open the channel. ` +
-                `Fund ${wallet.fundAddress} (Gocoon page or \`teleton gocoon init\`), then restart.`
-            );
-          }
-          this.gocoonSupervisor = new GocoonSupervisor({
-            configPath: clientConfigPath(),
-            healthUrl: `${runnerBaseUrl(port)}/v1/models`,
-            startGraceMs: 60_000, // first on-chain channel registration can take ~60s
-          });
-          await this.gocoonSupervisor.start();
-          log.info(`Gocoon runner started on port ${port}`);
-        }
-        // pi-ai always streams and only parses SSE; the gocoon runner returns a
-        // single JSON document. Front the runner with a local proxy that frames
-        // its reply as SSE so streaming clients parse it. Keeps gocoon untouched.
-        const { GocoonSseProxy } = await import("./gocoon/index.js");
-        this.gocoonProxy = new GocoonSseProxy({ runnerPort: port });
-        await this.gocoonProxy.start();
-        const { registerGocoonModels } = await import("./agent/client.js");
-        const models = await registerGocoonModels(this.gocoonProxy.port);
-        if (models.length === 0) {
-          throw new Error(`No models found on port ${port}`);
-        }
-        log.info(
-          `Gocoon ready: ${models.length} model(s) (runner ${port}, sse-proxy ${this.gocoonProxy.port})`
-        );
-      } catch (error: unknown) {
-        // Non-fatal: keep the agent and WebUI alive so gocoon can be installed and
-        // funded from the Gocoon page, then a restart activates it.
-        log.warn(`Gocoon not ready: ${getErrorMessage(error)}`);
-        log.warn(
-          "Agent is up but can't chat until gocoon is funded. Open the Gocoon page (or run `teleton gocoon init`), then restart."
-        );
-      }
-    }
-
-    if (this.config.agent.provider === "local" && !this.config.agent.base_url) {
-      throw new Error(
-        "Local provider requires base_url in config (e.g. http://localhost:11434/v1)"
-      );
-    }
-    if (this.config.agent.provider === "local" && this.config.agent.base_url) {
-      try {
-        const { registerLocalModels } = await import("./agent/client.js");
-        const models = await registerLocalModels(this.config.agent.base_url);
-        if (models.length > 0) {
-          log.info(`Discovered ${models.length} local model(s): ${models.join(", ")}`);
-          if (!this.config.agent.model || this.config.agent.model === "auto") {
-            this.config.agent.model = models[0];
-            log.info(`Using local model: ${models[0]}`);
-          }
-        } else {
-          log.warn("No models found on local LLM server — is it running?");
-        }
-      } catch (error: unknown) {
-        log.error(
-          `Local LLM server unavailable at ${this.config.agent.base_url}: ${getErrorMessage(error)}`
-        );
-        log.error("Start the LLM server first (e.g. ollama serve)");
-        throw new Error(`Local LLM server unavailable: ${getErrorMessage(error)}`);
-      }
-    }
-  }
-
-  /**
-   * Start module background jobs with timeout. Skips deals module in bot mode.
+   * Start module background jobs with timeout.
    */
   private async startModules(): Promise<PluginContext> {
-    const moduleDb = getDatabase().getDb();
     const pluginContext: PluginContext = {
       bridge: this.bridge,
-      db: moduleDb,
+      db: getDatabase().getDb(),
       config: this.config,
     };
-    const startedModules: typeof this.modules = [];
-    try {
-      for (const mod of this.modules) {
-        if (isBotBridge(this.bridge) && mod.name === "deals") {
-          log.info("Bot mode: skipping deals module (uses separate Grammy polling)");
-          continue;
-        }
-        await Promise.race([
-          mod.start?.(pluginContext),
-          new Promise<never>((_, reject) =>
-            setTimeout(
-              () => reject(new Error(`Plugin "${mod.name}" start() timed out after 30s`)),
-              PLUGIN_START_TIMEOUT_MS
-            )
-          ),
-        ]);
-        startedModules.push(mod);
-      }
-    } catch (error) {
-      log.error({ err: error }, "Module start failed, cleaning up started modules");
-      for (const mod of startedModules.reverse()) {
-        try {
-          await Promise.race([
-            mod.stop?.(),
-            new Promise<never>((_, reject) =>
-              setTimeout(
-                () => reject(new Error(`Plugin "${mod.name}" stop() timed out after 30s`)),
-                PLUGIN_STOP_TIMEOUT_MS
-              )
-            ),
-          ]);
-        } catch (innerError: unknown) {
-          log.error({ err: innerError }, `Module "${mod.name}" cleanup failed`);
-        }
-      }
-      throw error;
-    }
+    await startPluginModules(this.modules, pluginContext);
     return pluginContext;
-  }
-
-  /**
-   * Resolve owner name and username from Telegram API if not already configured.
-   * Persists resolved values to the config file so this only happens once.
-   */
-  private async resolveOwnerInfo(): Promise<void> {
-    try {
-      // Skip if both are already set
-      if (this.config.telegram.owner_name && this.config.telegram.owner_username) {
-        return;
-      }
-
-      // Can't resolve without an owner ID
-      if (!this.config.telegram.owner_id) {
-        return;
-      }
-
-      if (!isUserBridge(this.bridge)) return;
-      const entity = await this.bridge.getClient().getEntity(String(this.config.telegram.owner_id));
-
-      // Check that the entity is a User (has firstName)
-      if (!entity || !("firstName" in entity)) {
-        return;
-      }
-
-      const user = entity as Api.User;
-      const firstName = user.firstName || "";
-      const lastName = user.lastName || "";
-      const fullName = lastName ? `${firstName} ${lastName}` : firstName;
-      const username = user.username || "";
-
-      let updated = false;
-
-      if (!this.config.telegram.owner_name && fullName) {
-        this.config.telegram.owner_name = fullName;
-        updated = true;
-      }
-
-      if (!this.config.telegram.owner_username && username) {
-        this.config.telegram.owner_username = username;
-        updated = true;
-      }
-
-      if (updated) {
-        // Persist to disk
-        const raw = readRawConfig(this.configPath);
-        if (this.config.telegram.owner_name) {
-          setNestedValue(raw, "telegram.owner_name", this.config.telegram.owner_name);
-        }
-        if (this.config.telegram.owner_username) {
-          setNestedValue(raw, "telegram.owner_username", this.config.telegram.owner_username);
-        }
-        writeRawConfig(raw, this.configPath);
-
-        const displayName = this.config.telegram.owner_name || "Unknown";
-        const displayUsername = this.config.telegram.owner_username
-          ? ` (@${this.config.telegram.owner_username})`
-          : "";
-        log.info(`Owner resolved: ${displayName}${displayUsername}`);
-      }
-    } catch (error) {
-      log.warn(`Could not resolve owner info: ${getErrorMessage(error)}`);
-    }
   }
 
   /**
@@ -995,106 +763,38 @@ ${blue}  ┌──────────────────────�
    * plugins are picked up without re-registering handlers.
    */
   private wirePluginEventHooks(): void {
-    // Message hooks: single dynamic dispatcher that iterates this.modules
     this.messageHandler.setPluginMessageHooks([
-      async (event: PluginMessageEvent) => {
-        for (const mod of this.modules) {
-          const withHooks = mod as PluginModuleWithHooks;
-          if (withHooks.onMessage) {
-            try {
-              await withHooks.onMessage(event);
-            } catch (error: unknown) {
-              log.error(`❌ [${mod.name}] onMessage error: ${getErrorMessage(error)}`);
-            }
-          }
-        }
-      },
+      (event) => dispatchPluginMessage(this.modules, event),
     ]);
 
-    const hookCount = this.modules.filter((m) => (m as PluginModuleWithHooks).onMessage).length;
+    const hookCount = countPluginEventHooks(this.modules, "onMessage");
     if (hookCount > 0) {
       log.info(`${hookCount} plugin onMessage hook(s) registered`);
     }
 
-    // Callback query handler: register ONCE, dispatch dynamically
     if (!this.callbackHandlerRegistered && isUserBridge(this.bridge)) {
       const userBridge = this.bridge;
-      userBridge.getClient().addCallbackQueryHandler(async (update: unknown) => {
-        if (!update || typeof update !== "object") {
-          return;
-        }
-        const callbackUpdate = update as {
-          queryId?: unknown;
-          data?: { toString(): string } | string;
-          peer?: {
-            channelId?: { toString(): string };
-            chatId?: { toString(): string };
-            userId?: { toString(): string };
-          };
-          msgId?: unknown;
-          userId?: unknown;
-        };
-        const queryId = callbackUpdate.queryId;
-        const data =
-          typeof callbackUpdate.data === "string"
-            ? callbackUpdate.data
-            : callbackUpdate.data?.toString() || "";
-        const parts = data.split(":");
-        const action = parts[0];
-        const params = parts.slice(1);
-
-        const chatId =
-          callbackUpdate.peer?.channelId?.toString() ??
-          callbackUpdate.peer?.chatId?.toString() ??
-          callbackUpdate.peer?.userId?.toString() ??
-          "";
-        const messageId =
-          typeof callbackUpdate.msgId === "number"
-            ? callbackUpdate.msgId
-            : Number(callbackUpdate.msgId || 0);
-        const userId = Number(callbackUpdate.userId);
-
-        const answer = async (text?: string, alert = false): Promise<void> => {
-          try {
-            await userBridge.getClient().answerCallbackQuery(queryId, { message: text, alert });
-          } catch (error: unknown) {
-            log.error(`❌ Failed to answer callback query: ${getErrorMessage(error)}`);
-          }
-        };
-
-        const event: PluginCallbackEvent = {
-          data,
-          action,
-          params,
-          chatId,
-          messageId,
-          userId,
-          answer,
-        };
-
-        for (const mod of this.modules) {
-          const withHooks = mod as PluginModuleWithHooks;
-          if (withHooks.onCallbackQuery) {
-            try {
-              await withHooks.onCallbackQuery(event);
-            } catch (error: unknown) {
-              log.error(`❌ [${mod.name}] onCallbackQuery error: ${getErrorMessage(error)}`);
-            }
-          }
-        }
-      });
+      userBridge
+        .getClient()
+        .addCallbackQueryHandler(
+          createUserPluginCallbackHandler(userBridge, (event) =>
+            dispatchPluginCallback(this.modules, event)
+          )
+        );
       this.callbackHandlerRegistered = true;
 
-      const cbCount = this.modules.filter(
-        (m) => (m as PluginModuleWithHooks).onCallbackQuery
-      ).length;
+      const cbCount = countPluginEventHooks(this.modules, "onCallbackQuery");
       if (cbCount > 0) {
         log.info(`${cbCount} plugin onCallbackQuery hook(s) registered`);
       }
-    } else if (!this.callbackHandlerRegistered && this.bridge.getMode() === "bot") {
-      // In bot mode, callback queries are handled by GrammyBotBridge's callback_query:data handler
-      // TODO: dispatch plugin onCallbackQuery hooks from Grammy callback handler
+    } else if (!this.callbackHandlerRegistered && isBotBridge(this.bridge)) {
+      this.inlineRouter.setCallbackObserver((event) => dispatchPluginCallback(this.modules, event));
       this.callbackHandlerRegistered = true;
+
+      const cbCount = countPluginEventHooks(this.modules, "onCallbackQuery");
+      if (cbCount > 0) {
+        log.info(`${cbCount} plugin onCallbackQuery hook(s) registered`);
+      }
     }
   }
 
@@ -1165,21 +865,8 @@ ${blue}  ┌──────────────────────�
       }
     }
 
-    // Stop the gocoon SSE proxy and runner (when teleton supervises them)
-    if (this.gocoonProxy) {
-      try {
-        this.gocoonProxy.stop();
-      } catch (error: unknown) {
-        log.error({ err: error }, "gocoon sse-proxy stop failed");
-      }
-    }
-    if (this.gocoonSupervisor) {
-      try {
-        this.gocoonSupervisor.stop();
-      } catch (error: unknown) {
-        log.error({ err: error }, "gocoon supervisor stop failed");
-      }
-    }
+    // Stop supervised provider resources (Gocoon runner/proxy when active).
+    this.providerRuntime.stopGocoon();
 
     // Close MCP connections
     if (this.mcpConnections.length > 0) {
@@ -1206,21 +893,7 @@ ${blue}  ┌──────────────────────�
       log.error({ err: error }, "Message queue drain failed");
     }
 
-    for (const mod of this.modules) {
-      try {
-        await Promise.race([
-          mod.stop?.(),
-          new Promise<never>((_, reject) =>
-            setTimeout(
-              () => reject(new Error(`Plugin "${mod.name}" stop() timed out after 30s`)),
-              PLUGIN_STOP_TIMEOUT_MS
-            )
-          ),
-        ]);
-      } catch (error: unknown) {
-        log.error({ err: error }, `Module "${mod.name}" stop failed`);
-      }
-    }
+    await stopPluginModules(this.modules);
 
     this.callbackHandlerRegistered = false;
     // messageHandlersRegistered stays true — Grammy Bot instance retains its middleware tree

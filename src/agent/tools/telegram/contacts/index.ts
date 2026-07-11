@@ -5,12 +5,6 @@ import { telegramGetUserInfoTool, telegramGetUserInfoExecutor } from "./get-user
 import { telegramCheckUsernameTool, telegramCheckUsernameExecutor } from "./check-username.js";
 import type { ToolEntry } from "../../types.js";
 
-export { telegramBlockUserTool, telegramBlockUserExecutor };
-export { telegramGetBlockedTool, telegramGetBlockedExecutor };
-export { telegramGetCommonChatsTool, telegramGetCommonChatsExecutor };
-export { telegramGetUserInfoTool, telegramGetUserInfoExecutor };
-export { telegramCheckUsernameTool, telegramCheckUsernameExecutor };
-
 export const tools: ToolEntry[] = [
   {
     tool: telegramBlockUserTool,

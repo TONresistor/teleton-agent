@@ -46,9 +46,6 @@ export interface WizardData {
   tonapiKey: string;
   toncenterKey: string;
   tavilyKey: string;
-  customizeThresholds: boolean;
-  buyMaxFloor: number;
-  sellMinFloor: number;
   walletAction: 'keep' | 'generate' | 'import';
   mnemonic: string;
   walletAddress: string;
@@ -90,9 +87,6 @@ const DEFAULTS: WizardData = {
   tonapiKey: '',
   toncenterKey: '',
   tavilyKey: '',
-  customizeThresholds: false,
-  buyMaxFloor: 95,
-  sellMinFloor: 105,
   walletAction: 'generate',
   mnemonic: '',
   walletAddress: '',
@@ -120,6 +114,7 @@ function validateStep(step: number, data: WizardData): boolean {
         try { new URL(data.localUrl); return true; }
         catch { return false; }
       }
+      if (data.provider === 'codex' || data.provider === 'grok-build') return true;
       return data.apiKey.length > 0;
     case 2: {
       // Config
@@ -223,12 +218,6 @@ export function SetupProvider({ children }: { children: ReactNode }) {
         ...(data.botUsername ? { bot_username: data.botUsername } : {}),
       },
       ...(data.provider === 'gocoon' ? { gocoon: { port: data.gocoonPort } } : {}),
-      deals: {
-        enabled: !!data.botToken,
-        ...(data.customizeThresholds
-          ? { buy_max_floor_percent: data.buyMaxFloor, sell_min_floor_percent: data.sellMinFloor }
-          : {}),
-      },
       ...(data.tonapiKey ? { tonapi_key: data.tonapiKey } : {}),
       ...(data.toncenterKey ? { toncenter_api_key: data.toncenterKey } : {}),
       ...(data.tavilyKey ? { tavily_api_key: data.tavilyKey } : {}),

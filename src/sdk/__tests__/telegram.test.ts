@@ -17,6 +17,8 @@ vi.mock("telegram", () => {
     Api: {
       messages: {
         SendMedia: cls("messages.SendMedia"),
+        GetInlineBotResults: cls("messages.GetInlineBotResults"),
+        SendInlineBotResult: cls("messages.SendInlineBotResult"),
       },
       InputMediaDice: cls("InputMediaDice"),
       InputReplyToMessage: cls("InputReplyToMessage"),
@@ -247,6 +249,81 @@ describe("createTelegramSDK — core", () => {
     });
   });
 
+  describe("sendInlineBotResult()", () => {
+    it("queries the bot and sends the selected result", async () => {
+      mockGramJsClient.getEntity.mockResolvedValue({ id: 1 });
+      mockGramJsClient.getInputEntity.mockResolvedValue({ id: 2 });
+      mockGramJsClient.invoke
+        .mockResolvedValueOnce({
+          queryId: 123n,
+          results: [
+            { id: "first", title: "First", description: "One", type: "article" },
+            { id: "second", title: "Second", description: "Two", type: "audio" },
+          ],
+        })
+        .mockResolvedValueOnce({});
+
+      const result = await sdk.sendInlineBotResult("12345", "@DeezerMusicBot", " track ", 1);
+
+      expect(mockGramJsClient.getEntity).toHaveBeenCalledWith("DeezerMusicBot");
+      expect(mockGramJsClient.getInputEntity).toHaveBeenCalledWith("12345");
+      expect(mockGramJsClient.invoke).toHaveBeenCalledTimes(2);
+      expect(mockGramJsClient.invoke.mock.calls[0][0]).toMatchObject({
+        _: "messages.GetInlineBotResults",
+        query: "track",
+      });
+      expect(mockGramJsClient.invoke.mock.calls[1][0]).toMatchObject({
+        _: "messages.SendInlineBotResult",
+        queryId: 123n,
+        id: "second",
+      });
+      expect(result).toEqual({
+        query: "track",
+        sentIndex: 1,
+        totalResults: 2,
+        title: "Second",
+        description: "Two",
+        type: "audio",
+      });
+    });
+
+    it("rejects missing and out-of-range results", async () => {
+      mockGramJsClient.getEntity.mockResolvedValue({ id: 1 });
+      mockGramJsClient.getInputEntity.mockResolvedValue({ id: 2 });
+      mockGramJsClient.invoke.mockResolvedValue({ queryId: 1n, results: [] });
+
+      await expect(sdk.sendInlineBotResult("123", "pic", "cats")).rejects.toMatchObject({
+        code: "OPERATION_FAILED",
+        message: 'No inline results found for "cats"',
+      });
+
+      mockGramJsClient.invoke.mockResolvedValue({ queryId: 1n, results: [{ id: "only" }] });
+      await expect(sdk.sendInlineBotResult("123", "pic", "cats", 1)).rejects.toMatchObject({
+        code: "OPERATION_FAILED",
+      });
+    });
+
+    it("requires Telegram user mode", async () => {
+      sdk = createTelegramSDK(mockBridge, mockLog, "bot");
+      await expect(sdk.sendInlineBotResult("123", "pic", "cats")).rejects.toMatchObject({
+        code: "NOT_AVAILABLE",
+      });
+    });
+
+    it("validates input before querying Telegram", async () => {
+      await expect(sdk.sendInlineBotResult("123", "", "cats")).rejects.toMatchObject({
+        code: "OPERATION_FAILED",
+      });
+      await expect(sdk.sendInlineBotResult("123", "pic", " ")).rejects.toMatchObject({
+        code: "OPERATION_FAILED",
+      });
+      await expect(sdk.sendInlineBotResult("123", "pic", "cats", 50)).rejects.toMatchObject({
+        code: "OPERATION_FAILED",
+      });
+      expect(mockGramJsClient.invoke).not.toHaveBeenCalled();
+    });
+  });
+
   // ─── getMe ──────────────────────────────────────────────────
   describe("getMe()", () => {
     it("returns user info", () => {
@@ -292,19 +369,6 @@ describe("createTelegramSDK — core", () => {
     it("returns false when bridge is unavailable", () => {
       mockBridge.isAvailable.mockReturnValue(false);
       expect(sdk.isAvailable()).toBe(false);
-    });
-  });
-
-  // ─── getRawClient ───────────────────────────────────────────
-  describe("getRawClient()", () => {
-    it("returns GramJS client when bridge is available", () => {
-      const result = sdk.getRawClient();
-      expect(result).toBe(mockBridgeClient);
-    });
-
-    it("returns null when bridge is unavailable", () => {
-      mockBridge.isAvailable.mockReturnValue(false);
-      expect(sdk.getRawClient()).toBeNull();
     });
   });
 });

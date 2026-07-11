@@ -120,7 +120,8 @@ export const telegramGetResaleGiftsExecutor: ToolExecutor<GetResaleGiftsParams> 
         listings,
         count: listings.length,
         totalCount: result.count,
-        usage: "Use telegram_buy_resale_gift(slug) to purchase",
+        usage:
+          "Use telegram_buy_resale_gift(slug, maxPriceStars) with the listing's priceStars as the owner-approved maximum.",
       },
     };
   } catch (error) {

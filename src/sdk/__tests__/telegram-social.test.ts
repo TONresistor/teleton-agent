@@ -540,7 +540,7 @@ describe("createTelegramSocialSDK", () => {
 
     it("validates minimum 2 answers", async () => {
       await expect(sdk.createPoll("chat1", "q?", ["only_one"])).rejects.toMatchObject({
-        code: "OPERATION_FAILED",
+        code: "INVALID_INPUT",
         message: expect.stringContaining("at least 2 answers"),
       });
     });
@@ -549,14 +549,14 @@ describe("createTelegramSocialSDK", () => {
       const tooMany = Array.from({ length: 11 }, (_, i) => `opt${i}`);
 
       await expect(sdk.createPoll("chat1", "q?", tooMany)).rejects.toMatchObject({
-        code: "OPERATION_FAILED",
+        code: "INVALID_INPUT",
         message: expect.stringContaining("more than 10"),
       });
     });
 
     it("throws for empty answers", async () => {
       await expect(sdk.createPoll("chat1", "q?", [])).rejects.toMatchObject({
-        code: "OPERATION_FAILED",
+        code: "INVALID_INPUT",
       });
     });
 
@@ -576,6 +576,15 @@ describe("createTelegramSocialSDK", () => {
       const invokeArg = mockGramJsClient.invoke.mock.calls[0][0];
       expect(invokeArg.media.poll.publicVoters).toBe(true); // !anonymous
       expect(invokeArg.media.poll.multipleChoice).toBe(true);
+    });
+
+    it("rejects an empty question or answer", async () => {
+      await expect(sdk.createPoll("chat1", " ", ["a", "b"])).rejects.toMatchObject({
+        code: "INVALID_INPUT",
+      });
+      await expect(sdk.createPoll("chat1", "q?", ["a", " "])).rejects.toMatchObject({
+        code: "INVALID_INPUT",
+      });
     });
 
     it("returns null when no update found", async () => {
@@ -601,7 +610,7 @@ describe("createTelegramSocialSDK", () => {
 
     it("validates minimum 2 answers", async () => {
       await expect(sdk.createQuiz("chat1", "q?", ["only"], 0)).rejects.toMatchObject({
-        code: "OPERATION_FAILED",
+        code: "INVALID_INPUT",
         message: expect.stringContaining("at least 2 answers"),
       });
     });
@@ -610,29 +619,35 @@ describe("createTelegramSocialSDK", () => {
       const tooMany = Array.from({ length: 11 }, (_, i) => `opt${i}`);
 
       await expect(sdk.createQuiz("chat1", "q?", tooMany, 0)).rejects.toMatchObject({
-        code: "OPERATION_FAILED",
+        code: "INVALID_INPUT",
         message: expect.stringContaining("more than 10"),
       });
     });
 
     it("validates correctIndex lower bound", async () => {
       await expect(sdk.createQuiz("chat1", "q?", ["a", "b"], -1)).rejects.toMatchObject({
-        code: "OPERATION_FAILED",
+        code: "INVALID_INPUT",
         message: expect.stringContaining("out of bounds"),
       });
     });
 
     it("validates correctIndex upper bound", async () => {
       await expect(sdk.createQuiz("chat1", "q?", ["a", "b"], 2)).rejects.toMatchObject({
-        code: "OPERATION_FAILED",
+        code: "INVALID_INPUT",
         message: expect.stringContaining("out of bounds"),
       });
     });
 
     it("validates correctIndex equals length is out of bounds", async () => {
       await expect(sdk.createQuiz("chat1", "q?", ["a", "b", "c"], 3)).rejects.toMatchObject({
-        code: "OPERATION_FAILED",
+        code: "INVALID_INPUT",
         message: expect.stringContaining("out of bounds"),
+      });
+    });
+
+    it("rejects a non-integer correctIndex", async () => {
+      await expect(sdk.createQuiz("chat1", "q?", ["a", "b"], 0.5)).rejects.toMatchObject({
+        code: "INVALID_INPUT",
       });
     });
   });
@@ -986,6 +1001,48 @@ describe("createTelegramSocialSDK", () => {
       await expect(sdk.sendStory("/tmp/img.jpg")).rejects.toMatchObject({
         code: "OPERATION_FAILED",
       });
+    });
+  });
+
+  describe("v2 input contract", () => {
+    it("uses NOT_AVAILABLE for user-only methods in bot mode", async () => {
+      const botSdk = createTelegramSocialSDK(mockBridge, mockLog, "bot");
+      await expect(botSdk.getDialogs()).rejects.toMatchObject({ code: "NOT_AVAILABLE" });
+    });
+
+    it("rejects invalid limits before invoking Telegram", async () => {
+      await expect(sdk.getDialogs(0)).rejects.toMatchObject({ code: "INVALID_INPUT" });
+      await expect(sdk.getHistory("chat", -1)).rejects.toMatchObject({ code: "INVALID_INPUT" });
+      await expect(sdk.getMyGifts(1.5)).rejects.toMatchObject({ code: "INVALID_INPUT" });
+      await expect(sdk.getStarsTransactions(Number.NaN)).rejects.toMatchObject({
+        code: "INVALID_INPUT",
+      });
+    });
+
+    it("rejects invalid gift identifiers and monetary inputs", async () => {
+      await expect(sdk.sendGift(123, " ")).rejects.toMatchObject({ code: "INVALID_INPUT" });
+      await expect(sdk.getResaleGifts(" ")).rejects.toMatchObject({ code: "INVALID_INPUT" });
+      await expect(sdk.buyResaleGift(" ")).rejects.toMatchObject({ code: "INVALID_INPUT" });
+      await expect(sdk.transferCollectible(0, 123)).rejects.toMatchObject({
+        code: "INVALID_INPUT",
+      });
+      await expect(sdk.setCollectiblePrice(1, -1)).rejects.toMatchObject({
+        code: "INVALID_INPUT",
+      });
+      await expect(sdk.sendGiftOffer(123, "gift", 0)).rejects.toMatchObject({
+        code: "INVALID_INPUT",
+      });
+    });
+
+    it("rejects empty slugs and story paths", async () => {
+      await expect(sdk.getCollectibleInfo(" ")).rejects.toMatchObject({
+        code: "INVALID_INPUT",
+      });
+      await expect(sdk.getUniqueGift(" ")).rejects.toMatchObject({ code: "INVALID_INPUT" });
+      await expect(sdk.getUniqueGiftValue(" ")).rejects.toMatchObject({
+        code: "INVALID_INPUT",
+      });
+      await expect(sdk.sendStory(" ")).rejects.toMatchObject({ code: "INVALID_INPUT" });
     });
   });
 });

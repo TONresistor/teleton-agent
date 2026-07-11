@@ -1,6 +1,7 @@
 import { Hono } from "hono";
 import type { WebUIServerDeps, APIResponse } from "../types.js";
 import { getErrorMessage } from "../../utils/errors.js";
+import { apiError } from "../http.js";
 import {
   ensureGocoonBinaries,
   init,
@@ -59,7 +60,7 @@ export function createGocoonRoutes(deps: WebUIServerDeps) {
       await ensureGocoonBinaries();
       return c.json({ success: true, data: { version: GOCOON_VERSION } } as APIResponse);
     } catch (err) {
-      return c.json({ success: false, error: getErrorMessage(err) } as APIResponse, 500);
+      return apiError(c, err, 500);
     }
   });
 
@@ -71,7 +72,7 @@ export function createGocoonRoutes(deps: WebUIServerDeps) {
         data: { fundAddress: s.fundAddress, recommendedFundingTon: s.recommendedFundingTon },
       } as APIResponse);
     } catch (err) {
-      return c.json({ success: false, error: getErrorMessage(err) } as APIResponse, 500);
+      return apiError(c, err, 500);
     }
   });
 
@@ -84,7 +85,7 @@ export function createGocoonRoutes(deps: WebUIServerDeps) {
         data: { balanceTon: w.balanceTon, balanceNano: w.balanceNano.toString(), funded: w.funded },
       } as APIResponse);
     } catch (err) {
-      return c.json({ success: false, error: getErrorMessage(err) } as APIResponse, 400);
+      return apiError(c, err, 400);
     }
   });
 
@@ -97,7 +98,7 @@ export function createGocoonRoutes(deps: WebUIServerDeps) {
       await topup(amount, port());
       return c.json({ success: true, data: { amount } } as APIResponse);
     } catch (err) {
-      return c.json({ success: false, error: getErrorMessage(err) } as APIResponse, 400);
+      return apiError(c, err, 400);
     }
   });
 
@@ -167,7 +168,7 @@ export function createGocoonRoutes(deps: WebUIServerDeps) {
       await resetWallet({ force: Boolean(body.force) }, port());
       return c.json({ success: true, data: { reset: true } } as APIResponse);
     } catch (err) {
-      return c.json({ success: false, error: getErrorMessage(err) } as APIResponse, 400);
+      return apiError(c, err, 400);
     }
   });
 

@@ -280,6 +280,16 @@ describe("MessageHandler", () => {
       expect(ctx.reason).toBe("Sender is a bot");
     });
 
+    it("own user messages → shouldRespond=false", () => {
+      const { handler } = createHandler({ dm_policy: "open" });
+      handler.setOwnUserId("222");
+
+      const ctx = handler.analyzeMessage(makeMessage({ senderId: 222 }));
+
+      expect(ctx.shouldRespond).toBe(false);
+      expect(ctx.reason).toBe("Sender is self");
+    });
+
     it("message.id <= chatOffset → shouldRespond=false (already processed)", () => {
       mockReadOffset.mockReturnValue(100);
       const { handler } = createHandler({ dm_policy: "open" });
@@ -488,17 +498,86 @@ describe("MessageHandler", () => {
   // ── T9: telegramSendCalled detection ─────────────────────────────────────
 
   describe("telegramSendCalled detection", () => {
-    it("when processMessage uses a telegram send tool → bridge.sendMessage NOT called", async () => {
+    it("does not duplicate text successfully delivered to the current chat", async () => {
       const agent = makeAgent();
       agent.processMessage.mockResolvedValue({
         content: "sent via tool",
-        toolCalls: [{ name: "telegram_send_message", args: {} }],
+        toolCalls: [
+          {
+            name: "telegram_send_message",
+            input: { chatId: "chat1", text: "sent via tool" },
+            result: { success: true },
+          },
+        ],
       });
 
       const { handler, bridge } = createHandler({ dm_policy: "open" }, { agent });
       await handler.handleMessage(makeMessage({ id: 101 }));
 
       expect(bridge.sendMessage).not.toHaveBeenCalled();
+    });
+
+    it("sends the final response when the Telegram tool targeted another chat", async () => {
+      const agent = makeAgent();
+      agent.processMessage.mockResolvedValue({
+        content: "Message sent to Alice",
+        toolCalls: [
+          {
+            name: "telegram_send_message",
+            input: { chatId: "alice", text: "hello" },
+            result: { success: true },
+          },
+        ],
+      });
+
+      const { handler, bridge } = createHandler({ dm_policy: "open" }, { agent });
+      await handler.handleMessage(makeMessage({ id: 102, chatId: "chat1" }));
+
+      expect(bridge.sendMessage).toHaveBeenCalledWith(
+        expect.objectContaining({ chatId: "chat1", text: "Message sent to Alice" })
+      );
+    });
+
+    it("sends the final response when the Telegram tool failed", async () => {
+      const agent = makeAgent();
+      agent.processMessage.mockResolvedValue({
+        content: "I could not send the message",
+        toolCalls: [
+          {
+            name: "telegram_send_message",
+            input: { chatId: "chat1", text: "hello" },
+            result: { success: false, error: "forbidden" },
+          },
+        ],
+      });
+
+      const { handler, bridge } = createHandler({ dm_policy: "open" }, { agent });
+      await handler.handleMessage(makeMessage({ id: 103, chatId: "chat1" }));
+
+      expect(bridge.sendMessage).toHaveBeenCalledWith(
+        expect.objectContaining({ chatId: "chat1", text: "I could not send the message" })
+      );
+    });
+
+    it("sends a distinct confirmation after a successful current-chat send", async () => {
+      const agent = makeAgent();
+      agent.processMessage.mockResolvedValue({
+        content: "Done",
+        toolCalls: [
+          {
+            name: "telegram_send_message",
+            input: { chatId: "chat1", text: "hello" },
+            result: { success: true },
+          },
+        ],
+      });
+
+      const { handler, bridge } = createHandler({ dm_policy: "open" }, { agent });
+      await handler.handleMessage(makeMessage({ id: 104, chatId: "chat1" }));
+
+      expect(bridge.sendMessage).toHaveBeenCalledWith(
+        expect.objectContaining({ chatId: "chat1", text: "Done" })
+      );
     });
 
     it("when processMessage has no send tool → bridge.sendMessage IS called", async () => {
@@ -547,11 +626,18 @@ describe("MessageHandler", () => {
     });
 
     for (const toolName of TELEGRAM_SEND_TOOLS) {
+      if (toolName === "telegram_forward_message") continue;
       it(`recognizes ${toolName} as a send tool`, async () => {
         const agent = makeAgent();
         agent.processMessage.mockResolvedValue({
           content: "tool response",
-          toolCalls: [{ name: toolName, args: {} }],
+          toolCalls: [
+            {
+              name: toolName,
+              input: { chatId: "chat1", text: "tool response" },
+              result: { success: true },
+            },
+          ],
         });
 
         const { handler, bridge } = createHandler({ dm_policy: "open" }, { agent });
@@ -594,6 +680,55 @@ describe("MessageHandler", () => {
       expect(bridge.sendMessage).toHaveBeenCalledWith(
         expect.objectContaining({ text: "Here is a useful response" })
       );
+    });
+  });
+
+  describe("provider failures", () => {
+    it("replies with a safe quota message and marks the update processed", async () => {
+      const agent = makeAgent();
+      agent.processMessage.mockRejectedValue(
+        new Error("API error: Codex error: The usage limit has been reached")
+      );
+
+      const { handler, bridge } = createHandler({ dm_policy: "open" }, { agent });
+      await handler.handleMessage(makeMessage({ id: 201, chatId: "chat1" }));
+
+      expect(bridge.sendMessage).toHaveBeenCalledWith({
+        chatId: "chat1",
+        text: "⚠️ The AI provider usage limit has been reached. Please try again later or switch providers.",
+        replyToId: 201,
+      });
+      expect(mockWriteOffset).toHaveBeenCalledWith(201, "chat1");
+    });
+
+    it("does not expose unexpected provider details", async () => {
+      const agent = makeAgent();
+      agent.processMessage.mockRejectedValue(
+        new Error("API error: upstream failed with secret diagnostic details")
+      );
+
+      const { handler, bridge } = createHandler({ dm_policy: "open" }, { agent });
+      await handler.handleMessage(makeMessage({ id: 202, chatId: "chat1" }));
+
+      expect(bridge.sendMessage).toHaveBeenCalledWith({
+        chatId: "chat1",
+        text: "⚠️ The AI provider is unavailable. Please try again later.",
+        replyToId: 202,
+      });
+    });
+
+    it("keeps the update retryable when the error notification cannot be delivered", async () => {
+      const agent = makeAgent();
+      agent.processMessage.mockRejectedValue(
+        new Error("API error: Codex error: The usage limit has been reached")
+      );
+      const bridge = makeBridge();
+      bridge.sendMessage.mockRejectedValue(new Error("Telegram unavailable"));
+
+      const { handler } = createHandler({ dm_policy: "open" }, { agent, bridge });
+      await handler.handleMessage(makeMessage({ id: 203, chatId: "chat1" }));
+
+      expect(mockWriteOffset).not.toHaveBeenCalled();
     });
   });
 

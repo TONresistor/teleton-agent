@@ -32,6 +32,24 @@ const mockAuthManager = {
   cancelSession: vi.fn(),
 };
 
+const mockGrokCredentials = vi.hoisted(() => ({
+  getApiKey: vi.fn(() => "grok-session-token"),
+  isValid: vi.fn(() => true),
+  getVersion: vi.fn(() => "0.2.93"),
+}));
+
+vi.mock("../../providers/grok-build-credentials.js", () => ({
+  getGrokBuildApiKey: mockGrokCredentials.getApiKey,
+  isGrokBuildTokenValid: mockGrokCredentials.isValid,
+  getGrokBuildCliVersion: mockGrokCredentials.getVersion,
+  assertGrokBuildReady: () => {
+    const version = mockGrokCredentials.getVersion();
+    mockGrokCredentials.getApiKey();
+    if (!mockGrokCredentials.isValid()) throw new Error("Grok Build CLI session is expired");
+    return version;
+  },
+}));
+
 vi.mock("../setup-auth.js", () => ({
   TelegramAuthManager: class {
     sendCode = mockAuthManager.sendCode;
@@ -51,6 +69,7 @@ vi.mock("../../config/providers.js", () => ({
     {
       id: "anthropic",
       displayName: "Anthropic (Claude)",
+      credentialMode: "api-key",
       defaultModel: "claude-haiku-4-5-20251001",
       utilityModel: "claude-haiku-4-5-20251001",
       toolLimit: null,
@@ -58,8 +77,19 @@ vi.mock("../../config/providers.js", () => ({
       consoleUrl: "https://console.anthropic.com/",
     },
     {
+      id: "grok-build",
+      displayName: "Grok Build (Auto)",
+      credentialMode: "cli-auto",
+      defaultModel: "grok-build",
+      utilityModel: "grok-build",
+      toolLimit: 128,
+      keyPrefix: null,
+      consoleUrl: "https://x.ai/cli",
+    },
+    {
       id: "gocoon",
       displayName: "Gocoon",
+      credentialMode: "none",
       defaultModel: "auto",
       utilityModel: "auto",
       toolLimit: null,
@@ -101,7 +131,7 @@ vi.mock("../../utils/logger.js", () => ({
 
 vi.mock("../../config/schema.js", () => ({
   ConfigSchema: { parse: vi.fn((v: unknown) => v) },
-  DealsConfigSchema: { parse: vi.fn((v: unknown) => v) },
+  DEFAULT_TOOL_RAG_ALWAYS_INCLUDE: ["journal_*", "workspace_*", "web_*"],
 }));
 
 vi.mock("../../constants/limits.js", () => ({
@@ -126,7 +156,7 @@ import {
   getProviderMetadata,
   validateApiKeyFormat,
 } from "../../config/providers.js";
-import { ConfigSchema, DealsConfigSchema } from "../../config/schema.js";
+import { ConfigSchema } from "../../config/schema.js";
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
@@ -175,6 +205,7 @@ describe("Setup API Routes", () => {
       {
         id: "anthropic",
         displayName: "Anthropic (Claude)",
+        credentialMode: "api-key",
         defaultModel: "claude-haiku-4-5-20251001",
         utilityModel: "claude-haiku-4-5-20251001",
         toolLimit: null,
@@ -182,8 +213,19 @@ describe("Setup API Routes", () => {
         consoleUrl: "https://console.anthropic.com/",
       },
       {
+        id: "grok-build",
+        displayName: "Grok Build (Auto)",
+        credentialMode: "cli-auto",
+        defaultModel: "grok-build",
+        utilityModel: "grok-build",
+        toolLimit: 128,
+        keyPrefix: null,
+        consoleUrl: "https://x.ai/cli",
+      },
+      {
         id: "gocoon",
         displayName: "Gocoon",
+        credentialMode: "none",
         defaultModel: "auto",
         utilityModel: "auto",
         toolLimit: null,
@@ -198,7 +240,6 @@ describe("Setup API Routes", () => {
     });
     (validateApiKeyFormat as Mock).mockReturnValue(undefined);
     (ConfigSchema.parse as Mock).mockImplementation((v: unknown) => v);
-    (DealsConfigSchema.parse as Mock).mockImplementation((v: unknown) => v);
     mockAuthManager.sendCode.mockReset();
     mockAuthManager.verifyCode.mockReset();
     mockAuthManager.verifyPassword.mockReset();
@@ -286,11 +327,14 @@ describe("Setup API Routes", () => {
       expect(res.status).toBe(200);
       const data = await res.json();
       expect(data.success).toBe(true);
-      expect(data.data).toHaveLength(2);
+      expect(data.data).toHaveLength(3);
       expect(data.data[0].id).toBe("anthropic");
       expect(data.data[0].requiresApiKey).toBe(true);
-      expect(data.data[1].id).toBe("gocoon");
+      expect(data.data[1].id).toBe("grok-build");
       expect(data.data[1].requiresApiKey).toBe(false);
+      expect(data.data[1].credentialMode).toBe("cli-auto");
+      expect(data.data[2].id).toBe("gocoon");
+      expect(data.data[2].requiresApiKey).toBe(false);
     });
   });
 
@@ -887,6 +931,18 @@ describe("Setup API Routes", () => {
       expect(ConfigSchema.parse).toHaveBeenCalled();
     });
 
+    it("keeps Telegram send tools out of the generated default tool context", async () => {
+      await post(app, "/config/save", validInput);
+
+      const yaml = (writeFileSync as Mock).mock.calls[0][1] as string;
+      expect(yaml).not.toContain("telegram_send_message");
+      expect(yaml).not.toContain("telegram_quote_reply");
+      expect(yaml).not.toContain("telegram_send_photo");
+      expect(yaml).toContain("journal_*");
+      expect(yaml).toContain("workspace_*");
+      expect(yaml).toContain("web_*");
+    });
+
     it("includes gocoon config when provided", async () => {
       const input = {
         ...validInput,
@@ -940,6 +996,23 @@ describe("Setup API Routes", () => {
 
       const writeCall = (writeFileSync as Mock).mock.calls[0];
       expect(writeCall[2]).toEqual({ encoding: "utf-8", mode: 0o600 });
+    });
+
+    it("rejects Grok Build when the local CLI session is unavailable", async () => {
+      mockGrokCredentials.getApiKey.mockImplementationOnce(() => {
+        throw new Error("No Grok Build credentials found. Run 'grok login' to authenticate.");
+      });
+      const input = {
+        ...validInput,
+        agent: { ...validInput.agent, provider: "grok-build", api_key: "", model: "grok-build" },
+      };
+
+      const res = await post(app, "/config/save", input);
+
+      expect(res.status).toBe(400);
+      const data = await res.json();
+      expect(data.error).toContain("grok login");
+      expect(writeFileSync).not.toHaveBeenCalled();
     });
   });
 });

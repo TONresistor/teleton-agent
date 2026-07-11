@@ -4,7 +4,6 @@ import { Type } from "@sinclair/typebox";
 import { readFileSync, lstatSync } from "fs";
 import type { Tool, ToolExecutor } from "../types.js";
 import { validateReadPath, TEXT_FILE_EXTENSIONS } from "../../../workspace/index.js";
-import { withToolErrors } from "../wrap.js";
 
 interface WorkspaceReadParams {
   path: string;
@@ -35,56 +34,52 @@ export const workspaceReadTool: Tool = {
   }),
 };
 
-export const workspaceReadExecutor: ToolExecutor<WorkspaceReadParams> =
-  withToolErrors<WorkspaceReadParams>(async (params) => {
-    const { path, encoding = "utf-8", maxSize = 1024 * 1024 } = params;
+export const workspaceReadExecutor: ToolExecutor<WorkspaceReadParams> = async (params) => {
+  const { path, encoding = "utf-8", maxSize = 1024 * 1024 } = params;
 
-    // Validate the path
-    const validated = validateReadPath(path);
+  // Validate the path
+  const validated = validateReadPath(path);
 
-    // Check file size
-    const stats = lstatSync(validated.absolutePath);
+  // Check file size
+  const stats = lstatSync(validated.absolutePath);
 
-    if (stats.size > maxSize) {
-      return {
-        success: false,
-        error: `File too large: ${stats.size} bytes exceeds limit of ${maxSize} bytes`,
-      };
-    }
+  if (stats.size > maxSize) {
+    return {
+      success: false,
+      error: `File too large: ${stats.size} bytes exceeds limit of ${maxSize} bytes`,
+    };
+  }
 
-    // Check if it's a text file or binary
-    const isTextFile = TEXT_FILE_EXTENSIONS.includes(validated.extension);
+  // Check if it's a text file or binary
+  const isTextFile = TEXT_FILE_EXTENSIONS.includes(validated.extension);
 
-    if (!isTextFile && encoding === "utf-8") {
-      // Return metadata only for binary files
-      return {
-        success: true,
-        data: {
-          path: validated.relativePath,
-          type: "binary",
-          extension: validated.extension,
-          size: stats.size,
-          modified: stats.mtime.toISOString(),
-          message:
-            "Binary file - use encoding='base64' to read content, or this is media that can be sent directly",
-        },
-      };
-    }
-
-    // Read the file
-    const content = readFileSync(
-      validated.absolutePath,
-      encoding === "base64" ? "base64" : "utf-8"
-    );
-
+  if (!isTextFile && encoding === "utf-8") {
+    // Return metadata only for binary files
     return {
       success: true,
       data: {
         path: validated.relativePath,
-        content,
-        encoding,
+        type: "binary",
+        extension: validated.extension,
         size: stats.size,
         modified: stats.mtime.toISOString(),
+        message:
+          "Binary file - use encoding='base64' to read content, or this is media that can be sent directly",
       },
     };
-  });
+  }
+
+  // Read the file
+  const content = readFileSync(validated.absolutePath, encoding === "base64" ? "base64" : "utf-8");
+
+  return {
+    success: true,
+    data: {
+      path: validated.relativePath,
+      content,
+      encoding,
+      size: stats.size,
+      modified: stats.mtime.toISOString(),
+    },
+  };
+};

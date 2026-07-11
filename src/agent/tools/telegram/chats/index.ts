@@ -27,19 +27,6 @@ import {
 } from "./set-channel-username.js";
 import type { ToolEntry } from "../../types.js";
 
-export { telegramGetDialogsTool, telegramGetDialogsExecutor };
-export { telegramGetHistoryTool, telegramGetHistoryExecutor };
-export { telegramGetChatInfoTool, telegramGetChatInfoExecutor };
-export { telegramMarkAsReadTool, telegramMarkAsReadExecutor };
-export { telegramJoinChannelTool, telegramJoinChannelExecutor };
-export { telegramLeaveChannelTool, telegramLeaveChannelExecutor };
-export { telegramCreateChannelTool, telegramCreateChannelExecutor };
-export { telegramEditChannelInfoTool, telegramEditChannelInfoExecutor };
-export { telegramInviteToChannelTool, telegramInviteToChannelExecutor };
-export { telegramGetAdminedChannelsTool, telegramGetAdminedChannelsExecutor };
-export { telegramCheckChannelUsernameTool, telegramCheckChannelUsernameExecutor };
-export { telegramSetChannelUsernameTool, telegramSetChannelUsernameExecutor };
-
 export const tools: ToolEntry[] = [
   {
     tool: telegramGetDialogsTool,

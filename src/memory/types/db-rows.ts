@@ -18,6 +18,9 @@ export interface TaskRow {
   payload: string | null;
   reason: string | null;
   scheduled_message_id: number | null;
+  origin_sender_id: number | null;
+  origin_chat_id: string | null;
+  origin_is_group: number | null;
 }
 
 export interface TgUserRow {

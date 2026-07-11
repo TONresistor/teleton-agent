@@ -8,7 +8,6 @@ import { getDatabase } from "../../../memory/database.js";
 import { JournalStore } from "../../../memory/journal-store.js";
 import type { JournalType, JournalOutcome } from "../../../memory/journal-store.js";
 import type { Tool, ToolExecutor } from "../types.js";
-import { withToolErrors } from "../wrap.js";
 import { outcomeEmoji, formatAssetFlow, formatTxHash } from "./format.js";
 
 interface JournalQueryParams {
@@ -60,104 +59,103 @@ export const journalQueryTool: Tool = {
   }),
 };
 
-export const journalQueryExecutor: ToolExecutor<JournalQueryParams> =
-  withToolErrors<JournalQueryParams>(async (params) => {
-    const db = getDatabase().getDb();
-    const store = new JournalStore(db);
+export const journalQueryExecutor: ToolExecutor<JournalQueryParams> = async (params) => {
+  const db = getDatabase().getDb();
+  const store = new JournalStore(db);
 
-    const entries = store.queryEntries({
-      type: params.type,
-      asset: params.asset,
-      outcome: params.outcome,
-      days: params.days,
-      limit: params.limit ?? 20,
-    });
+  const entries = store.queryEntries({
+    type: params.type,
+    asset: params.asset,
+    outcome: params.outcome,
+    days: params.days,
+    limit: params.limit ?? 20,
+  });
 
-    if (entries.length === 0) {
-      return {
-        success: true,
-        data: {
-          entries: [],
-          message: "No entries found matching your filters.",
-        },
-      };
-    }
-
-    // Calculate P&L summary if filtering by outcome or type
-    let summary = "";
-    if (params.type || params.days) {
-      const pnl = store.calculatePnL({
-        type: params.type,
-        days: params.days,
-      });
-
-      if (pnl.trades_count > 0) {
-        summary = [
-          `**📊 Performance Summary**`,
-          ``,
-          `Trades: ${pnl.trades_count} (${pnl.profit_count} wins, ${pnl.loss_count} losses)`,
-          `Win Rate: ${pnl.win_rate.toFixed(1)}%`,
-          `Total P&L: ${pnl.total_pnl >= 0 ? "+" : ""}${pnl.total_pnl.toFixed(2)} TON`,
-          ``,
-          `---`,
-          ``,
-        ].join("\n");
-      }
-    }
-
-    // Format entries
-    const lines: string[] = [`📖 Journal Entries (${entries.length} results)`, ``];
-
-    if (summary) {
-      lines.push(summary);
-    }
-
-    for (const entry of entries) {
-      const date = new Date(entry.timestamp * 1000).toISOString().split("T")[0];
-      lines.push(
-        `**#${entry.id}** ${outcomeEmoji(entry.outcome)} ${entry.type} - ${entry.action} _[${date}]_`
-      );
-
-      const assetFlow = formatAssetFlow(entry);
-      if (assetFlow) {
-        lines.push(`  ${assetFlow}`);
-      }
-
-      if (entry.price_ton) {
-        lines.push(`  Price: ${entry.price_ton} TON`);
-      }
-
-      if (entry.counterparty) {
-        lines.push(`  Party: ${entry.counterparty}`);
-      }
-
-      if (entry.platform) {
-        lines.push(`  Platform: ${entry.platform}`);
-      }
-
-      if (entry.pnl_ton !== null && entry.pnl_ton !== undefined) {
-        const sign = entry.pnl_ton >= 0 ? "+" : "";
-        lines.push(
-          `  P&L: ${sign}${entry.pnl_ton.toFixed(2)} TON (${sign}${entry.pnl_pct?.toFixed(1) ?? "?"}%)`
-        );
-      }
-
-      if (entry.reasoning) {
-        lines.push(`  _"${entry.reasoning}"_`);
-      }
-
-      if (entry.tx_hash) {
-        lines.push(`  TX: ${formatTxHash(entry.tx_hash)}`);
-      }
-
-      lines.push(``);
-    }
-
+  if (entries.length === 0) {
     return {
       success: true,
       data: {
-        entries,
-        message: lines.join("\n"),
+        entries: [],
+        message: "No entries found matching your filters.",
       },
     };
-  });
+  }
+
+  // Calculate P&L summary if filtering by outcome or type
+  let summary = "";
+  if (params.type || params.days) {
+    const pnl = store.calculatePnL({
+      type: params.type,
+      days: params.days,
+    });
+
+    if (pnl.trades_count > 0) {
+      summary = [
+        `**📊 Performance Summary**`,
+        ``,
+        `Trades: ${pnl.trades_count} (${pnl.profit_count} wins, ${pnl.loss_count} losses)`,
+        `Win Rate: ${pnl.win_rate.toFixed(1)}%`,
+        `Total P&L: ${pnl.total_pnl >= 0 ? "+" : ""}${pnl.total_pnl.toFixed(2)} TON`,
+        ``,
+        `---`,
+        ``,
+      ].join("\n");
+    }
+  }
+
+  // Format entries
+  const lines: string[] = [`📖 Journal Entries (${entries.length} results)`, ``];
+
+  if (summary) {
+    lines.push(summary);
+  }
+
+  for (const entry of entries) {
+    const date = new Date(entry.timestamp * 1000).toISOString().split("T")[0];
+    lines.push(
+      `**#${entry.id}** ${outcomeEmoji(entry.outcome)} ${entry.type} - ${entry.action} _[${date}]_`
+    );
+
+    const assetFlow = formatAssetFlow(entry);
+    if (assetFlow) {
+      lines.push(`  ${assetFlow}`);
+    }
+
+    if (entry.price_ton) {
+      lines.push(`  Price: ${entry.price_ton} TON`);
+    }
+
+    if (entry.counterparty) {
+      lines.push(`  Party: ${entry.counterparty}`);
+    }
+
+    if (entry.platform) {
+      lines.push(`  Platform: ${entry.platform}`);
+    }
+
+    if (entry.pnl_ton !== null && entry.pnl_ton !== undefined) {
+      const sign = entry.pnl_ton >= 0 ? "+" : "";
+      lines.push(
+        `  P&L: ${sign}${entry.pnl_ton.toFixed(2)} TON (${sign}${entry.pnl_pct?.toFixed(1) ?? "?"}%)`
+      );
+    }
+
+    if (entry.reasoning) {
+      lines.push(`  _"${entry.reasoning}"_`);
+    }
+
+    if (entry.tx_hash) {
+      lines.push(`  TX: ${formatTxHash(entry.tx_hash)}`);
+    }
+
+    lines.push(``);
+  }
+
+  return {
+    success: true,
+    data: {
+      entries,
+      message: lines.join("\n"),
+    },
+  };
+};

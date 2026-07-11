@@ -1,21 +1,20 @@
 /**
  * Built-in module loader — discovers and registers plugin modules.
  * Unlike plugin-loader.ts (external ~/.teleton/plugins/), this handles
- * first-party modules that ship with the codebase (deals, etc.)
+ * first-party modules that ship with the codebase (ton-proxy, exec).
  */
 
 import type { PluginModule } from "./types.js";
 import type { ToolRegistry } from "./registry.js";
 import type { Config } from "../../config/schema.js";
 import type Database from "better-sqlite3";
-import dealsModule from "../../deals/module.js";
 import tonProxyModule from "../../ton-proxy/module.js";
 import { execModule } from "./exec/index.js";
 import { createLogger } from "../../utils/logger.js";
 
 const log = createLogger("ModuleLoader");
 
-const BUILTIN_MODULES: PluginModule[] = [dealsModule, tonProxyModule, execModule];
+const BUILTIN_MODULES: PluginModule[] = [tonProxyModule, execModule];
 
 export function loadModules(
   registry: ToolRegistry,
@@ -31,8 +30,8 @@ export function loadModules(
       mod.migrate?.(db);
 
       const tools = mod.tools(config);
-      for (const { tool, executor, scope, mode } of tools) {
-        registry.register(tool, executor, scope, mode);
+      for (const { tool, executor, scope, mode, allowFrom } of tools) {
+        registry.register(tool, executor, scope, mode, undefined, undefined, false, allowFrom);
       }
 
       loaded.push(mod);

@@ -1,5 +1,11 @@
 import { describe, it, expect } from "vitest";
-import { PluginSDKError, SDK_VERSION } from "../index.js";
+import {
+  PLUGIN_HOOK_NAMES,
+  TOOL_CATEGORIES,
+  TOOL_SCOPES,
+  PluginSDKError,
+  SDK_VERSION,
+} from "../index.js";
 
 // ─── SDK_VERSION ──────────────────────────────────────────────────
 
@@ -16,8 +22,8 @@ describe("SDK_VERSION", () => {
     expect(SDK_VERSION).toMatch(semverRegex);
   });
 
-  it("equals '1.0.0'", () => {
-    expect(SDK_VERSION).toBe("1.0.0");
+  it("equals the package version", () => {
+    expect(SDK_VERSION).toBe("2.1.0");
   });
 });
 
@@ -55,6 +61,11 @@ describe("PluginSDKError", () => {
     "BRIDGE_NOT_CONNECTED",
     "WALLET_NOT_INITIALIZED",
     "INVALID_ADDRESS",
+    "INVALID_INPUT",
+    "NOT_AVAILABLE",
+    "RATE_LIMITED",
+    "TRANSACTION_FAILED",
+    "PERMISSION_DENIED",
     "OPERATION_FAILED",
     "SECRET_NOT_FOUND",
   ] as const;
@@ -148,16 +159,23 @@ describe("named exports", () => {
     expect(typeof SDK_VERSION).toBe("string");
   });
 
+  it("exports canonical runtime contract values", () => {
+    expect(PLUGIN_HOOK_NAMES).toHaveLength(13);
+    expect(TOOL_SCOPES).toContain("open");
+    expect(TOOL_SCOPES).toContain("disabled");
+    expect(TOOL_CATEGORIES).toEqual(["data-bearing", "action"]);
+  });
+
   it("module has exactly the expected runtime exports", async () => {
     const mod = await import("../index.js");
     const exportedKeys = Object.keys(mod);
     // Only runtime exports (types are erased at runtime)
     expect(exportedKeys).toContain("PluginSDKError");
     expect(exportedKeys).toContain("SDK_VERSION");
-    // These are the only two runtime exports
+    // Types are erased; these constants and the error class are runtime exports.
     const runtimeExports = exportedKeys.filter(
       (k) => typeof (mod as Record<string, unknown>)[k] !== "undefined"
     );
-    expect(runtimeExports).toHaveLength(2);
+    expect(runtimeExports).toHaveLength(5);
   });
 });

@@ -2,12 +2,7 @@ import {
   telegramGetAvailableGiftsTool,
   telegramGetAvailableGiftsExecutor,
 } from "./get-available-gifts.js";
-import { telegramSendGiftTool, telegramSendGiftExecutor } from "./send-gift.js";
 import { telegramGetMyGiftsTool, telegramGetMyGiftsExecutor } from "./get-my-gifts.js";
-import {
-  telegramTransferCollectibleTool,
-  telegramTransferCollectibleExecutor,
-} from "./transfer-collectible.js";
 import {
   telegramSetCollectiblePriceTool,
   telegramSetCollectiblePriceExecutor,
@@ -33,20 +28,6 @@ import { getUserGiftsEntry } from "./get-user-gifts.js";
 import { getAvailableGiftsBotEntry } from "./get-available-gifts-bot.js";
 import type { ToolEntry } from "../../types.js";
 
-export { telegramGetAvailableGiftsTool, telegramGetAvailableGiftsExecutor };
-export { telegramSendGiftTool, telegramSendGiftExecutor };
-export { telegramGetMyGiftsTool, telegramGetMyGiftsExecutor };
-export { telegramTransferCollectibleTool, telegramTransferCollectibleExecutor };
-export { telegramSetCollectiblePriceTool, telegramSetCollectiblePriceExecutor };
-export { telegramGetResaleGiftsTool, telegramGetResaleGiftsExecutor };
-export { telegramBuyResaleGiftTool, telegramBuyResaleGiftExecutor };
-export { telegramSetGiftStatusTool, telegramSetGiftStatusExecutor };
-export { telegramGetCollectibleInfoTool, telegramGetCollectibleInfoExecutor };
-export { telegramGetUniqueGiftTool, telegramGetUniqueGiftExecutor };
-export { telegramGetUniqueGiftValueTool, telegramGetUniqueGiftValueExecutor };
-export { telegramSendGiftOfferTool, telegramSendGiftOfferExecutor };
-export { telegramResolveGiftOfferTool, telegramResolveGiftOfferExecutor };
-
 export const tools: ToolEntry[] = [
   {
     tool: telegramGetAvailableGiftsTool,
@@ -55,22 +36,8 @@ export const tools: ToolEntry[] = [
     tags: ["finance"],
   },
   {
-    tool: telegramSendGiftTool,
-    executor: telegramSendGiftExecutor,
-    scope: "dm-only",
-    mode: "user",
-    tags: ["finance"],
-  },
-  {
     tool: telegramGetMyGiftsTool,
     executor: telegramGetMyGiftsExecutor,
-    mode: "user",
-    tags: ["finance"],
-  },
-  {
-    tool: telegramTransferCollectibleTool,
-    executor: telegramTransferCollectibleExecutor,
-    scope: "dm-only",
     mode: "user",
     tags: ["finance"],
   },

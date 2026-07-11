@@ -1,9 +1,7 @@
 /** Maximum serialized tool result size before truncation */
 export const MAX_TOOL_RESULT_SIZE = 50_000;
 export const MAX_FILENAME_LENGTH = 255;
-export const DEFAULT_GIFTS_QUERY_LIMIT = 50;
 export const MAX_POLL_QUESTION_LENGTH = 300;
-export const DEAL_VERIFICATION_WINDOW_SECONDS = 300;
 export const TELEGRAM_MAX_MESSAGE_LENGTH = 4096;
 export const MAX_JSON_FIELD_CHARS = 8_000;
 export const MAX_TOTAL_PROMPT_CHARS = 32_000;

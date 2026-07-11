@@ -309,7 +309,7 @@ describe("createTelegramMessagesSDK", () => {
     it("wraps errors", async () => {
       mockGramJsClient.sendMessage.mockRejectedValue(new Error("fail"));
 
-      await expect(sdk.scheduleMessage("c", "t", 0)).rejects.toMatchObject({
+      await expect(sdk.scheduleMessage("c", "t", 1700000000)).rejects.toMatchObject({
         code: "OPERATION_FAILED",
       });
     });
@@ -555,6 +555,46 @@ describe("createTelegramMessagesSDK", () => {
       await expect(sdk.setTyping("c")).rejects.toMatchObject({
         code: "OPERATION_FAILED",
       });
+    });
+  });
+
+  describe("v2 input contract", () => {
+    it("uses NOT_AVAILABLE for user-only methods in bot mode", async () => {
+      const botSdk = createTelegramMessagesSDK(mockBridge, mockLog, "bot");
+      await expect(botSdk.deleteMessage("chat", 1)).rejects.toMatchObject({
+        code: "NOT_AVAILABLE",
+      });
+    });
+
+    it("rejects invalid message IDs", async () => {
+      await expect(sdk.deleteMessage("chat", 0)).rejects.toMatchObject({
+        code: "INVALID_INPUT",
+      });
+      await expect(sdk.forwardMessage("from", "to", 1.5)).rejects.toMatchObject({
+        code: "INVALID_INPUT",
+      });
+      await expect(sdk.downloadMedia("chat", -1)).rejects.toMatchObject({
+        code: "INVALID_INPUT",
+      });
+      await expect(sdk.sendScheduledNow("chat", 0)).rejects.toMatchObject({
+        code: "INVALID_INPUT",
+      });
+    });
+
+    it("rejects empty text identifiers and invalid limits", async () => {
+      await expect(sdk.searchMessages("chat", " ")).rejects.toMatchObject({
+        code: "INVALID_INPUT",
+      });
+      await expect(sdk.searchMessages("chat", "query", 0)).rejects.toMatchObject({
+        code: "INVALID_INPUT",
+      });
+      await expect(sdk.getReplies("chat", 1, 101.5)).rejects.toMatchObject({
+        code: "INVALID_INPUT",
+      });
+      await expect(sdk.scheduleMessage("chat", " ", 1)).rejects.toMatchObject({
+        code: "INVALID_INPUT",
+      });
+      await expect(sdk.setTyping(" ")).rejects.toMatchObject({ code: "INVALID_INPUT" });
     });
   });
 });

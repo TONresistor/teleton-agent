@@ -30,7 +30,10 @@ export class ScheduledTaskHandler {
     // Extract task ID from format: [TASK:uuid] description
     const match = message.text.match(/^\[TASK:([^\]]+)\]/);
     if (!match) {
-      log.warn(`Invalid task format: ${message.text}`);
+      log.warn(
+        { messageId: message.id, messageLength: message.text.length },
+        "Invalid task format"
+      );
       return;
     }
 
@@ -55,6 +58,23 @@ export class ScheduledTaskHandler {
         return;
       }
 
+      // Legacy rows did not persist their creator. Never substitute the Saved
+      // Messages sender (the owner account), because that elevates authority.
+      if (
+        task.originSenderId === undefined ||
+        task.originChatId === undefined ||
+        task.originIsGroup === undefined
+      ) {
+        const reason = "Scheduled task is missing creator authority; recreate it before execution";
+        taskStore.failTask(taskId, reason);
+        await this.bridge.sendMessage({
+          chatId: message.chatId,
+          text: `⚠️ Task "${task.description}" was blocked: missing creator authority. Recreate the task.`,
+          replyToId: message.id,
+        });
+        return;
+      }
+
       // Check if all dependencies are satisfied
       if (!taskStore.canExecute(taskId)) {
         log.warn(`Task ${taskId} cannot execute yet - dependencies not satisfied`);
@@ -76,9 +96,9 @@ export class ScheduledTaskHandler {
       const toolContext = {
         bridge: this.bridge,
         db,
-        chatId: message.chatId,
-        isGroup: message.isGroup,
-        senderId: message.senderId,
+        chatId: task.originChatId,
+        isGroup: task.originIsGroup,
+        senderId: task.originSenderId,
         config: this.config,
       };
 
@@ -100,11 +120,11 @@ export class ScheduledTaskHandler {
 
       // Feed prompt to agent (agent loop with full context)
       const response = await this.agent.processMessage({
-        chatId: message.chatId,
+        chatId: task.originChatId,
         userMessage: agentPrompt,
         userName: "self-scheduled-task",
         timestamp: message.timestamp.getTime(),
-        isGroup: false,
+        isGroup: task.originIsGroup,
         toolContext,
         messageId: message.id,
       });
@@ -121,7 +141,7 @@ export class ScheduledTaskHandler {
       // Mark task as done if agent responded successfully
       taskStore.completeTask(taskId, response.content);
 
-      log.info(`Executed scheduled task ${taskId}: ${task.description}`);
+      log.info({ taskId }, "Executed scheduled task");
 
       // Initialize dependency resolver if needed
       if (!this.dependencyResolver) {

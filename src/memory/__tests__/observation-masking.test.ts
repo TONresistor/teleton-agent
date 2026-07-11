@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import type { Message, ToolResultMessage, UserMessage } from "@mariozechner/pi-ai";
+import type { Message, ToolResultMessage, UserMessage } from "@earendil-works/pi-ai";
 import {
   maskOldToolResults,
   DEFAULT_MASKING_CONFIG,

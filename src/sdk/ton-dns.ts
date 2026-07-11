@@ -14,8 +14,15 @@ import { WalletContractV5R1, toNano, internal } from "@ton/ton";
 import { Address, beginCell } from "@ton/core";
 import { withTxLock } from "../ton/tx-lock.js";
 import { sendWalletTx, type SentTx } from "../ton/confirm.js";
-import { createHash } from "crypto";
 import { getErrorMessage } from "../utils/errors.js";
+import {
+  DnsUpdateError,
+  linkDnsWallet,
+  normalizeTonDomain,
+  setDnsSite,
+  unlinkDnsWallet,
+} from "../ton/dns-service.js";
+import { boundedLimit, requirePositiveNumber } from "./validation.js";
 
 interface TonApiDnsAuction {
   domain: string;
@@ -28,18 +35,6 @@ interface TonApiDnsAuction {
 
 /** .ton DNS root collection contract */
 const DNS_ROOT_COLLECTION = "EQC3dNlesgVD8YbAazcauIrXBPfiVhMMr5YYk2in0Mtsz0Bz";
-
-/** SHA256 of "wallet" — the DNS record key for wallet address */
-const DNS_WALLET_KEY = BigInt("0x" + createHash("sha256").update("wallet").digest("hex"));
-
-/** SHA256 of "site" — the DNS record key for ADNL site address */
-const DNS_SITE_KEY = BigInt("0x" + createHash("sha256").update("site").digest("hex"));
-
-/** dns_adnl_address prefix (#ad01) */
-const DNS_ADNL_PREFIX = 0xad01;
-
-/** Opcode for change_dns_record on TON DNS NFT */
-const CHANGE_DNS_RECORD_OP = 0x4eb1f0f9;
 
 /** Send a single internal message via the agent's wallet (within tx lock). */
 async function sendWalletMessage(
@@ -72,10 +67,28 @@ async function sendWalletMessage(
   return sent;
 }
 
+function dnsSdkError(error: unknown, operation: string): PluginSDKError {
+  if (error instanceof PluginSDKError) return error;
+  if (error instanceof DnsUpdateError) {
+    const code =
+      error.code === "WALLET_NOT_INITIALIZED"
+        ? "WALLET_NOT_INITIALIZED"
+        : error.code === "INVALID_ADDRESS"
+          ? "INVALID_ADDRESS"
+          : error.code === "INVALID_DOMAIN" || error.code === "INVALID_ADNL_ADDRESS"
+            ? "INVALID_INPUT"
+            : "OPERATION_FAILED";
+    return new PluginSDKError(error.message, code);
+  }
+  return new PluginSDKError(`${operation}: ${getErrorMessage(error)}`, "OPERATION_FAILED");
+}
+
 function normalizeDomain(domain: string): string {
-  let d = domain.toLowerCase().trim();
-  if (!d.endsWith(".ton")) d += ".ton";
-  return d;
+  try {
+    return normalizeTonDomain(domain);
+  } catch (error) {
+    throw dnsSdkError(error, "Invalid domain");
+  }
 }
 
 export function createDnsSDK(log: PluginLogger): DnsSDK {
@@ -141,10 +154,9 @@ export function createDnsSDK(log: PluginLogger): DnsSDK {
     },
 
     async getAuctions(limit?: number): Promise<DnsAuction[]> {
+      const bounded = boundedLimit(limit, 20, 100);
       try {
-        const response = await tonapiFetch(
-          `/dns/auctions?tld=ton&limit=${Math.min(limit ?? 20, 100)}`
-        );
+        const response = await tonapiFetch(`/dns/auctions?tld=ton&limit=${bounded}`);
         if (!response.ok) {
           log.debug(`dns.getAuctions() TonAPI error: ${response.status}`);
           return [];
@@ -194,9 +206,7 @@ export function createDnsSDK(log: PluginLogger): DnsSDK {
 
     async bid(domain: string, amount: number): Promise<DnsBidResult> {
       const normalized = normalizeDomain(domain);
-      if (!Number.isFinite(amount) || amount <= 0) {
-        throw new PluginSDKError("Bid amount must be positive", "OPERATION_FAILED");
-      }
+      requirePositiveNumber(amount, "Bid amount");
 
       const walletData = loadWallet();
       if (!walletData) {
@@ -222,125 +232,26 @@ export function createDnsSDK(log: PluginLogger): DnsSDK {
     },
 
     async link(domain: string, address: string): Promise<void> {
-      const normalized = normalizeDomain(domain);
-
       try {
-        Address.parse(address);
-      } catch {
-        throw new PluginSDKError("Invalid TON address", "INVALID_ADDRESS");
-      }
-
-      const walletData = loadWallet();
-      if (!walletData) {
-        throw new PluginSDKError("Wallet not initialized", "WALLET_NOT_INITIALIZED");
-      }
-
-      // Resolve domain to get NFT address
-      const resolveResult = await this.resolve(normalized);
-      if (!resolveResult?.nftAddress) {
-        throw new PluginSDKError(`Domain ${normalized} not found or not owned`, "OPERATION_FAILED");
-      }
-
-      // Build change_dns_record message with wallet record
-      const walletCell = beginCell()
-        .storeUint(0x9fd3, 16) // dns_smc_address#9fd3
-        .storeAddress(Address.parse(address))
-        .storeUint(0, 8) // flags
-        .endCell();
-
-      const body = beginCell()
-        .storeUint(CHANGE_DNS_RECORD_OP, 32) // op
-        .storeUint(0, 64) // query_id
-        .storeUint(DNS_WALLET_KEY, 256) // key = SHA256("wallet")
-        .storeRef(walletCell)
-        .endCell();
-
-      try {
-        await sendWalletMessage(Address.parse(resolveResult.nftAddress), toNano("0.05"), body);
+        await linkDnsWallet(domain, address);
       } catch (error) {
-        if (error instanceof PluginSDKError) throw error;
-        throw new PluginSDKError(
-          `Failed to link domain: ${getErrorMessage(error)}`,
-          "OPERATION_FAILED"
-        );
+        throw dnsSdkError(error, "Failed to link domain");
       }
     },
 
     async unlink(domain: string): Promise<void> {
-      const normalized = normalizeDomain(domain);
-
-      const walletData = loadWallet();
-      if (!walletData) {
-        throw new PluginSDKError("Wallet not initialized", "WALLET_NOT_INITIALIZED");
-      }
-
-      const resolveResult = await this.resolve(normalized);
-      if (!resolveResult?.nftAddress) {
-        throw new PluginSDKError(`Domain ${normalized} not found or not owned`, "OPERATION_FAILED");
-      }
-
-      // Build change_dns_record with no value (= delete record)
-      const body = beginCell()
-        .storeUint(CHANGE_DNS_RECORD_OP, 32) // op
-        .storeUint(0, 64) // query_id
-        .storeUint(DNS_WALLET_KEY, 256) // key = SHA256("wallet")
-        .endCell();
-
       try {
-        await sendWalletMessage(Address.parse(resolveResult.nftAddress), toNano("0.05"), body);
+        await unlinkDnsWallet(domain);
       } catch (error) {
-        if (error instanceof PluginSDKError) throw error;
-        throw new PluginSDKError(
-          `Failed to unlink domain: ${getErrorMessage(error)}`,
-          "OPERATION_FAILED"
-        );
+        throw dnsSdkError(error, "Failed to unlink domain");
       }
     },
 
     async setSiteRecord(domain: string, adnlAddress: string): Promise<void> {
-      const normalized = normalizeDomain(domain);
-
-      // Validate ADNL address: 64 hex chars (256-bit)
-      const adnl = adnlAddress.toLowerCase().replace(/^0x/, "");
-      if (!/^[0-9a-f]{64}$/.test(adnl)) {
-        throw new PluginSDKError(
-          "Invalid ADNL address: must be exactly 64 hex characters (256-bit)",
-          "OPERATION_FAILED"
-        );
-      }
-
-      const walletData = loadWallet();
-      if (!walletData) {
-        throw new PluginSDKError("Wallet not initialized", "WALLET_NOT_INITIALIZED");
-      }
-
-      const resolveResult = await this.resolve(normalized);
-      if (!resolveResult?.nftAddress) {
-        throw new PluginSDKError(`Domain ${normalized} not found or not owned`, "OPERATION_FAILED");
-      }
-
-      // Build ADNL record value cell: dns_adnl_address#ad01 + adnl_addr:bits256 + flags:uint8
-      const valueCell = beginCell()
-        .storeUint(DNS_ADNL_PREFIX, 16)
-        .storeBuffer(Buffer.from(adnl, "hex"), 32)
-        .storeUint(0, 8)
-        .endCell();
-
-      const body = beginCell()
-        .storeUint(CHANGE_DNS_RECORD_OP, 32)
-        .storeUint(0, 64)
-        .storeUint(DNS_SITE_KEY, 256)
-        .storeRef(valueCell)
-        .endCell();
-
       try {
-        await sendWalletMessage(Address.parse(resolveResult.nftAddress), toNano("0.05"), body);
+        await setDnsSite(domain, adnlAddress);
       } catch (error) {
-        if (error instanceof PluginSDKError) throw error;
-        throw new PluginSDKError(
-          `Failed to set site record: ${getErrorMessage(error)}`,
-          "OPERATION_FAILED"
-        );
+        throw dnsSdkError(error, "Failed to set site record");
       }
     },
   };

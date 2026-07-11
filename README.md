@@ -6,7 +6,7 @@
 
 <p align="center">
   <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
-  <a href="https://nodejs.org/"><img src="https://img.shields.io/badge/node-%3E%3D20.0.0-brightgreen" alt="Node.js"></a>
+  <a href="https://nodejs.org/"><img src="https://img.shields.io/badge/node-22.22.2%2B-brightgreen" alt="Node.js 22.22.2+"></a>
   <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-5.7-blue" alt="TypeScript"></a>
   <a href="https://teletonagent.dev"><img src="https://img.shields.io/badge/Website-teletonagent.dev-ff6600" alt="Website"></a>
   <a href="https://docs.teletonagent.dev"><img src="https://img.shields.io/badge/docs-Teleton%20Agents-blue" alt="Documentation"></a>
@@ -15,7 +15,7 @@
 
 ---
 
-<p align="center">Teleton is an autonomous AI agent platform that operates as a real Telegram user account or a Telegram Bot. It thinks through an agentic loop with tool calling, remembers conversations across sessions with hybrid RAG, and natively integrates the TON blockchain: send crypto, swap on DEXs, bid on domains, verify payments - all from a chat message. It can schedule tasks to run autonomously at any time. It ships with 135+ built-in tools, supports 15 LLM providers, and exposes a Plugin SDK so you can build your own tools on top of the platform.</p>
+<p align="center">Teleton is an autonomous AI agent platform that operates as a real Telegram user account or a Telegram Bot. It thinks through an agentic loop with tool calling, remembers conversations across sessions with hybrid RAG, and natively integrates the TON blockchain: send crypto, swap on DEXs, bid on domains, verify payments - all from a chat message. It can schedule tasks to run autonomously at any time. It ships with 128 always-registered tools plus 5 optional system tools, supports 16 LLM providers, and exposes a Plugin SDK so you can build your own tools on top of the platform.</p>
 
 ### Key Highlights
 
@@ -23,12 +23,12 @@
 <tr>
 <td align="center" width="33%"><br><b><ins>Full Telegram Access</ins></b><br>Real user via MTProto,<br>not a bot<br><br></td>
 <td align="center" width="33%"><br><b><ins>Agentic Loop</ins></b><br>Think, act, observe, repeat<br>until shit gets done<br><br></td>
-<td align="center" width="33%"><br><b><ins>15 LLM Providers</ins></b><br>Anthropic, OpenAI, Google, xAI, Groq, and more<br><br></td>
+<td align="center" width="33%"><br><b><ins>16 LLM Providers</ins></b><br>Anthropic, OpenAI, Google, xAI, Groq, and more<br><br></td>
 </tr>
 <tr>
 <td align="center"><br><b><ins>TON Blockchain</ins></b><br>Wallet, jettons, DEX swaps, DNS, NFTs<br><br></td>
 <td align="center"><br><b><ins>Persistent Memory</ins></b><br>Hybrid RAG, vector + keyword, auto-compaction<br><br></td>
-<td align="center"><br><b><ins>135+ Built-in Tools</ins></b><br>Messaging, media, crypto, DEX, DNS, files<br><br></td>
+<td align="center"><br><b><ins>128+ Built-in Tools</ins></b><br>Messaging, media, crypto, DEX, DNS, files<br><br></td>
 </tr>
 <tr>
 <td align="center"><br><b><ins>Plugin SDK</ins></b><br>Custom tools, isolated DBs, secrets, hooks<br><br></td>
@@ -45,23 +45,22 @@
 
 | Category      | Tools | Description                                                    |
 | ------------- | ----- | -------------------------------------------------------------- |
-| Telegram      | 80    | Messages, media, chats, polls, stickers, gifts, stars, stories |
+| Telegram      | 83    | Messages, media, chats, polls, stickers, gifts, stars, stories |
 | TON & Jettons | 15    | Wallet, send/receive, balances, prices, NFTs, DEX router       |
 | STON.fi DEX   | 5     | Swap, quote, search, trending, pools                           |
 | DeDust DEX    | 5     | Swap, quote, pools, prices, token analytics                    |
 | TON DNS       | 8     | Auctions, bidding, linking, TON Sites, resolution              |
-| Deals         | 5     | P2P escrow, on-chain verification, anti double-spend           |
 | Journal       | 3     | Trade logging, P&L tracking, natural language queries          |
 | Web           | 2     | Search and page extraction via Tavily                          |
 | Workspace     | 6     | Sandboxed file operations, path traversal protection           |
-| Exec          | 4     | Shell, files, processes (off by default, admin-only)           |
-| Bot           | 1     | Inline bot message sending for plugin interactions             |
+| Tool Search   | 1     | Semantic retrieval across the complete tool registry           |
+| System        | 5     | Exec (4) and TON Proxy status (1), both optional                |
 
 ### Advanced Capabilities
 
 | Capability              | Description                                                              |
 | ----------------------- | ------------------------------------------------------------------------ |
-| **Multi-Provider LLM**  | 15 providers, hot-swap from dashboard or CLI                             |
+| **Multi-Provider LLM**  | 16 providers, hot-swap from dashboard or CLI                             |
 | **RAG + Hybrid Search** | Vector (sqlite-vec) + keyword (FTS5) fused search                        |
 | **Auto-Compaction**     | AI summarizes old context, saves to `memory/*.md`                        |
 | **Observation Masking** | Compresses old tool results, saves ~90% context                          |
@@ -84,12 +83,12 @@
 
 ## Prerequisites
 
-- **Node.js 20.0.0+** - [Download](https://nodejs.org/)
-- **LLM API Key** - One of: [Anthropic](https://console.anthropic.com/) (recommended), [OpenAI](https://platform.openai.com/), [Google](https://aistudio.google.com/), [xAI](https://console.x.ai/), [Groq](https://console.groq.com/), [OpenRouter](https://openrouter.ai/), [Moonshot](https://platform.moonshot.ai/), [Mistral](https://console.mistral.ai/), [Cerebras](https://cloud.cerebras.ai/), [ZAI](https://open.bigmodel.cn/), [MiniMax](https://platform.minimaxi.com/), [Hugging Face](https://huggingface.co/settings/tokens) — or keyless: Codex (auto-detect), Gocoon (TON), Local (Ollama/vLLM)
+- **Node.js 22.22.2+ LTS** - [Download](https://nodejs.org/) (Node 24 requires 24.15.0+)
+- **LLM API Key** - One of: [Anthropic](https://console.anthropic.com/) (recommended), [OpenAI](https://platform.openai.com/), [Google](https://aistudio.google.com/), [xAI](https://console.x.ai/), [Groq](https://console.groq.com/), [OpenRouter](https://openrouter.ai/), [Moonshot](https://platform.moonshot.ai/), [Mistral](https://console.mistral.ai/), [Cerebras](https://cloud.cerebras.ai/), [ZAI](https://open.bigmodel.cn/), [MiniMax](https://platform.minimaxi.com/), [Hugging Face](https://huggingface.co/settings/tokens) — or keyless: Codex and Grok Build (CLI auto-detect), Gocoon (TON), Local (Ollama/vLLM)
 - **Telegram Account** - Dedicated account recommended for security
 - **Telegram API Credentials** - From [my.telegram.org/apps](https://my.telegram.org/apps)
 - **Your Telegram User ID** - Message [@userinfobot](https://t.me/userinfobot)
-- **Bot Token** *(optional)* - From [@BotFather](https://t.me/BotFather) for inline bot features (deals)
+- **Bot Token** *(optional in user mode)* - From [@BotFather](https://t.me/BotFather) for plugin inline cards and callbacks; required in bot mode
 
 > **Security Warning**: The agent will have full control over the Telegram account. Use a dedicated account, not your main one.
 
@@ -154,7 +153,7 @@ Teleton can run as a **user account** (MTProto) or a **Telegram bot** (Bot API).
 |---|---|---|
 | **Auth** | Phone + api_id + api_hash | Bot token from @BotFather |
 | **Protocol** | MTProto (GramJS) | Bot API (Grammy) |
-| **Tools** | 135+ | 67 (11 Telegram + 56 non-Telegram) |
+| **Tools** | 128 base, up to 133 with optional system modules | Registry filtered automatically by bot-compatible capabilities |
 | **Risk** | Account ban possible | No ban risk |
 | **Dialogs/History** | Full access | Not available |
 | **Media sending** | All types | Photos only (v1) |
@@ -172,7 +171,7 @@ The `teleton setup` wizard generates a fully configured `~/.teleton/config.yaml`
 
 ```yaml
 agent:
-  provider: "anthropic"              # anthropic | openai | google | xai | groq | openrouter | moonshot | mistral | cerebras | zai | minimax | huggingface | gocoon | local
+  provider: "anthropic"              # anthropic | codex | grok-build | openai | google | xai | groq | openrouter | moonshot | mistral | cerebras | zai | minimax | huggingface | gocoon | local
   api_key: "sk-ant-api03-..."
   model: "claude-haiku-4-5-20251001"
   utility_model: "claude-haiku-4-5-20251001"  # for summarization, compaction, vision
@@ -191,7 +190,7 @@ telegram:
   owner_username: "your_username"
   debounce_ms: 1500         # group message batching delay
 
-  # Optional: inline bot for interactive features (deals)
+  # Optional in user mode: plugin inline cards and callbacks
   bot_token: "123456:ABC-DEF..."
   bot_username: "your_bot"
 
@@ -214,7 +213,7 @@ ton_proxy:                   # Optional: .ton domain proxy
 
 ### Supported Models
 
-70+ models across 15 providers. Defined in `src/config/model-catalog.ts`, shared across CLI, WebUI, and Dashboard.
+70+ models across 16 providers. Defined in `src/config/model-catalog.ts`, shared across CLI, WebUI, and Dashboard.
 
 <table>
 <tr>
@@ -237,6 +236,7 @@ ton_proxy:                   # Optional: .ton domain proxy
 <td align="center"><br><b>Hugging Face</b><br>DeepSeek V3.2<br><br></td>
 <td align="center"><br><b>Gocoon</b><br>Decentralized (TON)<br><br></td>
 <td align="center"><br><b>Local</b><br>Ollama, vLLM, LM Studio<br><br></td>
+<td align="center"><br><b>Grok Build</b><br>CLI auto-detected<br><br></td>
 </tr>
 </table>
 
@@ -365,8 +365,8 @@ All admin commands support `/`, `!`, or `.` prefix:
 | `/model <name>` | Hot-swap LLM model at runtime |
 | `/policy <dm\|group> <value>` | Change access policies live |
 | `/loop <1-50>` | Set max agentic iterations |
-| `/strategy [buy\|sell <pct>]` | View/change trading thresholds |
 | `/wallet` | Show wallet address + balance |
+| `/approve <request_id>` / `/reject <request_id>` | Resolve a pending financial action |
 | `/modules set\|info\|reset` | Per-group tool permissions |
 | `/plugin set\|unset\|keys` | Manage plugin secrets |
 | `/task <description>` | Assign a task to the agent |
@@ -375,6 +375,7 @@ All admin commands support `/`, `!`, or `.` prefix:
 | `/clear [chat_id]` | Clear conversation history |
 | `/verbose` | Toggle debug logging |
 | `/rag [status\|topk <n>]` | Toggle Tool RAG or view status |
+| `/guest [on\|off]` | View or toggle bot guest mode |
 | `/stop` | Emergency shutdown |
 | `/ping` | Check responsiveness |
 | `/help` | Show all commands |
@@ -402,7 +403,7 @@ Plugins export a `tools` function (recommended) or array, plus optional lifecycl
 export const manifest = {
   name: "weather",
   version: "1.0.0",
-  sdkVersion: "^1.0.0",
+  sdkVersion: "^2.0.0",
 };
 
 // Optional: creates an isolated database at ~/.teleton/plugins/data/weather.db
@@ -453,7 +454,7 @@ The SDK provides namespaced access to core services:
 |                    | **Interactive**: `sendDice()`, `sendReaction()`, `createPoll()`, `createQuiz()`                                                                                                                                                                                                                      |
 |                    | **Moderation**: `banUser()`, `unbanUser()`, `muteUser()`, `kickUser()`                                                                                                                                                                                                                               |
 |                    | **Stars & Gifts**: `getStarsBalance()`, `sendGift()`, `getAvailableGifts()`, `getMyGifts()`, `getResaleGifts()`, `buyResaleGift()`, `getStarsTransactions()`, `transferCollectible()`, `setCollectiblePrice()`, `getCollectibleInfo()`, `getUniqueGift()`, `getUniqueGiftValue()`, `sendGiftOffer()` |
-|                    | **Advanced**: `getMe()`, `getMessages()`, `isAvailable()`, `getRawClient()`, `setTyping()`, `sendStory()`                                                                                                                                                                                            |
+|                    | **Advanced**: `getMe()`, `getMessages()`, `isAvailable()`, `setTyping()`, `sendStory()`                                                                                                                                                                                                             |
 | `sdk.bot`          | `onInlineQuery()`, `onCallback()`, `onChosenResult()`, `editInlineMessage()`, `keyboard()`, `isAvailable`, `username`                                                                                                                                                                                |
 | `sdk.secrets`      | `get()`, `require()`, `has()`                                                                                                                                                                                                                                                                        |
 | `sdk.storage`      | `get()`, `set()`, `delete()`, `has()`, `clear()` (KV with TTL)                                                                                                                                                                                                                                       |
@@ -463,7 +464,7 @@ The SDK provides namespaced access to core services:
 | `sdk.log`          | `info()`, `warn()`, `error()`, `debug()`                                                                                                                                                                                                                                                             |
 | `sdk.on()`         | Register hooks: `tool:before`, `tool:after`, `tool:error`, `prompt:before`, `prompt:after`, `session:start`, `session:end`, `message:receive`, `response:before`, `response:after`, `response:error`, `agent:start`, `agent:stop`                                                                    |
 
-**Lifecycle hooks**: `migrate(db)`, `start(ctx)`, `stop()`, `onMessage(event)`, `onCallbackQuery(event)`
+**Lifecycle hooks**: `migrate(db)`, `start(ctx)` (with `ctx.sdk`), `stop()`, `onMessage(event)`, `onCallbackQuery(event)`
 
 **Security**: all SDK objects are frozen. Plugins never see API keys or other plugins' data.
 
@@ -475,9 +476,9 @@ The SDK provides namespaced access to core services:
 
 | Layer | Technology |
 |-------|------------|
-| LLM | Multi-provider via [pi-ai](https://github.com/mariozechner/pi-ai) (15 providers: Anthropic, Codex, OpenAI, Google, xAI, Groq, OpenRouter, Moonshot, Mistral, Cerebras, ZAI, MiniMax, Hugging Face, Gocoon, Local) |
+| LLM | Multi-provider via [pi-ai](https://github.com/mariozechner/pi-ai) (16 providers: Anthropic, Codex, Grok Build, OpenAI, Google, xAI, Groq, OpenRouter, Moonshot, Mistral, Cerebras, ZAI, MiniMax, Hugging Face, Gocoon, Local) |
 | Telegram Userbot | [GramJS](https://gram.js.org/) Layer 223 fork (MTProto) |
-| Inline Bot | [Grammy](https://grammy.dev/) (Bot API, for deals) |
+| Inline Bot | [Grammy](https://grammy.dev/) (Bot API, plugin inline cards and callbacks) |
 | Blockchain | [TON SDK](https://github.com/ton-org/ton) (W5R1 wallet) |
 | DeFi | STON.fi SDK, DeDust SDK |
 | Database | [better-sqlite3](https://github.com/WiseLibs/better-sqlite3) with WAL mode |
@@ -486,7 +487,7 @@ The SDK provides namespaced access to core services:
 | Embeddings | [@huggingface/transformers](https://www.npmjs.com/package/@huggingface/transformers) (local ONNX) or Voyage AI |
 | MCP Client | [@modelcontextprotocol/sdk](https://modelcontextprotocol.io/) (stdio + SSE + Streamable HTTP) |
 | WebUI | [Hono](https://hono.dev/) (API) + React + Vite (frontend) |
-| Language | TypeScript 5.7, Node.js 20+ |
+| Language | TypeScript 5.7, Node.js 22.22.2+ LTS |
 
 ### Project Structure
 
@@ -496,13 +497,13 @@ src/
 ├── agent/                  # Core agent runtime
 │   ├── runtime.ts          # Agentic loop (5 iterations, tool calling, masking, compaction)
 │   ├── client.ts           # Multi-provider LLM client
-│   └── tools/              # 135+ built-in tools
+│   └── tools/              # 128 base tools plus 5 optional system tools
 │       ├── register-all.ts # Central tool registration (9 categories)
 │       ├── registry.ts     # Tool registry, scope filtering, provider limits
-│       ├── module-loader.ts    # Built-in module loading (deals + exec)
+│       ├── module-loader.ts    # Built-in module loading (TON Proxy + exec)
 │       ├── plugin-loader.ts    # External plugin discovery, validation, hot-reload
 │       ├── mcp-loader.ts       # MCP client (stdio/SSE), tool discovery, lifecycle
-│       ├── telegram/       # Telegram operations (80 tools)
+│       ├── telegram/       # Telegram operations (83 tools)
 │       ├── ton/            # TON blockchain + jettons + DEX router (15 tools)
 │       ├── stonfi/         # STON.fi DEX (5 tools)
 │       ├── dedust/         # DeDust DEX (5 tools)
@@ -510,18 +511,15 @@ src/
 │       ├── exec/           # System execution — YOLO mode (4 tools)
 │       ├── journal/        # Business journal (3 tools)
 │       └── workspace/      # File operations (6 tools)
-├── deals/                  # Deals module (5 tools, loaded via module-loader)
-│   ├── module.ts           # Module definition + lifecycle
-│   ├── executor.ts         # Deal execution logic
-│   └── strategy-checker.ts # Trading strategy enforcement
-├── bot/                    # Deals inline bot (Grammy + GramJS)
-│   ├── index.ts            # DealBot (Grammy Bot API)
-│   ├── gramjs-bot.ts       # GramJS MTProto for styled buttons
-│   └── services/           # Message builder, styled keyboard, verification
+├── bot/                    # Plugin inline-query and callback routing
+│   ├── inline-router.ts    # Namespaced plugin inline handlers
+│   ├── callback-router.ts  # Nonce-based callback dispatch
+│   ├── gramjs-bot.ts       # Userbot-to-bot inline transport
+│   └── services/           # Shared inline transport
 ├── telegram/               # Telegram integration layer
 │   ├── bridge.ts           # GramJS wrapper (peer cache, message parsing, keyboards)
 │   ├── handlers.ts         # Message routing, rate limiting, ChatQueue, feed storage
-│   ├── admin.ts            # 17 admin commands
+│   ├── admin.ts            # Runtime admin commands
 │   ├── debounce.ts         # Message batching for groups
 │   ├── formatting.ts       # Markdown → Telegram HTML
 │   ├── task-executor.ts    # Scheduled task runner
@@ -543,7 +541,7 @@ src/
 │   ├── manager.ts         # Binary download, start/stop, PID file, health checks
 │   ├── module.ts          # Module lifecycle integration
 │   └── tools.ts           # ton_proxy_status tool
-├── sdk/                    # Plugin SDK (v1.0.0)
+├── sdk/                    # Plugin SDK (v2.1.0)
 │   ├── index.ts            # SDK factory (createPluginSDK, all objects frozen)
 │   ├── ton.ts              # TON service for plugins
 │   ├── telegram.ts         # Telegram service for plugins
@@ -556,7 +554,7 @@ src/
 │   └── loader.ts           # 10 sections: soul + security + strategy + memory + context + ...
 ├── config/                 # Configuration
 │   ├── schema.ts           # Zod schemas + validation
-│   ├── providers.ts        # Multi-provider LLM registry (15 providers)
+│   ├── providers.ts        # Multi-provider LLM registry (16 providers)
 │   └── model-catalog.ts    # Shared model catalog (70+ models across all providers)
 ├── webui/                  # Optional web dashboard
 │   ├── server.ts           # Hono server, auth middleware, static serving
@@ -590,7 +588,7 @@ packages/sdk/               # Published @teleton-agent/sdk
 | **Plugin isolation** | Frozen SDK objects, sanitized config (no API keys), isolated per-plugin databases, `npm ci --ignore-scripts` |
 | **Wallet protection** | File permissions `0o600`, KeyPair cached (single PBKDF2), mnemonic never exposed to plugins |
 | **Memory protection** | Memory writes blocked in group chats to prevent poisoning |
-| **Payment security** | `INSERT OR IGNORE` on tx hashes prevents double-spend, atomic status transitions prevent race conditions |
+| **Payment security** | Verified payment hashes are recorded with `INSERT OR IGNORE`, preventing replay of the same transaction |
 | **Exec audit** | All YOLO mode commands logged to `exec_audit` table with user, command, output, and timestamps |
 | **Pino redaction** | Structured logging with automatic redaction of apiKey, password, secret, token, mnemonic fields |
 | **Tool access control** | Per-tool access level (all, allow-list, admin, off), DM vs group gated by global policies, per-group module permissions, all runtime-configurable |

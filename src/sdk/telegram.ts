@@ -3,9 +3,10 @@ import { isUserBridge } from "../telegram/bridge-guards.js";
 import type { TelegramSDK, TelegramUser, SimpleMessage, PluginLogger } from "@teleton-agent/sdk";
 import { PluginSDKError } from "@teleton-agent/sdk";
 import { getErrorMessage } from "../utils/errors.js";
-import { requireBridge as requireBridgeUtil } from "./telegram-utils.js";
+import { randomLong } from "../utils/gramjs-bigint.js";
 import { createTelegramMessagesSDK } from "./telegram-messages.js";
 import { createTelegramSocialSDK } from "./telegram-social.js";
+import { createTelegramRuntime } from "./telegram/runtime.js";
 
 export function createTelegramSDK(
   bridge: ITelegramBridge,
@@ -13,19 +14,7 @@ export function createTelegramSDK(
   mode?: "user" | "bot"
 ): TelegramSDK {
   const telegramMode = mode ?? bridge.getMode();
-
-  function requireBridge(): void {
-    requireBridgeUtil(bridge);
-  }
-
-  function requireUserMode(methodName: string): void {
-    if (telegramMode === "bot") {
-      throw new PluginSDKError(
-        `sdk.telegram.${methodName}() requires user mode`,
-        "OPERATION_FAILED"
-      );
-    }
-  }
+  const { requireBridge, requireUserMode, userOp } = createTelegramRuntime(bridge, telegramMode);
 
   return {
     getMode() {
@@ -114,6 +103,70 @@ export function createTelegramSDK(
       }
     },
 
+    async sendInlineBotResult(chatId, botUsername, query, index = 0) {
+      const normalizedBot = botUsername.trim().replace(/^@/, "");
+      const normalizedQuery = query.trim();
+      if (!normalizedBot) {
+        throw new PluginSDKError("Inline bot username is required", "OPERATION_FAILED");
+      }
+      if (!normalizedQuery) {
+        throw new PluginSDKError("Inline query is required", "OPERATION_FAILED");
+      }
+      if (!Number.isInteger(index) || index < 0 || index > 49) {
+        throw new PluginSDKError(
+          "Inline result index must be an integer from 0 to 49",
+          "OPERATION_FAILED"
+        );
+      }
+
+      return userOp("sendInlineBotResult", "send inline bot result", async ({ client, Api }) => {
+        const [bot, peer] = await Promise.all([
+          client.getEntity(normalizedBot),
+          client.getInputEntity(chatId),
+        ]);
+        const results = await client.invoke(
+          new Api.messages.GetInlineBotResults({
+            bot,
+            peer,
+            query: normalizedQuery,
+            offset: "",
+          })
+        );
+        const available = results.results ?? [];
+        if (available.length === 0) {
+          throw new PluginSDKError(
+            `No inline results found for "${normalizedQuery}"`,
+            "OPERATION_FAILED"
+          );
+        }
+        if (index >= available.length) {
+          throw new PluginSDKError(
+            `Only ${available.length} inline results available; index ${index} is out of range`,
+            "OPERATION_FAILED"
+          );
+        }
+
+        const chosen = available[index];
+        await client.invoke(
+          new Api.messages.SendInlineBotResult({
+            peer,
+            queryId: results.queryId,
+            id: chosen.id,
+            randomId: randomLong(),
+          })
+        );
+
+        return {
+          query: normalizedQuery,
+          sentIndex: index,
+          totalResults: available.length,
+          title: chosen.title ?? null,
+          description: chosen.description ?? null,
+          type: chosen.type ?? null,
+        };
+      });
+    },
+
     getMe(): TelegramUser | null {
       requireUserMode("getMe");
       try {
@@ -133,17 +186,6 @@ export function createTelegramSDK(
 
     isAvailable(): boolean {
       return bridge.isAvailable();
-    },
-
-    getRawClient(): unknown | null {
-      requireUserMode("getRawClient");
-      log.warn("getRawClient() called — this bypasses SDK sandbox guarantees");
-      if (!bridge.isAvailable()) return null;
-      try {
-        return isUserBridge(bridge) ? bridge.getClient() : null;
-      } catch {
-        return null;
-      }
     },
 
     // Spread extended methods from sub-modules

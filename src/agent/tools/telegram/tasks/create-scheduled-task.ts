@@ -248,10 +248,13 @@ export const telegramCreateScheduledTaskExecutor: ToolExecutor<CreateScheduledTa
     const task = taskStore.createTask({
       description,
       priority: priority ?? 0,
-      createdBy: "agent",
+      createdBy: `telegram:${context.senderId}`,
       scheduledFor: scheduleTimestamp ? new Date(scheduleTimestamp * 1000) : undefined,
       payload,
       reason,
+      originSenderId: context.senderId,
+      originChatId: context.chatId,
+      originIsGroup: context.isGroup,
       dependsOn,
     });
 

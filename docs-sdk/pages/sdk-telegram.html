@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>sdk.telegram, Telegram - Teleton Agent Documentation</title>
-    <meta name="description" content="Complete reference for the 52 Telegram methods in the Teleton Plugin SDK: messaging, media, moderation, stars, gifts, collectibles, and more.">
+    <meta name="description" content="Complete reference for the 51 Telegram methods in the Teleton Plugin SDK: messaging, media, moderation, stars, gifts, collectibles, and more.">
     <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg">
     <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
     <link href="https://cdn.jsdelivr.net/npm/geist@1.3.1/dist/fonts/geist-sans/style.min.css" rel="stylesheet">
@@ -29,7 +29,7 @@
         <aside class="sidebar" id="sidebar"><nav class="sidebar-nav">
             <div class="nav-section"><div class="nav-section-title">Start Here</div><ul class="nav-list"><div class="nav-list-inner"><li><a href="/index.html" class="nav-link">Introduction</a></li><li><a href="installation.html" class="nav-link">Installation</a></li><li><a href="quickstart.html" class="nav-link">Quick Start</a></li><li><a href="configuration.html" class="nav-link">Configuration</a></li></div></ul></div>
 <div class="nav-section"><div class="nav-section-title">Understand</div><ul class="nav-list"><div class="nav-list-inner"><li><a href="architecture.html" class="nav-link">Architecture</a></li><li><a href="agentic-loop.html" class="nav-link">Agentic Loop</a></li><li><a href="memory-system.html" class="nav-link">Memory System</a></li><li><a href="security.html" class="nav-link">Security</a></li></div></ul></div>
-<div class="nav-section"><div class="nav-section-title">Tools</div><ul class="nav-list"><div class="nav-list-inner"><li><a href="tools-telegram.html" class="nav-link">Telegram (76)</a></li><li><a href="tools-ton.html" class="nav-link">TON Blockchain (15)</a></li><li><a href="tools-dex.html" class="nav-link">DEX Trading (10)</a></li><li><a href="tools-dns.html" class="nav-link">DNS &amp; Domains (8)</a></li><li><a href="tools-deals.html" class="nav-link">Deals &amp; Escrow (5)</a></li><li><a href="tools-other.html" class="nav-link">Utilities</a></li></div></ul></div>
+<div class="nav-section"><div class="nav-section-title">Tools</div><ul class="nav-list"><div class="nav-list-inner"><li><a href="tools-telegram.html" class="nav-link">Telegram (83)</a></li><li><a href="tools-ton.html" class="nav-link">TON Blockchain (15)</a></li><li><a href="tools-dex.html" class="nav-link">DEX Trading (10)</a></li><li><a href="tools-dns.html" class="nav-link">DNS &amp; Domains (8)</a></li><li><a href="tools-other.html" class="nav-link">Utilities</a></li></div></ul></div>
 <div class="nav-section"><div class="nav-section-title">Build Plugins</div><ul class="nav-list"><div class="nav-list-inner"><li><a href="plugin-sdk.html" class="nav-link">Plugin SDK</a></li></div></ul></div>
 <div class="nav-section"><div class="nav-section-title">SDK Reference</div><ul class="nav-list"><div class="nav-list-inner"><li><a href="sdk-overview.html" class="nav-link">Overview</a></li><li><a href="sdk-ton.html" class="nav-link">TON Blockchain</a></li><li><a href="sdk-dex.html" class="nav-link">DEX Trading</a></li><li><a href="sdk-dns.html" class="nav-link">DNS &amp; Domains</a></li><li><a href="sdk-telegram.html" class="nav-link active">Telegram</a></li><li><a href="sdk-bot.html" class="nav-link">Bot SDK</a></li><li><a href="sdk-utilities.html" class="nav-link">Utilities</a></li><li><a href="sdk-errors.html" class="nav-link">Error Handling</a></li><li><a href="tutorial-payment-bot.html" class="nav-link">Tutorial: Payment Bot</a></li><li><a href="tutorial-dex-bot.html" class="nav-link">Tutorial: DEX Bot</a></li><li><a href="tutorial-inline-bot.html" class="nav-link">Tutorial: Inline Bot</a></li></div></ul></div>
 <div class="nav-section"><div class="nav-section-title">Deploy &amp; Manage</div><ul class="nav-list"><div class="nav-list-inner"><li><a href="deploy-docker.html" class="nav-link">Docker</a></li><li><a href="cli-reference.html" class="nav-link">CLI Reference</a></li></div></ul></div>
@@ -37,7 +37,7 @@
         <main class="main"><article class="content">
 
             <h1>sdk.telegram: Telegram</h1>
-            <p class="lead">Complete reference for the 52 Telegram methods: messaging, media, moderation, stars, gifts, collectibles, and more. Access via <code>sdk.telegram</code> in any plugin tool executor or lifecycle hook.</p>
+            <p class="lead">Complete reference for the 51 Telegram methods: messaging, media, moderation, stars, gifts, collectibles, and more. Access via <code>sdk.telegram</code> in any plugin tool executor or lifecycle hook.</p>
 
             <!-- ────────────────────────────────────────────────── -->
             <section class="section" id="quick-example">
@@ -642,46 +642,30 @@ if (storyId) {
             <!-- ────────────────────────────────────────────────── -->
             <section class="section" id="advanced">
                 <h2>Advanced (3 methods)</h2>
-                <p>Low-level utilities: typing indicator, raw GramJS client access, and connection status.</p>
+                <p>Runtime-mode, connection-status, and typing-indicator utilities.</p>
 
                 <div class="table-wrapper"><table>
                     <thead><tr><th>Method</th><th>Returns</th><th>Description</th></tr></thead>
                     <tbody>
+                        <tr><td><code>getMode()</code></td><td><code>"user" | "bot"</code></td><td>Return the active Telegram runtime mode.</td></tr>
                         <tr><td><code>setTyping(chatId)</code></td><td><code>Promise&lt;void&gt;</code></td><td>Show "typing..." indicator in a chat. Automatically expires after ~5 seconds.</td></tr>
-                        <tr><td><code>getRawClient()</code></td><td><code>unknown | null</code></td><td>Get the raw GramJS <code>TelegramClient</code> for advanced MTProto operations. Returns <code>null</code> if not connected.</td></tr>
                         <tr><td><code>isAvailable()</code></td><td><code>boolean</code></td><td>Check if the Telegram bridge is connected and ready.</td></tr>
                     </tbody>
                 </table></div>
 
                 <h3>Signatures</h3>
-                <div class="code-block"><div class="code-header"><span>Advanced method signatures</span></div><pre><code class="language-typescript">setTyping(chatId: string): Promise&lt;void&gt;
-getRawClient(): unknown | null
+                <div class="code-block"><div class="code-header"><span>Advanced method signatures</span></div><pre><code class="language-typescript">getMode(): "user" | "bot"
+setTyping(chatId: string): Promise&lt;void&gt;
 isAvailable(): boolean</code></pre></div>
 
-                <p><code>getRawClient()</code> returns the underlying GramJS <code>TelegramClient</code> instance typed as <code>unknown</code>. Cast it in your plugin to use MTProto APIs not covered by the SDK. This is an escape hatch: prefer the typed SDK methods when possible.</p>
-
-                <div class="code-block"><div class="code-header"><span>Example: raw client usage</span></div><pre><code class="language-typescript">// Always check availability first
+                <div class="code-block"><div class="code-header"><span>Example: connection and typing</span></div><pre><code class="language-typescript">// Always check availability first
 if (!sdk.telegram.isAvailable()) {
   return { success: false, error: "Telegram not connected" };
 }
 
 // Show typing while processing
 await sdk.telegram.setTyping(chatId);
-
-// Use raw client for inline bot results
-const client = sdk.telegram.getRawClient();
-if (client) {
-  const { Api } = require("telegram");
-  const results = await (client as any).invoke(
-    new Api.messages.GetInlineBotResults({
-      bot: "@pic",
-      query: "sunset",
-      peer: chatId,
-      offset: "",
-    })
-  );
-  console.log(`Got ${results.results.length} inline results`);
-}</code></pre></div>
+return { success: true };</code></pre></div>
             </section>
 
             <!-- ────────────────────────────────────────────────── -->
@@ -966,8 +950,8 @@ if (client) {
 
                 <h3 id="type-startcontext">StartContext</h3>
                 <div class="code-block"><div class="code-header"><span>StartContext</span></div><pre><code class="language-typescript">interface StartContext {
-  /** Telegram bridge for advanced operations */
-  bridge: unknown;
+  /** Capability-scoped SDK for background work */
+  sdk: PluginSDK;
   /** Plugin's isolated SQLite database (null if unavailable) */
   db: unknown;
   /** Sanitized application config (no API keys) */
@@ -1036,8 +1020,8 @@ if (client) {
                         <tr><td>47</td><td><code>getUniqueGiftValue(slug)</code></td><td><code>Promise&lt;GiftValue | null&gt;</code></td><td>Collectibles</td></tr>
                         <tr><td>48</td><td><code>sendGiftOffer(userId, giftSlug, price, opts?)</code></td><td><code>Promise&lt;void&gt;</code></td><td>Collectibles</td></tr>
                         <tr><td>49</td><td><code>setTyping(chatId)</code></td><td><code>Promise&lt;void&gt;</code></td><td>Advanced</td></tr>
-                        <tr><td>50</td><td><code>getRawClient()</code></td><td><code>unknown | null</code></td><td>Advanced</td></tr>
-                        <tr><td>51</td><td><code>isAvailable()</code></td><td><code>boolean</code></td><td>Advanced</td></tr>
+                        <tr><td>50</td><td><code>isAvailable()</code></td><td><code>boolean</code></td><td>Advanced</td></tr>
+                        <tr><td>51</td><td><code>getMode()</code></td><td><code>"user" | "bot"</code></td><td>Advanced</td></tr>
                     </tbody>
                 </table></div>
             </section>

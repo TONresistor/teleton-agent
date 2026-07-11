@@ -1,23 +1,7 @@
-export type SupportedProvider =
-  | "anthropic"
-  | "codex"
-  | "openai"
-  | "google"
-  | "xai"
-  | "groq"
-  | "openrouter"
-  | "moonshot"
-  | "mistral"
-  | "cerebras"
-  | "zai"
-  | "minimax"
-  | "huggingface"
-  | "gocoon"
-  | "local";
-
 export interface ProviderMetadata {
-  id: SupportedProvider;
+  id: string;
   displayName: string;
+  credentialMode: "api-key" | "cli-auto" | "none";
   envVar: string;
   keyPrefix: string | null;
   keyHint: string;
@@ -28,10 +12,11 @@ export interface ProviderMetadata {
   piAiProvider: string;
 }
 
-const PROVIDER_REGISTRY: Record<SupportedProvider, ProviderMetadata> = {
+const PROVIDER_REGISTRY = {
   codex: {
     id: "codex",
     displayName: "Codex (Auto)",
+    credentialMode: "cli-auto",
     envVar: "OPENAI_API_KEY",
     keyPrefix: null,
     keyHint: "Auto-detected from Codex CLI",
@@ -41,9 +26,23 @@ const PROVIDER_REGISTRY: Record<SupportedProvider, ProviderMetadata> = {
     toolLimit: 128,
     piAiProvider: "openai-codex",
   },
+  "grok-build": {
+    id: "grok-build",
+    displayName: "Grok Build (Auto)",
+    credentialMode: "cli-auto",
+    envVar: "",
+    keyPrefix: null,
+    keyHint: "Auto-detected from Grok CLI",
+    consoleUrl: "https://x.ai/cli",
+    defaultModel: "grok-build",
+    utilityModel: "grok-build",
+    toolLimit: 128,
+    piAiProvider: "grok-build",
+  },
   zai: {
     id: "zai",
     displayName: "ZAI (Zhipu)",
+    credentialMode: "api-key",
     envVar: "ZAI_API_KEY",
     keyPrefix: null,
     keyHint: "...",
@@ -56,6 +55,7 @@ const PROVIDER_REGISTRY: Record<SupportedProvider, ProviderMetadata> = {
   anthropic: {
     id: "anthropic",
     displayName: "Anthropic (Claude)",
+    credentialMode: "api-key",
     envVar: "ANTHROPIC_API_KEY",
     keyPrefix: "sk-ant-",
     keyHint: "sk-ant-api03-...",
@@ -68,6 +68,7 @@ const PROVIDER_REGISTRY: Record<SupportedProvider, ProviderMetadata> = {
   openai: {
     id: "openai",
     displayName: "OpenAI (GPT-5.5)",
+    credentialMode: "api-key",
     envVar: "OPENAI_API_KEY",
     keyPrefix: "sk-",
     keyHint: "sk-proj-...",
@@ -80,6 +81,7 @@ const PROVIDER_REGISTRY: Record<SupportedProvider, ProviderMetadata> = {
   google: {
     id: "google",
     displayName: "Google (Gemini)",
+    credentialMode: "api-key",
     envVar: "GOOGLE_API_KEY",
     keyPrefix: null,
     keyHint: "AIza...",
@@ -92,6 +94,7 @@ const PROVIDER_REGISTRY: Record<SupportedProvider, ProviderMetadata> = {
   xai: {
     id: "xai",
     displayName: "xAI (Grok)",
+    credentialMode: "api-key",
     envVar: "XAI_API_KEY",
     keyPrefix: "xai-",
     keyHint: "xai-...",
@@ -104,6 +107,7 @@ const PROVIDER_REGISTRY: Record<SupportedProvider, ProviderMetadata> = {
   groq: {
     id: "groq",
     displayName: "Groq",
+    credentialMode: "api-key",
     envVar: "GROQ_API_KEY",
     keyPrefix: "gsk_",
     keyHint: "gsk_...",
@@ -116,6 +120,7 @@ const PROVIDER_REGISTRY: Record<SupportedProvider, ProviderMetadata> = {
   openrouter: {
     id: "openrouter",
     displayName: "OpenRouter",
+    credentialMode: "api-key",
     envVar: "OPENROUTER_API_KEY",
     keyPrefix: "sk-or-",
     keyHint: "sk-or-v1-...",
@@ -128,6 +133,7 @@ const PROVIDER_REGISTRY: Record<SupportedProvider, ProviderMetadata> = {
   moonshot: {
     id: "moonshot",
     displayName: "Moonshot (Kimi)",
+    credentialMode: "api-key",
     envVar: "MOONSHOT_API_KEY",
     keyPrefix: "sk-",
     keyHint: "sk-...",
@@ -140,6 +146,7 @@ const PROVIDER_REGISTRY: Record<SupportedProvider, ProviderMetadata> = {
   mistral: {
     id: "mistral",
     displayName: "Mistral AI",
+    credentialMode: "api-key",
     envVar: "MISTRAL_API_KEY",
     keyPrefix: null,
     keyHint: "...",
@@ -152,6 +159,7 @@ const PROVIDER_REGISTRY: Record<SupportedProvider, ProviderMetadata> = {
   cerebras: {
     id: "cerebras",
     displayName: "Cerebras",
+    credentialMode: "api-key",
     envVar: "CEREBRAS_API_KEY",
     keyPrefix: "csk-",
     keyHint: "csk-...",
@@ -164,6 +172,7 @@ const PROVIDER_REGISTRY: Record<SupportedProvider, ProviderMetadata> = {
   minimax: {
     id: "minimax",
     displayName: "MiniMax",
+    credentialMode: "api-key",
     envVar: "MINIMAX_API_KEY",
     keyPrefix: null,
     keyHint: "Save your key — shown only once!",
@@ -176,6 +185,7 @@ const PROVIDER_REGISTRY: Record<SupportedProvider, ProviderMetadata> = {
   huggingface: {
     id: "huggingface",
     displayName: "HuggingFace",
+    credentialMode: "api-key",
     envVar: "HF_TOKEN",
     keyPrefix: "hf_",
     keyHint: "hf_...",
@@ -188,6 +198,7 @@ const PROVIDER_REGISTRY: Record<SupportedProvider, ProviderMetadata> = {
   gocoon: {
     id: "gocoon",
     displayName: "Gocoon (Decentralized, TON)",
+    credentialMode: "none",
     envVar: "",
     keyPrefix: null,
     keyHint: "No API key, pays in TON",
@@ -200,6 +211,7 @@ const PROVIDER_REGISTRY: Record<SupportedProvider, ProviderMetadata> = {
   local: {
     id: "local",
     displayName: "Local (Ollama, vLLM, LM Studio...)",
+    credentialMode: "none",
     envVar: "",
     keyPrefix: null,
     keyHint: "No API key needed",
@@ -209,9 +221,12 @@ const PROVIDER_REGISTRY: Record<SupportedProvider, ProviderMetadata> = {
     toolLimit: 128,
     piAiProvider: "local",
   },
-};
+} as const satisfies Record<string, ProviderMetadata>;
 
-export function getProviderMetadata(provider: SupportedProvider): ProviderMetadata {
+export type SupportedProvider = keyof typeof PROVIDER_REGISTRY;
+type RegisteredProviderMetadata = (typeof PROVIDER_REGISTRY)[SupportedProvider];
+
+export function getProviderMetadata(provider: SupportedProvider): RegisteredProviderMetadata {
   const meta = PROVIDER_REGISTRY[provider];
   if (!meta) {
     throw new Error(`Unknown provider: ${provider}`);
@@ -219,8 +234,12 @@ export function getProviderMetadata(provider: SupportedProvider): ProviderMetada
   return meta;
 }
 
-export function getSupportedProviders(): ProviderMetadata[] {
+export function getSupportedProviders(): RegisteredProviderMetadata[] {
   return Object.values(PROVIDER_REGISTRY);
+}
+
+export function providerNeedsApiKey(provider: SupportedProvider): boolean {
+  return getProviderMetadata(provider).credentialMode === "api-key";
 }
 
 /**
@@ -235,7 +254,7 @@ export const SUPPORTED_PROVIDER_IDS = Object.keys(PROVIDER_REGISTRY) as [
 export function validateApiKeyFormat(provider: SupportedProvider, key: string): string | undefined {
   const meta = PROVIDER_REGISTRY[provider];
   if (!meta) return `Unknown provider: ${provider}`;
-  if (provider === "gocoon" || provider === "local" || provider === "codex") return undefined;
+  if (!providerNeedsApiKey(provider)) return undefined;
   if (!key || key.trim().length === 0) return "API key is required";
   if (meta.keyPrefix && !key.startsWith(meta.keyPrefix)) {
     return `Invalid format (should start with ${meta.keyPrefix})`;

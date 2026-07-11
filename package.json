@@ -1,6 +1,6 @@
 {
   "name": "teleton",
-  "version": "0.9.0",
+  "version": "0.10.0",
   "workspaces": [
     "packages/*"
   ],
@@ -37,6 +37,7 @@
   "scripts": {
     "build": "npm run build:sdk && npm run build:backend && npm run build:web",
     "build:sdk": "npm run build -w @teleton-agent/sdk",
+    "check:sdk-package": "npm run build:sdk && node scripts/check-sdk-package.mjs",
     "build:backend": "tsup --config tsup.config.ts",
     "build:web": "cd web && npm run build",
     "prestart": "npm run build",
@@ -53,20 +54,22 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
+    "test:sdk:coverage": "vitest run --config vitest.sdk.config.ts --coverage",
     "typecheck": "tsc --noEmit",
     "knip": "knip",
     "circular": "madge --circular --no-spinner --no-color --extensions ts --ts-config tsconfig.json src/",
     "dupcheck": "jscpd --config .jscpd.json src/",
     "audit:ci": "audit-ci --config ./audit-ci.jsonc",
+    "check:runtime": "node scripts/check-runtime-contract.mjs",
     "prepublishOnly": "npm run build",
     "prepare": "husky"
   },
   "dependencies": {
     "@dedust/sdk": "^0.8.7",
+    "@earendil-works/pi-ai": "^0.80.6",
     "@hono/node-server": "^2.0.4",
     "@huggingface/transformers": "^3.8.1",
     "@inquirer/prompts": "^8.3.2",
-    "@mariozechner/pi-ai": "^0.73.1",
     "@modelcontextprotocol/sdk": "^1.28.0",
     "@sinclair/typebox": "^0.34.48",
     "@tavily/core": "^0.7.2",
@@ -92,7 +95,8 @@
   "overrides": {
     "@aws-sdk/xml-builder": "3.972.19",
     "fast-xml-parser": "5.7.1",
-    "axios": ">=1.15.2"
+    "axios": ">=1.15.2",
+    "esbuild": "0.28.1"
   },
   "devDependencies": {
     "@ston-fi/api": "^0.32.0",
@@ -116,7 +120,7 @@
     "vitest": "^4.1.1"
   },
   "engines": {
-    "node": ">=20.0.0"
+    "node": "^22.22.2 || ^24.15.0 || >=26.0.0"
   },
   "lint-staged": {
     "src/**/*.ts": [

@@ -6,7 +6,6 @@ import { dirname } from "path";
 import { MAX_WRITE_SIZE } from "../../../constants/limits.js";
 import type { Tool, ToolExecutor } from "../types.js";
 import { validateWritePath, MEMORY_SCAN_FILES } from "../../../workspace/index.js";
-import { withToolErrors } from "../wrap.js";
 import { scanMemoryContent } from "../../../utils/memory-guard.js";
 
 interface WorkspaceWriteParams {
@@ -48,65 +47,64 @@ export const workspaceWriteTool: Tool = {
   }),
 };
 
-export const workspaceWriteExecutor: ToolExecutor<WorkspaceWriteParams> =
-  withToolErrors<WorkspaceWriteParams>(async (params) => {
-    const { path, content, encoding = "utf-8", append = false, createDirs = true } = params;
+export const workspaceWriteExecutor: ToolExecutor<WorkspaceWriteParams> = async (params) => {
+  const { path, content, encoding = "utf-8", append = false, createDirs = true } = params;
 
-    // Validate the path (no extension enforcement - fix from audit)
-    const validated = validateWritePath(path);
+  // Validate the path (no extension enforcement - fix from audit)
+  const validated = validateWritePath(path);
 
-    // Create parent directories if needed
-    const parentDir = dirname(validated.absolutePath);
-    if (createDirs && !existsSync(parentDir)) {
-      mkdirSync(parentDir, { recursive: true });
-    }
+  // Create parent directories if needed
+  const parentDir = dirname(validated.absolutePath);
+  if (createDirs && !existsSync(parentDir)) {
+    mkdirSync(parentDir, { recursive: true });
+  }
 
-    // SECURITY: Scan memory-sensitive files (and anything under memory/) for injection
-    const isMemoryFile =
-      MEMORY_SCAN_FILES.includes(validated.relativePath) ||
-      validated.relativePath.startsWith("memory/");
-    if (isMemoryFile && encoding !== "base64") {
-      const scan = scanMemoryContent(content);
-      if (!scan.safe) {
-        return {
-          success: false,
-          error: `Write blocked: suspicious content detected in ${validated.relativePath} (${scan.threats.join(", ")}).`,
-        };
-      }
-    }
-
-    // Prepare content
-    let writeContent: string | Buffer;
-    if (encoding === "base64") {
-      writeContent = Buffer.from(content, "base64");
-    } else {
-      writeContent = content;
-    }
-
-    // SECURITY: Enforce file size limits to prevent DoS attacks
-    const contentSize = Buffer.byteLength(writeContent);
-    if (contentSize > MAX_WRITE_SIZE) {
+  // SECURITY: Scan memory-sensitive files (and anything under memory/) for injection
+  const isMemoryFile =
+    MEMORY_SCAN_FILES.includes(validated.relativePath) ||
+    validated.relativePath.startsWith("memory/");
+  if (isMemoryFile && encoding !== "base64") {
+    const scan = scanMemoryContent(content);
+    if (!scan.safe) {
       return {
         success: false,
-        error: `File too large: ${contentSize} bytes exceeds maximum write size of ${MAX_WRITE_SIZE} bytes (50 MB)`,
+        error: `Write blocked: suspicious content detected in ${validated.relativePath} (${scan.threats.join(", ")}).`,
       };
     }
+  }
 
-    // Write or append
-    if (append && validated.exists) {
-      appendFileSync(validated.absolutePath, writeContent, { mode: 0o600 });
-    } else {
-      writeFileSync(validated.absolutePath, writeContent, { mode: 0o600 });
-    }
+  // Prepare content
+  let writeContent: string | Buffer;
+  if (encoding === "base64") {
+    writeContent = Buffer.from(content, "base64");
+  } else {
+    writeContent = content;
+  }
 
+  // SECURITY: Enforce file size limits to prevent DoS attacks
+  const contentSize = Buffer.byteLength(writeContent);
+  if (contentSize > MAX_WRITE_SIZE) {
     return {
-      success: true,
-      data: {
-        path: validated.relativePath,
-        absolutePath: validated.absolutePath,
-        size: Buffer.byteLength(writeContent),
-        append,
-        message: `File ${append ? "appended" : "written"} successfully`,
-      },
+      success: false,
+      error: `File too large: ${contentSize} bytes exceeds maximum write size of ${MAX_WRITE_SIZE} bytes (50 MB)`,
     };
-  });
+  }
+
+  // Write or append
+  if (append && validated.exists) {
+    appendFileSync(validated.absolutePath, writeContent, { mode: 0o600 });
+  } else {
+    writeFileSync(validated.absolutePath, writeContent, { mode: 0o600 });
+  }
+
+  return {
+    success: true,
+    data: {
+      path: validated.relativePath,
+      absolutePath: validated.absolutePath,
+      size: Buffer.byteLength(writeContent),
+      append,
+      message: `File ${append ? "appended" : "written"} successfully`,
+    },
+  };
+};

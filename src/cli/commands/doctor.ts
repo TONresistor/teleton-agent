@@ -9,7 +9,14 @@ import {
   type SupportedProvider,
 } from "../../config/providers.js";
 import { getErrorMessage } from "../../utils/errors.js";
+import { SUPPORTED_NODE_RANGE, isNodeVersionSupported } from "../../constants/runtime.js";
 import { GREEN, YELLOW, RED } from "../prompts.js";
+import { getCodexApiKey, isCodexTokenValid } from "../../providers/codex-credentials.js";
+import {
+  getGrokBuildCliVersion,
+  getGrokBuildApiKey,
+  isGrokBuildTokenValid,
+} from "../../providers/grok-build-credentials.js";
 
 interface CheckResult {
   name: string;
@@ -140,12 +147,42 @@ async function checkApiKey(workspaceDir: string): Promise<CheckResult> {
       };
     }
 
-    if (provider === "gocoon" || provider === "local") {
+    if (meta.credentialMode === "none") {
       return {
         name: `${meta.displayName}`,
         status: "ok",
         message: "No API key needed",
       };
+    }
+
+    if (meta.credentialMode === "cli-auto") {
+      try {
+        if (provider === "codex") {
+          getCodexApiKey();
+          return {
+            name: meta.displayName,
+            status: isCodexTokenValid() ? "ok" : "warn",
+            message: isCodexTokenValid() ? "CLI credentials detected" : "CLI token expired",
+          };
+        }
+
+        const cliVersion = getGrokBuildCliVersion();
+        getGrokBuildApiKey();
+        const tokenValid = isGrokBuildTokenValid();
+        return {
+          name: meta.displayName,
+          status: tokenValid ? "ok" : "warn",
+          message: tokenValid
+            ? `Grok CLI ${cliVersion}; credentials detected`
+            : `Grok CLI ${cliVersion}; token expired (run grok login)`,
+        };
+      } catch (error) {
+        return {
+          name: meta.displayName,
+          status: "error",
+          message: getErrorMessage(error),
+        };
+      }
     }
 
     if (!apiKey) {
@@ -224,7 +261,7 @@ async function checkWallet(workspaceDir: string): Promise<CheckResult> {
 }
 
 async function checkSoul(workspaceDir: string): Promise<CheckResult> {
-  const soulPath = join(workspaceDir, "SOUL.md");
+  const soulPath = join(workspaceDir, "workspace", "SOUL.md");
 
   if (!existsSync(soulPath)) {
     return {
@@ -397,13 +434,12 @@ async function checkAdmins(workspaceDir: string): Promise<CheckResult> {
 
 async function checkNodeVersion(): Promise<CheckResult> {
   const version = process.version;
-  const major = parseInt(version.slice(1).split(".")[0]);
 
-  if (major < 20) {
+  if (!isNodeVersionSupported(version)) {
     return {
       name: "Node.js",
       status: "error",
-      message: `${version} (requires >= 20.0.0)`,
+      message: `${version} (requires ${SUPPORTED_NODE_RANGE})`,
     };
   }
 
@@ -424,7 +460,7 @@ ${blue}  ┌──────────────────────�
   └─────────────────────────────────────────────────────────────┘${reset}
 `);
 
-  console.log(`  Workspace: ${workspaceDir}\n`);
+  console.log(`  Data directory: ${workspaceDir}\n`);
 
   // Run all checks
   const results: CheckResult[] = [];

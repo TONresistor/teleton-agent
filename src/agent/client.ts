@@ -4,16 +4,18 @@ import {
   type Context,
   type AssistantMessage,
   type Message,
-  type Tool,
-  type ProviderStreamOptions,
-} from "@mariozechner/pi-ai";
+} from "@earendil-works/pi-ai/compat";
 import type { AgentConfig } from "../config/schema.js";
 import { appendToTranscript, readTranscript } from "../session/transcript.js";
 import type { SupportedProvider } from "../config/providers.js";
-import { sanitizeToolsForGemini } from "./schema-sanitizer.js";
 import { createLogger } from "../utils/logger.js";
-import { getCodexApiKey, refreshCodexApiKey } from "../providers/codex-credentials.js";
-import { getProviderModel } from "../providers/model-resolver.js";
+import { refreshCodexApiKey } from "../providers/codex-credentials.js";
+import { refreshGrokBuildApiKey } from "../providers/grok-build-credentials.js";
+import {
+  prepareModelRequest,
+  type ModelRequestOptions,
+  type PreparedModelRequest,
+} from "./model-request.js";
 
 // Model resolution + provider model registration live in the neutral providers/
 // layer so non-agent consumers (e.g. memory) can resolve models without importing
@@ -24,6 +26,7 @@ export {
   getProviderModel,
   getUtilityModel,
 } from "../providers/model-resolver.js";
+export { getEffectiveApiKey } from "./model-request.js";
 
 const log = createLogger("LLM");
 
@@ -34,26 +37,13 @@ function isUnauthorizedError(errorMessage?: string): boolean {
 }
 
 /** Providers whose credentials can be refreshed once on a 401, then the call retried. */
-const RETRY_401_PROVIDERS: { provider: string; refresh: () => Promise<string | null> }[] = [
-  { provider: "codex", refresh: refreshCodexApiKey },
-];
+const CREDENTIAL_REFRESHERS: Partial<Record<SupportedProvider, () => Promise<string | null>>> = {
+  codex: refreshCodexApiKey,
+  "grok-build": refreshGrokBuildApiKey,
+};
 
-/** Resolve the effective API key for a provider (local/gocoon need no real key) */
-export function getEffectiveApiKey(provider: string, rawKey: string): string {
-  if (provider === "local") return "local";
-  if (provider === "gocoon") return "gocoon";
-  if (provider === "codex") return getCodexApiKey(rawKey);
-  return rawKey;
-}
-
-export interface ChatOptions {
-  systemPrompt?: string;
-  context: Context;
-  sessionId?: string;
-  maxTokens?: number;
-  temperature?: number;
+export interface ChatOptions extends ModelRequestOptions {
   persistTranscript?: boolean;
-  tools?: Tool[];
 }
 
 export interface ChatResponse {
@@ -95,47 +85,31 @@ function finalizeResponse(
   return { message: response, text, context: updatedContext };
 }
 
+async function retryAfterCredentialRefresh(
+  request: PreparedModelRequest,
+  response: AssistantMessage
+): Promise<AssistantMessage> {
+  const refresh = CREDENTIAL_REFRESHERS[request.provider];
+  if (!refresh || response.stopReason !== "error" || !isUnauthorizedError(response.errorMessage)) {
+    return response;
+  }
+
+  log.warn(`${request.provider} token rejected (401), refreshing credentials and retrying...`);
+  const refreshedKey = await refresh();
+  if (!refreshedKey) return response;
+
+  request.options.apiKey = refreshedKey;
+  return complete(request.model, request.context, request.options);
+}
+
 export async function chatWithContext(
   config: AgentConfig,
   options: ChatOptions
 ): Promise<ChatResponse> {
-  const provider = (config.provider || "anthropic") as SupportedProvider;
-  const model = getProviderModel(provider, config.model);
-  const tools =
-    provider === "google" && options.tools ? sanitizeToolsForGemini(options.tools) : options.tools;
-
-  const systemPrompt = options.systemPrompt || options.context.systemPrompt || "";
-
-  const context: Context = {
-    ...options.context,
-    systemPrompt,
-    tools,
-  };
-
-  const temperature = options.temperature ?? config.temperature;
-
-  const completeOptions: Record<string, unknown> = {
-    apiKey: getEffectiveApiKey(provider, config.api_key),
-    maxTokens: options.maxTokens ?? config.max_tokens,
-    ...(provider !== "codex" && { temperature }),
-    sessionId: options.sessionId,
-    cacheRetention: "long",
-  };
-
-  let response = await complete(model, context, completeOptions as ProviderStreamOptions);
-
-  // Refreshable providers: retry once on 401/Unauthorized by refreshing credentials
-  const retry401 = RETRY_401_PROVIDERS.find((e) => e.provider === provider);
-  if (retry401 && response.stopReason === "error" && isUnauthorizedError(response.errorMessage)) {
-    log.warn(`${provider} token rejected (401), refreshing credentials and retrying...`);
-    const refreshedKey = await retry401.refresh();
-    if (refreshedKey) {
-      completeOptions.apiKey = refreshedKey;
-      response = await complete(model, context, completeOptions as ProviderStreamOptions);
-    }
-  }
-
-  return finalizeResponse(response, context, options);
+  const request = prepareModelRequest(config, options);
+  const initialResponse = await complete(request.model, request.context, request.options);
+  const response = await retryAfterCredentialRefresh(request, initialResponse);
+  return finalizeResponse(response, request.context, options);
 }
 
 export interface StreamResult {
@@ -144,31 +118,8 @@ export interface StreamResult {
 }
 
 export function streamWithContext(config: AgentConfig, options: ChatOptions): StreamResult {
-  const provider = (config.provider || "anthropic") as SupportedProvider;
-  const model = getProviderModel(provider, config.model);
-
-  const tools =
-    provider === "google" && options.tools ? sanitizeToolsForGemini(options.tools) : options.tools;
-
-  const systemPrompt = options.systemPrompt || options.context.systemPrompt || "";
-
-  const context: Context = {
-    ...options.context,
-    systemPrompt,
-    tools,
-  };
-
-  const temperature = options.temperature ?? config.temperature;
-
-  const streamOptions: Record<string, unknown> = {
-    apiKey: getEffectiveApiKey(provider, config.api_key),
-    maxTokens: options.maxTokens ?? config.max_tokens,
-    ...(provider !== "codex" && { temperature }),
-    sessionId: options.sessionId,
-    cacheRetention: "long",
-  };
-
-  const eventStream = stream(model, context, streamOptions as ProviderStreamOptions);
+  const request = prepareModelRequest(config, options);
+  const eventStream = stream(request.model, request.context, request.options);
 
   // Transform event stream into a simple text delta async iterable
   async function* textDeltas(): AsyncIterable<string> {
@@ -185,8 +136,9 @@ export function streamWithContext(config: AgentConfig, options: ChatOptions): St
 
   // Result promise: wait for the stream to complete and build ChatResponse
   const resultPromise = (async (): Promise<ChatResponse> => {
-    const response = await eventStream.result();
-    return finalizeResponse(response, context, options);
+    const initialResponse = await eventStream.result();
+    const response = await retryAfterCredentialRefresh(request, initialResponse);
+    return finalizeResponse(response, request.context, options);
   })();
 
   return { textStream: textDeltas(), result: resultPromise };

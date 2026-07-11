@@ -87,16 +87,40 @@ describe("TxLock", () => {
       ).rejects.toThrow("inner error");
     });
 
-    it("should timeout after 60 seconds", async () => {
-      // Use fake timers for timeout test
-      const neverResolves = withTxLock(
-        () => new Promise<void>(() => {}) // never resolves
-      );
+    it("should hold the lock until the underlying transaction settles", async () => {
+      let finishFirst!: () => void;
+      let firstState: "pending" | "resolved" | "rejected" = "pending";
+      let secondStarted = false;
 
-      // Advance past the 60s timeout — async version resolves microtasks
+      const first = withTxLock(
+        () =>
+          new Promise<void>((resolve) => {
+            finishFirst = resolve;
+          })
+      );
+      void first.then(
+        () => {
+          firstState = "resolved";
+        },
+        () => {
+          firstState = "rejected";
+        }
+      );
+      const second = withTxLock(async () => {
+        secondStarted = true;
+        return "second";
+      });
+
       await vi.advanceTimersByTimeAsync(61_000);
 
-      await expect(neverResolves).rejects.toThrow("TON tx-lock timeout (60s)");
+      expect(firstState).toBe("pending");
+      expect(secondStarted).toBe(false);
+
+      finishFirst();
+      await expect(first).resolves.toBeUndefined();
+      await expect(second).resolves.toBe("second");
+      expect(firstState).toBe("resolved");
+      expect(secondStarted).toBe(true);
     });
   });
 });

@@ -29,7 +29,7 @@
         <aside class="sidebar" id="sidebar"><nav class="sidebar-nav">
             <div class="nav-section"><div class="nav-section-title">Start Here</div><ul class="nav-list"><div class="nav-list-inner"><li><a href="/index.html" class="nav-link">Introduction</a></li><li><a href="installation.html" class="nav-link active">Installation</a></li><li><a href="quickstart.html" class="nav-link">Quick Start</a></li><li><a href="configuration.html" class="nav-link">Configuration</a></li></div></ul></div>
 <div class="nav-section"><div class="nav-section-title">Understand</div><ul class="nav-list"><div class="nav-list-inner"><li><a href="architecture.html" class="nav-link">Architecture</a></li><li><a href="agentic-loop.html" class="nav-link">Agentic Loop</a></li><li><a href="memory-system.html" class="nav-link">Memory System</a></li><li><a href="security.html" class="nav-link">Security</a></li></div></ul></div>
-<div class="nav-section"><div class="nav-section-title">Tools</div><ul class="nav-list"><div class="nav-list-inner"><li><a href="tools-telegram.html" class="nav-link">Telegram (76)</a></li><li><a href="tools-ton.html" class="nav-link">TON Blockchain (15)</a></li><li><a href="tools-dex.html" class="nav-link">DEX Trading (10)</a></li><li><a href="tools-dns.html" class="nav-link">DNS &amp; Domains (8)</a></li><li><a href="tools-deals.html" class="nav-link">Deals &amp; Escrow (5)</a></li><li><a href="tools-other.html" class="nav-link">Utilities</a></li></div></ul></div>
+<div class="nav-section"><div class="nav-section-title">Tools</div><ul class="nav-list"><div class="nav-list-inner"><li><a href="tools-telegram.html" class="nav-link">Telegram (83)</a></li><li><a href="tools-ton.html" class="nav-link">TON Blockchain (15)</a></li><li><a href="tools-dex.html" class="nav-link">DEX Trading (10)</a></li><li><a href="tools-dns.html" class="nav-link">DNS &amp; Domains (8)</a></li><li><a href="tools-other.html" class="nav-link">Utilities</a></li></div></ul></div>
 <div class="nav-section"><div class="nav-section-title">Build Plugins</div><ul class="nav-list"><div class="nav-list-inner"><li><a href="plugin-sdk.html" class="nav-link">Plugin SDK</a></li></div></ul></div>
 <div class="nav-section"><div class="nav-section-title">SDK Reference</div><ul class="nav-list"><div class="nav-list-inner"><li><a href="sdk-overview.html" class="nav-link">Overview</a></li><li><a href="sdk-ton.html" class="nav-link">TON Blockchain</a></li><li><a href="sdk-dex.html" class="nav-link">DEX Trading</a></li><li><a href="sdk-dns.html" class="nav-link">DNS &amp; Domains</a></li><li><a href="sdk-telegram.html" class="nav-link">Telegram</a></li><li><a href="sdk-bot.html" class="nav-link">Bot SDK</a></li><li><a href="sdk-utilities.html" class="nav-link">Utilities</a></li><li><a href="sdk-errors.html" class="nav-link">Error Handling</a></li><li><a href="tutorial-payment-bot.html" class="nav-link">Tutorial: Payment Bot</a></li><li><a href="tutorial-dex-bot.html" class="nav-link">Tutorial: DEX Bot</a></li><li><a href="tutorial-inline-bot.html" class="nav-link">Tutorial: Inline Bot</a></li></div></ul></div>
 <div class="nav-section"><div class="nav-section-title">Deploy &amp; Manage</div><ul class="nav-list"><div class="nav-list-inner"><li><a href="deploy-docker.html" class="nav-link">Docker</a></li><li><a href="cli-reference.html" class="nav-link">CLI Reference</a></li></div></ul></div>
@@ -44,12 +44,12 @@
                 <div class="table-wrapper"><table>
                     <thead><tr><th>Requirement</th><th>Details</th></tr></thead>
                     <tbody>
-                        <tr><td><strong>Node.js 20+</strong></td><td><a href="https://nodejs.org/" target="_blank" rel="noopener">Download</a>: check with <code>node --version</code></td></tr>
+                        <tr><td><strong>Node.js 22.22.2+ LTS</strong></td><td><a href="https://nodejs.org/" target="_blank" rel="noopener">Download</a>: Node 24 requires 24.15.0+; check with <code>node --version</code></td></tr>
                         <tr><td><strong>LLM API Key</strong></td><td>Anthropic (recommended), OpenAI, Google, xAI, Groq, OpenRouter, Moonshot, Mistral, Cerebras, ZAI, MiniMax, Hugging Face, or any of 15 supported providers</td></tr>
                         <tr><td><strong>Telegram Account</strong></td><td>Dedicated account recommended (agent has full control)</td></tr>
                         <tr><td><strong>Telegram API Credentials</strong></td><td><code>api_id</code> + <code>api_hash</code> from <a href="https://my.telegram.org/apps" target="_blank" rel="noopener">my.telegram.org/apps</a></td></tr>
                         <tr><td><strong>Telegram User ID</strong></td><td>Message <a href="https://t.me/userinfobot" target="_blank" rel="noopener">@userinfobot</a> to get yours</td></tr>
-                        <tr><td><strong>Bot Token</strong> <em>(optional)</em></td><td>From @BotFather: required for the deals system</td></tr>
+                        <tr><td><strong>Bot Token</strong> <em>(optional in user mode)</em></td><td>From @BotFather for plugin inline cards and callbacks; required in bot mode</td></tr>
                         <tr><td><strong>TonAPI Key</strong> <em>(optional)</em></td><td>From @AntTonTechBot mini app: higher rate limits</td></tr>
                     </tbody>
                 </table></div>
@@ -83,7 +83,7 @@ npm install && npm run build</code></pre></div>
                     <li><strong>Access Policies</strong>: DM policy (open/allowlist/pairing/disabled), group policy, mention rules</li>
                     <li><strong>Admin</strong>: Your Telegram User ID, owner name/username</li>
                     <li><strong>TON Wallet</strong>: Generates a W5R1 wallet with 24-word mnemonic</li>
-                    <li><strong>Deals</strong> <em>(optional)</em>: Bot token for the deals system, trading thresholds</li>
+                    <li><strong>Optional integrations</strong>: Bot token, TonAPI, Toncenter, and Tavily credentials</li>
                     <li><strong>Workspace</strong>: Creates template files (SOUL.md, IDENTITY.md, STRATEGY.md, etc.)</li>
                 </ol>
 
@@ -118,7 +118,7 @@ SOUL.md loaded
 Knowledge indexed
 Telegram: @your_agent connected
 TON Blockchain: connected
-Agent is ready! (124 tools)</code></pre></div>
+Agent is ready! (128 base tools)</code></pre></div>
                 <p><strong>Verify:</strong> Send <code>/ping</code> to your agent on Telegram.</p>
             </section>
 
@@ -133,7 +133,6 @@ Agent is ready! (124 tools)</code></pre></div>
                         <tr><td><code>/task &lt;description&gt;</code></td><td>Give agent a task to execute</td></tr>
                         <tr><td><code>/clear</code></td><td>Clear current chat history</td></tr>
                         <tr><td><code>/model &lt;name&gt;</code></td><td>Switch LLM model at runtime</td></tr>
-                        <tr><td><code>/strategy</code></td><td>View or change trading thresholds</td></tr>
                         <tr><td><code>/wallet</code></td><td>Show wallet address and balance</td></tr>
                         <tr><td><code>/policy dm open</code></td><td>Change DM policy at runtime</td></tr>
                         <tr><td><code>/pause</code> / <code>/resume</code></td><td>Pause/resume agent responses</td></tr>

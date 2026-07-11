@@ -38,18 +38,6 @@ export const JOURNAL_SCHEMA = `
   CREATE INDEX IF NOT EXISTS idx_journal_type_timestamp ON journal(type, timestamp DESC);
 `;
 
-export const USED_TRANSACTIONS_SCHEMA = `
-  CREATE TABLE IF NOT EXISTS used_transactions (
-    tx_hash TEXT PRIMARY KEY,
-    user_id TEXT NOT NULL,
-    amount REAL NOT NULL,
-    game_type TEXT NOT NULL,
-    used_at INTEGER NOT NULL DEFAULT (unixepoch())
-  );
-
-  CREATE INDEX IF NOT EXISTS idx_used_tx_user ON used_transactions(user_id);
-  CREATE INDEX IF NOT EXISTS idx_used_tx_used_at ON used_transactions(used_at);
-`;
 export function openModuleDb(path: string): Database.Database {
   const dir = dirname(path);
   if (!existsSync(dir)) {

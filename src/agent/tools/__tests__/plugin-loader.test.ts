@@ -4,6 +4,15 @@ import { sanitizeConfigForPlugins } from "../plugin-validator.js";
 import { SDK_VERSION } from "@teleton-agent/sdk";
 import type { Config } from "../../../config/schema.js";
 
+const moduleDbMocks = vi.hoisted(() => ({
+  pluginDb: {
+    kind: "plugin",
+    close: vi.fn(),
+    exec: vi.fn(),
+    prepare: vi.fn(() => ({ all: () => [] })),
+  },
+}));
+
 // ─── Mocks ──────────────────────────────────────────────────────
 
 vi.mock("../../../utils/logger.js", () => ({
@@ -16,8 +25,15 @@ vi.mock("../../../utils/logger.js", () => ({
 }));
 
 vi.mock("../../../utils/module-db.js", () => ({
-  openModuleDb: () => ({ close: vi.fn(), exec: vi.fn(), prepare: vi.fn() }),
-  createDbWrapper: () => (executor: unknown) => executor,
+  openModuleDb: () => moduleDbMocks.pluginDb,
+  createDbWrapper:
+    (getDb: () => unknown) =>
+    (executor: (params: unknown, context: Record<string, unknown>) => unknown) =>
+    (params: unknown, context: Record<string, unknown>) => {
+      const db = getDb();
+      if (!db) return Promise.resolve({ success: false, error: "plugin module not started" });
+      return executor(params, { ...context, db });
+    },
   migrateFromMainDb: vi.fn(),
 }));
 
@@ -75,15 +91,6 @@ function makeConfig(overrides?: Partial<Config>): Config {
       history_limit: 100,
     },
     embedding: { provider: "local" },
-    deals: {
-      enabled: true,
-      expiry_seconds: 120,
-      buy_max_floor_percent: 95,
-      sell_min_floor_percent: 105,
-      poll_interval_ms: 5000,
-      max_verification_retries: 12,
-      expiry_check_interval_ms: 60000,
-    },
     webui: {
       enabled: false,
       port: 7777,
@@ -262,6 +269,37 @@ describe("adaptPlugin — SDK version + dependency check", () => {
     expect(module.name).toBe("my-cool-plugin");
     expect(module.version).toBe("0.0.0");
   });
+
+  it("fails closed when an exported manifest is invalid", () => {
+    const raw = makeRawPlugin({
+      manifest: {
+        name: "INVALID NAME",
+        version: "1.0.0",
+      },
+    });
+
+    expect(() => adaptPlugin(raw, "invalid-plugin", makeConfig(), [], minimalSdkDeps)).toThrow(
+      /invalid manifest/
+    );
+  });
+
+  it("propagates an explicit approval requirement from the public tool contract", () => {
+    const raw = makeRawPlugin({
+      tools: [
+        {
+          name: "sensitive_read",
+          description: "Read sensitive plugin data",
+          category: "data-bearing",
+          requiresApproval: true,
+          execute: async () => ({ success: true }),
+        },
+      ],
+    });
+    const module = adaptPlugin(raw, "approval-plugin", makeConfig(), [], minimalSdkDeps);
+    module.migrate?.();
+
+    expect(module.tools(makeConfig())[0].requiresApproval).toBe(true);
+  });
 });
 
 // ─── T4: Plugin config isolation (sanitizeConfigForPlugins) ─────
@@ -306,13 +344,6 @@ describe("sanitizeConfigForPlugins — config isolation", () => {
     expect(sanitized.telegram.admin_ids).toEqual([111, 222]);
   });
 
-  it("T4d: preserves deals.enabled", () => {
-    const config = makeConfig();
-    const sanitized = sanitizeConfigForPlugins(config) as any;
-
-    expect(sanitized.deals.enabled).toBe(true);
-  });
-
   it("T4e: does not expose top-level secret keys", () => {
     const config = makeConfig();
     const sanitized = sanitizeConfigForPlugins(config) as any;
@@ -352,5 +383,79 @@ describe("sanitizeConfigForPlugins — config isolation", () => {
     const tools = module.tools();
     expect(tools.length).toBe(1);
     expect(tools[0].tool.name).toBe("test_tool");
+  });
+});
+
+describe("adaptPlugin — database isolation", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("always replaces the agent database for plugins without migrate()", async () => {
+    const agentDb = { kind: "agent" };
+    let receivedContext: Record<string, unknown> | undefined;
+    const raw = makeRawPlugin({
+      tools: [
+        {
+          name: "db_probe",
+          description: "Inspect the injected database",
+          execute: async (_params: unknown, context: Record<string, unknown>) => {
+            receivedContext = context;
+            return { success: true };
+          },
+        },
+      ],
+    });
+
+    const module = adaptPlugin(raw, "db-probe", makeConfig(), [], minimalSdkDeps);
+    module.migrate?.();
+    const [tool] = module.tools(makeConfig());
+    await tool.executor({}, { db: agentDb, bridge: minimalSdkDeps.bridge } as never);
+
+    expect(receivedContext?.db).not.toBe(agentDb);
+    expect((receivedContext?.db as { kind: string }).kind).toBe("plugin");
+    expect(receivedContext).not.toHaveProperty("bridge");
+  });
+
+  it("uses the protected plugin database for migrate(), tools, and start()", async () => {
+    const agentDb = { kind: "agent" };
+    const received: Record<string, unknown> = {};
+    let startContext: Record<string, unknown> | undefined;
+    const raw = makeRawPlugin({
+      migrate: (db: unknown) => {
+        received.migrate = db;
+      },
+      tools: [
+        {
+          name: "db_probe",
+          description: "Inspect the injected database",
+          execute: async (_params: unknown, context: { db: unknown }) => {
+            received.tool = context.db;
+            return { success: true };
+          },
+        },
+      ],
+      start: async (context: Record<string, unknown>) => {
+        startContext = context;
+        received.start = context.db;
+      },
+    });
+
+    const module = adaptPlugin(raw, "db-probe", makeConfig(), [], minimalSdkDeps);
+    module.migrate?.();
+    const [tool] = module.tools(makeConfig());
+    await tool.executor({}, { db: agentDb } as never);
+    await module.start?.({
+      bridge: minimalSdkDeps.bridge,
+      db: agentDb,
+      config: makeConfig(),
+    } as never);
+
+    for (const db of Object.values(received)) {
+      expect(db).not.toBe(agentDb);
+      expect((db as { kind: string }).kind).toBe("plugin");
+    }
+    expect(startContext).toHaveProperty("sdk");
+    expect(startContext).not.toHaveProperty("bridge");
   });
 });

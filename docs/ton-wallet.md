@@ -275,7 +275,7 @@ The `ton_nft_list` tool allows listing NFTs for sale on supported marketplaces.
 
 ## DNS Integration
 
-TON DNS allows mapping human-readable `.ton` domains to wallet addresses and other resources. Teleton Agent includes 7 DNS tools.
+TON DNS allows mapping human-readable `.ton` domains to wallet addresses and other resources. Teleton Agent includes 8 DNS tools.
 
 | Tool | Description |
 |------|-------------|
@@ -283,6 +283,7 @@ TON DNS allows mapping human-readable `.ton` domains to wallet addresses and oth
 | `dns_resolve` | Resolve a `.ton` domain to its wallet address |
 | `dns_link` | Link a `.ton` domain to a wallet address |
 | `dns_unlink` | Remove a domain-to-address link |
+| `dns_set_site` | Link a `.ton` domain to a TON Site ADNL address |
 | `dns_auctions` | View active domain auctions |
 | `dns_start_auction` | Start an auction for an available domain |
 | `dns_bid` | Place a bid on a domain auction |

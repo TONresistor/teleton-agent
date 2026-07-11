@@ -1,11 +1,11 @@
 # Teleton Plugin SDK — Complete Reference
 
-> @teleton-agent/sdk v1.0.0 — TypeScript SDK for building Teleton Agent plugins with TON blockchain and Telegram integration.
+> @teleton-agent/sdk v2.0.0 — TypeScript SDK for building Teleton Agent plugins with TON blockchain and Telegram integration.
 
 ## Installation
 
 ```bash
-npm install @teleton-agent/sdk
+npm install @teleton-agent/sdk@^2
 ```
 
 ## Plugin Structure
@@ -35,10 +35,10 @@ export const tools = (sdk: PluginSDK): SimpleToolDef[] => [{
 
 ```typescript
 interface PluginSDK {
-  readonly version: string;           // "1.0.0"
+  readonly version: string;           // "2.0.0"
   readonly ton: TonSDK;              // TON blockchain (18 methods + dex + dns)
-  readonly telegram: TelegramSDK;    // Telegram (52 methods)
-  readonly db: Database | null;      // SQLite (null if no migrate())
+  readonly telegram: TelegramSDK;    // Telegram (51 methods)
+  readonly db: Database | null;      // Isolated SQLite (null only on initialization failure)
   readonly config: Record<string, unknown>;      // Sanitized app config
   readonly pluginConfig: Record<string, unknown>; // Plugin-specific config
   readonly secrets: SecretsSDK;      // API keys (3 methods)
@@ -121,7 +121,7 @@ NOTE: DnsCheckResult.auction field exists in types but is NOT populated by imple
 
 ---
 
-## sdk.telegram — Telegram (52 methods)
+## sdk.telegram — Telegram (51 methods)
 
 ### Core
 - `sendMessage(chatId: string, text: string, opts?: SendMessageOptions): Promise<number>` — Send text message. opts: { replyToId?, inlineKeyboard? }. Returns message ID.
@@ -193,7 +193,6 @@ NOTE: DnsCheckResult.auction field exists in types but is NOT populated by imple
 
 ### Advanced
 - `setTyping(chatId: string): Promise<void>` — Show typing indicator.
-- `getRawClient(): unknown | null` — Raw GramJS TelegramClient for MTProto.
 - `isAvailable(): boolean` — Check if connected.
 
 ---
@@ -217,8 +216,7 @@ Styled buttons (green/red/blue) only work with .toTL() (GramJS Layer 222). .toGr
 
 ## sdk.secrets — Secrets (3 methods)
 
-Resolution order: 1. Env var (${PLUGIN_NAME_UPPER}_${KEY_UPPER}), 2. Secrets store (/plugin set), 3. pluginConfig.
-NOTE: The `env` field in manifest.secrets is defined but IGNORED — env naming is always auto-derived.
+Resolution order: 1. Manifest `env` override or derived TELETON_PLUGIN_${PLUGIN_NAME_UPPER}_${KEY_UPPER}, 2. Secrets store (/plugin set), 3. pluginConfig. Overrides must use the same reserved TELETON_PLUGIN_ namespace.
 
 - `get(key: string): string | undefined` — Get secret value.
 - `require(key: string): string` — Get or throw SECRET_NOT_FOUND.
@@ -251,7 +249,7 @@ Auto-prefixed with [plugin:name].
 
 ## sdk.db — SQLite Database
 
-Type: `Database.Database | null` (better-sqlite3). null if plugin doesn't export `migrate()`.
+Type: `Database.Database | null` (better-sqlite3). The database is created for every plugin and is null only if initialization fails.
 Each plugin gets an isolated database. Sync API.
 
 ```typescript
@@ -294,9 +292,10 @@ interface PluginManifest {
   description?: string;            // Max 256 chars
   dependencies?: string[];         // Required built-in modules
   defaultConfig?: Record<string, unknown>;
-  sdkVersion?: string;             // Range: ">=1.0.0"
+  sdkVersion?: string;             // Range: ">=2.0.0"
   secrets?: Record<string, SecretDeclaration>;
   bot?: BotManifest;               // Enables sdk.bot
+  hooks?: PluginHookDeclaration[];
 }
 ```
 
@@ -308,8 +307,9 @@ interface SimpleToolDef {
   description: string;             // For LLM
   parameters?: Record<string, unknown>; // JSON Schema
   execute: (params, context) => Promise<ToolResult>;
-  scope?: "always" | "dm-only" | "group-only" | "admin-only";
+  scope?: "open" | "always" | "dm-only" | "group-only" | "admin-only" | "allowlist" | "disabled";
   category?: "data-bearing" | "action";
+  requiresApproval?: boolean;
 }
 
 interface ToolResult {
@@ -337,14 +337,14 @@ export const onCallbackQuery = async (event: PluginCallbackEvent) => {
 
 1. SDK object is frozen — plugins cannot modify or extend it.
 2. sdk.bot is null if manifest doesn't declare `bot: { inline: true }`.
-3. sdk.db is null if plugin doesn't export `migrate()`.
+3. sdk.db is isolated per plugin and is null only if database initialization failed.
 4. sdk.storage is null if no database is available.
 5. sendTON() uses PAY_GAS_SEPARATELY — amount sent is exact.
 6. Float precision: SDK uses string-based decimal conversion, NOT Math.floor(amount * 10**d).
 7. verifyPayment() requires `used_transactions` table for replay protection.
 8. sendStory() has path allowlist: /tmp, Downloads/, Pictures/, Videos/, teleton workspace.
-9. Secrets env naming: auto-derived ${PLUGIN_NAME_UPPER}_${KEY_UPPER} — manifest `env` field is IGNORED.
+9. Secrets env naming uses TELETON_PLUGIN_${PLUGIN_NAME_UPPER}_${KEY_UPPER}. Overrides must stay under the same reserved plugin prefix; cross-plugin/global env access is rejected.
 10. DnsCheckResult.auction field exists in types but is NOT populated (reserved).
 11. Bot SDK callback data is auto-prefixed with plugin name.
 12. Styled buttons (colors) only work with .toTL() (GramJS), .toGrammy() falls back to standard.
-13. getRawClient() returns GramJS client — BigInteger requires `BigInt(value) as any` cast.
+13. Plugins cannot access the raw Telegram bridge or GramJS client; use typed SDK capabilities.

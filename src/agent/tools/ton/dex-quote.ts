@@ -1,13 +1,8 @@
 import { Type } from "@sinclair/typebox";
 import type { Tool, ToolExecutor, ToolResult } from "../types.js";
-import type { TonClient } from "@ton/ton";
-import { Address } from "@ton/core";
-import { getCachedTonClient } from "../../../ton/wallet-service.js";
-import { StonApiClient } from "@ston-fi/api";
-import { Factory, Asset } from "@dedust/sdk";
-import { DEDUST_FACTORY_MAINNET, NATIVE_TON_ADDRESS } from "../dedust/constants.js";
-import { findDedustPool } from "../dedust/pool.js";
-import { getDecimals, toUnits, fromUnits } from "../dedust/asset-cache.js";
+import { NATIVE_TON_ADDRESS } from "../dedust/constants.js";
+import { fromUnits } from "../../../ton/units.js";
+import { estimateDedustSwap, simulateStonfiSwap } from "../../../ton/dex-service.js";
 import { getErrorMessage } from "../../../utils/errors.js";
 import { createLogger } from "../../../utils/logger.js";
 
@@ -69,25 +64,8 @@ async function getStonfiQuote(
   slippage: number
 ): Promise<DexQuoteResult> {
   try {
-    const isTonInput = fromAsset.toLowerCase() === "ton";
-    const isTonOutput = toAsset.toLowerCase() === "ton";
-    const fromAddress = isTonInput ? NATIVE_TON_ADDRESS : fromAsset;
-    const toAddress = isTonOutput ? NATIVE_TON_ADDRESS : toAsset;
-
-    const stonApiClient = new StonApiClient();
-
-    // Resolve correct decimals
-    const fromDecimals = await getDecimals(fromAsset);
-    const toDecimals = await getDecimals(toAsset);
-
-    const simulationResult = await stonApiClient.simulateSwap({
-      offerAddress: fromAddress,
-      askAddress: toAddress,
-      offerUnits: toUnits(amount, fromDecimals).toString(),
-      slippageTolerance: slippage.toString(),
-    });
-
-    if (!simulationResult) {
+    const quote = await simulateStonfiSwap({ fromAsset, toAsset, amount, slippage });
+    if (!quote) {
       return {
         dex: "STON.fi",
         expectedOutput: 0,
@@ -97,6 +75,7 @@ async function getStonfiQuote(
         error: "No liquidity",
       };
     }
+    const { simulation: simulationResult, toDecimals } = quote;
 
     const askUnits = BigInt(simulationResult.askUnits);
     const minAskUnits = BigInt(simulationResult.minAskUnits);
@@ -135,23 +114,11 @@ async function getDedustQuote(
   fromAsset: string,
   toAsset: string,
   amount: number,
-  slippage: number,
-  tonClient: TonClient
+  slippage: number
 ): Promise<DexQuoteResult> {
   try {
-    const isTonInput = fromAsset.toLowerCase() === "ton";
-    const isTonOutput = toAsset.toLowerCase() === "ton";
-
-    const factory = tonClient.open(
-      Factory.createFromAddress(Address.parse(DEDUST_FACTORY_MAINNET))
-    );
-
-    const fromAssetObj = isTonInput ? Asset.native() : Asset.jetton(Address.parse(fromAsset));
-    const toAssetObj = isTonOutput ? Asset.native() : Asset.jetton(Address.parse(toAsset));
-
-    // Find the best pool (volatile first, then stable fallback)
-    const poolMatch = await findDedustPool(tonClient, factory, fromAssetObj, toAssetObj);
-    if (!poolMatch) {
+    const quote = await estimateDedustSwap({ fromAsset, toAsset, amount, slippage });
+    if (!quote) {
       return {
         dex: "DeDust",
         expectedOutput: 0,
@@ -161,19 +128,7 @@ async function getDedustQuote(
         error: "No pool available",
       };
     }
-    const { pool, poolType } = poolMatch;
-
-    // Resolve correct decimals
-    const fromDecimals = await getDecimals(isTonInput ? "ton" : fromAsset);
-    const toDecimals = await getDecimals(isTonOutput ? "ton" : toAsset);
-
-    const amountIn = toUnits(amount, fromDecimals);
-    const { amountOut, tradeFee } = await pool.getEstimatedSwapOut({
-      assetIn: fromAssetObj,
-      amountIn,
-    });
-
-    const minAmountOut = amountOut - (amountOut * BigInt(Math.floor(slippage * 10000))) / 10000n;
+    const { amountOut, tradeFee, minAmountOut, toDecimals, poolType } = quote;
 
     const expectedOutput = fromUnits(amountOut, toDecimals);
     const minOutput = fromUnits(minAmountOut, toDecimals);
@@ -207,12 +162,9 @@ export const dexQuoteExecutor: ToolExecutor<DexQuoteParams> = async (
   try {
     const { from_asset, to_asset, amount, slippage = 0.01 } = params;
 
-    // Initialize TON client for DeDust
-    const tonClient = await getCachedTonClient();
-
     const [stonfiQuote, dedustQuote] = await Promise.all([
       getStonfiQuote(from_asset, to_asset, amount, slippage),
-      getDedustQuote(from_asset, to_asset, amount, slippage, tonClient),
+      getDedustQuote(from_asset, to_asset, amount, slippage),
     ]);
 
     // Determine best DEX

@@ -1,5 +1,5 @@
 import type Database from "better-sqlite3";
-import type { Tool as PiAiTool } from "@mariozechner/pi-ai";
+import type { Tool as PiAiTool } from "@earendil-works/pi-ai";
 import type { EmbeddingProvider } from "../../memory/embeddings/provider.js";
 import { serializeEmbedding } from "../../memory/embeddings/index.js";
 import {

@@ -1,5 +1,5 @@
 # ---- Build stage ----
-FROM node:20-slim AS build
+FROM node:22.22.2-slim AS build
 
 WORKDIR /app
 
@@ -30,7 +30,7 @@ RUN cd web && npm ci
 RUN npm run build
 
 # ---- Runtime stage ----
-FROM node:20-slim
+FROM node:22.22.2-slim
 
 WORKDIR /app
 

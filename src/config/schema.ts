@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { TELEGRAM_MAX_MESSAGE_LENGTH } from "../constants/limits.js";
 import { SUPPORTED_PROVIDER_IDS } from "./providers.js";
+import { getModelAvailability } from "./model-catalog.js";
 
 export const DMPolicy = z.enum(["allowlist", "open", "admin-only", "disabled"]);
 export const GroupPolicy = z.enum(["open", "allowlist", "admin-only", "disabled"]);
@@ -9,6 +10,8 @@ export const GroupPolicy = z.enum(["open", "allowlist", "admin-only", "disabled"
 // instead of re-listing the literals.
 export const ExecMode = z.enum(["off", "yolo"]);
 export const ExecScope = z.enum(["admin-only", "allowlist", "all"]);
+
+export const DEFAULT_TOOL_RAG_ALWAYS_INCLUDE = ["journal_*", "workspace_*", "web_*"] as const;
 
 export const SessionResetPolicySchema = z.object({
   daily_reset_enabled: z.boolean().default(true).describe("Enable daily session reset"),
@@ -25,28 +28,44 @@ export const SessionResetPolicySchema = z.object({
     .describe("Minutes of inactivity before session reset (default: 24h)"),
 });
 
-export const AgentConfigSchema = z.object({
-  provider: z.enum(SUPPORTED_PROVIDER_IDS).default("anthropic"),
-  api_key: z.string().default(""),
-  base_url: z
-    .string()
-    .url()
-    .optional()
-    .describe("Base URL for local LLM server (e.g. http://localhost:11434/v1)"),
-  model: z.string().default("claude-haiku-4-5-20251001"),
-  utility_model: z
-    .string()
-    .optional()
-    .describe("Cheap model for summarization (auto-detected if omitted)"),
-  max_tokens: z.number().default(4096),
-  temperature: z.number().default(0.7),
-  system_prompt: z.string().nullable().default(null),
-  max_agentic_iterations: z
-    .number()
-    .default(5)
-    .describe("Maximum number of agentic loop iterations (tool call → result → tool call cycles)"),
-  session_reset_policy: SessionResetPolicySchema.default(SessionResetPolicySchema.parse({})),
-});
+export const AgentConfigSchema = z
+  .object({
+    provider: z.enum(SUPPORTED_PROVIDER_IDS).default("anthropic"),
+    api_key: z.string().default(""),
+    base_url: z
+      .string()
+      .url()
+      .optional()
+      .describe("Base URL for local LLM server (e.g. http://localhost:11434/v1)"),
+    model: z.string().default("claude-haiku-4-5-20251001"),
+    utility_model: z
+      .string()
+      .optional()
+      .describe("Cheap model for summarization (auto-detected if omitted)"),
+    max_tokens: z.number().default(4096),
+    temperature: z.number().default(0.7),
+    system_prompt: z.string().nullable().default(null),
+    max_agentic_iterations: z
+      .number()
+      .default(5)
+      .describe(
+        "Maximum number of agentic loop iterations (tool call → result → tool call cycles)"
+      ),
+    session_reset_policy: SessionResetPolicySchema.default(SessionResetPolicySchema.parse({})),
+  })
+  .superRefine((agent, context) => {
+    for (const field of ["model", "utility_model"] as const) {
+      const modelId = agent[field];
+      if (!modelId) continue;
+      const availability = getModelAvailability(agent.provider, modelId);
+      if (availability.available) continue;
+      context.addIssue({
+        code: "custom",
+        path: [field],
+        message: availability.message ?? `${modelId} is not currently available`,
+      });
+    }
+  });
 
 export const TelegramConfigSchema = z
   .object({
@@ -77,11 +96,8 @@ export const TelegramConfigSchema = z
     bot_token: z
       .string()
       .optional()
-      .describe("Telegram Bot token from @BotFather for inline deal buttons"),
-    bot_username: z
-      .string()
-      .optional()
-      .describe("Bot username without @ (e.g., 'teleton_deals_bot')"),
+      .describe("Telegram Bot token from @BotFather for inline bot features"),
+    bot_username: z.string().optional().describe("Bot username without @ (e.g., 'my_agent_bot')"),
     stream_mode: z
       .enum(["all", "replace", "off"])
       .default("replace")
@@ -142,17 +158,6 @@ export const MetaConfigSchema = z.object({
   last_modified_at: z.string().optional(),
   onboard_command: z.string().default("teleton setup"),
 });
-
-const _DealsObject = z.object({
-  enabled: z.boolean().default(true),
-  expiry_seconds: z.number().default(120),
-  buy_max_floor_percent: z.number().default(95),
-  sell_min_floor_percent: z.number().default(105),
-  poll_interval_ms: z.number().default(5000),
-  max_verification_retries: z.number().default(12),
-  expiry_check_interval_ms: z.number().default(60000),
-});
-export const DealsConfigSchema = _DealsObject.default(_DealsObject.parse({}));
 
 const _WebUIObject = z.object({
   enabled: z.boolean().default(false).describe("Enable WebUI server"),
@@ -272,13 +277,7 @@ const _ToolRagObject = z.object({
   top_k: z.number().default(35).describe("Max tools to retrieve per LLM call"),
   always_include: z
     .array(z.string())
-    .default([
-      "telegram_send_message",
-      "telegram_quote_reply",
-      "telegram_send_photo",
-      "journal_*",
-      "workspace_*",
-    ])
+    .default([...DEFAULT_TOOL_RAG_ALWAYS_INCLUDE])
     .describe("Tool name patterns always included (prefix glob with *)"),
   skip_unlimited_providers: z
     .boolean()
@@ -341,7 +340,6 @@ export const ConfigSchema = z.object({
   telegram: TelegramConfigSchema,
   storage: StorageConfigSchema.default(StorageConfigSchema.parse({})),
   embedding: EmbeddingConfigSchema,
-  deals: DealsConfigSchema,
   webui: WebUIConfigSchema,
   logging: LoggingConfigSchema,
   dev: DevConfigSchema,
@@ -389,7 +387,6 @@ export type Config = z.infer<typeof ConfigSchema>;
 export type AgentConfig = z.infer<typeof AgentConfigSchema>;
 export type TelegramConfig = z.infer<typeof TelegramConfigSchema>;
 export type SessionResetPolicy = z.infer<typeof SessionResetPolicySchema>;
-export type DealsConfig = z.infer<typeof DealsConfigSchema>;
 export type WebUIConfig = z.infer<typeof WebUIConfigSchema>;
 export type McpConfig = z.infer<typeof McpConfigSchema>;
 export type McpServerConfig = z.infer<typeof McpServerSchema>;

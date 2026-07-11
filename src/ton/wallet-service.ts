@@ -30,31 +30,28 @@ export interface WalletData {
   createdAt: string;
 }
 
-/**
- * Generate a new TON wallet (W5R1)
- */
-export async function generateWallet(): Promise<WalletData> {
-  // Generate new mnemonic (24 words)
-  const mnemonic = await mnemonicNew(24);
-
-  // Derive keys from mnemonic
+async function deriveWalletData(mnemonic: string[]): Promise<WalletData> {
   const keyPair = await mnemonicToPrivateKey(mnemonic);
-
-  // Create W5R1 wallet contract
   const wallet = WalletContractV5R1.create({
     workchain: 0,
     publicKey: keyPair.publicKey,
   });
 
-  const address = wallet.address.toString({ bounceable: true, testOnly: false });
-
   return {
     version: "w5r1",
-    address,
+    address: wallet.address.toString({ bounceable: true, testOnly: false }),
     publicKey: keyPair.publicKey.toString("hex"),
     mnemonic,
     createdAt: new Date().toISOString(),
   };
+}
+
+/**
+ * Generate a new TON wallet (W5R1)
+ */
+export async function generateWallet(): Promise<WalletData> {
+  const mnemonic = await mnemonicNew(24);
+  return deriveWalletData(mnemonic);
 }
 
 /**
@@ -115,22 +112,7 @@ export async function importWallet(mnemonic: string[]): Promise<WalletData> {
     throw new Error("Invalid mnemonic: words do not form a valid TON seed phrase");
   }
 
-  const keyPair = await mnemonicToPrivateKey(mnemonic);
-
-  const wallet = WalletContractV5R1.create({
-    workchain: 0,
-    publicKey: keyPair.publicKey,
-  });
-
-  const address = wallet.address.toString({ bounceable: true, testOnly: false });
-
-  return {
-    version: "w5r1",
-    address,
-    publicKey: keyPair.publicKey.toString("hex"),
-    mnemonic,
-    createdAt: new Date().toISOString(),
-  };
+  return deriveWalletData(mnemonic);
 }
 
 /**

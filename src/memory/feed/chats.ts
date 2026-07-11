@@ -15,6 +15,22 @@ export interface TelegramChat {
   updatedAt: Date;
 }
 
+function rowToChat(row: TgChatRow): TelegramChat {
+  return {
+    id: row.id,
+    type: row.type as TelegramChat["type"],
+    title: row.title ?? undefined,
+    username: row.username ?? undefined,
+    memberCount: row.member_count ?? undefined,
+    isMonitored: Boolean(row.is_monitored),
+    isArchived: Boolean(row.is_archived),
+    lastMessageId: row.last_message_id ?? undefined,
+    lastMessageAt: row.last_message_at ? new Date(row.last_message_at * 1000) : undefined,
+    createdAt: new Date(row.created_at * 1000),
+    updatedAt: new Date(row.updated_at * 1000),
+  };
+}
+
 export class ChatStore {
   constructor(private db: Database.Database) {}
 
@@ -62,21 +78,7 @@ export class ChatStore {
       )
       .get(id) as TgChatRow | undefined;
 
-    if (!row) return undefined;
-
-    return {
-      id: row.id,
-      type: row.type as TelegramChat["type"],
-      title: row.title ?? undefined,
-      username: row.username ?? undefined,
-      memberCount: row.member_count ?? undefined,
-      isMonitored: Boolean(row.is_monitored),
-      isArchived: Boolean(row.is_archived),
-      lastMessageId: row.last_message_id ?? undefined,
-      lastMessageAt: row.last_message_at ? new Date(row.last_message_at * 1000) : undefined,
-      createdAt: new Date(row.created_at * 1000),
-      updatedAt: new Date(row.updated_at * 1000),
-    };
+    return row ? rowToChat(row) : undefined;
   }
 
   getActiveChats(limit: number = 50): TelegramChat[] {
@@ -91,19 +93,7 @@ export class ChatStore {
       )
       .all(limit) as TgChatRow[];
 
-    return rows.map((row) => ({
-      id: row.id,
-      type: row.type as TelegramChat["type"],
-      title: row.title ?? undefined,
-      username: row.username ?? undefined,
-      memberCount: row.member_count ?? undefined,
-      isMonitored: Boolean(row.is_monitored),
-      isArchived: Boolean(row.is_archived),
-      lastMessageId: row.last_message_id ?? undefined,
-      lastMessageAt: row.last_message_at ? new Date(row.last_message_at * 1000) : undefined,
-      createdAt: new Date(row.created_at * 1000),
-      updatedAt: new Date(row.updated_at * 1000),
-    }));
+    return rows.map(rowToChat);
   }
 
   updateLastMessage(chatId: string, messageId: string, timestamp: Date): void {

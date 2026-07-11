@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import Database from "better-sqlite3";
 import { createPluginSDK } from "../index.js";
 import { SDK_VERSION } from "@teleton-agent/sdk";
+import { HookRegistry } from "../hooks/registry.js";
 
 // ─── Mocks ──────────────────────────────────────────────────────
 import { createMocks } from "./__fixtures__/mocks.js";
@@ -135,5 +136,43 @@ describe("createPluginSDK — factory integration", () => {
 
     sdk.storage!.set("obj", { nested: true });
     expect(sdk.storage!.get("obj")).toEqual({ nested: true });
+  });
+
+  it("uses the manifest hook priority when sdk.on() does not override it", () => {
+    const hookRegistry = new HookRegistry();
+    const sdk = createPluginSDK(
+      { bridge: mockBridge },
+      {
+        pluginName: "test-plugin",
+        db,
+        sanitizedConfig: {},
+        pluginConfig: {},
+        hookRegistry,
+        declaredHooks: [{ name: "agent:start", priority: 25 }],
+      }
+    );
+
+    sdk.on("agent:start", async () => {});
+
+    expect(hookRegistry.getHooks("agent:start")[0]?.priority).toBe(25);
+  });
+
+  it("allows sdk.on() to override the manifest hook priority", () => {
+    const hookRegistry = new HookRegistry();
+    const sdk = createPluginSDK(
+      { bridge: mockBridge },
+      {
+        pluginName: "test-plugin",
+        db,
+        sanitizedConfig: {},
+        pluginConfig: {},
+        hookRegistry,
+        declaredHooks: [{ name: "agent:start", priority: 25 }],
+      }
+    );
+
+    sdk.on("agent:start", async () => {}, { priority: -5 });
+
+    expect(hookRegistry.getHooks("agent:start")[0]?.priority).toBe(-5);
   });
 });

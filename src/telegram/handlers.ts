@@ -8,8 +8,8 @@ import type { EmbeddingProvider } from "../memory/embeddings/provider.js";
 import { readOffset, writeOffset } from "./offset-store.js";
 import { PendingHistory } from "../memory/pending-history.js";
 import type { ToolContext } from "../agent/tools/types.js";
-import { TELEGRAM_SEND_TOOLS } from "../constants/tools.js";
 import { isSilentReply } from "../constants/tokens.js";
+import { deliveredTelegramText } from "../agent/telegram-send-state.js";
 import { transcribeAudio } from "../sdk/telegram-utils.js";
 import { TYPING_REFRESH_MS } from "../constants/timeouts.js";
 import { createLogger } from "../utils/logger.js";
@@ -17,6 +17,36 @@ import { getErrorMessage } from "../utils/errors.js";
 
 const log = createLogger("Telegram");
 import type { PluginMessageEvent } from "@teleton-agent/sdk";
+
+function providerFailureReply(error: unknown): string {
+  const message = getErrorMessage(error).toLowerCase();
+
+  if (
+    message.includes("usage limit") ||
+    message.includes("insufficient_quota") ||
+    message.includes("quota exceeded")
+  ) {
+    return "⚠️ The AI provider usage limit has been reached. Please try again later or switch providers.";
+  }
+
+  if (
+    message.includes("rate limit") ||
+    message.includes("rate_limited") ||
+    /\b429\b/.test(message)
+  ) {
+    return "⚠️ The AI provider is temporarily rate-limited. Please try again in a moment.";
+  }
+
+  if (
+    message.includes("authentication token is expired") ||
+    message.includes("invalid authentication") ||
+    /\b(?:401|unauthorized)\b/.test(message)
+  ) {
+    return "⚠️ The AI provider credentials are invalid or expired. Please refresh them and try again.";
+  }
+
+  return "⚠️ The AI provider is unavailable. Please try again later.";
+}
 
 export interface MessageContext {
   message: TelegramMessage;
@@ -212,6 +242,20 @@ export class MessageHandler {
           reason: "Already processed",
         };
       }
+    }
+
+    const ownSenderId = this.ownUserId ? Number(this.ownUserId) : undefined;
+    if (
+      ownSenderId !== undefined &&
+      Number.isFinite(ownSenderId) &&
+      message.senderId === ownSenderId
+    ) {
+      return {
+        message,
+        isAdmin,
+        shouldRespond: false,
+        reason: "Sender is self",
+      };
     }
 
     if (message.isBot) {
@@ -437,7 +481,8 @@ export class MessageHandler {
               if (transcribeResult.text) {
                 transcriptionText = transcribeResult.text;
                 log.info(
-                  `Auto-transcribed voice msg ${message.id}: "${transcriptionText?.substring(0, 80)}..."`
+                  { messageId: message.id, transcriptLength: transcriptionText.length },
+                  "Voice message auto-transcribed"
                 );
               }
             } catch (innerError) {
@@ -473,36 +518,59 @@ export class MessageHandler {
                 }
               : undefined;
 
-          const response = await this.agent.processMessage({
-            chatId: message.chatId,
-            userMessage: effectiveText,
-            userName,
-            timestamp: message.timestamp.getTime(),
-            isGroup: message.isGroup,
-            pendingContext,
-            toolContext,
-            senderUsername: message.senderUsername,
-            senderRank: message.senderRank,
-            hasMedia: message.hasMedia,
-            mediaType: message.mediaType,
-            messageId: message.id,
-            replyContext,
-            streamToChat,
-          });
+          let response: Awaited<ReturnType<AgentRuntime["processMessage"]>>;
+          try {
+            response = await this.agent.processMessage({
+              chatId: message.chatId,
+              userMessage: effectiveText,
+              userName,
+              timestamp: message.timestamp.getTime(),
+              isGroup: message.isGroup,
+              pendingContext,
+              toolContext,
+              senderUsername: message.senderUsername,
+              senderRank: message.senderRank,
+              hasMedia: message.hasMedia,
+              mediaType: message.mediaType,
+              messageId: message.id,
+              replyContext,
+              streamToChat,
+            });
+          } catch (error) {
+            log.error({ err: error }, "Agent provider request failed");
 
-          // 8. Handle response based on whether tools were used
-          const hasToolCalls = response.toolCalls && response.toolCalls.length > 0;
+            try {
+              await this.bridge.sendMessage({
+                chatId: message.chatId,
+                text: providerFailureReply(error),
+                replyToId: message.id,
+              });
 
-          // Check if agent used any Telegram send tool - it already sent the message
-          const telegramSendCalled =
-            hasToolCalls && response.toolCalls?.some((tc) => TELEGRAM_SEND_TOOLS.has(tc.name));
+              if (this.bridge.requiresOffsetDedup()) {
+                writeOffset(message.id, message.chatId);
+              }
+            } catch (notificationError) {
+              log.error({ err: notificationError }, "Failed to send provider error notification");
+            }
+
+            return;
+          }
+
+          // Suppress only an identical text that was confirmed delivered to this
+          // chat. Cross-chat sends, failed sends, and distinct confirmations must
+          // still produce a response to the requester.
+          const responseAlreadyDelivered = deliveredTelegramText(
+            response.toolCalls,
+            message.chatId,
+            response.content
+          );
 
           if (isSilentReply(response.content)) {
             log.debug("Silent reply suppressed");
           } else if (response.streamed) {
             log.debug("Response already streamed to chat");
           } else if (
-            !telegramSendCalled &&
+            !responseAlreadyDelivered &&
             response.content &&
             response.content.trim().length > 0
           ) {
@@ -537,7 +605,7 @@ export class MessageHandler {
               true
             );
           } else if (
-            telegramSendCalled &&
+            responseAlreadyDelivered &&
             response.content &&
             response.content.trim().length > 0 &&
             !isSilentReply(response.content)

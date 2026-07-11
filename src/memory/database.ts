@@ -110,65 +110,6 @@ export class MemoryDatabase {
     return this._dimensionsChanged;
   }
 
-  getVectorDimensions(): number | undefined {
-    return this.config.vectorDimensions;
-  }
-
-  transaction<T>(fn: () => T): T {
-    return this.db.transaction(fn)();
-  }
-
-  getStats(): {
-    knowledge: number;
-    sessions: number;
-    tasks: number;
-    tgChats: number;
-    tgUsers: number;
-    tgMessages: number;
-    embeddingCache: number;
-    vectorSearchEnabled: boolean;
-  } {
-    const counts = this.db
-      .prepare(
-        `SELECT
-          (SELECT COUNT(*) FROM knowledge)       as knowledge,
-          (SELECT COUNT(*) FROM sessions)        as sessions,
-          (SELECT COUNT(*) FROM tasks)           as tasks,
-          (SELECT COUNT(*) FROM tg_chats)        as tg_chats,
-          (SELECT COUNT(*) FROM tg_users)        as tg_users,
-          (SELECT COUNT(*) FROM tg_messages)     as tg_messages,
-          (SELECT COUNT(*) FROM embedding_cache) as embedding_cache`
-      )
-      .get() as {
-      knowledge: number;
-      sessions: number;
-      tasks: number;
-      tg_chats: number;
-      tg_users: number;
-      tg_messages: number;
-      embedding_cache: number;
-    };
-
-    return {
-      knowledge: counts.knowledge,
-      sessions: counts.sessions,
-      tasks: counts.tasks,
-      tgChats: counts.tg_chats,
-      tgUsers: counts.tg_users,
-      tgMessages: counts.tg_messages,
-      embeddingCache: counts.embedding_cache,
-      vectorSearchEnabled: this.vectorReady,
-    };
-  }
-
-  vacuum(): void {
-    this.db.exec("VACUUM");
-  }
-
-  optimize(): void {
-    this.db.exec("ANALYZE");
-  }
-
   /**
    * Rebuild FTS indexes from existing data.
    * Call this if FTS triggers didn't fire correctly.

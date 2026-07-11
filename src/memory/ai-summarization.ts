@@ -1,4 +1,9 @@
-import { complete, type Context, type Message, type TextContent } from "@mariozechner/pi-ai";
+import {
+  complete,
+  type Context,
+  type Message,
+  type TextContent,
+} from "@earendil-works/pi-ai/compat";
 import { extractText, extractToolNames, stripEnvelopePrefix } from "../utils/pi-message.js";
 import { getUtilityModel } from "../providers/model-resolver.js";
 import type { SupportedProvider } from "../config/providers.js";

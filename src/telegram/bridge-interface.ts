@@ -20,6 +20,22 @@ export interface TelegramMessage {
   _rawMessage?: Api.Message;
 }
 
+type MediaType = NonNullable<TelegramMessage["mediaType"]>;
+
+/**
+ * Classify a message's media from per-kind presence flags. Shared by both bridges
+ * (GramJS user, grammy bot) which extract the flags from their own message shapes.
+ * A message carries at most one media kind, so the check order is arbitrary.
+ */
+export function classifyMedia(present: Record<MediaType, unknown>): {
+  hasMedia: boolean;
+  mediaType?: MediaType;
+} {
+  const order: MediaType[] = ["photo", "video", "audio", "voice", "sticker", "document"];
+  const mediaType = order.find((k) => present[k]);
+  return { hasMedia: mediaType !== undefined, mediaType };
+}
+
 export interface InlineButton {
   text: string;
   callback_data: string;

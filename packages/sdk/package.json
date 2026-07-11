@@ -1,7 +1,7 @@
 {
   "name": "@teleton-agent/sdk",
-  "version": "1.0.0",
-  "description": "Plugin SDK types for Teleton Agent — TypeScript autocompletion and type safety for plugin developers",
+  "version": "2.1.0",
+  "description": "Plugin SDK for Teleton Agent — typed capabilities, runtime contracts, and error helpers",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -38,12 +38,18 @@
     "url": "https://github.com/TONresistor/teleton-agent",
     "directory": "packages/sdk"
   },
+  "dependencies": {
+    "@types/better-sqlite3": "^7.6.13",
+    "@types/node": "^22.0.0"
+  },
   "devDependencies": {
+    "@ton/core": "^0.63.1",
     "better-sqlite3": "^12.0.0",
     "tsup": "^8.5.0",
     "typescript": "^5.8.0"
   },
   "peerDependencies": {
+    "@ton/core": ">=0.63.0 <1.0.0",
     "better-sqlite3": ">=9.0.0"
   },
   "peerDependenciesMeta": {

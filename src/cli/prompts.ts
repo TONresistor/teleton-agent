@@ -8,6 +8,7 @@
 import { input, select, checkbox, confirm, password } from "@inquirer/prompts";
 import chalk from "chalk";
 import ora from "ora";
+import { PACKAGE_VERSION } from "../utils/package-info.js";
 
 // ── Branding & Theme ──────────────────────────────────────────────────
 
@@ -105,7 +106,7 @@ export function wizardFrame(currentStep: number, steps: StepDef[]): string {
 
   const subtitle = "Autonomous AI agent on Telegram with native TON blockchain integration";
   out.push(frameRow(DIM(centerIn(subtitle, W))));
-  out.push(frameRow(DIM(centerIn("t.me/TeletonAgents  |  v0.7.0", W))));
+  out.push(frameRow(DIM(centerIn(`t.me/TeletonAgents  |  v${PACKAGE_VERSION}`, W))));
 
   out.push(`  ${TON("╠" + "═".repeat(W) + "╣")}`);
   out.push(emptyRow());
@@ -403,10 +404,6 @@ export class InquirerPrompter {
     console.log(`  ${GREEN("✓")} ${GREEN(message)}`);
   }
 }
-
-// Backward-compatible aliases
-export { InquirerPrompter as ClackPrompter };
-export type ClackSpinner = PrompterSpinner;
 
 export function createPrompter(): InquirerPrompter {
   return new InquirerPrompter();

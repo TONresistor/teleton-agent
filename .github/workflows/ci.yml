@@ -26,14 +26,20 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version-file: .nvmrc
           cache: npm
 
       - name: Install dependencies
         run: npm ci
 
+      - name: Verify runtime contract
+        run: npm run check:runtime
+
       - name: Build SDK workspace
         run: npm run build -w packages/sdk
+
+      - name: Verify SDK package contract
+        run: node scripts/check-sdk-package.mjs
 
       - name: Type check
         run: npm run typecheck
@@ -62,7 +68,7 @@ jobs:
     timeout-minutes: 25
     strategy:
       matrix:
-        node-version: [20, 22]
+        node-version: ["22.22.2", "24.15.0"]
     steps:
       - uses: actions/checkout@v4
 
@@ -90,16 +96,16 @@ jobs:
       - name: Test with coverage
         run: npm run test:coverage
 
+      - name: Enforce SDK coverage
+        run: npm run test:sdk:coverage
+
       - name: CLI smoke test
         run: node dist/cli/index.js --help
 
-  # ---- Telegram notification (after the full CI passes, pushes only) ----
-  # dev  : one message PER COMMIT, prefixed [DEV], paced 1/sec.
-  # main : one clean summary of how many stable commits were merged.
-  # Both walk the push range (before..after), not just the HEAD commit.
+  # ---- Telegram notification (one summary per push, pushes only) ----
   notify:
     needs: [checks, test]
-    if: github.event_name == 'push'
+    if: always() && github.event_name == 'push'
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
@@ -111,33 +117,22 @@ jobs:
         env:
           TG_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TG_CHAT: ${{ secrets.TELEGRAM_CHAT_ID }}
-          REPO: ${{ github.repository }}
           BRANCH: ${{ github.ref_name }}
-          BEFORE: ${{ github.event.before }}
-          AFTER: ${{ github.sha }}
+          BEFORE_SHA: ${{ github.event.before }}
+          AFTER_SHA: ${{ github.event.after }}
+          CHECKS_RESULT: ${{ needs.checks.result }}
+          TEST_RESULT: ${{ needs.test.result }}
         run: |
           set -uo pipefail
-          ZERO=0000000000000000000000000000000000000000
+          NULL_SHA="0000000000000000000000000000000000000000"
 
-          # Resolve the commits in this push, oldest -> newest (merge commits excluded).
-          # Fallbacks (first push / force-push / unknown before) -> HEAD only.
-          if [ "$BEFORE" = "$ZERO" ] \
-             || ! git cat-file -e "${BEFORE}^{commit}" 2>/dev/null \
-             || ! git merge-base --is-ancestor "$BEFORE" "$AFTER" 2>/dev/null; then
-            SHAS=$(git log -1 --format=%H "$AFTER")
-            RANGE_OK=0
-          else
-            SHAS=$(git log --reverse --no-merges --format=%H "${BEFORE}..${AFTER}")
-            RANGE_OK=1
+          if [ -z "$TG_TOKEN" ] || [ -z "$TG_CHAT" ]; then
+            echo "Telegram secrets not configured, skipping"
+            exit 0
           fi
 
-          COUNT=$(printf '%s\n' "$SHAS" | grep -c . || true)
-          if [ "$COUNT" -eq 0 ]; then echo "Nothing to notify"; exit 0; fi
-
-          esc() { printf '%s' "$1" | sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g'; }
-          # Send one message, retrying until Telegram accepts it. IMPORTANT: no
-          # curl --fail here — on a 429 we must READ the body to get retry_after;
-          # --fail discards it, which silently drops rate-limited messages.
+          # Send one message, retrying until Telegram accepts it. Do not use
+          # curl --fail: a 429 body contains the retry_after value we need.
           send() {
             local text="$1" attempt resp ra
             for attempt in 1 2 3 4 5 6; do
@@ -155,26 +150,42 @@ jobs:
             return 1
           }
 
-          if [ "$BRANCH" = "main" ]; then
-            # Clean summary: number of stable commits merged to main.
-            noun="commits"; [ "$COUNT" -eq 1 ] && noun="commit"
-            if [ "$RANGE_OK" = 1 ]; then
-              link="https://github.com/${REPO}/compare/${BEFORE}...${AFTER}"
+          REPO_URL="${{ github.server_url }}/${{ github.repository }}"
+
+          # One summary notification per push (avoid per-commit spam).
+          if [ -n "$BRANCH" ]; then
+            if [ "$BEFORE_SHA" = "$NULL_SHA" ] || ! git merge-base --is-ancestor "$BEFORE_SHA" "$AFTER_SHA" 2>/dev/null; then
+              COUNT=$(git rev-list --count "$AFTER_SHA")
+              RANGE="$AFTER_SHA"
+              URL="$REPO_URL/commits/$BRANCH"
             else
-              link="https://github.com/${REPO}/commit/${AFTER}"
+              COUNT=$(git rev-list --count "$BEFORE_SHA..$AFTER_SHA")
+              RANGE="$BEFORE_SHA..$AFTER_SHA"
+              URL="$REPO_URL/compare/$BEFORE_SHA...$AFTER_SHA"
             fi
-            send "🟢 <b>${COUNT}</b> stable ${noun} merged to <b>main</b>"$'\n'"<a href=\"${link}\">View changes</a>"
-          else
-            # Per-commit feed for dev (and any other non-main branch), [DEV] prefixed.
-            tag="[${BRANCH^^}]"
+            NOUN=commits; [ "$COUNT" = "1" ] && NOUN=commit
+            REPO_NAME=${REPO_URL##*/}
+            LABEL=$(printf '%s' "$BRANCH" | tr '[:lower:]' '[:upper:]')
+            TEXT="<b>[$LABEL] $REPO_NAME</b>"
+            if [ "$CHECKS_RESULT" = "success" ] && [ "$TEST_RESULT" = "success" ]; then
+              printf -v TEXT '%s\n%s %s pushed to %s' "$TEXT" "$COUNT" "$NOUN" "$BRANCH"
+            else
+              printf -v TEXT '%s\nCI failed on %s (%s %s)' "$TEXT" "$BRANCH" "$COUNT" "$NOUN"
+            fi
+
+            # Commit titles (HTML-escaped), oldest first, capped to avoid huge messages.
+            MAX=50
+            TITLES=$(git log --reverse --max-count="$MAX" --pretty=format:'%s' "$RANGE" \
+              | sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g')
             if [ "$COUNT" -gt 1 ]; then
-              send "📦 <b>${COUNT}</b> commits pushed to <b>${BRANCH}</b>"
-              sleep 1
+              if [ "$COUNT" -gt "$MAX" ]; then
+                printf -v TITLES '%s\n… and %s more' "$TITLES" "$((COUNT - MAX))"
+              fi
+              # Multiple commits: collapse the title list into an expandable quote.
+              printf -v TEXT '%s\n\n<blockquote expandable>%s</blockquote>' "$TEXT" "$TITLES"
+            elif [ -n "$TITLES" ]; then
+              printf -v TEXT '%s\n\n<blockquote>%s</blockquote>' "$TEXT" "$TITLES"
             fi
-            for sha in $SHAS; do
-              title=$(esc "$(git log -1 --format=%s "$sha")")
-              url="https://github.com/${REPO}/commit/${sha}"
-              send "${tag} <b>${title}</b>"$'\n'"<a href=\"${url}\">${sha:0:7}</a>"
-              sleep 1
-            done
+            printf -v TEXT '%s\n\n<a href="%s">View commits</a>' "$TEXT" "$URL"
+            send "$TEXT"
           fi

@@ -1081,7 +1081,7 @@ describe("Memory Schema", () => {
     });
 
     it("CURRENT_SCHEMA_VERSION is set to expected value", () => {
-      expect(CURRENT_SCHEMA_VERSION).toBe("1.19.0");
+      expect(CURRENT_SCHEMA_VERSION).toBe("1.20.0");
     });
   });
 
@@ -1128,6 +1128,20 @@ describe("Memory Schema", () => {
       expect(columnNames).toContain("payload");
       expect(columnNames).toContain("reason");
       expect(columnNames).toContain("scheduled_message_id");
+    });
+
+    it("runMigrations from version 1.19.0 adds scheduled task authority columns", () => {
+      ensureSchema(db);
+      setSchemaVersion(db, "1.19.0");
+
+      runMigrations(db);
+
+      const info = db.prepare("PRAGMA table_info(tasks)").all() as Array<{ name: string }>;
+      const columnNames = info.map((c) => c.name);
+
+      expect(columnNames).toContain("origin_sender_id");
+      expect(columnNames).toContain("origin_chat_id");
+      expect(columnNames).toContain("origin_is_group");
     });
 
     it("runMigrations from version 1.1.0 extends sessions table", () => {

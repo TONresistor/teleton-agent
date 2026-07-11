@@ -1,6 +1,6 @@
 /**
  * Generic inline bot send tool — sends plugin inline results into chats.
- * Replicates the userbot→bot inline query pattern from deal proposals.
+ * Uses Telegram's userbot-to-bot inline query flow for plugin-generated cards.
  */
 
 import { Api } from "telegram";
@@ -97,7 +97,7 @@ export const botInlineSendExecutor: ToolExecutor<BotInlineSendParams> = async (p
       })
     );
 
-    log.info(`Inline bot result sent: plugin="${plugin}" query="${query}" index=${resultIndex}`);
+    log.info({ plugin, queryLength: query.length, resultIndex }, "Inline bot result sent");
 
     return {
       success: true,

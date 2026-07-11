@@ -9,7 +9,7 @@ import {
   type BlocklistConfig,
   type TriggerEntry,
 } from "../../agent/hooks/user-hook-store.js";
-import { getErrorMessage } from "../../utils/errors.js";
+import { apiError } from "../http.js";
 
 export function createHooksRoutes(deps: WebUIServerDeps) {
   const app = new Hono();
@@ -21,7 +21,7 @@ export function createHooksRoutes(deps: WebUIServerDeps) {
       const data = getBlocklistConfig(deps.memory.db);
       return c.json<APIResponse<BlocklistConfig>>({ success: true, data });
     } catch (error: unknown) {
-      return c.json<APIResponse>({ success: false, error: getErrorMessage(error) }, 500);
+      return apiError(c, error, 500);
     }
   });
 
@@ -59,7 +59,7 @@ export function createHooksRoutes(deps: WebUIServerDeps) {
 
       return c.json<APIResponse<BlocklistConfig>>({ success: true, data: config });
     } catch (error: unknown) {
-      return c.json<APIResponse>({ success: false, error: getErrorMessage(error) }, 500);
+      return apiError(c, error, 500);
     }
   });
 
@@ -70,7 +70,7 @@ export function createHooksRoutes(deps: WebUIServerDeps) {
       const data = getTriggersConfig(deps.memory.db);
       return c.json<APIResponse<TriggerEntry[]>>({ success: true, data });
     } catch (error: unknown) {
-      return c.json<APIResponse>({ success: false, error: getErrorMessage(error) }, 500);
+      return apiError(c, error, 500);
     }
   });
 
@@ -115,7 +115,7 @@ export function createHooksRoutes(deps: WebUIServerDeps) {
 
       return c.json<APIResponse<TriggerEntry>>({ success: true, data: entry });
     } catch (error: unknown) {
-      return c.json<APIResponse>({ success: false, error: getErrorMessage(error) }, 500);
+      return apiError(c, error, 500);
     }
   });
 
@@ -163,7 +163,7 @@ export function createHooksRoutes(deps: WebUIServerDeps) {
 
       return c.json<APIResponse<TriggerEntry>>({ success: true, data: triggers[idx] });
     } catch (error: unknown) {
-      return c.json<APIResponse>({ success: false, error: getErrorMessage(error) }, 500);
+      return apiError(c, error, 500);
     }
   });
 
@@ -176,7 +176,7 @@ export function createHooksRoutes(deps: WebUIServerDeps) {
       deps.userHookEvaluator?.reload();
       return c.json<APIResponse<null>>({ success: true, data: null });
     } catch (error: unknown) {
-      return c.json<APIResponse>({ success: false, error: getErrorMessage(error) }, 500);
+      return apiError(c, error, 500);
     }
   });
 
@@ -204,7 +204,7 @@ export function createHooksRoutes(deps: WebUIServerDeps) {
         data: { id, enabled: body.enabled },
       });
     } catch (error: unknown) {
-      return c.json<APIResponse>({ success: false, error: getErrorMessage(error) }, 500);
+      return apiError(c, error, 500);
     }
   });
 
