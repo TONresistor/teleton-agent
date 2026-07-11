@@ -281,6 +281,16 @@ export interface ReceivedGift {
   messageId?: number;
 }
 
+/** Metadata returned after sending a result from a third-party inline bot. */
+export interface InlineBotResult {
+  query: string;
+  sentIndex: number;
+  totalResults: number;
+  title: string | null;
+  description: string | null;
+  type: string | null;
+}
+
 /**
  * Telegram messaging and user operations.
  *
@@ -359,6 +369,23 @@ export interface TelegramSDK {
    * @returns Simplified message objects, or empty array on error.
    */
   getMessages(chatId: string, limit?: number): Promise<SimpleMessage[]>;
+
+  /**
+   * Query a third-party inline bot and send one of its results to a chat.
+   * Available in Telegram user mode only.
+   *
+   * @param chatId — Destination chat ID
+   * @param botUsername — Inline bot username, with or without a leading @
+   * @param query — Inline query text
+   * @param index — Zero-based result index (default: 0, max: 49)
+   * @throws {PluginSDKError} NOT_AVAILABLE, BRIDGE_NOT_CONNECTED, OPERATION_FAILED
+   */
+  sendInlineBotResult(
+    chatId: string,
+    botUsername: string,
+    query: string,
+    index?: number
+  ): Promise<InlineBotResult>;
 
   /**
    * Get bot's own user info.

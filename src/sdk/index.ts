@@ -111,7 +111,7 @@ export function createPluginSDK(deps: SDKDependencies, opts: CreatePluginSDKOpti
   const log = createLogger(opts.pluginName);
 
   const safeDb = opts.db ? createSafePluginDb(opts.db) : null;
-  const ton = Object.freeze(createTonSDK(log, safeDb));
+  const ton = Object.freeze(createTonSDK(log, safeDb, opts.pluginName));
   const telegram = Object.freeze(createTelegramSDK(deps.bridge, log));
   const secrets = Object.freeze(
     createSecretsSDK(opts.pluginName, opts.pluginConfig, log, opts.secretDeclarations)

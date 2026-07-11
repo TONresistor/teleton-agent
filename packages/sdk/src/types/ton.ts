@@ -170,6 +170,40 @@ export interface TonTransferResult {
   seqno: number;
 }
 
+/** Core-managed Highload Wallet v3 state. */
+export interface HighloadWalletInfo {
+  address: string;
+  rawAddress: string;
+  balance: string;
+  balanceNano: string;
+  deployed: boolean;
+  currentQueryId: number;
+  hasNext: boolean;
+  timeout?: number;
+  lastCleaned?: number;
+  subwalletId?: number;
+}
+
+/** Result of a Highload Wallet v3 batch submission. */
+export interface HighloadBatchResult {
+  address: string;
+  /** Query ID submitted on-chain. */
+  queryId: number;
+  /** Persisted query ID reserved for the next batch. */
+  nextQueryId: number;
+  recipientCount: number;
+}
+
+/** Highload Wallet v3 operations with signing and query IDs owned by Teleton core. */
+export interface HighloadSDK {
+  getInfo(): Promise<HighloadWalletInfo>;
+  fund(amount: number): Promise<TonTransferResult>;
+  sendMessages(
+    messages: TonMessage[],
+    opts?: { valuePerBatch?: number }
+  ): Promise<HighloadBatchResult>;
+}
+
 /** Result of runGetMethod */
 export interface GetMethodResult {
   exitCode: number;
@@ -769,4 +803,7 @@ export interface TonSDK {
 
   /** DNS domain management (.ton domains) */
   readonly dns: DnsSDK;
+
+  /** Highload Wallet v3 batch transfers */
+  readonly highload: HighloadSDK;
 }

@@ -52,6 +52,7 @@ import { isHttpError } from "../utils/errors.js";
 import { fetchJettonMeta, findJettonBalance, formatTokenBalance } from "./ton/jetton-api.js";
 import { mapNftItem, type TonApiNftItem } from "./ton/nft-api.js";
 import { createJettonAnalyticsSDK } from "./ton/jetton-analytics.js";
+import { createHighloadSDK } from "./ton-highload.js";
 
 /**
  * Drop the cached TON node when an error is a 429 or 5xx, so the next attempt
@@ -276,7 +277,22 @@ function cleanupOldTransactions(
   }
 }
 
-export function createTonSDK(log: PluginLogger, db: Database.Database | null): TonSDK {
+export function createTonSDK(
+  log: PluginLogger,
+  db: Database.Database | null,
+  pluginName = "plugin"
+): TonSDK {
+  const highload = createHighloadSDK(
+    log,
+    db,
+    (address, amount, bounce) =>
+      signAndSend([{ to: address, value: amount, bounce }], {
+        sendMode: SendMode.PAY_GAS_SEPARATELY | SendMode.IGNORE_ERRORS,
+        errorPrefix: "Failed to fund Highload wallet",
+      }),
+    pluginName
+  );
+
   return {
     getAddress(): string | null {
       try {
@@ -991,5 +1007,6 @@ export function createTonSDK(log: PluginLogger, db: Database.Database | null): T
 
     dex: Object.freeze(createDexSDK(log)),
     dns: Object.freeze(createDnsSDK(log)),
+    highload: Object.freeze(highload),
   };
 }

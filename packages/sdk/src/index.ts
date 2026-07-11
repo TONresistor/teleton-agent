@@ -50,6 +50,9 @@ export type {
   TonMessage,
   TonSendOptions,
   TonTransferResult,
+  HighloadWalletInfo,
+  HighloadBatchResult,
+  HighloadSDK,
   GetMethodResult,
   TonSender,
   NftItem,
@@ -88,6 +91,7 @@ export type {
   PollOptions,
   StarGift,
   ReceivedGift,
+  InlineBotResult,
   StartContext,
   // Telegram Extensions
   Dialog,

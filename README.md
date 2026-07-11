@@ -541,7 +541,7 @@ src/
 │   ├── manager.ts         # Binary download, start/stop, PID file, health checks
 │   ├── module.ts          # Module lifecycle integration
 │   └── tools.ts           # ton_proxy_status tool
-├── sdk/                    # Plugin SDK (v2.0.0)
+├── sdk/                    # Plugin SDK (v2.1.0)
 │   ├── index.ts            # SDK factory (createPluginSDK, all objects frozen)
 │   ├── ton.ts              # TON service for plugins
 │   ├── telegram.ts         # Telegram service for plugins

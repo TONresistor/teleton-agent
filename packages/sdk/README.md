@@ -183,7 +183,7 @@ type SDKErrorCode =
 
 ```typescript
 import { SDK_VERSION } from "@teleton-agent/sdk";
-// "1.0.0"
+// "2.1.0"
 ```
 
 ---
@@ -214,6 +214,7 @@ import { SDK_VERSION } from "@teleton-agent/sdk";
 | `getJettonHistory(jettonAddress)` | `Promise<JettonHistory \| null>` | Market analytics: volume, FDV, market cap |
 | `dex` | `DexSDK` | DEX quotes and swaps (STON.fi + DeDust) |
 | `dns` | `DnsSDK` | .ton domain management and auctions |
+| `highload` | `HighloadSDK` | Core-managed Highload Wallet v3 batches |
 
 #### `TonBalance`
 
@@ -450,6 +451,16 @@ Extends `DexQuoteParams` with:
 | `minOutput` | `string` | Minimum after slippage |
 | `slippage` | `string` | Slippage used |
 
+#### Highload Wallet v3 — `sdk.ton.highload`
+
+| Method | Returns | Description |
+|--------|---------|-------------|
+| `getInfo()` | `Promise<HighloadWalletInfo>` | Address, balance, deployment, query sequence, and on-chain settings |
+| `fund(amount)` | `Promise<TonTransferResult>` | Fund the derived Highload wallet from the main wallet |
+| `sendMessages(messages, opts?)` | `Promise<HighloadBatchResult>` | Submit 1–254 messages with core-managed signing and query IDs |
+
+The Highload address uses the standard subwallet ID `0x10ad`, preserving compatibility with existing Multisend deposits. Query IDs are advanced in private core state before broadcast to prevent cross-plugin collisions and replay after a process crash.
+
 #### DNS — `sdk.ton.dns`
 
 Manage .ton domains: check availability, resolve addresses, participate in auctions, and link domains to wallets.
@@ -551,6 +562,7 @@ await sdk.ton.dns.setSiteRecord("mysite.ton", "aabbccdd...64hex");
 | `sendDice(chatId, emoticon, replyToId?)` | `Promise<DiceResult>` | Send dice/slot animation |
 | `sendReaction(chatId, messageId, emoji)` | `Promise<void>` | React to a message |
 | `getMessages(chatId, limit?)` | `Promise<SimpleMessage[]>` | Fetch recent messages (default 50) |
+| `sendInlineBotResult(chatId, botUsername, query, index?)` | `Promise<InlineBotResult>` | Query a third-party inline bot and send one result (user mode only) |
 | `getMe()` | `TelegramUser \| null` | Bot's user info |
 | `isAvailable()` | `boolean` | Whether the bridge is connected |
 

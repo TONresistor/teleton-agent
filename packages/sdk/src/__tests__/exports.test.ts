@@ -23,7 +23,7 @@ describe("SDK_VERSION", () => {
   });
 
   it("equals the package version", () => {
-    expect(SDK_VERSION).toBe("2.0.0");
+    expect(SDK_VERSION).toBe("2.1.0");
   });
 });
 

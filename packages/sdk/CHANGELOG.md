@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.1.0] - 2026-07-11
+
+### Added
+
+- `telegram.sendInlineBotResult(chatId, botUsername, query, index?)` safely queries a third-party inline bot and sends the selected result without exposing the raw Telegram client.
+- `InlineBotResult` describes the normalized result metadata returned to plugins.
+- `ton.highload` preserves Highload Wallet v3 addresses while core owns signing, transaction serialization, and persistent query IDs.
+
 ## [2.0.0] - 2026-07-10
 
 ### Breaking
