@@ -309,7 +309,7 @@ interface SimpleToolDef {
   execute: (params, context) => Promise<ToolResult>;
   scope?: "open" | "always" | "dm-only" | "group-only" | "admin-only" | "allowlist" | "disabled";
   category?: "data-bearing" | "action";
-  requiresApproval?: boolean;
+  requiresApproval?: boolean; // Deprecated compatibility field; ignored by the runtime
 }
 
 interface ToolResult {

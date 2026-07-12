@@ -366,7 +366,6 @@ All admin commands support `/`, `!`, or `.` prefix:
 | `/policy <dm\|group> <value>` | Change access policies live |
 | `/loop <1-50>` | Set max agentic iterations |
 | `/wallet` | Show wallet address + balance |
-| `/approve <request_id>` / `/reject <request_id>` | Resolve a pending financial action |
 | `/modules set\|info\|reset` | Per-group tool permissions |
 | `/plugin set\|unset\|keys` | Manage plugin secrets |
 | `/task <description>` | Assign a task to the agent |

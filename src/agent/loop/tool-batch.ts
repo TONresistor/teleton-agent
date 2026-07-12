@@ -231,7 +231,9 @@ export function detectToolStall(toolPlans: ToolPlan[], seen: Set<string>): boole
 export function injectDiscoveredTools(
   toolPlans: ToolPlan[],
   execResults: ToolExecResult[],
-  tools: PiAiTool[]
+  tools: PiAiTool[],
+  maxTools: number | null = null,
+  excludedNames: ReadonlySet<string> = new Set()
 ): number {
   let injected = 0;
   for (let index = 0; index < toolPlans.length; index++) {
@@ -248,12 +250,26 @@ export function injectDiscoveredTools(
     }
     const discovered = (exec.result.data as { tools: PiAiTool[] }).tools;
     if (!Array.isArray(discovered)) continue;
+    const available: PiAiTool[] = [];
     for (const tool of discovered) {
-      if (tool?.name && !tools.some((existing) => existing.name === tool.name)) {
+      if (!tool?.name || excludedNames.has(tool.name)) continue;
+      if (tools.some((existing) => existing.name === tool.name)) {
+        available.push(tool);
+        continue;
+      }
+      if (maxTools === null || tools.length < maxTools) {
         tools.push(tool);
+        available.push(tool);
         injected++;
       }
     }
+    const data = exec.result.data as Record<string, unknown>;
+    data.tools = available;
+    data.tools_found = available.length;
+    data.hint =
+      available.length > 0
+        ? "These tools are now available. Call them directly."
+        : "No additional tools could be loaded in this context.";
   }
   return injected;
 }

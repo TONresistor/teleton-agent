@@ -664,6 +664,7 @@ export class AgentRuntime {
         ...toolContext,
         chatId,
         isGroup: effectiveIsGroup,
+        isGuest: opts.isGuest,
       };
 
       // Phases 1-2: build the tool plans (tool:before hooks) and execute them.
@@ -676,6 +677,23 @@ export class AgentRuntime {
         effectiveIsGroup
       );
 
+      // Mid-loop tool injection: when tool_search returns discoveries, inject schemas
+      // before recording the result. The result is pruned to tools that are actually
+      // available, so the model is never told to call a schema rejected by the
+      // provider limit or current context.
+      if (tools) {
+        const injected = injectDiscoveredTools(
+          toolPlans,
+          execResults,
+          tools,
+          getProviderMetadata(provider).toolLimit,
+          opts.isGuest ? TELEGRAM_SEND_TOOLS : undefined
+        );
+        if (injected > 0) {
+          log.info(`ToolSearch: injected ${injected} tool(s) mid-loop (total: ${tools.length})`);
+        }
+      }
+
       // Phase 3: record results + observing hooks; push the returned messages in order.
       const resultMessages = await recordToolResults(this.hookRunner, toolPlans, execResults, {
         totalToolCalls,
@@ -686,17 +704,6 @@ export class AgentRuntime {
       });
       for (const resultMsg of resultMessages) {
         context.messages.push(resultMsg);
-      }
-
-      // Mid-loop tool injection: when tool_search returns discoveries, inject schemas
-      // into the live tools[] so the LLM can call them in the next iteration (D4).
-      // Runs whenever tools exist (ToolSearch mode AND the RAG hybrid escape hatch);
-      // it's a no-op unless a tool_search call actually returned results.
-      if (tools) {
-        const injected = injectDiscoveredTools(toolPlans, execResults, tools);
-        if (injected > 0) {
-          log.info(`ToolSearch: injected ${injected} tool(s) mid-loop (total: ${tools.length})`);
-        }
       }
 
       log.info(`${iteration}/${maxIterations} → ${iterationToolNames.join(", ")}`);

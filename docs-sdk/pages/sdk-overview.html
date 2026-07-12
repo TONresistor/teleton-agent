@@ -205,7 +205,7 @@ export const manifest: PluginManifest = {
   ) =&gt; Promise&lt;ToolResult&gt;;    // Tool executor function
   scope?: ToolScope;           // Visibility scope (default: "always")
   category?: ToolCategory;     // "data-bearing" or "action"
-  requiresApproval?: boolean;  // Require authenticated owner approval
+  requiresApproval?: boolean;  // Deprecated compatibility field; ignored by the runtime
 }</code></pre></div>
 
                 <h3>ToolResult</h3>

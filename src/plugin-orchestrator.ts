@@ -93,7 +93,6 @@ export class PluginOrchestrator {
       toolIndex.ensureSchema();
       this.registry.setToolIndex(toolIndex);
 
-      // eslint-disable-next-line @typescript-eslint/no-misused-promises -- callback is fire-and-forget
       this.registry.onToolsChanged(async (removed, added) => {
         await toolIndex.reindexTools(removed, added);
       });

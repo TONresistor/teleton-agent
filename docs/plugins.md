@@ -801,7 +801,7 @@ async execute(params, context) {
 - `"data-bearing"` -- Tool results are subject to observation masking. After a few agentic iterations, older results from data-bearing tools are summarized to reduce token usage (~90% reduction).
 - `"action"` -- Tool results are always preserved in full across all iterations. Use for tools whose output must remain visible (e.g., transaction confirmations).
 
-External `action` tools are forced to `admin-only` and require owner approval by default. Read-only `data-bearing` tools may opt into approval with `requiresApproval: true`.
+External `action` tools require a trusted Telegram identity by default and execute directly once authorized. The legacy `requiresApproval` field remains accepted for compatibility but is ignored at runtime.
 
 ---
 
