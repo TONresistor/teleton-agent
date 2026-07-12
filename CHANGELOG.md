@@ -15,6 +15,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Isolated iterative compaction summaries per conversation, preventing one chat summary from entering another chat.
+- Persist Telegram admin changes from `/model`, `/loop`, `/policy`, and `/rag` to the validated YAML config before applying them at runtime.
 
 ## [0.10.0] - 2026-07-11
 

@@ -189,7 +189,7 @@ export const CONFIGURABLE_KEYS: Record<string, ConfigKeyMeta> = {
     description: "Max tool-call loop iterations per message",
     sensitive: false,
     hotReload: "instant",
-    validate: numberInRange(1, 20),
+    validate: numberInRange(1, 50),
     mask: identity,
     parse: (v) => Number(v),
   },
