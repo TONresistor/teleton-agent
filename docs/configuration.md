@@ -46,6 +46,9 @@ LLM provider and agentic loop configuration.
 | `agent.temperature` | `number` | `0.7` | Sampling temperature (0.0 = deterministic, 1.0 = creative). |
 | `agent.system_prompt` | `string \| null` | `null` | Additional system prompt text appended to the default SOUL.md personality. Set to `null` to use only the built-in soul. |
 | `agent.max_agentic_iterations` | `number` | `5` | Maximum number of agentic loop iterations per message. Each iteration is one tool-call-then-result cycle. Higher values allow more complex multi-step reasoning but increase cost and latency. |
+| `agent.max_tool_calls_per_turn` | `number` | `20` | Maximum tool executions in one inbound turn. Calls beyond the budget are not started. |
+| `agent.max_turn_duration_ms` | `number` | `300000` | Wall-clock budget checked between safe loop phases. Running external actions are never cut off. |
+| `agent.fallbacks` | `array` | `[]` | Ordered provider/model fallbacks used only after quota or transient provider failures and only before any external action has started. |
 
 ### agent.session_reset_policy
 
@@ -69,6 +72,11 @@ agent:
   max_tokens: 4096
   temperature: 0.7
   max_agentic_iterations: 5
+  max_tool_calls_per_turn: 20
+  max_turn_duration_ms: 300000
+  fallbacks:
+    - provider: "codex"
+      model: "gpt-5.6-terra"
   session_reset_policy:
     daily_reset_enabled: true
     daily_reset_hour: 4
@@ -642,6 +650,8 @@ agent:
   max_tokens: 4096
   temperature: 0.7
   max_agentic_iterations: 5
+  max_tool_calls_per_turn: 20
+  max_turn_duration_ms: 300000
   session_reset_policy:
     daily_reset_enabled: true
     daily_reset_hour: 4

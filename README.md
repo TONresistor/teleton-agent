@@ -15,7 +15,7 @@
 
 ---
 
-<p align="center">Teleton is an autonomous AI agent platform that operates as a real Telegram user account or a Telegram Bot. It thinks through an agentic loop with tool calling, remembers conversations across sessions with hybrid RAG, and natively integrates the TON blockchain: send crypto, swap on DEXs, bid on domains, verify payments - all from a chat message. It can schedule tasks to run autonomously at any time. It ships with 128 always-registered tools plus 5 optional system tools, supports 16 LLM providers, and exposes a Plugin SDK so you can build your own tools on top of the platform.</p>
+<p align="center">Teleton is an autonomous AI agent platform that operates as a real Telegram user account or a Telegram Bot. It thinks through an agentic loop with tool calling, remembers conversations across sessions with hybrid RAG, and natively integrates the TON blockchain: send crypto, swap on DEXs, bid on domains, verify payments - all from a chat message. It can schedule tasks to run autonomously at any time. It ships with 129 always-registered tools plus 5 optional system tools, supports 16 LLM providers, and exposes a Plugin SDK so you can build your own tools on top of the platform.</p>
 
 ### Key Highlights
 
@@ -28,7 +28,7 @@
 <tr>
 <td align="center"><br><b><ins>TON Blockchain</ins></b><br>Wallet, jettons, DEX swaps, DNS, NFTs<br><br></td>
 <td align="center"><br><b><ins>Persistent Memory</ins></b><br>Hybrid RAG, vector + keyword, auto-compaction<br><br></td>
-<td align="center"><br><b><ins>128+ Built-in Tools</ins></b><br>Messaging, media, crypto, DEX, DNS, files<br><br></td>
+<td align="center"><br><b><ins>129+ Built-in Tools</ins></b><br>Messaging, media, crypto, DEX, DNS, files<br><br></td>
 </tr>
 <tr>
 <td align="center"><br><b><ins>Plugin SDK</ins></b><br>Custom tools, isolated DBs, secrets, hooks<br><br></td>
@@ -153,7 +153,7 @@ Teleton can run as a **user account** (MTProto) or a **Telegram bot** (Bot API).
 |---|---|---|
 | **Auth** | Phone + api_id + api_hash | Bot token from @BotFather |
 | **Protocol** | MTProto (GramJS) | Bot API (Grammy) |
-| **Tools** | 128 base, up to 133 with optional system modules | Registry filtered automatically by bot-compatible capabilities |
+| **Tools** | 129 base, up to 134 with optional system modules | Registry filtered automatically by bot-compatible capabilities |
 | **Risk** | Account ban possible | No ban risk |
 | **Dialogs/History** | Full access | Not available |
 | **Media sending** | All types | Photos only (v1) |
@@ -494,9 +494,9 @@ The SDK provides namespaced access to core services:
 src/
 ├── index.ts                # Entry point, TeletonApp lifecycle, graceful shutdown
 ├── agent/                  # Core agent runtime
-│   ├── runtime.ts          # Agentic loop (5 iterations, tool calling, masking, compaction)
+│   ├── runtime.ts          # Budgeted agentic loop, tool calling, masking, compaction
 │   ├── client.ts           # Multi-provider LLM client
-│   └── tools/              # 128 base tools plus 5 optional system tools
+│   └── tools/              # 129 base tools plus 5 optional system tools
 │       ├── register-all.ts # Central tool registration (9 categories)
 │       ├── registry.ts     # Tool registry, scope filtering, provider limits
 │       ├── module-loader.ts    # Built-in module loading (TON Proxy + exec)

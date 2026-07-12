@@ -28,6 +28,13 @@ export const SessionResetPolicySchema = z.object({
     .describe("Minutes of inactivity before session reset (default: 24h)"),
 });
 
+const AgentFallbackSchema = z.object({
+  provider: z.enum(SUPPORTED_PROVIDER_IDS),
+  model: z.string().min(1),
+  api_key: z.string().optional(),
+  base_url: z.string().url().optional(),
+});
+
 export const AgentConfigSchema = z
   .object({
     provider: z.enum(SUPPORTED_PROVIDER_IDS).default("anthropic"),
@@ -51,6 +58,25 @@ export const AgentConfigSchema = z
       .describe(
         "Maximum number of agentic loop iterations (tool call → result → tool call cycles)"
       ),
+    max_tool_calls_per_turn: z
+      .number()
+      .int()
+      .min(1)
+      .max(100)
+      .default(20)
+      .describe("Maximum tool executions in one inbound turn"),
+    max_turn_duration_ms: z
+      .number()
+      .int()
+      .min(10_000)
+      .max(900_000)
+      .default(300_000)
+      .describe("Wall-clock budget checked between safe agentic-loop phases"),
+    fallbacks: z
+      .array(AgentFallbackSchema)
+      .max(3)
+      .default([])
+      .describe("Ordered provider/model fallbacks for quota and transient provider failures"),
     session_reset_policy: SessionResetPolicySchema.default(SessionResetPolicySchema.parse({})),
   })
   .superRefine((agent, context) => {
@@ -65,6 +91,15 @@ export const AgentConfigSchema = z
         message: availability.message ?? `${modelId} is not currently available`,
       });
     }
+    agent.fallbacks.forEach((fallback, index) => {
+      const availability = getModelAvailability(fallback.provider, fallback.model);
+      if (availability.available) return;
+      context.addIssue({
+        code: "custom",
+        path: ["fallbacks", index, "model"],
+        message: availability.message ?? `${fallback.model} is not currently available`,
+      });
+    });
   });
 
 export const TelegramConfigSchema = z

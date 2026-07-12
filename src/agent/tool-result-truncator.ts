@@ -6,7 +6,7 @@ export function truncateToolResult(
   result: { success: boolean; data?: unknown; error?: string },
   maxSize: number
 ): string {
-  const resultText = JSON.stringify(result);
+  const resultText = serializeToolResult(result);
   if (resultText.length <= maxSize) return resultText;
 
   const data = result.data as Record<string, unknown> | undefined;
@@ -40,4 +40,35 @@ export function truncateToolResult(
     }
   }
   return JSON.stringify({ success: result.success, data: summarized });
+}
+
+export function serializeToolResult(result: {
+  success: boolean;
+  data?: unknown;
+  error?: string;
+}): string {
+  return JSON.stringify(result, (_key, value) =>
+    typeof value === "bigint" ? value.toString() : value
+  );
+}
+
+export function attachArtifactReference(
+  truncatedResult: string,
+  artifact: { id: string; sizeBytes: number }
+): string {
+  const parsed = JSON.parse(truncatedResult) as {
+    success: boolean;
+    data?: Record<string, unknown>;
+    error?: string;
+  };
+  parsed.data = {
+    ...(parsed.data ?? {}),
+    _artifact: {
+      id: artifact.id,
+      size_bytes: artifact.sizeBytes,
+      read_with: "tool_result_read",
+      hint: "Read the full result in pages with tool_result_read.",
+    },
+  };
+  return JSON.stringify(parsed);
 }

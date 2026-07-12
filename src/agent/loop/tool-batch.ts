@@ -7,11 +7,16 @@ import type {
   ToolErrorEvent,
 } from "../../sdk/hooks/types.js";
 import { appendToTranscript } from "../../session/transcript.js";
+import { createToolResultArtifact } from "../../memory/tool-result-artifacts.js";
 import { getErrorMessage } from "../../utils/errors.js";
 import { createLogger } from "../../utils/logger.js";
 import type { CompletedToolCall } from "../telegram-send-state.js";
 import { summarizeToolParams } from "../runtime-utils.js";
-import { truncateToolResult } from "../tool-result-truncator.js";
+import {
+  attachArtifactReference,
+  serializeToolResult,
+  truncateToolResult,
+} from "../tool-result-truncator.js";
 import type { ToolRegistry } from "../tools/registry.js";
 import type { ToolContext } from "../tools/types.js";
 
@@ -28,6 +33,7 @@ export interface ToolPlan {
 export interface ToolExecResult {
   result: { success: boolean; data?: unknown; error?: string };
   durationMs: number;
+  attempted?: boolean;
   execError?: { message: string; stack?: string };
 }
 
@@ -42,7 +48,8 @@ export async function executeToolBatch(
   toolCalls: ToolCall[],
   fullContext: ToolContext,
   chatId: string,
-  effectiveIsGroup: boolean
+  effectiveIsGroup: boolean,
+  executionLimit = Number.POSITIVE_INFINITY
 ): Promise<{ toolPlans: ToolPlan[]; execResults: ToolExecResult[] }> {
   // Phase 1: Run tool:before hooks sequentially (hooks may cross-reference)
   const toolPlans: ToolPlan[] = [];
@@ -54,7 +61,12 @@ export async function executeToolBatch(
     let blocked = false;
     let blockReason = "";
 
-    if (hookRunner) {
+    if (toolPlans.length >= executionLimit) {
+      blocked = true;
+      blockReason = "Per-turn tool-call budget exhausted";
+    }
+
+    if (hookRunner && !blocked) {
       const beforeEvent: BeforeToolCallEvent = {
         toolName: block.name,
         params: structuredClone(toolParams),
@@ -88,6 +100,7 @@ export async function executeToolBatch(
           execResults[idx] = {
             result: { success: false, error: plan.blockReason },
             durationMs: 0,
+            attempted: false,
           };
           continue;
         }
@@ -98,13 +111,14 @@ export async function executeToolBatch(
             { ...plan.block, arguments: plan.params },
             fullContext
           );
-          execResults[idx] = { result, durationMs: Date.now() - startTime };
+          execResults[idx] = { result, durationMs: Date.now() - startTime, attempted: true };
         } catch (execErr) {
           const errMsg = getErrorMessage(execErr);
           const errStack = execErr instanceof Error ? execErr.stack : undefined;
           execResults[idx] = {
             result: { success: false, error: errMsg },
             durationMs: Date.now() - startTime,
+            attempted: true,
             execError: { message: errMsg, stack: errStack },
           };
         }
@@ -133,6 +147,7 @@ export async function recordToolResults(
     sessionId: string;
     chatId: string;
     effectiveIsGroup: boolean;
+    db: ToolContext["db"];
   }
 ): Promise<Message[]> {
   const resultMessages: Message[] = [];
@@ -182,6 +197,8 @@ export async function recordToolResults(
     sink.totalToolCalls.push({
       name: block.name,
       input: plan.params,
+      durationMs: exec.durationMs,
+      attempted: exec.attempted,
       result: {
         success: exec.result.success,
         data: exec.result.data,
@@ -189,7 +206,21 @@ export async function recordToolResults(
       },
     });
 
-    const resultText = truncateToolResult(exec.result, MAX_TOOL_RESULT_SIZE);
+    const fullResultText = serializeToolResult(exec.result);
+    let resultText = truncateToolResult(exec.result, MAX_TOOL_RESULT_SIZE);
+    if (fullResultText.length > MAX_TOOL_RESULT_SIZE) {
+      try {
+        const artifact = createToolResultArtifact(sink.db, {
+          sessionId: sink.sessionId,
+          chatId: sink.chatId,
+          toolName: block.name,
+          content: fullResultText,
+        });
+        resultText = attachArtifactReference(resultText, artifact);
+      } catch (error) {
+        log.error({ err: error }, `Failed to persist large result for ${block.name}`);
+      }
+    }
     if (resultText.includes('"_truncated":true')) {
       log.warn(`Tool result too large, truncated to ${resultText.length} chars`);
     }

@@ -314,7 +314,9 @@ export function buildToolNamespaceCatalog(
   >();
 
   for (const registered of tools) {
-    if (registered.tool.name === "tool_search") continue;
+    if (registered.tool.name === "tool_search" || registered.tool.name === "tool_result_read") {
+      continue;
+    }
     const current = grouped.get(registered.namespace.name) ?? {
       namespace: registered.namespace,
       tools: [],

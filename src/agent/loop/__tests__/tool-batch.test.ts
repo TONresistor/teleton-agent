@@ -1,5 +1,10 @@
-import { describe, expect, it } from "vitest";
-import { injectDiscoveredTools, type ToolExecResult, type ToolPlan } from "../tool-batch.js";
+import { describe, expect, it, vi } from "vitest";
+import {
+  executeToolBatch,
+  injectDiscoveredTools,
+  type ToolExecResult,
+  type ToolPlan,
+} from "../tool-batch.js";
 
 function discoveryPlan(): ToolPlan {
   return {
@@ -46,6 +51,41 @@ describe("injectDiscoveredTools", () => {
       tools_found: 1,
       tools: [{ name: "exec_run" }],
       hint: "These tools are now available. Call them directly.",
+    });
+  });
+});
+
+describe("executeToolBatch budgets", () => {
+  it("does not start tool calls beyond the remaining per-turn budget", async () => {
+    const execute = vi.fn(async () => ({ success: true }));
+    const calls = ["first_tool", "second_tool"].map((name, index) => ({
+      type: "toolCall" as const,
+      id: `call-${index}`,
+      name,
+      arguments: {},
+    }));
+
+    const { toolPlans, execResults } = await executeToolBatch(
+      { execute } as never,
+      undefined,
+      calls,
+      {
+        bridge: {} as never,
+        db: {} as never,
+        chatId: "chat-1",
+        senderId: 1,
+        isGroup: false,
+      },
+      "chat-1",
+      false,
+      1
+    );
+
+    expect(execute).toHaveBeenCalledTimes(1);
+    expect(execResults.map((result) => result.attempted)).toEqual([true, false]);
+    expect(toolPlans[1]).toMatchObject({
+      blocked: true,
+      blockReason: "Per-turn tool-call budget exhausted",
     });
   });
 });

@@ -27,6 +27,7 @@ import type { ToolIndex } from "./tool-index.js";
 import { getErrorMessage } from "../../utils/errors.js";
 import { createLogger } from "../../utils/logger.js";
 import { TELEGRAM_SEND_TOOLS } from "../../constants/tools.js";
+import { completeActionExecution, reserveActionExecution } from "../../memory/action-executions.js";
 import {
   buildToolNamespaceCatalog,
   formatNamespaceCatalogForPrompt,
@@ -317,12 +318,35 @@ export class ToolRegistry {
     validatedArgs: unknown,
     context: ToolContext
   ): Promise<ToolResult> {
+    let actionArgsHash: string | null = null;
     try {
-      // An action has no cancellation channel. Racing it against a timer would
-      // report failure while the side effect continues, inviting a duplicate
-      // retry. Only explicitly read-only tools may use the registry timeout.
+      if (registered.tool.category !== "data-bearing" && context.turnId) {
+        const reservation = reserveActionExecution(
+          context.db,
+          context.turnId,
+          toolName,
+          validatedArgs
+        );
+        if (reservation.kind === "replay") return reservation.result;
+        if (reservation.kind === "unknown") {
+          return {
+            success: false,
+            error:
+              `Action "${toolName}" already started in this turn and its outcome is unknown. ` +
+              "Do not retry it automatically; inspect the remote state first.",
+          };
+        }
+        actionArgsHash = reservation.argsHash;
+      }
+
+      // Do not race external actions against a timeout: the side effect could
+      // continue after a reported failure and invite an unsafe duplicate retry.
       if (registered.tool.category !== "data-bearing") {
-        return await registered.executor(validatedArgs, context);
+        const result = await registered.executor(validatedArgs, context);
+        if (actionArgsHash && context.turnId) {
+          completeActionExecution(context.db, context.turnId, toolName, actionArgsHash, result);
+        }
+        return result;
       }
 
       let timeoutHandle: ReturnType<typeof setTimeout>;
@@ -342,10 +366,14 @@ export class ToolRegistry {
       return result;
     } catch (error) {
       log.error({ err: error }, `Error executing tool ${toolName}`);
-      return {
+      const result = {
         success: false,
         error: getErrorMessage(error),
       };
+      if (actionArgsHash && context.turnId) {
+        completeActionExecution(context.db, context.turnId, toolName, actionArgsHash, result);
+      }
+      return result;
     }
   }
 

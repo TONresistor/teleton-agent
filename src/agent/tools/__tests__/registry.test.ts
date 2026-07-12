@@ -52,6 +52,18 @@ describe("ToolRegistry", () => {
         updated_by INTEGER
       )
     `);
+    db.exec(`
+      CREATE TABLE action_executions (
+        turn_id TEXT NOT NULL,
+        tool_name TEXT NOT NULL,
+        args_hash TEXT NOT NULL,
+        status TEXT NOT NULL,
+        result_json TEXT,
+        started_at INTEGER NOT NULL,
+        completed_at INTEGER,
+        PRIMARY KEY (turn_id, tool_name, args_hash)
+      )
+    `);
 
     mockContext = {
       bridge: { getMode: () => "user" } as any,
@@ -635,6 +647,26 @@ describe("ToolRegistry", () => {
 
       expect(result.success).toBe(false);
       expect(result.error).toBe("Execution failed");
+    });
+
+    it("should execute an action only once for the same turn and arguments", async () => {
+      const tool = createMockTool("idempotent_action", "action");
+      const executor = createMockExecutor({ success: true, data: { remoteId: "one" } });
+      registry.register(tool, executor);
+      const toolCall: ToolCall = {
+        type: "toolCall",
+        id: "call-1",
+        name: tool.name,
+        arguments: { message: "perform once" },
+      };
+      const context = { ...mockContext, turnId: "turn-1" };
+
+      const first = await registry.execute(toolCall, context);
+      const replay = await registry.execute({ ...toolCall, id: "call-2" }, context);
+
+      expect(first).toEqual({ success: true, data: { remoteId: "one" } });
+      expect(replay).toEqual(first);
+      expect(executor).toHaveBeenCalledTimes(1);
     });
 
     it("should timeout long-running data-bearing tools", async () => {

@@ -19,6 +19,10 @@ export interface ToolContext {
   isGroup: boolean;
   /** Whether this request came from bot guest mode. */
   isGuest?: boolean;
+  /** Stable ID for one inbound turn; used for action idempotency. */
+  turnId?: string;
+  /** Stable session ID used to scope persisted tool artifacts. */
+  sessionId?: string;
   /** Full config for accessing API key, model, etc. (optional) */
   config?: Config;
 }

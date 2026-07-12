@@ -51,6 +51,9 @@ export function buildConfig(input: BuildConfigInput): Config {
       temperature: 0.7,
       system_prompt: null,
       max_agentic_iterations: input.maxAgenticIterations,
+      max_tool_calls_per_turn: 20,
+      max_turn_duration_ms: 300_000,
+      fallbacks: [],
       session_reset_policy: {
         daily_reset_enabled: true,
         daily_reset_hour: 4,

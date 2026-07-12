@@ -26,7 +26,7 @@ describe("Memory Schema", () => {
   // ============================================
 
   describe("Table Creation", () => {
-    it("creates all 15 core tables after initialization", () => {
+    it("creates all required core tables after initialization", () => {
       ensureSchema(db);
 
       const tables = db
@@ -41,7 +41,7 @@ describe("Memory Schema", () => {
 
       const tableNames = tables.map((t) => t.name);
 
-      // Core tables (14 total)
+      // Core and FTS backing tables
       expect(tableNames).toContain("meta");
       expect(tableNames).toContain("knowledge");
       expect(tableNames).toContain("sessions");
@@ -56,6 +56,9 @@ describe("Memory Schema", () => {
       expect(tableNames).toContain("knowledge_fts_data");
       expect(tableNames).toContain("tg_messages_fts");
       expect(tableNames).toContain("tg_messages_fts_data");
+      expect(tableNames).toContain("agent_turn_traces");
+      expect(tableNames).toContain("tool_result_artifacts");
+      expect(tableNames).toContain("action_executions");
     });
 
     it("creates meta table with correct schema", () => {
@@ -1081,7 +1084,7 @@ describe("Memory Schema", () => {
     });
 
     it("CURRENT_SCHEMA_VERSION is set to expected value", () => {
-      expect(CURRENT_SCHEMA_VERSION).toBe("1.20.0");
+      expect(CURRENT_SCHEMA_VERSION).toBe("1.21.0");
     });
   });
 
@@ -1178,6 +1181,32 @@ describe("Memory Schema", () => {
 
       expect(columnNames).toContain("input_tokens");
       expect(columnNames).toContain("output_tokens");
+    });
+
+    it("runMigrations from 1.20.0 adds runtime resilience tables", () => {
+      ensureSchema(db);
+      db.exec(`
+        DROP TABLE agent_turn_traces;
+        DROP TABLE tool_result_artifacts;
+        DROP TABLE action_executions;
+      `);
+      setSchemaVersion(db, "1.20.0");
+
+      runMigrations(db);
+
+      const tables = (
+        db
+          .prepare(
+            `SELECT name FROM sqlite_master
+             WHERE type = 'table' AND name IN (
+               'agent_turn_traces', 'tool_result_artifacts', 'action_executions'
+             )`
+          )
+          .all() as Array<{ name: string }>
+      ).map((row) => row.name);
+      expect(tables.sort()).toEqual(
+        ["action_executions", "agent_turn_traces", "tool_result_artifacts"].sort()
+      );
     });
 
     it("runMigrations is idempotent (can run multiple times)", () => {

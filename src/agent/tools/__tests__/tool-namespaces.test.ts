@@ -42,9 +42,10 @@ describe("tool namespaces", () => {
     expect(resolveToolNamespace(toolName, module, "description").name).toBe(expectedNamespace);
   });
 
-  it("builds a deterministic bounded catalog and excludes tool_search", () => {
+  it("builds a deterministic bounded catalog and excludes core meta-tools", () => {
     const tools = [
       registeredTool("tool_search", "tool"),
+      registeredTool("tool_result_read", "tool"),
       ...Array.from({ length: 25 }, (_, index) =>
         registeredTool(`uranus_action_${String(index).padStart(2, "0")}`, "uranus")
       ),
@@ -58,6 +59,7 @@ describe("tool namespaces", () => {
     expect(first.flatMap((entry) => entry.toolNames)).toHaveLength(25);
     expect(new Set(first.flatMap((entry) => entry.toolNames)).size).toBe(25);
     expect(first.flatMap((entry) => entry.toolNames)).not.toContain("tool_search");
+    expect(first.flatMap((entry) => entry.toolNames)).not.toContain("tool_result_read");
   });
 
   it("compacts large catalogs to root-level prompt cards", () => {
@@ -114,7 +116,7 @@ describe("tool namespaces", () => {
       const visibleNames = registry
         .getForContext(isGroup, null, isGroup ? "group" : "dm", true, 42)
         .map((tool) => tool.name)
-        .filter((name) => name !== "tool_search")
+        .filter((name) => name !== "tool_search" && name !== "tool_result_read")
         .sort();
       const catalog = registry.getNamespaceCatalog(isGroup, isGroup ? "group" : "dm", true, 42);
       const catalogNames = catalog.flatMap((entry) => entry.toolNames).sort();

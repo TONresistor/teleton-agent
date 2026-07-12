@@ -1,5 +1,9 @@
 import { describe, it, expect } from "vitest";
-import { isContextOverflowError, isTrivialMessage } from "../../agent/runtime-utils.js";
+import {
+  classifyLlmError,
+  isContextOverflowError,
+  isTrivialMessage,
+} from "../../agent/runtime-utils.js";
 
 // ─── T10: isContextOverflowError ────────────────────────────────
 
@@ -176,5 +180,21 @@ describe("isTrivialMessage (replicated from runtime.ts — not exported)", () =>
     expect(isTrivialMessage("!!!")).toBe(true);
     expect(isTrivialMessage("???")).toBe(true);
     expect(isTrivialMessage("—")).toBe(true);
+  });
+});
+
+describe("LLM error classification", () => {
+  it.each([
+    "429 rate limit",
+    "usage limit reached",
+    "insufficient_quota",
+    "quota exceeded for this account",
+  ])("classifies quota exhaustion as rate limiting: %s", (message) => {
+    expect(classifyLlmError(message).kind).toBe("rate_limit");
+  });
+
+  it("does not treat authentication failures as fallback-safe", () => {
+    expect(classifyLlmError("401 unauthorized").kind).toBe("unknown");
+    expect(classifyLlmError("failed to generate an image").kind).toBe("unknown");
   });
 });
