@@ -1,6 +1,6 @@
 import type { Context, Message, TextContent } from "@earendil-works/pi-ai";
 import { truncate } from "../utils/pi-message.js";
-import { appendToTranscript, readTranscript } from "../session/transcript.js";
+import { appendToTranscript } from "../session/transcript.js";
 import { randomUUID } from "crypto";
 import { writeSummaryToDailyLog } from "./daily-logs.js";
 import { summarizeWithFallback } from "./ai-summarization.js";
@@ -21,6 +21,14 @@ import {
 } from "../constants/limits.js";
 
 const COMPACTION_PREFIX = "[Auto-compacted";
+
+function findPreviousCompactionSummary(context: Context): string | null {
+  for (const message of context.messages) {
+    if (message.role !== "user" || typeof message.content !== "string") continue;
+    if (message.content.startsWith(COMPACTION_PREFIX)) return message.content;
+  }
+  return null;
+}
 
 export interface CompactionConfig {
   enabled: boolean;
@@ -334,9 +342,6 @@ export async function compactAndSaveTranscript(
 
 export class CompactionManager {
   private config: CompactionConfig;
-  /** Previous compaction summary — injected into the next summarization
-   *  prompt so that information accumulates instead of being lost. */
-  private previousSummary: string | null = null;
 
   constructor(config: CompactionConfig = DEFAULT_COMPACTION_CONFIG) {
     this.config = config;
@@ -375,20 +380,9 @@ export class CompactionManager {
       chatId,
       provider,
       utilityModel,
-      this.previousSummary
+      findPreviousCompactionSummary(context)
     );
     log.info(`Compaction complete: ${newSessionId}`);
-
-    // Extract the summary text from the compacted context for iterative reuse.
-    // The first message after compaction is the summary message.
-    const compacted = readTranscript(newSessionId);
-    if (compacted.length > 0) {
-      const firstMsg = compacted[0];
-      const text = typeof firstMsg.content === "string" ? firstMsg.content : null;
-      if (text?.startsWith(COMPACTION_PREFIX)) {
-        this.previousSummary = text;
-      }
-    }
 
     return newSessionId;
   }
