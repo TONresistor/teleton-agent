@@ -10,6 +10,9 @@ import type { SDKDependencies } from "../sdk/index.js";
 import type { ITelegramBridge } from "../telegram/bridge-interface.js";
 import type { UserHookEvaluator } from "../agent/hooks/user-hook-evaluator.js";
 import type { WebUIServerDeps } from "../webui/types.js";
+import type { HookRegistry } from "../sdk/hooks/registry.js";
+import type { InlineRouter } from "../bot/inline-router.js";
+import type { PluginExecutionGate } from "../agent/tools/plugin-execution-gate.js";
 
 export interface ServerDepsInput {
   agent: AgentRuntime;
@@ -25,6 +28,11 @@ export interface ServerDepsInput {
   userHookEvaluator: UserHookEvaluator | null;
   rewireHooks: () => void;
   stopGocoonRunner: () => boolean;
+  reloadConfig: () => Config;
+  applyConfigKey: (key: string, value: unknown) => void;
+  getHookRegistry: () => HookRegistry;
+  inlineRouter: InlineRouter;
+  pluginExecutionGate: PluginExecutionGate;
 }
 
 /** Build the shared dependency boundary used by WebUI and Management API servers. */
@@ -55,7 +63,7 @@ export function createServerDeps(input: ServerDepsInput): WebUIServerDeps {
     config: input.config,
   };
 
-  return {
+  const deps: WebUIServerDeps = {
     agent: input.agent,
     bridge: input.bridge,
     memory: input.memory,
@@ -66,16 +74,31 @@ export function createServerDeps(input: ServerDepsInput): WebUIServerDeps {
     mcpServers,
     config: input.config.webui,
     configPath: input.configPath,
+    reloadConfig: input.reloadConfig,
+    applyConfigKey: input.applyConfigKey,
     lifecycle: input.lifecycle,
     marketplace: {
       modules: input.modules,
       config: input.config,
       sdkDeps: input.sdkDeps,
       pluginContext,
-      loadedModuleNames: input.modules.map((module) => module.name),
+      loadedModuleNames: () => input.modules.map((module) => module.name),
       rewireHooks: input.rewireHooks,
+      hookRegistry: input.getHookRegistry,
+      inlineRouter: input.inlineRouter,
+      executionGate: input.pluginExecutionGate,
     },
     userHookEvaluator: input.userHookEvaluator,
     gocoonControl: { stopRunner: input.stopGocoonRunner },
   };
+
+  Object.defineProperty(deps, "bridge", {
+    enumerable: true,
+    get: () => input.sdkDeps.bridge,
+  });
+  Object.defineProperty(pluginContext, "bridge", {
+    enumerable: true,
+    get: () => input.sdkDeps.bridge,
+  });
+  return deps;
 }

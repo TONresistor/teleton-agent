@@ -4,7 +4,8 @@
  */
 
 import type { BotSDK, BotManifest, BotKeyboard, ButtonDef, PluginLogger } from "@teleton-agent/sdk";
-import type { InlineRouter, PluginBotHandlers } from "../bot/inline-router.js";
+import type { PluginBotHandlers, PluginBotRegistrationTarget } from "../bot/inline-router.js";
+import type { PluginExecutionGate } from "../agent/tools/plugin-execution-gate.js";
 import type { GramJSBotClient } from "../bot/gramjs-bot.js";
 import type { Bot } from "grammy";
 import type { PluginRateLimiter } from "../bot/rate-limiter.js";
@@ -19,13 +20,14 @@ import { editInlineViaGramJS } from "../bot/services/inline-transport.js";
 import { getGramJSErrorMessage } from "../utils/errors.js";
 
 export function createBotSDK(
-  router: InlineRouter | null,
+  router: PluginBotRegistrationTarget | null,
   gramjsBot: GramJSBotClient | null,
   grammyBot: Bot | null,
   pluginName: string,
   manifest: BotManifest | undefined,
   rateLimiter: PluginRateLimiter | null,
-  log: PluginLogger
+  log: PluginLogger,
+  executionGate?: PluginExecutionGate
 ): BotSDK | null {
   // No router or no manifest with bot features → null
   if (!router || !manifest || (!manifest.inline && !manifest.callbacks)) {
@@ -37,6 +39,18 @@ export function createBotSDK(
 
   // Track accumulated handlers so incremental registration works
   const handlers: PluginBotHandlers = {};
+
+  async function withExecutionGate<T>(operation: () => Promise<T>): Promise<T> {
+    const release = executionGate?.enter(pluginName);
+    if (executionGate && !release) {
+      throw new Error(`Plugin "${pluginName}" is reloading`);
+    }
+    try {
+      return await operation();
+    } finally {
+      release?.();
+    }
+  }
 
   function syncToRouter(): void {
     router?.registerPlugin(pluginName, { ...handlers });
@@ -63,7 +77,7 @@ export function createBotSDK(
         if (rateLimiter) {
           rateLimiter.check(pluginName, "inline", inlineLimit);
         }
-        return handler(ctx);
+        return withExecutionGate(() => handler(ctx));
       };
       syncToRouter();
     },
@@ -79,14 +93,14 @@ export function createBotSDK(
           if (rateLimiter) {
             rateLimiter.check(pluginName, "callback", callbackLimit);
           }
-          return handler(ctx);
+          return withExecutionGate(() => handler(ctx));
         },
       });
       syncToRouter();
     },
 
     onChosenResult(handler) {
-      handlers.onChosenResult = handler;
+      handlers.onChosenResult = (ctx) => withExecutionGate(() => handler(ctx));
       syncToRouter();
     },
 

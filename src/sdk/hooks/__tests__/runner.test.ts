@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { HookRegistry } from "../registry.js";
 import { createHookRunner } from "../runner.js";
 import type { BeforeToolCallEvent, AfterToolCallEvent } from "../types.js";
+import { PluginExecutionGate } from "../../../agent/tools/plugin-execution-gate.js";
 
 const mockLogger = {
   warn: vi.fn(),
@@ -17,6 +18,58 @@ beforeEach(() => {
 });
 
 describe("Hook Runner", () => {
+  it("skips plugin hooks while the plugin is quiesced", async () => {
+    const gate = new PluginExecutionGate();
+    registry = new HookRegistry(gate);
+    const handler = vi.fn();
+    registry.register({
+      pluginId: "reloading-plugin",
+      hookName: "tool:after",
+      handler,
+      priority: 0,
+    });
+    await gate.quiesce(["reloading-plugin"]);
+
+    const runner = createHookRunner(registry, { logger: mockLogger });
+    await runner.runObservingHook("tool:after", {
+      toolName: "test",
+      params: {},
+      result: { success: true },
+      durationMs: 10,
+      chatId: "123",
+      isGroup: false,
+    });
+
+    expect(handler).not.toHaveBeenCalled();
+  });
+
+  it("fails closed when a blockable enforcement hook is quiesced", async () => {
+    const gate = new PluginExecutionGate();
+    registry = new HookRegistry(gate);
+    const handler = vi.fn();
+    registry.register({
+      pluginId: "policy-plugin",
+      hookName: "tool:before",
+      handler,
+      priority: 0,
+    });
+    await gate.quiesce(["policy-plugin"]);
+    const event: BeforeToolCallEvent = {
+      toolName: "test",
+      params: {},
+      chatId: "123",
+      isGroup: false,
+      block: false,
+      blockReason: "",
+    };
+
+    await createHookRunner(registry, { logger: mockLogger }).runModifyingHook("tool:before", event);
+
+    expect(handler).not.toHaveBeenCalled();
+    expect(event.block).toBe(true);
+    expect(event.blockReason).toContain("plugin is reloading");
+  });
+
   it("3.1 runObservingHook fires all handlers sequentially", async () => {
     const order: number[] = [];
     registry.register({
@@ -138,7 +191,7 @@ describe("Hook Runner", () => {
     expect(event.params.seenModified).toBe(true);
   });
 
-  it("3.5 runModifyingHook times out after 5s per handler (fail-open)", async () => {
+  it("3.5 runModifyingHook fails closed when an enforcement hook times out", async () => {
     vi.useFakeTimers();
 
     registry.register({
@@ -163,10 +216,49 @@ describe("Hook Runner", () => {
     await promise;
 
     expect(mockLogger.error).toHaveBeenCalledWith(expect.stringContaining("Hook timeout"));
-    // Event not blocked — fail-open
-    expect(event.block).toBe(false);
+    expect(event.block).toBe(true);
+    expect(event.blockReason).toContain("Hook timeout");
 
     vi.useRealTimers();
+  });
+
+  it("retains the reload lease until a timed-out hook actually settles", async () => {
+    vi.useFakeTimers();
+    try {
+      const gate = new PluginExecutionGate();
+      registry = new HookRegistry(gate);
+      let finish: (() => void) | undefined;
+      registry.register({
+        pluginId: "slow",
+        hookName: "tool:before",
+        handler: () =>
+          new Promise<void>((resolve) => {
+            finish = resolve;
+          }),
+        priority: 0,
+      });
+
+      const runner = createHookRunner(registry, { logger: mockLogger, timeoutMs: 100 });
+      const event: BeforeToolCallEvent = {
+        toolName: "test",
+        params: {},
+        chatId: "123",
+        isGroup: false,
+        block: false,
+        blockReason: "",
+      };
+      const run = runner.runModifyingHook("tool:before", event);
+      await vi.advanceTimersByTimeAsync(200);
+      await run;
+
+      expect(gate.getActiveCount("slow")).toBe(1);
+      finish?.();
+      await gate.quiesce(["slow"]);
+      expect(gate.getActiveCount("slow")).toBe(0);
+      gate.resume(["slow"]);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it("3.6 runModifyingHook returns early when no hooks registered", async () => {
@@ -453,5 +545,49 @@ describe("Hook Runner", () => {
     await expect(runner.runObservingHook("tool:after", event)).rejects.toThrow(
       "observing-propagated"
     );
+  });
+
+  it("3.16 does not confuse concurrent hook events with nested reentrancy", async () => {
+    let releaseFirst!: () => void;
+    let firstStarted!: () => void;
+    const started = new Promise<void>((resolve) => (firstStarted = resolve));
+    const gate = new Promise<void>((resolve) => (releaseFirst = resolve));
+    const seen: string[] = [];
+
+    registry.register({
+      pluginId: "observer",
+      hookName: "tool:after",
+      handler: async (event) => {
+        seen.push(event.toolName);
+        if (event.toolName === "first") {
+          firstStarted();
+          await gate;
+        }
+      },
+      priority: 0,
+    });
+
+    const runner = createHookRunner(registry, { logger: mockLogger });
+    const first = runner.runObservingHook("tool:after", {
+      toolName: "first",
+      params: {},
+      result: { success: true },
+      durationMs: 1,
+      chatId: "chat-a",
+      isGroup: false,
+    });
+    await started;
+    const second = runner.runObservingHook("tool:after", {
+      toolName: "second",
+      params: {},
+      result: { success: true },
+      durationMs: 1,
+      chatId: "chat-b",
+      isGroup: false,
+    });
+    releaseFirst();
+    await Promise.all([first, second]);
+
+    expect(seen).toEqual(["first", "second"]);
   });
 });

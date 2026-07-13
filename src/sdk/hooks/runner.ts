@@ -1,6 +1,7 @@
 import type { HookRegistry } from "./registry.js";
 import type { HookHandlerMap, HookName, HookRunnerOptions } from "./types.js";
 import { getErrorMessage } from "../../utils/errors.js";
+import { AsyncLocalStorage } from "async_hooks";
 
 const DEFAULT_TIMEOUT_MS = 5000;
 
@@ -30,14 +31,16 @@ const BLOCKABLE_HOOKS: ReadonlySet<HookName> = new Set([
 ]);
 
 export function createHookRunner(registry: HookRegistry, opts: HookRunnerOptions) {
-  let hookDepth = 0;
+  const hookExecution = new AsyncLocalStorage<number>();
+  let activeRuns = 0;
   const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
   const catchErrors = opts.catchErrors ?? true;
 
   /** Skip when no hooks or already inside a hook (reentrancy guard). */
   function canRun(name: HookName): boolean {
-    if (hookDepth > 0) {
-      opts.logger.debug(`Skipping ${name} hooks (reentrancy depth=${hookDepth})`);
+    const depth = hookExecution.getStore() ?? 0;
+    if (depth > 0) {
+      opts.logger.debug(`Skipping ${name} hooks (reentrancy depth=${depth})`);
       return false;
     }
     return registry.hasHooks(name);
@@ -50,18 +53,34 @@ export function createHookRunner(registry: HookRegistry, opts: HookRunnerOptions
     event: Parameters<HookHandlerMap[K]>[0]
   ): Promise<void> {
     const label = `${hook.pluginId}:${name}`;
+    const release = registry.beginExecution(hook.pluginId);
+    if (!release) {
+      if (BLOCKABLE_HOOKS.has(name)) {
+        const blockable = event as { block?: boolean; blockReason?: string };
+        blockable.block = true;
+        blockable.blockReason = `Hook enforcement unavailable [${label}]: plugin is reloading`;
+      }
+      return;
+    }
     const t0 = Date.now();
+    // Keep the execution lease tied to the real handler promise. A timeout
+    // cannot cancel plugin code, so releasing earlier could let hot reload close
+    // the plugin database while that handler is still running.
+    const execution = Promise.resolve().then(() =>
+      (hook.handler as (e: typeof event) => void | Promise<void>)(event)
+    );
+    void execution.then(release, release);
     try {
-      await withTimeout(
-        () => (hook.handler as (e: typeof event) => void | Promise<void>)(event),
-        timeoutMs,
-        label
-      );
+      await withTimeout(() => execution, timeoutMs, label);
     } catch (error) {
       if (!catchErrors) throw error;
-      opts.logger.error(
-        `Hook error [${label}]: ${getErrorMessage(error)} (after ${Date.now() - t0}ms)`
-      );
+      const message = getErrorMessage(error);
+      opts.logger.error(`Hook error [${label}]: ${message} (after ${Date.now() - t0}ms)`);
+      if (BLOCKABLE_HOOKS.has(name)) {
+        const blockable = event as { block?: boolean; blockReason?: string };
+        blockable.block = true;
+        blockable.blockReason = `Hook enforcement failed [${label}]: ${message}`;
+      }
     }
   }
 
@@ -72,14 +91,16 @@ export function createHookRunner(registry: HookRegistry, opts: HookRunnerOptions
   ): Promise<void> {
     if (!canRun(name)) return;
     const hooks = registry.getHooks(name); // pre-sorted by effectivePriority in registry
-    hookDepth++;
+    activeRuns++;
     try {
-      for (const hook of hooks) {
-        await runOne(hook, name, event);
-        if (BLOCKABLE_HOOKS.has(name) && (event as { block?: boolean }).block) break;
-      }
+      await hookExecution.run(1, async () => {
+        for (const hook of hooks) {
+          await runOne(hook, name, event);
+          if (BLOCKABLE_HOOKS.has(name) && (event as { block?: boolean }).block) break;
+        }
+      });
     } finally {
-      hookDepth--;
+      activeRuns--;
     }
   }
 
@@ -90,9 +111,11 @@ export function createHookRunner(registry: HookRegistry, opts: HookRunnerOptions
   ): Promise<void> {
     if (!canRun(name)) return;
     const hooks = registry.getHooks(name);
-    hookDepth++;
+    activeRuns++;
     try {
-      const results = await Promise.allSettled(hooks.map((hook) => runOne(hook, name, event)));
+      const results = await hookExecution.run(1, () =>
+        Promise.allSettled(hooks.map((hook) => runOne(hook, name, event)))
+      );
       // When catchErrors=false, re-throw the first rejection that allSettled absorbed
       if (!catchErrors) {
         const firstRejected = results.find((r) => r.status === "rejected") as
@@ -101,7 +124,7 @@ export function createHookRunner(registry: HookRegistry, opts: HookRunnerOptions
         if (firstRejected) throw firstRejected.reason;
       }
     } finally {
-      hookDepth--;
+      activeRuns--;
     }
   }
 
@@ -109,7 +132,7 @@ export function createHookRunner(registry: HookRegistry, opts: HookRunnerOptions
     runModifyingHook,
     runObservingHook,
     get depth() {
-      return hookDepth;
+      return hookExecution.getStore() ?? activeRuns;
     },
   };
 }

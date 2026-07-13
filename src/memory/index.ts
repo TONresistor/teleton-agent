@@ -31,6 +31,7 @@ export function initializeMemory(config: {
   workspaceDir: string;
 }): MemorySystem {
   const db = getDatabase(config.database);
+  db.configureVectorSearch(config.database.enableVectorSearch, config.database.vectorDimensions);
   const rawEmbedder = createEmbeddingProvider(config.embeddings);
   const vectorEnabled = db.isVectorSearchReady();
   const database: Database.Database = db.getDb();

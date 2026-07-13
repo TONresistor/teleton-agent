@@ -115,7 +115,7 @@ export function AgentSettingsPanel({
               onSave={(v) => saveConfig('agent.max_agentic_iterations', v)}
               onCancel={() => cancelLocal('agent.max_agentic_iterations')}
               min={1}
-              max={20}
+              max={50}
               inline
             />
           </div>

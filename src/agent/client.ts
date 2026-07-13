@@ -16,6 +16,7 @@ import {
   type ModelRequestOptions,
   type PreparedModelRequest,
 } from "./model-request.js";
+import { isSilentReply } from "../constants/tokens.js";
 
 // Model resolution + provider model registration live in the neutral providers/
 // layer so non-agent consumers (e.g. memory) can resolve models without importing
@@ -70,12 +71,17 @@ function finalizeResponse(
     }
   }
 
-  if (options.persistTranscript && options.sessionId) {
-    appendToTranscript(options.sessionId, response);
-  }
-
   const textContent = response.content.find((block) => block.type === "text");
   const text = textContent?.type === "text" ? textContent.text : "";
+
+  if (
+    options.persistTranscript &&
+    options.sessionId &&
+    response.stopReason !== "error" &&
+    !isSilentReply(text)
+  ) {
+    appendToTranscript(options.sessionId, response);
+  }
 
   const updatedContext: Context = {
     ...context,

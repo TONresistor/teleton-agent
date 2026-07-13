@@ -17,6 +17,8 @@ export interface ToolContext {
   senderId: number;
   /** Whether this is a group chat */
   isGroup: boolean;
+  /** Whether this request came from bot guest mode. */
+  isGuest?: boolean;
   /** Full config for accessing API key, model, etc. (optional) */
   config?: Config;
 }
@@ -37,6 +39,14 @@ export interface ToolResult {
  * Tool category for masking behavior
  */
 export type ToolCategory = "data-bearing" | "action";
+
+/** Compact routing metadata used to discover large tool surfaces hierarchically. */
+export interface ToolNamespaceMetadata {
+  /** Stable dotted identifier, for example `telegram.messaging`. */
+  name: string;
+  /** Short capability-oriented description shown to the model. */
+  description: string;
+}
 
 /** Runtime authority required to expose and execute a tool. */
 export type ToolAccessLevel = "all" | "allowlist" | "admin" | "off";
@@ -110,12 +120,12 @@ export interface RegisteredTool {
   minimumAccess: ToolAccessLevel;
   /** Optional per-tool allowlist. When present, it replaces telegram.allow_from. */
   allowFrom?: ReadonlySet<number>;
-  /** Whether execution requires a separate, human-authenticated approval step. */
-  requiresApproval: boolean;
   /** Telegram mode this tool runs in. */
   mode: ToolMode;
   /** Module this tool belongs to (name prefix for built-ins, plugin name otherwise). */
   module: string;
+  /** Hierarchical routing namespace. */
+  namespace: ToolNamespaceMetadata;
   /** Toolset tags (e.g. "core", "finance"). */
   tags?: string[];
 }
@@ -133,7 +143,7 @@ export interface ToolEntry {
   minimumAccess?: ToolAccessLevel;
   /** Optional per-tool allowlist. When present, it replaces telegram.allow_from. */
   allowFrom?: readonly number[];
-  /** Require a separate owner command before executing this tool. */
+  /** @deprecated Retained for plugin source compatibility; ignored at runtime. */
   requiresApproval?: boolean;
   /** Telegram mode(s) this tool runs in. Mandatory — every tool must declare it. */
   mode: ToolMode;
@@ -149,6 +159,8 @@ export interface ToolEntry {
 export interface PluginModule {
   name: string;
   version: string;
+  /** Filesystem/marketplace identifier, distinct from the display manifest name. */
+  sourceId?: string;
   /** Called ALWAYS (even if disabled) to merge YAML config into runtime defaults */
   configure?(config: Config): void;
   /** Called ALWAYS — must be idempotent (IF NOT EXISTS) */
@@ -163,7 +175,7 @@ export interface PluginModule {
     allowFrom?: readonly number[];
     /** Telegram mode(s) this module tool runs in. Defaults to "both" when omitted. */
     mode?: ToolMode;
-    /** Require an authenticated owner approval before execution. */
+    /** @deprecated Retained for plugin source compatibility; ignored at runtime. */
     requiresApproval?: boolean;
   }>;
   /** Start background jobs (polling, timers, etc.) */

@@ -51,7 +51,7 @@ const executor = async (params: any, context: any) => {
     inlineKeyboard,
   });
 
-  return { success: true, message_id: sent.id };
+  return { success: true, data: { messageId: sent.id } };
 };
 
 export const sendButtonsEntry: ToolEntry = {

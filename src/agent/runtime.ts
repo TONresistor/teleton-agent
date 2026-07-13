@@ -87,6 +87,8 @@ export interface ProcessMessageOptions {
   isHeartbeat?: boolean;
   isGuest?: boolean;
   streamToChat?: { chatId: string; bridge: ITelegramBridge; mode: "all" | "replace" | "off" };
+  /** Optional conversation-state key when delivery chat and session identity differ. */
+  sessionKey?: string;
 }
 
 export interface AgentResponse {
@@ -105,6 +107,7 @@ interface TurnContext {
   tools: PiAiTool[] | undefined;
   userMsg: UserMessage;
   provider: SupportedProvider;
+  sessionKey: string;
 }
 
 type TurnContextResult =
@@ -130,7 +133,6 @@ export class AgentRuntime {
   private embedder: EmbeddingProvider | null = null;
   private hookRunner?: ReturnType<typeof createHookRunner>;
   private userHookEvaluator?: UserHookEvaluator;
-
   constructor(config: Config, soul?: string, toolRegistry?: ToolRegistry) {
     this.config = config;
     this.soul = soul ?? "";
@@ -139,6 +141,7 @@ export class AgentRuntime {
     if (this.toolRegistry && config.telegram?.allow_from?.length) {
       this.toolRegistry.setAllowFrom(config.telegram.allow_from);
     }
+    this.toolRegistry?.setAdminIds(config.telegram.admin_ids);
 
     const provider = (config.agent.provider || "anthropic") as SupportedProvider;
     try {
@@ -157,8 +160,32 @@ export class AgentRuntime {
     }
   }
 
-  setHookRunner(runner: ReturnType<typeof createHookRunner>): void {
+  setHookRunner(runner: ReturnType<typeof createHookRunner> | undefined): void {
     this.hookRunner = runner;
+  }
+
+  updateConfig(config: Config): void {
+    this.config = config;
+    this.toolRegistry?.setAllowFrom(config.telegram.allow_from ?? []);
+    this.toolRegistry?.setAdminIds(config.telegram.admin_ids);
+
+    const provider = (config.agent.provider || "anthropic") as SupportedProvider;
+    try {
+      const contextWindow = getProviderModel(provider, config.agent.model).contextWindow;
+      this.compactionManager.updateConfig({
+        maxTokens: Math.floor(contextWindow * COMPACTION_MAX_TOKENS_RATIO),
+        softThresholdTokens: Math.floor(contextWindow * COMPACTION_SOFT_THRESHOLD_RATIO),
+      });
+    } catch {
+      this.compactionManager.updateConfig(DEFAULT_COMPACTION_CONFIG);
+    }
+  }
+
+  setToolRegistry(registry: ToolRegistry): void {
+    this.toolRegistry = registry;
+    registry.setAllowFrom(this.config.telegram.allow_from ?? []);
+    registry.setAdminIds(this.config.telegram.admin_ids);
+    if (this.embedder) registry.setEmbedder(this.embedder);
   }
 
   setUserHookEvaluator(evaluator: UserHookEvaluator): void {
@@ -258,7 +285,10 @@ export class AgentRuntime {
       await this.hookRunner.runModifyingHook("message:receive", msgEvent);
       if (msgEvent.block) {
         log.info(`Message blocked by hook: ${msgEvent.blockReason || "no reason"}`);
-        return { kind: "early", response: { content: "", toolCalls: [] } };
+        const content = msgEvent.blockReason.startsWith("Hook enforcement failed")
+          ? "Request blocked because an enforcement hook failed. Check the agent logs."
+          : "";
+        return { kind: "early", response: { content, toolCalls: [] } };
       }
       effectiveMessage = sanitizeForContext(msgEvent.text);
       if (msgEvent.additionalContext) {
@@ -266,7 +296,8 @@ export class AgentRuntime {
       }
     }
 
-    let session = getOrCreateSession(chatId);
+    const sessionKey = opts.sessionKey ?? chatId;
+    let session = getOrCreateSession(sessionKey);
     const now = timestamp ?? Date.now();
 
     const resetPolicy = this.config.agent.session_reset_policy;
@@ -303,7 +334,7 @@ export class AgentRuntime {
         }
       }
 
-      session = resetSessionWithPolicy(chatId);
+      session = resetSessionWithPolicy(sessionKey);
       clearMemorySnapshot(); // New session will capture a fresh snapshot
     }
 
@@ -365,6 +396,9 @@ export class AgentRuntime {
 
     let relevantContext = "";
     const isNonTrivial = !isTrivialMessage(effectiveMessage);
+    const isAdmin =
+      toolContext?.senderId !== undefined &&
+      this.config.telegram.admin_ids.includes(toolContext.senderId);
 
     // Start embedding computation concurrently with session:start hook
     const embeddingPromise = computeRagEmbedding(this.embedder, effectiveMessage, context);
@@ -388,7 +422,7 @@ export class AgentRuntime {
               chatId,
               includeAgentMemory: true,
               includeFeedHistory: true,
-              searchAllChats: !isGroup,
+              searchAllChats: true,
               maxRecentMessages: CONTEXT_MAX_RECENT_MESSAGES,
               maxRelevantChunks: CONTEXT_MAX_RELEVANT_CHUNKS,
               queryEmbedding,
@@ -469,8 +503,8 @@ export class AgentRuntime {
       ownerName: this.config.telegram.owner_name,
       ownerUsername: this.config.telegram.owner_username,
       context: finalContext,
-      includeMemory: !effectiveIsGroup,
-      includeStrategy: !effectiveIsGroup,
+      includeMemory: true,
+      includeStrategy: true,
       memoryFlushWarning: needsMemoryFlush,
       isHeartbeat,
       agentModel: this.config.agent.model,
@@ -509,9 +543,9 @@ export class AgentRuntime {
     );
     if (preemptiveCompaction) {
       log.info(`Preemptive compaction triggered, reloading session...`);
-      updateSession(chatId, { sessionId: preemptiveCompaction });
+      updateSession(sessionKey, { sessionId: preemptiveCompaction });
       // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- session guaranteed to exist after compaction
-      session = getSession(chatId)!;
+      session = getSession(sessionKey)!;
       context = loadContextFromTranscript(session.sessionId);
       context.messages.push(userMsg);
       captureMemorySnapshot(); // Refresh snapshot for the new compacted session
@@ -521,8 +555,6 @@ export class AgentRuntime {
 
     const provider = (this.config.agent.provider || "anthropic") as SupportedProvider;
     const providerMeta = getProviderMetadata(provider);
-    const isAdmin = toolContext?.config?.telegram.admin_ids.includes(toolContext.senderId) ?? false;
-
     let tools = await selectTools(
       this.config,
       this.toolRegistry,
@@ -551,6 +583,7 @@ export class AgentRuntime {
         tools,
         userMsg,
         provider,
+        sessionKey,
       },
     };
   }
@@ -559,11 +592,11 @@ export class AgentRuntime {
     turn: TurnContext,
     opts: ProcessMessageOptions
   ): Promise<LoopResult> {
-    const { chatId, effectiveIsGroup, processStartTime, systemPrompt, tools, userMsg, provider } =
-      turn;
+    const { chatId, effectiveIsGroup, processStartTime, systemPrompt, userMsg, sessionKey } = turn;
     const { toolContext } = opts;
     let session = turn.session;
     let context = turn.context;
+    const activeTools = turn.tools ? [...turn.tools] : undefined;
 
     const maxIterations = Math.max(1, this.config.agent.max_agentic_iterations || 5);
     let iteration = 0;
@@ -596,7 +629,7 @@ export class AgentRuntime {
         maskedContext,
         systemPrompt,
         session.sessionId,
-        tools,
+        activeTools,
         streamAccumulatedText
       );
       const response = iterationResult.response;
@@ -604,7 +637,6 @@ export class AgentRuntime {
       streamAccumulatedText = iterationResult.streamAccumulatedText;
 
       const assistantMsg = response.message;
-
       // Accumulate usage across all iterations — including errored responses that
       // get retried, so cost metrics capture tokens spent on failed attempts too.
       const iterUsage = response.message.usage;
@@ -624,8 +656,9 @@ export class AgentRuntime {
             session,
             context,
             chatId,
+            sessionKey,
             effectiveIsGroup,
-            provider,
+            provider: turn.provider,
             processStartTime,
             userMsg,
           }
@@ -664,6 +697,7 @@ export class AgentRuntime {
         ...toolContext,
         chatId,
         isGroup: effectiveIsGroup,
+        isGuest: opts.isGuest,
       };
 
       // Phases 1-2: build the tool plans (tool:before hooks) and execute them.
@@ -676,6 +710,25 @@ export class AgentRuntime {
         effectiveIsGroup
       );
 
+      // Mid-loop tool injection: when tool_search returns discoveries, inject schemas
+      // before recording the result. The result is pruned to tools that are actually
+      // available, so the model is never told to call a schema rejected by the
+      // provider limit or current context.
+      if (activeTools) {
+        const injected = injectDiscoveredTools(
+          toolPlans,
+          execResults,
+          activeTools,
+          getProviderMetadata(turn.provider).toolLimit,
+          opts.isGuest ? TELEGRAM_SEND_TOOLS : undefined
+        );
+        if (injected > 0) {
+          log.info(
+            `ToolSearch: injected ${injected} tool(s) mid-loop (total: ${activeTools.length})`
+          );
+        }
+      }
+
       // Phase 3: record results + observing hooks; push the returned messages in order.
       const resultMessages = await recordToolResults(this.hookRunner, toolPlans, execResults, {
         totalToolCalls,
@@ -686,17 +739,6 @@ export class AgentRuntime {
       });
       for (const resultMsg of resultMessages) {
         context.messages.push(resultMsg);
-      }
-
-      // Mid-loop tool injection: when tool_search returns discoveries, inject schemas
-      // into the live tools[] so the LLM can call them in the next iteration (D4).
-      // Runs whenever tools exist (ToolSearch mode AND the RAG hybrid escape hatch);
-      // it's a no-op unless a tool_search call actually returned results.
-      if (tools) {
-        const injected = injectDiscoveredTools(toolPlans, execResults, tools);
-        if (injected > 0) {
-          log.info(`ToolSearch: injected ${injected} tool(s) mid-loop (total: ${tools.length})`);
-        }
       }
 
       log.info(`${iteration}/${maxIterations} → ${iterationToolNames.join(", ")}`);
@@ -721,11 +763,8 @@ export class AgentRuntime {
       }
     }
 
-    if (finalResponse) {
-      const lastMsg = context.messages[context.messages.length - 1];
-      if (lastMsg?.role !== "assistant") {
-        context.messages.push(finalResponse.message);
-      }
+    if (finalResponse && !context.messages.includes(finalResponse.message)) {
+      context.messages.push(finalResponse.message);
     }
 
     return {
@@ -763,7 +802,7 @@ export class AgentRuntime {
         accumulatedUsage.cacheWrite,
       outputTokens: (session.outputTokens ?? 0) + accumulatedUsage.output,
     };
-    updateSession(chatId, sessionUpdate);
+    updateSession(opts.sessionKey ?? chatId, sessionUpdate);
 
     if (accumulatedUsage.input > 0 || accumulatedUsage.output > 0) {
       const u = accumulatedUsage;
@@ -810,7 +849,9 @@ export class AgentRuntime {
       await this.hookRunner.runModifyingHook("response:before", responseBeforeEvent);
       if (responseBeforeEvent.block) {
         log.info(`🚫 Response blocked by hook: ${responseBeforeEvent.blockReason || "no reason"}`);
-        content = "";
+        content = responseBeforeEvent.blockReason.startsWith("Hook enforcement failed")
+          ? "Response withheld because an enforcement hook failed. Check the agent logs."
+          : "";
       } else {
         content = responseBeforeEvent.text;
       }
@@ -863,7 +904,7 @@ export class AgentRuntime {
 
     db.prepare(
       `DELETE FROM tg_messages_vec WHERE id IN (
-        SELECT id FROM tg_messages WHERE chat_id = ?
+        SELECT chat_id || char(31) || id FROM tg_messages WHERE chat_id = ?
       )`
     ).run(chatId);
 

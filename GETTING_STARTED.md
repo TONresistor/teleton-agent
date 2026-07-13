@@ -154,7 +154,6 @@ Admin commands are only available to users listed in `admin_ids`. All commands w
 | `/clear <chat_id>` | Clear specific chat history |
 | `/model <name>` | Switch LLM model at runtime |
 | `/wallet` | Show wallet address and balance |
-| `/approve <request_id>` / `/reject <request_id>` | Resolve a pending financial action |
 | `/policy dm open` | Change DM policy at runtime |
 | `/modules set\|info\|reset` | Manage per-group tool permissions |
 | `/plugin set\|unset\|keys` | Manage plugin secrets |

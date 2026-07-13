@@ -366,7 +366,6 @@ All admin commands support `/`, `!`, or `.` prefix:
 | `/policy <dm\|group> <value>` | Change access policies live |
 | `/loop <1-50>` | Set max agentic iterations |
 | `/wallet` | Show wallet address + balance |
-| `/approve <request_id>` / `/reject <request_id>` | Resolve a pending financial action |
 | `/modules set\|info\|reset` | Per-group tool permissions |
 | `/plugin set\|unset\|keys` | Manage plugin secrets |
 | `/task <description>` | Assign a task to the agent |
@@ -495,7 +494,7 @@ The SDK provides namespaced access to core services:
 src/
 ├── index.ts                # Entry point, TeletonApp lifecycle, graceful shutdown
 ├── agent/                  # Core agent runtime
-│   ├── runtime.ts          # Agentic loop (5 iterations, tool calling, masking, compaction)
+│   ├── runtime.ts          # Agentic loop, tool calling, masking, compaction
 │   ├── client.ts           # Multi-provider LLM client
 │   └── tools/              # 128 base tools plus 5 optional system tools
 │       ├── register-all.ts # Central tool registration (9 categories)

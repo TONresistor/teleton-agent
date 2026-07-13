@@ -78,6 +78,13 @@ export class AgentLifecycle extends EventEmitter {
         this.transition("running");
       } catch (error) {
         const message = getErrorMessage(error);
+        if (this.registeredStopFn) {
+          try {
+            await this.registeredStopFn();
+          } catch (cleanupError) {
+            log.error({ err: cleanupError }, "Failed to clean up partial agent start");
+          }
+        }
         this.error = message;
         this.runningSince = null;
         this.transition("stopped", message);

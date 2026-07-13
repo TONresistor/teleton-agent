@@ -28,6 +28,25 @@ const CONFIG_SIDE_EFFECTS: Record<string, (value: string | undefined) => void> =
   },
 };
 
+function applyRuntimeValue(
+  deps: WebUIServerDeps,
+  key: string,
+  value: unknown,
+  hotReload: "instant" | "restart"
+): void {
+  if (hotReload !== "instant") return;
+  if (deps.reloadConfig && deps.applyConfigKey) {
+    const validated = deps.reloadConfig();
+    deps.applyConfigKey(key, getNestedValue(validated as unknown as Record<string, unknown>, key));
+    return;
+  }
+
+  // Backward-compatible path for embedded/test consumers without a config owner.
+  const runtimeConfig = deps.agent.getConfig() as unknown as Record<string, unknown>;
+  if (value === undefined) deleteNestedValue(runtimeConfig, key);
+  else setNestedValue(runtimeConfig, key, value);
+}
+
 export function createConfigRoutes(deps: WebUIServerDeps) {
   const app = new Hono();
 
@@ -138,9 +157,7 @@ export function createConfigRoutes(deps: WebUIServerDeps) {
         setNestedValue(raw, key, parsed);
         writeRawConfig(raw, deps.configPath);
 
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- runtime config is dynamic
-        const runtimeConfig = deps.agent.getConfig() as Record<string, any>;
-        setNestedValue(runtimeConfig, key, parsed);
+        applyRuntimeValue(deps, key, parsed, meta.hotReload);
 
         const result: ConfigKeyData = {
           key,
@@ -191,18 +208,24 @@ export function createConfigRoutes(deps: WebUIServerDeps) {
 
       writeRawConfig(raw, deps.configPath);
 
-      // Update runtime config for immediate effect
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- runtime config is dynamic
-      const runtimeConfig = deps.agent.getConfig() as Record<string, any>;
-      setNestedValue(runtimeConfig, key, parsed);
+      applyRuntimeValue(deps, key, parsed, meta.hotReload);
       CONFIG_SIDE_EFFECTS[key]?.(parsed as string);
 
       // Sync runtime admin_ids too
       if (key === "telegram.owner_id" && typeof parsed === "number") {
-        const rtAdminIds: number[] =
-          (getNestedValue(runtimeConfig, "telegram.admin_ids") as number[]) ?? [];
-        if (!rtAdminIds.includes(parsed)) {
-          setNestedValue(runtimeConfig, "telegram.admin_ids", [...rtAdminIds, parsed]);
+        if (deps.reloadConfig && deps.applyConfigKey) {
+          const validated = deps.reloadConfig();
+          deps.applyConfigKey(
+            "telegram.admin_ids",
+            getNestedValue(validated as unknown as Record<string, unknown>, "telegram.admin_ids")
+          );
+        } else {
+          const runtimeConfig = deps.agent.getConfig() as unknown as Record<string, unknown>;
+          const rtAdminIds =
+            (getNestedValue(runtimeConfig, "telegram.admin_ids") as number[]) ?? [];
+          if (!rtAdminIds.includes(parsed)) {
+            setNestedValue(runtimeConfig, "telegram.admin_ids", [...rtAdminIds, parsed]);
+          }
         }
       }
 
@@ -258,10 +281,7 @@ export function createConfigRoutes(deps: WebUIServerDeps) {
       deleteNestedValue(raw, key);
       writeRawConfig(raw, deps.configPath);
 
-      // Clear from runtime config
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- runtime config is dynamic
-      const runtimeConfig = deps.agent.getConfig() as Record<string, any>;
-      deleteNestedValue(runtimeConfig, key);
+      applyRuntimeValue(deps, key, undefined, meta.hotReload);
       CONFIG_SIDE_EFFECTS[key]?.(undefined);
 
       const result: ConfigKeyData = {

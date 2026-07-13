@@ -75,43 +75,63 @@ export async function executeToolBatch(
     toolPlans.push({ block, blocked, blockReason, params: toolParams });
   }
 
-  // Phase 2: Execute tools with concurrency limit (blocked tools resolve instantly)
+  // Phase 2: preserve model order for actions; parallelize only contiguous reads.
   const execResults: ToolExecResult[] = new Array(toolPlans.length);
-  {
-    let cursor = 0;
-    const runWorker = async (): Promise<void> => {
-      while (cursor < toolPlans.length) {
-        const idx = cursor++;
-        const plan = toolPlans[idx];
+  const runPlan = async (idx: number): Promise<void> => {
+    const plan = toolPlans[idx];
+    if (plan.blocked) {
+      execResults[idx] = {
+        result: { success: false, error: plan.blockReason },
+        durationMs: 0,
+      };
+      return;
+    }
 
-        if (plan.blocked) {
-          execResults[idx] = {
-            result: { success: false, error: plan.blockReason },
-            durationMs: 0,
-          };
-          continue;
-        }
+    const startTime = Date.now();
+    try {
+      const result = await toolRegistry.execute(
+        { ...plan.block, arguments: plan.params },
+        fullContext
+      );
+      execResults[idx] = { result, durationMs: Date.now() - startTime };
+    } catch (execErr) {
+      const errMsg = getErrorMessage(execErr);
+      const errStack = execErr instanceof Error ? execErr.stack : undefined;
+      execResults[idx] = {
+        result: { success: false, error: errMsg },
+        durationMs: Date.now() - startTime,
+        execError: { message: errMsg, stack: errStack },
+      };
+    }
+  };
 
-        const startTime = Date.now();
-        try {
-          const result = await toolRegistry.execute(
-            { ...plan.block, arguments: plan.params },
-            fullContext
-          );
-          execResults[idx] = { result, durationMs: Date.now() - startTime };
-        } catch (execErr) {
-          const errMsg = getErrorMessage(execErr);
-          const errStack = execErr instanceof Error ? execErr.stack : undefined;
-          execResults[idx] = {
-            result: { success: false, error: errMsg },
-            durationMs: Date.now() - startTime,
-            execError: { message: errMsg, stack: errStack },
-          };
-        }
+  let cursor = 0;
+  while (cursor < toolPlans.length) {
+    const plan = toolPlans[cursor];
+    const isRead =
+      !plan.blocked && toolRegistry.getToolCategory(plan.block.name) === "data-bearing";
+    if (!isRead) {
+      await runPlan(cursor++);
+      continue;
+    }
+
+    const readIndexes: number[] = [];
+    while (
+      cursor < toolPlans.length &&
+      !toolPlans[cursor].blocked &&
+      toolRegistry.getToolCategory(toolPlans[cursor].block.name) === "data-bearing"
+    ) {
+      readIndexes.push(cursor++);
+    }
+
+    let readCursor = 0;
+    const runReadWorker = async (): Promise<void> => {
+      while (readCursor < readIndexes.length) {
+        await runPlan(readIndexes[readCursor++]);
       }
     };
-    const workers = Math.min(TOOL_CONCURRENCY_LIMIT, toolPlans.length);
-    await Promise.all(Array.from({ length: workers }, () => runWorker()));
+    const workers = Math.min(TOOL_CONCURRENCY_LIMIT, readIndexes.length);
+    await Promise.all(Array.from({ length: workers }, () => runReadWorker()));
   }
 
   return { toolPlans, execResults };
@@ -231,7 +251,9 @@ export function detectToolStall(toolPlans: ToolPlan[], seen: Set<string>): boole
 export function injectDiscoveredTools(
   toolPlans: ToolPlan[],
   execResults: ToolExecResult[],
-  tools: PiAiTool[]
+  tools: PiAiTool[],
+  maxTools: number | null = null,
+  excludedNames: ReadonlySet<string> = new Set()
 ): number {
   let injected = 0;
   for (let index = 0; index < toolPlans.length; index++) {
@@ -248,12 +270,26 @@ export function injectDiscoveredTools(
     }
     const discovered = (exec.result.data as { tools: PiAiTool[] }).tools;
     if (!Array.isArray(discovered)) continue;
+    const available: PiAiTool[] = [];
     for (const tool of discovered) {
-      if (tool?.name && !tools.some((existing) => existing.name === tool.name)) {
+      if (!tool?.name || excludedNames.has(tool.name)) continue;
+      if (tools.some((existing) => existing.name === tool.name)) {
+        available.push(tool);
+        continue;
+      }
+      if (maxTools === null || tools.length < maxTools) {
         tools.push(tool);
+        available.push(tool);
         injected++;
       }
     }
+    const data = exec.result.data as Record<string, unknown>;
+    data.tools = available;
+    data.tools_found = available.length;
+    data.hint =
+      available.length > 0
+        ? "These tools are now available. Call them directly."
+        : "No additional tools could be loaded in this context.";
   }
   return injected;
 }

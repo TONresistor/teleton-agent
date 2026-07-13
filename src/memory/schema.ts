@@ -255,11 +255,13 @@ export function ensureSchema(db: Database.Database): void {
 
     -- Messages
     CREATE TABLE IF NOT EXISTS tg_messages (
-      id TEXT PRIMARY KEY,
+      id TEXT NOT NULL,
       chat_id TEXT NOT NULL,
       sender_id TEXT,
       text TEXT,
       embedding TEXT,
+      embedding_status TEXT NOT NULL DEFAULT 'pending'
+        CHECK(embedding_status IN ('pending', 'ready', 'failed', 'disabled')),
       reply_to_id TEXT,
       forward_from_id TEXT,
       is_from_agent INTEGER DEFAULT 0,
@@ -268,6 +270,7 @@ export function ensureSchema(db: Database.Database): void {
       media_type TEXT,
       timestamp INTEGER NOT NULL,
       indexed_at INTEGER NOT NULL DEFAULT (unixepoch()),
+      PRIMARY KEY (chat_id, id),
       FOREIGN KEY (chat_id) REFERENCES tg_chats(id) ON DELETE CASCADE,
       FOREIGN KEY (sender_id) REFERENCES tg_users(id) ON DELETE SET NULL
     );
@@ -275,7 +278,7 @@ export function ensureSchema(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_tg_messages_chat ON tg_messages(chat_id, timestamp DESC);
     CREATE INDEX IF NOT EXISTS idx_tg_messages_sender ON tg_messages(sender_id, timestamp DESC);
     CREATE INDEX IF NOT EXISTS idx_tg_messages_timestamp ON tg_messages(timestamp DESC);
-    CREATE INDEX IF NOT EXISTS idx_tg_messages_reply ON tg_messages(reply_to_id) WHERE reply_to_id IS NOT NULL;
+    CREATE INDEX IF NOT EXISTS idx_tg_messages_reply ON tg_messages(chat_id, reply_to_id) WHERE reply_to_id IS NOT NULL;
     CREATE INDEX IF NOT EXISTS idx_tg_messages_from_agent ON tg_messages(is_from_agent, timestamp DESC) WHERE is_from_agent = 1;
 
     -- Full-text search for messages
@@ -302,7 +305,8 @@ export function ensureSchema(db: Database.Database): void {
     CREATE TRIGGER IF NOT EXISTS tg_messages_fts_update AFTER UPDATE ON tg_messages WHEN old.text IS NOT NULL OR new.text IS NOT NULL BEGIN
       DELETE FROM tg_messages_fts WHERE rowid = old.rowid;
       INSERT INTO tg_messages_fts(rowid, text, id, chat_id, sender_id, timestamp)
-      VALUES (new.rowid, new.text, new.id, new.chat_id, new.sender_id, new.timestamp);
+      SELECT new.rowid, new.text, new.id, new.chat_id, new.sender_id, new.timestamp
+      WHERE new.text IS NOT NULL;
     END;
 
     -- ============================================
@@ -403,7 +407,7 @@ export function setSchemaVersion(db: Database.Database, version: string): void {
   ).run(version);
 }
 
-export const CURRENT_SCHEMA_VERSION = "1.20.0";
+export const CURRENT_SCHEMA_VERSION = "1.24.0";
 
 export function runMigrations(db: Database.Database): void {
   const currentVersion = getSchemaVersion(db);
@@ -807,6 +811,136 @@ export function runMigrations(db: Database.Database): void {
       log.info("Migration 1.20.0 complete: Scheduled task authority persisted");
     } catch (error) {
       log.error({ err: error }, "Migration 1.20.0 failed");
+      throw error;
+    }
+  }
+
+  if (!currentVersion || versionLessThan(currentVersion, "1.22.0")) {
+    log.info("Running migration 1.22.0: Scope Telegram message IDs by chat");
+    try {
+      const columns = db.prepare("PRAGMA table_info(tg_messages)").all() as Array<{
+        name: string;
+        pk: number;
+      }>;
+      const primaryKey = columns
+        .filter((column) => column.pk > 0)
+        .sort((a, b) => a.pk - b.pk)
+        .map((column) => column.name);
+
+      if (primaryKey.join(",") !== "chat_id,id") {
+        db.transaction(() => {
+          db.exec(`
+            DROP TRIGGER IF EXISTS tg_messages_fts_insert;
+            DROP TRIGGER IF EXISTS tg_messages_fts_delete;
+            DROP TRIGGER IF EXISTS tg_messages_fts_update;
+            DROP TABLE IF EXISTS tg_messages_fts;
+
+            CREATE TABLE tg_messages_new (
+              id TEXT NOT NULL,
+              chat_id TEXT NOT NULL,
+              sender_id TEXT,
+              text TEXT,
+              embedding TEXT,
+              embedding_status TEXT NOT NULL DEFAULT 'pending'
+                CHECK(embedding_status IN ('pending', 'ready', 'failed', 'disabled')),
+              reply_to_id TEXT,
+              forward_from_id TEXT,
+              is_from_agent INTEGER DEFAULT 0,
+              is_edited INTEGER DEFAULT 0,
+              has_media INTEGER DEFAULT 0,
+              media_type TEXT,
+              timestamp INTEGER NOT NULL,
+              indexed_at INTEGER NOT NULL DEFAULT (unixepoch()),
+              PRIMARY KEY (chat_id, id),
+              FOREIGN KEY (chat_id) REFERENCES tg_chats(id) ON DELETE CASCADE,
+              FOREIGN KEY (sender_id) REFERENCES tg_users(id) ON DELETE SET NULL
+            );
+
+            INSERT INTO tg_messages_new (
+              id, chat_id, sender_id, text, embedding, embedding_status,
+              reply_to_id, forward_from_id, is_from_agent, is_edited,
+              has_media, media_type, timestamp, indexed_at
+            )
+            SELECT
+              id, chat_id, sender_id, text, embedding,
+              CASE WHEN embedding IS NULL THEN 'pending' ELSE 'ready' END,
+              reply_to_id, forward_from_id, is_from_agent, is_edited,
+              has_media, media_type, timestamp, indexed_at
+            FROM tg_messages;
+
+            DROP TABLE tg_messages;
+            ALTER TABLE tg_messages_new RENAME TO tg_messages;
+
+            CREATE INDEX idx_tg_messages_chat ON tg_messages(chat_id, timestamp DESC);
+            CREATE INDEX idx_tg_messages_sender ON tg_messages(sender_id, timestamp DESC);
+            CREATE INDEX idx_tg_messages_timestamp ON tg_messages(timestamp DESC);
+            CREATE INDEX idx_tg_messages_reply ON tg_messages(chat_id, reply_to_id)
+              WHERE reply_to_id IS NOT NULL;
+            CREATE INDEX idx_tg_messages_from_agent ON tg_messages(is_from_agent, timestamp DESC)
+              WHERE is_from_agent = 1;
+
+            CREATE VIRTUAL TABLE tg_messages_fts USING fts5(
+              text,
+              id UNINDEXED,
+              chat_id UNINDEXED,
+              sender_id UNINDEXED,
+              timestamp UNINDEXED,
+              content='tg_messages',
+              content_rowid='rowid'
+            );
+
+            CREATE TRIGGER tg_messages_fts_insert AFTER INSERT ON tg_messages
+              WHEN new.text IS NOT NULL BEGIN
+              INSERT INTO tg_messages_fts(rowid, text, id, chat_id, sender_id, timestamp)
+              VALUES (new.rowid, new.text, new.id, new.chat_id, new.sender_id, new.timestamp);
+            END;
+            CREATE TRIGGER tg_messages_fts_delete AFTER DELETE ON tg_messages
+              WHEN old.text IS NOT NULL BEGIN
+              DELETE FROM tg_messages_fts WHERE rowid = old.rowid;
+            END;
+            CREATE TRIGGER tg_messages_fts_update AFTER UPDATE ON tg_messages
+              WHEN old.text IS NOT NULL OR new.text IS NOT NULL BEGIN
+              DELETE FROM tg_messages_fts WHERE rowid = old.rowid;
+              INSERT INTO tg_messages_fts(rowid, text, id, chat_id, sender_id, timestamp)
+              SELECT new.rowid, new.text, new.id, new.chat_id, new.sender_id, new.timestamp
+              WHERE new.text IS NOT NULL;
+            END;
+
+            INSERT INTO tg_messages_fts(rowid, text, id, chat_id, sender_id, timestamp)
+            SELECT rowid, text, id, chat_id, sender_id, timestamp
+            FROM tg_messages WHERE text IS NOT NULL;
+
+            INSERT INTO meta (key, value, updated_at)
+            VALUES ('tg_messages_vector_rebuild_required', '1', unixepoch())
+            ON CONFLICT(key) DO UPDATE SET value = '1', updated_at = unixepoch();
+          `);
+        })();
+      } else if (!columns.some((column) => column.name === "embedding_status")) {
+        addColumnIfNotExists(
+          db,
+          "tg_messages",
+          "embedding_status",
+          "TEXT NOT NULL DEFAULT 'pending' CHECK(embedding_status IN ('pending', 'ready', 'failed', 'disabled'))"
+        );
+      }
+      log.info("Migration 1.22.0 complete: Telegram message IDs are chat-scoped");
+    } catch (error) {
+      log.error({ err: error }, "Migration 1.22.0 failed");
+      throw error;
+    }
+  }
+
+  if (!currentVersion || versionLessThan(currentVersion, "1.24.0")) {
+    log.info("Running migration 1.24.0: Remove unused agent runtime state");
+    try {
+      db.exec(`
+        DROP TABLE IF EXISTS action_executions;
+        DROP TABLE IF EXISTS agent_turn_traces;
+        DROP TABLE IF EXISTS tool_result_artifacts;
+      `);
+      log.info("Migration 1.24.0 complete: Unused agent runtime state removed");
+    } catch (error) {
+      log.error({ err: error }, "Migration 1.24.0 failed");
       throw error;
     }
   }

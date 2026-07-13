@@ -12,8 +12,8 @@
  * Each plugin is adapted into a PluginModule for unified lifecycle management.
  */
 
-import { readdirSync, readFileSync, existsSync, statSync } from "fs";
-import { join } from "path";
+import { readdirSync, readFileSync, existsSync, statSync, lstatSync, realpathSync } from "fs";
+import { dirname, isAbsolute, join, relative, sep } from "path";
 import { pathToFileURL } from "url";
 import { execFile } from "child_process";
 import { getPluginPriorities } from "./plugin-config-store.js";
@@ -53,6 +53,38 @@ import { getErrorMessage } from "../../utils/errors.js";
 const log = createLogger("PluginLoader");
 
 const PLUGIN_DATA_DIR = join(TELETON_ROOT, "plugins", "data");
+
+/**
+ * Plugins are trusted application code, not sandboxed scripts. Reject paths
+ * that another OS user could replace before importing them into this process.
+ */
+export function assertTrustedPluginPath(modulePath: string, pluginsDir: string): void {
+  const root = realpathSync(pluginsDir);
+  const resolvedModule = realpathSync(modulePath);
+  const rel = relative(root, resolvedModule);
+  if (rel === ".." || rel.startsWith(`..${sep}`) || isAbsolute(rel)) {
+    throw new Error(`Plugin path escapes the trusted directory: ${modulePath}`);
+  }
+
+  const expectedUid = typeof process.getuid === "function" ? process.getuid() : undefined;
+  let current = modulePath;
+  while (true) {
+    const metadata = lstatSync(current);
+    if (metadata.isSymbolicLink()) {
+      throw new Error(`Plugin path must not contain symlinks: ${current}`);
+    }
+    if ((metadata.mode & 0o022) !== 0) {
+      throw new Error(`Plugin path is group/world writable: ${current}`);
+    }
+    if (expectedUid !== undefined && metadata.uid !== expectedUid) {
+      throw new Error(`Plugin path is not owned by the Teleton process user: ${current}`);
+    }
+    if (realpathSync(current) === root) break;
+    const parent = dirname(current);
+    if (parent === current) throw new Error(`Plugin path is outside trusted root: ${modulePath}`);
+    current = parent;
+  }
+}
 
 interface RawPluginExports {
   tools?: SimpleToolDef[] | ((sdk: PluginSDK) => SimpleToolDef[]);
@@ -175,7 +207,11 @@ export function adaptPlugin(
 
   const sanitizedConfig = sanitizeConfigForPlugins(config);
   let pluginSdk: PluginSDK | null = null;
+  let lifecycleActive = false;
   const getSdk = (): PluginSDK => {
+    if (!exposedPluginDb) {
+      throw new Error(`Plugin "${pluginName}" SDK requested before database migration`);
+    }
     pluginSdk ??= createPluginSDK(sdkDeps, {
       pluginName,
       db: exposedPluginDb,
@@ -193,6 +229,7 @@ export function adaptPlugin(
   const module: PluginModuleWithHooks = {
     name: pluginName,
     version: pluginVersion,
+    sourceId: entryName.replace(/\.js$/, ""),
 
     // Store event hooks from plugin exports
     onMessage: typeof raw.onMessage === "function" ? raw.onMessage : undefined,
@@ -201,6 +238,7 @@ export function adaptPlugin(
     configure() {},
 
     migrate() {
+      if (pluginDb && exposedPluginDb) return;
       try {
         // Always create plugin DB (needed for sdk.storage even without migrate())
         const dbPath = join(PLUGIN_DATA_DIR, `${pluginName}.db`);
@@ -209,7 +247,8 @@ export function adaptPlugin(
 
         // Run plugin's custom migrations if provided
         if (hasMigrate) {
-          raw.migrate?.(exposedPluginDb);
+          const migrationDb = exposedPluginDb;
+          pluginDb.transaction(() => raw.migrate?.(migrationDb))();
 
           const pluginTables = (
             pluginDb
@@ -235,6 +274,7 @@ export function adaptPlugin(
           pluginDb = null;
         }
         exposedPluginDb = null;
+        throw error;
       }
     },
 
@@ -253,7 +293,7 @@ export function adaptPlugin(
 
         return validDefs.map((def) => {
           const rawExecutor = def.execute;
-          const sandboxedExecutor: ToolExecutor = (params, context) => {
+          const restrictedContextExecutor: ToolExecutor = (params, context) => {
             const sanitizedContext: PluginToolContext = {
               chatId: context.chatId,
               senderId: context.senderId,
@@ -276,18 +316,19 @@ export function adaptPlugin(
             } as Tool,
             // Always replace the agent DB from ToolContext with the plugin's
             // isolated handle. Failing closed also covers DB startup errors.
-            executor: withPluginDb(sandboxedExecutor),
+            executor: withPluginDb(restrictedContextExecutor),
             scope: def.scope as ToolScope | undefined,
             requiresApproval: def.requiresApproval,
           };
         });
       } catch (error: unknown) {
         pluginLog.error(`tools() failed: ${getErrorMessage(error)}`);
-        return [];
+        throw error;
       }
     },
 
     async start(_context) {
+      lifecycleActive = true;
       if (!raw.start) return;
 
       try {
@@ -301,25 +342,30 @@ export function adaptPlugin(
         await raw.start(enhancedContext);
       } catch (error: unknown) {
         pluginLog.error(`start() failed: ${getErrorMessage(error)}`);
+        throw error;
       }
     },
 
     async stop() {
+      const shouldRunStopHook = lifecycleActive;
+      lifecycleActive = false;
+      const dbToClose = pluginDb;
+      pluginDb = null;
+      exposedPluginDb = null;
+      pluginSdk = null;
       try {
-        await raw.stop?.();
+        if (shouldRunStopHook) await raw.stop?.();
       } catch (error: unknown) {
         pluginLog.error(`stop() failed: ${getErrorMessage(error)}`);
+        throw error;
       } finally {
-        if (pluginDb) {
+        if (dbToClose) {
           try {
-            pluginDb.close();
+            dbToClose.close();
           } catch {
             /* ignore */
           }
         }
-        pluginDb = null;
-        exposedPluginDb = null;
-        pluginSdk = null;
       }
     },
   };
@@ -380,7 +426,7 @@ export async function loadEnhancedPlugins(
   sdkDeps: SDKDependencies,
   db?: import("better-sqlite3").Database // eslint-disable-line @typescript-eslint/consistent-type-imports
 ): Promise<LoadEnhancedPluginsResult> {
-  const hookRegistry = new HookRegistry();
+  const hookRegistry = new HookRegistry(sdkDeps.executionGate);
   const pluginsDir = WORKSPACE_PATHS.PLUGINS_DIR;
 
   if (!existsSync(pluginsDir)) {
@@ -425,7 +471,12 @@ export async function loadEnhancedPlugins(
     }
 
     if (modulePath) {
-      pluginPaths.push({ entry, path: modulePath });
+      try {
+        assertTrustedPluginPath(modulePath, pluginsDir);
+        pluginPaths.push({ entry, path: modulePath });
+      } catch (error) {
+        log.error(`Plugin "${entry}" rejected: ${getErrorMessage(error)}`);
+      }
     }
   }
 

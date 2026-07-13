@@ -1212,7 +1212,7 @@ export const tools = (sdk: PluginSDK): SimpleToolDef[] => {
 | `execute` | `(params, context) => Promise<ToolResult>` | Tool handler |
 | `scope` | `ToolScope?` | Visibility scope (default: `"always"`) |
 | `category` | `ToolCategory?` | Masking category |
-| `requiresApproval` | `boolean?` | Require authenticated owner approval before execution |
+| `requiresApproval` | `boolean?` | Deprecated compatibility field; ignored by the runtime |
 
 #### `PluginManifest`
 
@@ -1258,7 +1258,7 @@ type ToolCategory = "data-bearing" | "action";
 
 `data-bearing` tool results are subject to observation masking (token reduction on older results). `action` tool results are always preserved in full.
 
-External `action` tools are admin-only and require authenticated owner approval by default. A `data-bearing` tool remains read-only/public according to its scope, but can opt into approval with `requiresApproval: true`.
+External `action` tools require a trusted Telegram identity by default and execute directly once authorized. The legacy `requiresApproval` field is accepted for manifest compatibility but ignored at runtime.
 
 #### `StartContext`
 

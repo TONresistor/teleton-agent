@@ -53,6 +53,10 @@ export class AdminHandler {
     return this.config.admin_ids.includes(userId);
   }
 
+  updateConfig(config: TelegramConfig): void {
+    this.config = config;
+  }
+
   isPaused(): boolean {
     return this.paused;
   }
@@ -105,10 +109,6 @@ export class AdminHandler {
         return this.handleResumeCommand();
       case "wallet":
         return await this.handleWalletCommand();
-      case "approve":
-        return await this.handleApprovalCommand(command, true);
-      case "reject":
-        return await this.handleApprovalCommand(command, false);
       case "stop":
         return await this.handleStopCommand();
       case "verbose":
@@ -162,13 +162,32 @@ export class AdminHandler {
     }
   }
 
+  private persistConfigValue(
+    path: string,
+    value: unknown,
+    applyRuntime: () => void
+  ): string | null {
+    try {
+      const raw = readRawConfig(this.configPath);
+      setNestedValue(raw, path, value);
+      writeRawConfig(raw, this.configPath);
+    } catch (error) {
+      return `❌ Error saving config: ${getErrorMessage(error)}`;
+    }
+    applyRuntime();
+    return null;
+  }
+
   private handleLoopCommand(command: AdminCommand): string {
-    const n = parseInt(command.args[0], 10);
-    if (isNaN(n) || n < 1 || n > 50) {
+    const n = Number(command.args[0]);
+    if (!Number.isInteger(n) || n < 1 || n > 50) {
       const current = this.agent.getConfig().agent.max_agentic_iterations || 5;
       return `🔄 Current loop: **${current}** iterations\n\nUsage: /loop <1-50>`;
     }
-    this.agent.getConfig().agent.max_agentic_iterations = n;
+    const error = this.persistConfigValue("agent.max_agentic_iterations", n, () => {
+      this.agent.getConfig().agent.max_agentic_iterations = n;
+    });
+    if (error) return error;
     return `🔄 Max iterations set to **${n}**`;
   }
 
@@ -179,7 +198,10 @@ export class AdminHandler {
     }
     const newModel = command.args[0];
     const oldModel = cfg.agent.model;
-    cfg.agent.model = newModel;
+    const error = this.persistConfigValue("agent.model", newModel, () => {
+      cfg.agent.model = newModel;
+    });
+    if (error) return error;
     return `🧠 Model: **${oldModel}** → **${newModel}**`;
   }
 
@@ -199,7 +221,12 @@ export class AdminHandler {
         return `❌ Invalid DM policy. Valid: ${VALID_DM_POLICIES.join(", ")}`;
       }
       const old = this.config.dm_policy;
-      this.config.dm_policy = value as typeof this.config.dm_policy;
+      const next = value as typeof this.config.dm_policy;
+      const error = this.persistConfigValue("telegram.dm_policy", next, () => {
+        this.config.dm_policy = next;
+        this.agent.getConfig().telegram.dm_policy = next;
+      });
+      if (error) return error;
       return `📬 DM policy: **${old}** → **${value}**`;
     }
 
@@ -208,7 +235,12 @@ export class AdminHandler {
         return `❌ Invalid group policy. Valid: ${VALID_GROUP_POLICIES.join(", ")}`;
       }
       const old = this.config.group_policy;
-      this.config.group_policy = value as typeof this.config.group_policy;
+      const next = value as typeof this.config.group_policy;
+      const error = this.persistConfigValue("telegram.group_policy", next, () => {
+        this.config.group_policy = next;
+        this.agent.getConfig().telegram.group_policy = next;
+      });
+      if (error) return error;
       return `👥 Group policy: **${old}** → **${value}**`;
     }
 
@@ -242,35 +274,6 @@ export class AdminHandler {
 
     const friendly = Address.parse(address).toString({ bounceable: false });
     return `💎 **${result.balance} TON**\n📍 \`${friendly}\``;
-  }
-
-  private async handleApprovalCommand(command: AdminCommand, approve: boolean): Promise<string> {
-    const ownUserId = this.bridge.getOwnUserId?.();
-    if (ownUserId !== undefined && command.senderId === Number(ownUserId)) {
-      return "❌ Approval must come from a separate interactive admin account";
-    }
-
-    const approvalId = command.args[0];
-    if (!approvalId) {
-      return `❌ Usage: /${approve ? "approve" : "reject"} <request_id>`;
-    }
-    if (!this.registry) return "❌ Tool registry unavailable";
-
-    const result = approve
-      ? await this.registry.approvePendingAction(approvalId, command.senderId, command.chatId)
-      : await this.registry.rejectPendingAction(approvalId, command.senderId, command.chatId);
-
-    if (!result.success) return `❌ ${result.error ?? "Approval failed"}`;
-    if (!approve) return `🚫 Approval request ${approvalId} rejected.`;
-
-    const data = result.data;
-    const message =
-      data && typeof data === "object" && "message" in data && typeof data.message === "string"
-        ? data.message
-        : data === undefined
-          ? "Action completed."
-          : JSON.stringify(data);
-    return `✅ Approved action completed\n\n${message}`;
   }
 
   getBootstrapContent(): string | null {
@@ -308,18 +311,24 @@ export class AdminHandler {
     }
 
     if (sub === "topk") {
-      const n = parseInt(command.args[1], 10);
-      if (isNaN(n) || n < 5 || n > 200) {
+      const n = Number(command.args[1]);
+      if (!Number.isInteger(n) || n < 5 || n > 200) {
         return `🔍 Current top_k: **${cfg.tool_rag.top_k}**\n\nUsage: /rag topk <5-200>`;
       }
       const old = cfg.tool_rag.top_k;
-      cfg.tool_rag.top_k = n;
+      const error = this.persistConfigValue("tool_rag.top_k", n, () => {
+        cfg.tool_rag.top_k = n;
+      });
+      if (error) return error;
       return `🔍 Tool RAG top_k: **${old}** → **${n}**`;
     }
 
     // Toggle ON/OFF
     const next = !cfg.tool_rag.enabled;
-    cfg.tool_rag.enabled = next;
+    const error = this.persistConfigValue("tool_rag.enabled", next, () => {
+      cfg.tool_rag.enabled = next;
+    });
+    if (error) return error;
     return next ? "🔍 Tool RAG **ON**" : "🔇 Tool RAG **OFF**";
   }
 
@@ -331,14 +340,10 @@ export class AdminHandler {
       return `👤 Guest mode: **${state}**\n\nUsage: /guest on|off`;
     }
     const enabled = sub === "on";
-    try {
-      const raw = readRawConfig(this.configPath);
-      setNestedValue(raw, "telegram.guest_mode", enabled);
-      writeRawConfig(raw, this.configPath);
-    } catch (error) {
-      return `❌ Error saving config: ${getErrorMessage(error)}`;
-    }
-    cfg.telegram.guest_mode = enabled;
+    const error = this.persistConfigValue("telegram.guest_mode", enabled, () => {
+      cfg.telegram.guest_mode = enabled;
+    });
+    if (error) return error;
     return enabled ? "👤 Guest mode **ON**" : "👤 Guest mode **OFF**";
   }
 
@@ -568,9 +573,6 @@ Manage plugin secrets (API keys, tokens)
 
 **/wallet**
 Check TON wallet balance
-
-**/approve** <request_id> / **/reject** <request_id>
-Approve or reject a pending financial action
 
 **/verbose**
 Toggle verbose debug logging

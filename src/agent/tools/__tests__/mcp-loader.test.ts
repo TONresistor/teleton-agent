@@ -53,7 +53,10 @@ describe("MCP tool execution", () => {
       expect(sideEffectCompleted).toBe(false);
 
       await vi.advanceTimersByTimeAsync(10_000);
-      await expect(resultPromise).resolves.toEqual({ success: true, data: "done" });
+      await expect(resultPromise).resolves.toEqual({
+        success: true,
+        data: "done",
+      });
       expect(sideEffectCompleted).toBe(true);
       expect(callTool).toHaveBeenCalledWith(
         { name: "mutate", arguments: { id: "once" } },

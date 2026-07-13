@@ -17,6 +17,11 @@ export class ScheduledTaskHandler {
     private config: Config
   ) {}
 
+  updateConfig(config: Config): void {
+    this.config = config;
+    this.dependencyResolver = null;
+  }
+
   async execute(message: TelegramMessage): Promise<void> {
     // Hoist all dynamic imports to top of function
     const { getTaskStore } = await import("./memory/agent/tasks.js");

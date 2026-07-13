@@ -19,12 +19,13 @@ import { ToolRegistry } from "./agent/tools/registry.js";
 import { registerAllTools } from "./agent/tools/register-all.js";
 import type { HookName, AgentStartEvent, AgentStopEvent } from "./sdk/hooks/types.js";
 import { createHookRunner } from "./sdk/hooks/runner.js";
-import type { HookRegistry } from "./sdk/hooks/registry.js";
+import { HookRegistry } from "./sdk/hooks/registry.js";
 import type { SDKDependencies } from "./sdk/index.js";
 import type { SupportedProvider } from "./config/providers.js";
 import { loadModules } from "./agent/tools/module-loader.js";
 import { ModulePermissions } from "./agent/tools/module-permissions.js";
 import { SHUTDOWN_TIMEOUT_MS } from "./constants/timeouts.js";
+import { flushAllTranscripts } from "./session/transcript.js";
 
 import type { PluginModule, PluginContext } from "./agent/tools/types.js";
 import { PluginWatcher } from "./agent/tools/plugin-watcher.js";
@@ -52,6 +53,8 @@ import {
 import { createServerDeps } from "./app/server-deps.js";
 import { startPluginModules, stopPluginModules } from "./app/plugin-lifecycle.js";
 import { resolveOwnerInfo } from "./app/owner-info.js";
+import { deleteNestedValue, setNestedValue } from "./config/configurable-keys.js";
+import { PluginExecutionGate } from "./agent/tools/plugin-execution-gate.js";
 
 const log = createLogger("App");
 
@@ -65,7 +68,6 @@ export class TeletonApp {
   private toolCount: number = 0;
   private toolRegistry: ToolRegistry;
   private modules: PluginModule[] = [];
-  private builtinModuleCount: number = 0;
   private memory: MemorySystem;
   private sdkDeps: SDKDependencies;
   private webuiServer: WebUIServer | null = null;
@@ -84,7 +86,11 @@ export class TeletonApp {
   private scheduledTaskHandler: ScheduledTaskHandler;
   private inlineRouter = new InlineRouter();
   private pluginRateLimiter = new PluginRateLimiter();
+  private pluginExecutionGate = new PluginExecutionGate();
   private inlineMiddlewareBridge: ITelegramBridge | null = null;
+  private pluginHookRegistry = new HookRegistry(this.pluginExecutionGate);
+  private disposeToolIndexSubscription: (() => void) | null = null;
+  private acceptingMessages = false;
 
   private configPath: string;
 
@@ -103,7 +109,39 @@ export class TeletonApp {
       userHookEvaluator: this.userHookEvaluator,
       rewireHooks: () => this.wirePluginEventHooks(),
       stopGocoonRunner: () => this.stopGocoonRunner(),
+      reloadConfig: () => loadConfig(this.configPath),
+      applyConfigKey: (key, value) => this.applyHotConfigKey(key, value),
+      getHookRegistry: () => this.pluginHookRegistry,
+      inlineRouter: this.inlineRouter,
+      pluginExecutionGate: this.pluginExecutionGate,
     });
+  }
+
+  private applyHotConfigKey(key: string, value: unknown): void {
+    const runtimeConfig = this.config as unknown as Record<string, unknown>;
+    if (value === undefined) deleteNestedValue(runtimeConfig, key);
+    else setNestedValue(runtimeConfig, key, value);
+
+    this.providerRuntime.updateConfig(this.config);
+    this.agent.updateConfig(this.config);
+    this.toolRegistry.setAllowFrom(this.config.telegram.allow_from ?? []);
+    this.toolRegistry.setAdminIds(this.config.telegram.admin_ids);
+    this.messageHandler.updateConfig(this.config);
+    this.adminHandler.updateConfig(this.config.telegram);
+    this.scheduledTaskHandler.updateConfig(this.config);
+    this.heartbeatRunner.updateConfig(this.config);
+    if (key === "telegram.debounce_ms") {
+      this.debouncer?.updateDebounceMs(this.config.telegram.debounce_ms);
+    }
+    initLoggerFromConfig(this.config.logging);
+
+    if (key === "heartbeat.enabled" || key === "telegram.admin_ids") {
+      this.heartbeatRunner.stop();
+      const adminChatId = this.config.telegram.admin_ids[0];
+      if (this.config.heartbeat.enabled && adminChatId) {
+        this.heartbeatRunner.start(adminChatId, this.config.heartbeat.interval_ms);
+      }
+    }
   }
 
   /**
@@ -132,7 +170,7 @@ export class TeletonApp {
 
     const soul = loadSoul();
 
-    this.toolRegistry = new ToolRegistry(this.config.telegram.mode);
+    this.toolRegistry = new ToolRegistry(this.config.telegram.mode, this.pluginExecutionGate);
     registerAllTools(this.toolRegistry);
 
     this.agent = new AgentRuntime(this.config, soul, this.toolRegistry);
@@ -163,10 +201,9 @@ export class TeletonApp {
     this.userHookEvaluator = new UserHookEvaluator(db);
     this.agent.setUserHookEvaluator(this.userHookEvaluator);
 
-    this.sdkDeps = { bridge: this.bridge };
+    this.sdkDeps = { bridge: this.bridge, executionGate: this.pluginExecutionGate };
 
     this.modules = loadModules(this.toolRegistry, this.config, db);
-    this.builtinModuleCount = this.modules.length;
 
     const modulePermissions = new ModulePermissions(db);
     this.toolRegistry.setPermissions(modulePermissions);
@@ -318,18 +355,37 @@ ${blue}  ┌──────────────────────�
    */
   private async startAgent(): Promise<void> {
     // Reload config from disk (mode switch writes YAML before restart)
+    const previousMode = this.config.telegram.mode;
+    const previousEmbeddingProvider = this.config.embedding.provider;
+    const previousEmbeddingModel = this.config.embedding.model;
     const freshConfig = loadConfig(this.configPath);
-    const modeChanged = freshConfig.telegram.mode !== this.config.telegram.mode;
-    this.config = freshConfig;
+    const modeChanged = freshConfig.telegram.mode !== previousMode;
+    const embeddingChanged =
+      freshConfig.embedding.provider !== previousEmbeddingProvider ||
+      freshConfig.embedding.model !== previousEmbeddingModel;
+    const stableConfig = this.config as unknown as Record<string, unknown>;
+    for (const key of Object.keys(stableConfig)) delete stableConfig[key];
+    Object.assign(stableConfig, freshConfig);
     this.providerRuntime.updateConfig(this.config);
 
     if (modeChanged) {
-      log.info(`Mode changed to "${this.config.telegram.mode}", recreating bridge & registry`);
-      this.recreateForModeChange();
+      log.info(`Mode changed to "${this.config.telegram.mode}", recreating Telegram bridge`);
+      this.bridge = createBridge(this.config);
+      this.sdkDeps.bridge = this.bridge;
+      this.messageHandlersRegistered = false;
+      this.callbackHandlerRegistered = false;
+      this.inlineMiddlewareBridge = null;
     }
 
-    // Truncate stale external plugins from previous run (keep builtins only)
-    this.modules.length = this.builtinModuleCount;
+    if (embeddingChanged) {
+      Object.assign(this.memory, this.createMemorySystem());
+      if (this.config.embedding.provider !== "none") {
+        getDatabase().invalidateTelegramMessageEmbeddings();
+      }
+      setKnowledgeIndexer(this.memory.knowledge);
+    }
+
+    this.rebuildRuntimeGeneration();
     this.preparePluginBotRuntime();
 
     const builtinNames = this.modules.map((m) => m.name);
@@ -338,8 +394,9 @@ ${blue}  ┌──────────────────────�
       .map((m) => m.name);
 
     // Load plugins, MCP servers, and configure tool registry
-    this.mcpConnections =
+    const nextMcpConnections =
       Object.keys(this.config.mcp.servers).length > 0 ? await loadMcpServers(this.config.mcp) : [];
+    this.mcpConnections.splice(0, this.mcpConnections.length, ...nextMcpConnections);
     const orchestrator = new PluginOrchestrator(
       this.toolRegistry,
       this.config,
@@ -353,7 +410,10 @@ ${blue}  ┌──────────────────────�
       hookRegistry,
       externalModules,
       toolCount,
+      dispose,
     } = await orchestrator.loadAll(builtinNames, moduleNames, this.mcpConnections);
+    this.disposeToolIndexSubscription = dispose;
+    this.pluginHookRegistry = hookRegistry;
     for (const mod of externalModules) this.modules.push(mod);
     if (pluginToolCount > 0 || toolCount !== this.toolCount) {
       this.toolCount = toolCount;
@@ -364,7 +424,11 @@ ${blue}  ┌──────────────────────�
       getDatabase().getDb(),
       this.config,
       this.configPath,
-      { embedder: this.memory.embedder, knowledge: this.memory.knowledge }
+      {
+        embedder: this.memory.embedder,
+        knowledge: this.memory.knowledge,
+        messages: this.memory.messages,
+      }
     );
     const { indexResult, ftsResult } = await maintenance.run();
 
@@ -402,10 +466,11 @@ ${blue}  ┌──────────────────────�
     // Register every middleware and dynamic plugin hook before polling starts.
     const firstStart = !this.messageHandlersRegistered;
     this.installMessagePipeline();
-    if (hookRegistry.hasAnyHooks()) this.installHookRunner(hookRegistry);
+    this.installHookRunner(hookRegistry);
     this.wirePluginEventHooks();
 
     // Wire mode-specific handlers and start polling last.
+    this.acceptingMessages = true;
     if (isBotBridge(this.bridge)) {
       this.wireBotMode(firstStart);
     } else {
@@ -421,6 +486,9 @@ ${blue}  ┌──────────────────────�
         modules: this.modules,
         pluginContext,
         loadedModuleNames: builtinNames,
+        hookRegistry,
+        inlineRouter: this.inlineRouter,
+        executionGate: this.pluginExecutionGate,
       });
       this.pluginWatcher.start();
     }
@@ -455,6 +523,66 @@ ${blue}  ┌──────────────────────�
         this.heartbeatRunner.start(adminChatId, this.config.heartbeat.interval_ms);
       }
     }
+  }
+
+  private createMemorySystem(): MemorySystem {
+    const embeddingProvider = this.config.embedding.provider;
+    return initializeMemory({
+      database: {
+        path: join(TELETON_ROOT, "memory.db"),
+        enableVectorSearch: embeddingProvider !== "none",
+        vectorDimensions: 384,
+      },
+      embeddings: {
+        provider: embeddingProvider,
+        model: this.config.embedding.model,
+        apiKey: embeddingProvider === "anthropic" ? this.config.agent.api_key : undefined,
+      },
+      workspaceDir: join(TELETON_ROOT),
+    });
+  }
+
+  /** Build a complete runtime generation so restarts cannot retain stale tools or handlers. */
+  private rebuildRuntimeGeneration(): void {
+    this.disposeToolIndexSubscription?.();
+    this.disposeToolIndexSubscription = null;
+
+    const db = getDatabase().getDb();
+    const registry = this.toolRegistry;
+    registry.reset(this.config.telegram.mode);
+    registerAllTools(registry);
+    registry.setAllowFrom(this.config.telegram.allow_from ?? []);
+    registry.setAdminIds(this.config.telegram.admin_ids);
+    const modulePermissions = new ModulePermissions(db);
+    registry.setPermissions(modulePermissions);
+
+    const nextModules = loadModules(registry, this.config, db);
+    this.modules.splice(0, this.modules.length, ...nextModules);
+    this.toolCount = registry.count;
+
+    this.agent.updateConfig(this.config);
+    this.agent.setToolRegistry(registry);
+    this.agent.initializeContextBuilder(this.memory.embedder, getDatabase().isVectorSearchReady());
+
+    this.messageHandler = new MessageHandler(
+      this.bridge,
+      this.config.telegram,
+      this.agent,
+      db,
+      this.memory.embedder,
+      getDatabase().isVectorSearchReady(),
+      this.config
+    );
+    this.adminHandler = new AdminHandler(
+      this.bridge,
+      this.config.telegram,
+      this.agent,
+      this.configPath,
+      modulePermissions,
+      registry
+    );
+    this.heartbeatRunner = new HeartbeatRunner(this.agent, this.bridge, this.config);
+    this.scheduledTaskHandler = new ScheduledTaskHandler(this.agent, this.bridge, this.config);
   }
 
   private preparePluginBotRuntime(): void {
@@ -550,6 +678,7 @@ ${blue}  ┌──────────────────────�
     // Register common message handler ONCE (survive agent restart via WebUI)
     if (!this.messageHandlersRegistered) {
       this.bridge.onNewMessage(async (message) => {
+        if (!this.acceptingMessages) return;
         try {
           // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- debouncer always initialized before handlers register
           await this.debouncer!.enqueue(message);
@@ -559,45 +688,6 @@ ${blue}  ┌──────────────────────�
       });
       this.messageHandlersRegistered = true;
     }
-  }
-
-  /**
-   * Recreate the bridge, registry mode, and non-hot-swappable handlers after a
-   * user/bot mode switch. Caller logs the switch and guards on modeChanged.
-   */
-  private recreateForModeChange(): void {
-    // Recreate bridge for the new mode
-    this.bridge = createBridge(this.config);
-    this.sdkDeps.bridge = this.bridge;
-
-    // Update tool registry mode (filters tools for user vs bot)
-    this.toolRegistry.setMode(this.config.telegram.mode);
-    if (this.config.telegram.allow_from?.length) {
-      this.toolRegistry.setAllowFrom(this.config.telegram.allow_from);
-    }
-
-    // Swap bridge ref in handlers that hold it
-    this.messageHandler.setBridge(this.bridge);
-
-    // Recreate handlers that don't support hot-swap
-    const db = getDatabase().getDb();
-    const modulePermissions = new ModulePermissions(db);
-    this.toolRegistry.setPermissions(modulePermissions);
-    this.adminHandler = new AdminHandler(
-      this.bridge,
-      this.config.telegram,
-      this.agent,
-      this.configPath,
-      modulePermissions,
-      this.toolRegistry
-    );
-    this.heartbeatRunner = new HeartbeatRunner(this.agent, this.bridge, this.config);
-    this.scheduledTaskHandler = new ScheduledTaskHandler(this.agent, this.bridge, this.config);
-
-    // New bridge = new message listeners needed
-    this.messageHandlersRegistered = false;
-    this.callbackHandlerRegistered = false;
-    this.inlineMiddlewareBridge = null;
   }
 
   // ─── Mode-specific wiring ──────────────────────────────────────────────
@@ -610,11 +700,13 @@ ${blue}  ┌──────────────────────�
 
     if (isBotBridge(this.bridge)) {
       this.bridge.setCallbackHandler((msg) => {
+        if (!this.acceptingMessages) return;
         // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- debouncer initialized before wireBotMode
         void this.debouncer!.enqueue(msg);
       });
       if (firstStart) {
         this.bridge.onGuestMessage(async (msg) => {
+          if (!this.acceptingMessages) return "";
           if (!this.config.telegram.guest_mode) return "";
           if (this.adminHandler.isPaused()) return "";
           const response = await this.agent.processMessage({
@@ -650,6 +742,7 @@ ${blue}  ┌──────────────────────�
   private wireUserMode(firstStart: boolean): void {
     if (firstStart && isUserBridge(this.bridge)) {
       this.bridge.onServiceMessage(async (message) => {
+        if (!this.acceptingMessages) return;
         try {
           // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- debouncer always initialized before handlers register
           await this.debouncer!.enqueue(message);
@@ -764,7 +857,7 @@ ${blue}  ┌──────────────────────�
    */
   private wirePluginEventHooks(): void {
     this.messageHandler.setPluginMessageHooks([
-      (event) => dispatchPluginMessage(this.modules, event),
+      (event) => dispatchPluginMessage(this.modules, event, this.pluginExecutionGate),
     ]);
 
     const hookCount = countPluginEventHooks(this.modules, "onMessage");
@@ -778,7 +871,7 @@ ${blue}  ┌──────────────────────�
         .getClient()
         .addCallbackQueryHandler(
           createUserPluginCallbackHandler(userBridge, (event) =>
-            dispatchPluginCallback(this.modules, event)
+            dispatchPluginCallback(this.modules, event, this.pluginExecutionGate)
           )
         );
       this.callbackHandlerRegistered = true;
@@ -788,7 +881,9 @@ ${blue}  ┌──────────────────────�
         log.info(`${cbCount} plugin onCallbackQuery hook(s) registered`);
       }
     } else if (!this.callbackHandlerRegistered && isBotBridge(this.bridge)) {
-      this.inlineRouter.setCallbackObserver((event) => dispatchPluginCallback(this.modules, event));
+      this.inlineRouter.setCallbackObserver((event) =>
+        dispatchPluginCallback(this.modules, event, this.pluginExecutionGate)
+      );
       this.callbackHandlerRegistered = true;
 
       const cbCount = countPluginEventHooks(this.modules, "onCallbackQuery");
@@ -838,23 +933,11 @@ ${blue}  ┌──────────────────────�
    * Called by lifecycle.stop() — do NOT call directly.
    */
   private async stopAgent(): Promise<void> {
-    // Stop heartbeat timer
-    this.heartbeatRunner.stop();
+    // Quiesce ingress first. Already queued messages are still flushed below.
+    this.acceptingMessages = false;
 
-    // Hook: agent:stop — fire BEFORE disconnecting anything
-    if (this.hookRunner) {
-      try {
-        const agentStopEvent: AgentStopEvent = {
-          reason: "manual",
-          uptimeMs: this.startTime > 0 ? Date.now() - this.startTime : 0,
-          messagesProcessed: this.messagesProcessed,
-          timestamp: Date.now(),
-        };
-        await this.hookRunner.runObservingHook("agent:stop", agentStopEvent);
-      } catch (error: unknown) {
-        log.error({ err: error }, "agent:stop hook failed");
-      }
-    }
+    // Stop heartbeat timer
+    await this.heartbeatRunner.stopAndDrain();
 
     // Stop plugin watcher first
     if (this.pluginWatcher) {
@@ -863,21 +946,11 @@ ${blue}  ┌──────────────────────�
       } catch (error: unknown) {
         log.error({ err: error }, "Plugin watcher stop failed");
       }
+      this.pluginWatcher = null;
     }
 
-    // Stop supervised provider resources (Gocoon runner/proxy when active).
-    this.providerRuntime.stopGocoon();
-
-    // Close MCP connections
-    if (this.mcpConnections.length > 0) {
-      try {
-        await closeMcpServers(this.mcpConnections);
-      } catch (error: unknown) {
-        log.error({ err: error }, "MCP close failed");
-      }
-    }
-
-    // Each step is isolated so a failure in one doesn't skip the rest
+    // Flush and drain while providers, MCP connections, and plugins remain
+    // available to the in-flight turns that may still be using them.
     if (this.debouncer) {
       try {
         await this.debouncer.flushAll();
@@ -893,7 +966,45 @@ ${blue}  ┌──────────────────────�
       log.error({ err: error }, "Message queue drain failed");
     }
 
+    try {
+      await flushAllTranscripts();
+    } catch (error: unknown) {
+      log.error({ err: error }, "Transcript flush failed");
+    }
+
+    // Hook: agent:stop — after turns drain, before resources disconnect.
+    if (this.hookRunner) {
+      try {
+        const agentStopEvent: AgentStopEvent = {
+          reason: "manual",
+          uptimeMs: this.startTime > 0 ? Date.now() - this.startTime : 0,
+          messagesProcessed: this.messagesProcessed,
+          timestamp: Date.now(),
+        };
+        await this.hookRunner.runObservingHook("agent:stop", agentStopEvent);
+      } catch (error: unknown) {
+        log.error({ err: error }, "agent:stop hook failed");
+      }
+    }
+
+    // Stop supervised provider resources and MCP only after all turns drain.
+    this.providerRuntime.stopGocoon();
+    if (this.mcpConnections.length > 0) {
+      try {
+        await closeMcpServers(this.mcpConnections);
+      } catch (error: unknown) {
+        log.error({ err: error }, "MCP close failed");
+      }
+      this.mcpConnections.splice(0, this.mcpConnections.length);
+    }
+
     await stopPluginModules(this.modules);
+
+    this.disposeToolIndexSubscription?.();
+    this.disposeToolIndexSubscription = null;
+    this.pluginHookRegistry.clear();
+    this.hookRunner = undefined;
+    this.agent.setHookRunner(undefined);
 
     this.callbackHandlerRegistered = false;
     // messageHandlersRegistered stays true — Grammy Bot instance retains its middleware tree

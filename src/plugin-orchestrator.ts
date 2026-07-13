@@ -19,6 +19,7 @@ export interface OrchestratorResult {
   hookRegistry: HookRegistry;
   externalModules: PluginModule[];
   toolCount: number;
+  dispose: () => void;
 }
 
 export class PluginOrchestrator {
@@ -44,6 +45,7 @@ export class PluginOrchestrator {
     );
     let pluginToolCount = 0;
     const pluginNames: string[] = [];
+    const healthyExternalModules: PluginModule[] = [];
     for (const mod of externalModules) {
       try {
         mod.configure?.(this.config);
@@ -53,12 +55,21 @@ export class PluginOrchestrator {
           pluginToolCount += this.registry.registerPluginTools(mod.name, tools);
           pluginNames.push(mod.name);
         }
+        healthyExternalModules.push(mod);
       } catch (error) {
         log.error(`❌ Plugin "${mod.name}" failed to load: ${getErrorMessage(error)}`);
+        this.registry.removePluginTools(mod.name);
+        hookRegistry.unregister(mod.name);
+        try {
+          await mod.stop?.();
+        } catch (cleanupError) {
+          log.error(`❌ Plugin "${mod.name}" cleanup failed: ${getErrorMessage(cleanupError)}`);
+        }
       }
     }
 
     let toolCount = this.registry.count;
+    let disposeToolIndexSubscription = (): void => {};
 
     // Load MCP servers
     const mcpServerNames: string[] = [];
@@ -93,8 +104,7 @@ export class PluginOrchestrator {
       toolIndex.ensureSchema();
       this.registry.setToolIndex(toolIndex);
 
-      // eslint-disable-next-line @typescript-eslint/no-misused-promises -- callback is fire-and-forget
-      this.registry.onToolsChanged(async (removed, added) => {
+      disposeToolIndexSubscription = this.registry.onToolsChanged(async (removed, added) => {
         await toolIndex.reindexTools(removed, added);
       });
     }
@@ -118,8 +128,9 @@ export class PluginOrchestrator {
       pluginToolCount,
       mcpServerNames,
       hookRegistry,
-      externalModules,
+      externalModules: healthyExternalModules,
       toolCount,
+      dispose: disposeToolIndexSubscription,
     };
   }
 }

@@ -9,6 +9,9 @@ import type { SDKDependencies } from "../sdk/index.js";
 import type { AgentLifecycle } from "../agent/lifecycle.js";
 import type { UserHookEvaluator } from "../agent/hooks/user-hook-evaluator.js";
 import type { McpServerInfo } from "./contracts.js";
+import type { HookRegistry } from "../sdk/hooks/registry.js";
+import type { InlineRouter } from "../bot/inline-router.js";
+import type { PluginExecutionGate } from "../agent/tools/plugin-execution-gate.js";
 
 export type {
   APIResponse,
@@ -45,6 +48,8 @@ export interface WebUIServerDeps {
   mcpServers: McpServerInfo[] | (() => McpServerInfo[]);
   config: WebUIConfig;
   configPath: string;
+  reloadConfig?: () => Config;
+  applyConfigKey?: (key: string, value: unknown) => void;
   lifecycle?: AgentLifecycle;
   marketplace?: MarketplaceDeps;
   userHookEvaluator?: UserHookEvaluator | null;
@@ -68,8 +73,11 @@ export interface MarketplaceDeps {
   config: Config;
   sdkDeps: SDKDependencies;
   pluginContext: PluginContext;
-  loadedModuleNames: string[];
+  loadedModuleNames: string[] | (() => string[]);
   rewireHooks: () => void;
+  hookRegistry?: HookRegistry | (() => HookRegistry);
+  inlineRouter: InlineRouter;
+  executionGate: PluginExecutionGate;
 }
 
 export interface SessionInfo {

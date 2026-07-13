@@ -335,7 +335,7 @@ describe("Runtime Hook Integration", () => {
     expect(afterCalls).toEqual(["ton_get_balance"]);
   });
 
-  it("5.10 Hook error doesn't affect tool execution result", async () => {
+  it("5.10 Enforcement hook errors fail closed without throwing", async () => {
     registry.register({
       pluginId: "buggy",
       hookName: "tool:before",
@@ -356,11 +356,11 @@ describe("Runtime Hook Integration", () => {
       blockReason: "",
     };
 
-    // Should not throw — fail-open
+    // The runner contains the plugin exception but blocks the action.
     await runner.runModifyingHook("tool:before", event);
 
-    // Tool should still execute (event not blocked)
-    expect(event.block).toBe(false);
+    expect(event.block).toBe(true);
+    expect(event.blockReason).toContain("Plugin crashed");
 
     // Error was logged (with duration)
     expect(mockLogger.error).toHaveBeenCalledWith(expect.stringContaining("Plugin crashed"));

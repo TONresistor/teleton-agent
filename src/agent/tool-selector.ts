@@ -8,6 +8,16 @@ import type { ToolRegistry } from "./tools/registry.js";
 
 const log = createLogger("Agent");
 
+export function enforceProviderToolLimit(tools: PiAiTool[], toolLimit: number | null): PiAiTool[] {
+  if (toolLimit === null || tools.length <= toolLimit) return tools;
+  const priority = new Map([["tool_search", 0]]);
+  return tools
+    .map((tool, index) => ({ tool, index, priority: priority.get(tool.name) ?? 1 }))
+    .sort((left, right) => left.priority - right.priority || left.index - right.index)
+    .slice(0, toolLimit)
+    .map(({ tool }) => tool);
+}
+
 /** Compute the enriched RAG embedding concurrently with the rest of turn preparation. */
 export function computeRagEmbedding(
   embedder: EmbeddingProvider | null,
@@ -62,7 +72,10 @@ export async function selectTools(
     !(toolLimit === null && config.tool_rag?.skip_unlimited_providers !== false);
 
   if (config.tool_search?.enabled) {
-    const tools = registry.getCoreTools(effectiveIsGroup, chatId, isAdmin, senderId);
+    const tools = enforceProviderToolLimit(
+      registry.getCoreTools(effectiveIsGroup, chatId, isAdmin, senderId),
+      toolLimit
+    );
     log.info(`ToolSearch: ${tools.length} core tools (${registry.count} total available)`);
     return tools;
   }
@@ -78,9 +91,10 @@ export async function selectTools(
     );
     const searchTool = registry.getAll().find((tool) => tool.name === "tool_search");
     if (searchTool && !tools.some((tool) => tool.name === "tool_search")) tools.push(searchTool);
-    log.info(`Tool RAG: ${tools.length}/${registry.count} tools selected`);
-    log.debug(`Tool RAG selected: ${tools.map((tool) => tool.name).join(", ")}`);
-    return tools;
+    const limitedTools = enforceProviderToolLimit(tools, toolLimit);
+    log.info(`Tool RAG: ${limitedTools.length}/${registry.count} tools selected`);
+    log.debug(`Tool RAG selected: ${limitedTools.map((tool) => tool.name).join(", ")}`);
+    return limitedTools;
   }
   return registry.getForContext(effectiveIsGroup, toolLimit, chatId, isAdmin, senderId);
 }
