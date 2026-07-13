@@ -79,6 +79,8 @@ export class ToolRegistry {
   > = [];
   private mode: RuntimeMode;
   private allowFrom: Set<number> = new Set();
+  private adminIds: Set<number> = new Set();
+  private adminIdsConfigured = false;
 
   constructor(mode: RuntimeMode = "user") {
     this.mode = mode;
@@ -157,8 +159,31 @@ export class ToolRegistry {
     log.info(`Mode switched to ${mode}, ${count} tools available`);
   }
 
+  /** Reset the registry in place so long-lived API consumers keep a valid reference. */
+  reset(mode: RuntimeMode): void {
+    const removed = [...this.tools.keys()];
+    this.tools.clear();
+    this.pluginToolNames.clear();
+    this.toolConfigs.clear();
+    this.toolArrayCache = null;
+    this.toolIndex = null;
+    this.embedderRef = null;
+    this.permissions = null;
+    this.mode = mode;
+    this.allowFrom.clear();
+    this.adminIds.clear();
+    this.adminIdsConfigured = false;
+    this.onToolsChangedCallbacks.length = 0;
+    if (removed.length > 0) log.debug(`Reset tool registry (${removed.length} tools removed)`);
+  }
+
   setAllowFrom(ids: number[]): void {
     this.allowFrom = new Set(ids);
+  }
+
+  setAdminIds(ids: number[]): void {
+    this.adminIds = new Set(ids);
+    this.adminIdsConfigured = true;
   }
 
   getAvailableModules(): string[] {
@@ -287,7 +312,9 @@ export class ToolRegistry {
     }
 
     // Defense-in-depth authorization (tools are also filtered from the LLM tool list)
-    const isAdmin = context.config?.telegram.admin_ids.includes(context.senderId) ?? false;
+    const isAdmin = this.adminIdsConfigured
+      ? this.adminIds.has(context.senderId)
+      : (context.config?.telegram.admin_ids.includes(context.senderId) ?? false);
     const access = this.checkAccess(toolCall.name, {
       isGroup: context.isGroup,
       isAdmin,
@@ -552,6 +579,11 @@ export class ToolRegistry {
       requiresApproval?: boolean;
     }>
   ): number {
+    if (this.pluginToolNames.has(pluginName)) {
+      this.replacePluginTools(pluginName, tools);
+      return this.pluginToolNames.get(pluginName)?.length ?? 0;
+    }
+
     const names: string[] = [];
     for (const { tool, executor, scope, mode, minimumAccess } of tools) {
       if (this.tools.has(tool.name)) continue;
@@ -652,7 +684,7 @@ export class ToolRegistry {
 
   // ─── Tool RAG ──────────────────────────────────────────────────
 
-  setToolIndex(index: ToolIndex): void {
+  setToolIndex(index: ToolIndex | null): void {
     this.toolIndex = index;
   }
 
@@ -745,8 +777,14 @@ export class ToolRegistry {
     return buildToolNamespaceCatalog(available);
   }
 
-  onToolsChanged(callback: (removed: string[], added: PiAiTool[]) => void | Promise<void>): void {
+  onToolsChanged(
+    callback: (removed: string[], added: PiAiTool[]) => void | Promise<void>
+  ): () => void {
     this.onToolsChangedCallbacks.push(callback);
+    return () => {
+      const index = this.onToolsChangedCallbacks.indexOf(callback);
+      if (index >= 0) this.onToolsChangedCallbacks.splice(index, 1);
+    };
   }
 
   private notifyToolsChanged(removed: string[], added: PiAiTool[]): void {

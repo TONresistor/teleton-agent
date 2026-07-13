@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   stream: vi.fn(),
   getGrokBuildApiKey: vi.fn(() => "grok-session-token"),
   refreshGrokBuildApiKey: vi.fn(),
+  appendToTranscript: vi.fn(),
 }));
 
 vi.mock("@earendil-works/pi-ai/compat", async () => {
@@ -22,6 +23,11 @@ vi.mock("../../providers/grok-build-credentials.js", () => ({
   getGrokBuildApiKey: mocks.getGrokBuildApiKey,
   refreshGrokBuildApiKey: mocks.refreshGrokBuildApiKey,
   getGrokBuildCliVersion: vi.fn(() => "0.2.77"),
+}));
+
+vi.mock("../../session/transcript.js", () => ({
+  appendToTranscript: mocks.appendToTranscript,
+  readTranscript: vi.fn().mockReturnValue([]),
 }));
 
 import { chatWithContext, streamWithContext } from "../client.js";
@@ -60,6 +66,7 @@ describe("Grok Build client", () => {
     mocks.getGrokBuildApiKey.mockReset();
     mocks.getGrokBuildApiKey.mockReturnValue("grok-session-token");
     mocks.refreshGrokBuildApiKey.mockReset();
+    mocks.appendToTranscript.mockReset();
   });
 
   it("uses the CLI token without temperature or long cache retention", async () => {
@@ -105,5 +112,31 @@ describe("Grok Build client", () => {
       parallel_tool_calls: false,
     });
     expect(result.text).toBe("ok");
+  });
+
+  it("does not persist terminal provider errors in the conversation transcript", async () => {
+    mocks.complete.mockResolvedValue(assistantMessage("error", "provider unavailable"));
+
+    await chatWithContext(config, {
+      context: { messages: [] },
+      sessionId: "session-1",
+      persistTranscript: true,
+    });
+
+    expect(mocks.appendToTranscript).not.toHaveBeenCalled();
+  });
+
+  it("does not persist the silent control token in the conversation transcript", async () => {
+    const silent = assistantMessage("stop");
+    silent.content = [{ type: "text", text: "__SILENT__" }];
+    mocks.complete.mockResolvedValue(silent);
+
+    await chatWithContext(config, {
+      context: { messages: [] },
+      sessionId: "session-1",
+      persistTranscript: true,
+    });
+
+    expect(mocks.appendToTranscript).not.toHaveBeenCalled();
   });
 });

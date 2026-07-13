@@ -4,6 +4,7 @@ import {
   finishAgentTurnTrace,
   startAgentTurnTrace,
   updateAgentTurnTraceProgress,
+  updateAgentTurnTraceTarget,
   type AgentTurnTraceStatus,
   type AgentTurnTraceTool,
 } from "../memory/agent-traces.js";
@@ -38,6 +39,8 @@ export class AgentTurnTraceRecorder {
     startedAt: number;
     provider: string;
     model: string;
+    requestedModel: string;
+    endpointFingerprint: string;
     selectedTools: string[];
   }): void {
     try {
@@ -60,6 +63,15 @@ export class AgentTurnTraceRecorder {
       });
     } catch (error) {
       log.warn({ err: error }, "Unable to persist agent turn trace progress");
+    }
+  }
+
+  updateTarget(provider: string, model: string, endpointFingerprint: string): void {
+    if (!this.started || this.finished) return;
+    try {
+      updateAgentTurnTraceTarget(this.db, this.turnId, { provider, model, endpointFingerprint });
+    } catch (error) {
+      log.warn({ err: error }, "Unable to update agent turn trace target");
     }
   }
 

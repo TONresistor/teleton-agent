@@ -34,6 +34,8 @@ This guide walks through building, testing, and distributing plugins for Teleton
 
 A Teleton plugin is a JavaScript module (ESM) placed in `~/.teleton/plugins/`. It exports one required item (`tools`) and several optional lifecycle hooks. The platform discovers plugins at startup, validates them, and integrates their tools into the LLM's available tool set.
 
+> **Security boundary:** plugins are trusted application code loaded into the Teleton process; they are not a JavaScript sandbox. Install only reviewed plugins from trusted sources. Teleton rejects symlinked, foreign-owned, and group/world-writable plugin paths, installs locked dependencies with lifecycle scripts disabled, restricts the SDK context, and isolates the database handle exposed through the SDK. These controls do not make malicious Node.js code safe.
+
 Key facts:
 - Plugins receive a **frozen SDK** object -- they cannot modify or extend it
 - Each plugin gets an **isolated SQLite database**; `migrate` is optional
@@ -678,7 +680,7 @@ export function migrate(db) {
 }
 ```
 
-The database file is created at `~/.teleton/plugins/data/<plugin-name>.db`. Each plugin gets its own isolated database -- plugins cannot access each other's data.
+The database file is created at `~/.teleton/plugins/data/<plugin-name>.db`. Each plugin receives a restricted SDK database handle scoped to that file. Because plugins are trusted Node.js code rather than sandboxed scripts, this SDK-level isolation is not a defense against a malicious plugin using direct operating-system APIs.
 
 You can also access the database directly via `sdk.db` in your tool functions:
 
@@ -701,7 +703,7 @@ export const tools = (sdk) => [
 
 ## Event Hooks
 
-Plugins can export `onMessage` and `onCallbackQuery` to react to Telegram events directly, without going through the LLM agentic loop. These hooks are fire-and-forget -- errors are caught per plugin and logged, so a failing hook never blocks message processing or other plugins.
+Plugins can export `onMessage` and `onCallbackQuery` to react to Telegram events directly, without going through the LLM agentic loop. Handlers are awaited sequentially; errors are caught and logged per plugin so one failing handler does not prevent later handlers from running.
 
 ### onMessage
 
@@ -946,7 +948,7 @@ npm install -D @teleton-agent/sdk@^2
 
 9. **Calling `sdk.ton.verifyPayment` without `used_transactions` table**: This method requires a `used_transactions` table in your plugin's database. Create it in your `migrate` function.
 
-10. **Blocking the event loop in hooks**: `onMessage` and `onCallbackQuery` are fire-and-forget but still run on the main event loop. Avoid CPU-intensive synchronous operations; use `setTimeout` or `setImmediate` for heavy processing.
+10. **Blocking the event loop in hooks**: `onMessage` and `onCallbackQuery` are awaited and run on the main event loop. Avoid CPU-intensive synchronous operations; use a worker for CPU-bound work and keep handlers short.
 
 11. **`sdk.bot` is null without manifest**: If you access `sdk.bot` without declaring `bot` in your manifest, it's `null`. Always check `sdk.bot` before calling methods, or declare the `bot` manifest field.
 

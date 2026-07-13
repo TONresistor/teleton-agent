@@ -2,6 +2,7 @@ import type Database from "better-sqlite3";
 import type { Config } from "./config/schema.js";
 import type { EmbeddingProvider } from "./memory/embeddings/provider.js";
 import type { KnowledgeIndexer } from "./memory/agent/knowledge.js";
+import type { MessageStore } from "./memory/feed/messages.js";
 import type { SupportedProvider } from "./config/providers.js";
 import { readRawConfig, writeRawConfig } from "./config/configurable-keys.js";
 import { getDatabase } from "./memory/index.js";
@@ -14,7 +15,11 @@ export class StartupMaintenance {
     private db: Database.Database,
     private config: Config,
     private configPath: string,
-    private memory: { embedder: EmbeddingProvider; knowledge: KnowledgeIndexer }
+    private memory: {
+      embedder: EmbeddingProvider;
+      knowledge: KnowledgeIndexer;
+      messages: MessageStore;
+    }
   ) {}
 
   async run(): Promise<{
@@ -65,6 +70,13 @@ export class StartupMaintenance {
     // Warmup embedding model (pre-download at startup, not on first message)
     if (this.memory.embedder.warmup) {
       await this.memory.embedder.warmup();
+    }
+
+    const messageBackfill = await this.memory.messages.backfillPendingEmbeddings();
+    if (messageBackfill.indexed > 0 || messageBackfill.failed > 0) {
+      log.info(
+        `Message embedding backfill: ${messageBackfill.indexed} indexed, ${messageBackfill.failed} failed`
+      );
     }
 
     // Index knowledge base (MEMORY.md, memory/*.md)

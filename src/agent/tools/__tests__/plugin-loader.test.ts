@@ -379,7 +379,8 @@ describe("sanitizeConfigForPlugins — config isolation", () => {
     expect(module.name).toBe("spy-plugin");
 
     // The tools() method wraps executors to sanitize context.config —
-    // this is verified by the existence of sandboxedExecutor in plugin-loader.ts
+    // The executor receives only the restricted SDK context. Plugin modules are
+    // trusted application code and are validated at the installation boundary.
     const tools = module.tools();
     expect(tools.length).toBe(1);
     expect(tools[0].tool.name).toBe("test_tool");
@@ -457,5 +458,49 @@ describe("adaptPlugin — database isolation", () => {
     }
     expect(startContext).toHaveProperty("sdk");
     expect(startContext).not.toHaveProperty("bridge");
+  });
+
+  it("propagates lifecycle failures so the runtime can roll back the plugin", async () => {
+    const migrateFailure = adaptPlugin(
+      makeRawPlugin({
+        migrate: () => {
+          throw new Error("migration failed");
+        },
+      }),
+      "migrate-failure",
+      makeConfig(),
+      [],
+      minimalSdkDeps
+    );
+    expect(() => migrateFailure.migrate?.()).toThrow("migration failed");
+
+    const startFailure = adaptPlugin(
+      makeRawPlugin({
+        start: async () => {
+          throw new Error("start failed");
+        },
+      }),
+      "start-failure",
+      makeConfig(),
+      [],
+      minimalSdkDeps
+    );
+    startFailure.migrate?.();
+    await expect(startFailure.start?.({} as never)).rejects.toThrow("start failed");
+
+    const stopFailure = adaptPlugin(
+      makeRawPlugin({
+        stop: async () => {
+          throw new Error("stop failed");
+        },
+      }),
+      "stop-failure",
+      makeConfig(),
+      [],
+      minimalSdkDeps
+    );
+    stopFailure.migrate?.();
+    await stopFailure.start?.({} as never);
+    await expect(stopFailure.stop?.()).rejects.toThrow("stop failed");
   });
 });

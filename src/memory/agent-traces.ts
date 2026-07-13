@@ -17,6 +17,8 @@ export interface StartAgentTurnTrace {
   startedAt: number;
   provider: string;
   model: string;
+  requestedModel: string;
+  endpointFingerprint: string;
   selectedTools: string[];
 }
 
@@ -37,8 +39,9 @@ export interface FinishAgentTurnTrace {
 export function startAgentTurnTrace(db: Database.Database, trace: StartAgentTurnTrace): void {
   db.prepare(
     `INSERT INTO agent_turn_traces (
-       id, session_id, chat_id, started_at, status, provider, model, selected_tools_json
-     ) VALUES (?, ?, ?, ?, 'running', ?, ?, ?)`
+       id, session_id, chat_id, started_at, status, provider, model,
+       requested_model, endpoint_fingerprint, selected_tools_json
+     ) VALUES (?, ?, ?, ?, 'running', ?, ?, ?, ?, ?)`
   ).run(
     trace.id,
     trace.sessionId,
@@ -46,6 +49,8 @@ export function startAgentTurnTrace(db: Database.Database, trace: StartAgentTurn
     trace.startedAt,
     trace.provider,
     trace.model,
+    trace.requestedModel,
+    trace.endpointFingerprint,
     JSON.stringify(trace.selectedTools)
   );
   db.prepare("DELETE FROM agent_turn_traces WHERE started_at < ?").run(
@@ -105,6 +110,18 @@ export function updateAgentTurnTraceProgress(
     progress.totalCost,
     traceId
   );
+}
+
+export function updateAgentTurnTraceTarget(
+  db: Database.Database,
+  traceId: string,
+  target: { provider: string; model: string; endpointFingerprint: string }
+): void {
+  db.prepare(
+    `UPDATE agent_turn_traces
+     SET provider = ?, model = ?, endpoint_fingerprint = ?
+     WHERE id = ? AND status = 'running'`
+  ).run(target.provider, target.model, target.endpointFingerprint, traceId);
 }
 
 export function failAgentTurnTrace(

@@ -163,6 +163,8 @@ export interface ToolEntry {
 export interface PluginModule {
   name: string;
   version: string;
+  /** Filesystem/marketplace identifier, distinct from the display manifest name. */
+  sourceId?: string;
   /** Called ALWAYS (even if disabled) to merge YAML config into runtime defaults */
   configure?(config: Config): void;
   /** Called ALWAYS — must be idempotent (IF NOT EXISTS) */

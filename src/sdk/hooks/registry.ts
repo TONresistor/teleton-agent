@@ -57,6 +57,20 @@ export class HookRegistry {
     return before - this.hooks.length;
   }
 
+  getRegistrations(pluginId?: string): HookRegistration[] {
+    const registrations = pluginId
+      ? this.hooks.filter((hook) => hook.pluginId === pluginId)
+      : this.hooks;
+    return registrations.map((registration) => ({ ...registration }));
+  }
+
+  replacePlugin(pluginId: string, registrations: HookRegistration[]): void {
+    this.unregister(pluginId);
+    for (const registration of registrations) {
+      this.register({ ...registration, pluginId });
+    }
+  }
+
   clear(): void {
     this.hooks = [];
     this.hookMap.clear();

@@ -21,6 +21,8 @@ const SESSIONS_DIR = join(TELETON_ROOT, "sessions");
 // Avoids re-reading + re-parsing JSONL from disk on every message.
 // Invalidated on delete/archive; updated on append.
 const transcriptCache = new Map<string, (Message | AssistantMessage)[]>();
+const transcriptWriteQueues = new Map<string, Promise<void>>();
+const transcriptWriteErrors = new Map<string, unknown>();
 
 export function getTranscriptPath(sessionId: string): string {
   return join(SESSIONS_DIR, `${sessionId}.jsonl`);
@@ -38,15 +40,46 @@ export function appendToTranscript(sessionId: string, message: Message | Assista
   const transcriptPath = getTranscriptPath(sessionId);
   const line = JSON.stringify(message) + "\n";
 
-  // Fire-and-forget async write — does not block the event loop
-  appendFile(transcriptPath, line, { encoding: "utf-8", mode: 0o600 }).catch((error) => {
-    log.error({ err: error }, `Failed to append to transcript ${sessionId}`);
+  const previous = transcriptWriteQueues.get(sessionId) ?? Promise.resolve();
+  const queuedWrite = previous
+    .then(() => appendFile(transcriptPath, line, { encoding: "utf-8", mode: 0o600 }))
+    .catch((error) => {
+      transcriptWriteErrors.set(sessionId, error);
+      log.error({ err: error }, `Failed to append to transcript ${sessionId}`);
+    });
+  transcriptWriteQueues.set(sessionId, queuedWrite);
+  void queuedWrite.finally(() => {
+    if (transcriptWriteQueues.get(sessionId) === queuedWrite) {
+      transcriptWriteQueues.delete(sessionId);
+    }
   });
 
   // Update in-memory cache immediately (callers read from cache, not disk)
-  const cached = transcriptCache.get(sessionId);
-  if (cached) {
-    cached.push(message);
+  const cached = transcriptCache.get(sessionId) ?? readTranscript(sessionId);
+  transcriptCache.set(sessionId, cached);
+  cached.push(message);
+}
+
+export async function flushTranscript(sessionId: string): Promise<void> {
+  await transcriptWriteQueues.get(sessionId);
+  const error = transcriptWriteErrors.get(sessionId);
+  if (error !== undefined) {
+    transcriptWriteErrors.delete(sessionId);
+    throw error;
+  }
+}
+
+export async function flushAllTranscripts(): Promise<void> {
+  const sessionIds = new Set([...transcriptWriteQueues.keys(), ...transcriptWriteErrors.keys()]);
+  const results = await Promise.allSettled(
+    [...sessionIds].map((sessionId) => flushTranscript(sessionId))
+  );
+  const failures = results.filter((result) => result.status === "rejected");
+  if (failures.length > 0) {
+    throw new AggregateError(
+      failures.map((failure) => (failure as PromiseRejectedResult).reason),
+      `Failed to flush ${failures.length} transcript(s)`
+    );
   }
 }
 
@@ -67,54 +100,63 @@ function extractToolCallIds(msg: Message | AssistantMessage): Set<string> {
  * Anthropic API requires tool_results IMMEDIATELY follow their corresponding tool_use.
  * Removes: 1) tool_results referencing non-existent tool_uses, 2) out-of-order tool_results.
  */
-function sanitizeMessages(
+export function sanitizeTranscriptMessages(
   messages: (Message | AssistantMessage)[]
 ): (Message | AssistantMessage)[] {
   const sanitized: (Message | AssistantMessage)[] = [];
-  let pendingToolCallIds = new Set<string>(); // IDs waiting for their results
+  let pendingBatch:
+    | { messages: (Message | AssistantMessage)[]; toolCallIds: Set<string> }
+    | undefined;
   let removedCount = 0;
 
-  for (let i = 0; i < messages.length; i++) {
-    const msg = messages[i];
+  const discardPendingBatch = (): void => {
+    if (!pendingBatch) return;
+    removedCount += pendingBatch.messages.length;
+    log.warn(
+      `Removing incomplete tool-call batch with ${pendingBatch.toolCallIds.size} missing result(s)`
+    );
+    pendingBatch = undefined;
+  };
+
+  for (const msg of messages) {
+    if (pendingBatch) {
+      if (
+        msg.role === "toolResult" &&
+        typeof msg.toolCallId === "string" &&
+        pendingBatch.toolCallIds.has(msg.toolCallId)
+      ) {
+        pendingBatch.messages.push(msg);
+        pendingBatch.toolCallIds.delete(msg.toolCallId);
+        if (pendingBatch.toolCallIds.size === 0) {
+          sanitized.push(...pendingBatch.messages);
+          pendingBatch = undefined;
+        }
+        continue;
+      }
+      discardPendingBatch();
+    }
 
     if (msg.role === "assistant") {
-      const newToolIds = extractToolCallIds(msg);
-
-      if (pendingToolCallIds.size > 0 && newToolIds.size > 0) {
-        log.warn(`Found ${pendingToolCallIds.size} pending tool results that were never received`);
-      }
-
-      pendingToolCallIds = newToolIds;
-      sanitized.push(msg);
-    } else if (msg.role === "toolResult") {
-      const toolCallId = msg.toolCallId;
-
-      if (!toolCallId || typeof toolCallId !== "string") {
-        removedCount++;
-        log.warn(`Removing toolResult with missing/invalid toolCallId`);
-        continue;
-      }
-
-      if (pendingToolCallIds.has(toolCallId)) {
-        pendingToolCallIds.delete(toolCallId);
-        sanitized.push(msg);
+      const toolCallIds = extractToolCallIds(msg);
+      if (toolCallIds.size > 0) {
+        pendingBatch = { messages: [msg], toolCallIds };
       } else {
-        removedCount++;
-        log.warn(`Removing orphaned toolResult: ${toolCallId.slice(0, 20)}...`);
-        continue;
+        sanitized.push(msg);
       }
-    } else if (msg.role === "user") {
-      if (pendingToolCallIds.size > 0) {
-        log.warn(
-          `User message arrived while ${pendingToolCallIds.size} tool results pending - marking them as orphaned`
-        );
-        pendingToolCallIds.clear();
-      }
-      sanitized.push(msg);
-    } else {
-      sanitized.push(msg);
+      continue;
     }
+
+    if (msg.role === "toolResult") {
+      removedCount++;
+      const id = typeof msg.toolCallId === "string" ? msg.toolCallId : "invalid";
+      log.warn(`Removing orphaned toolResult: ${id.slice(0, 20)}...`);
+      continue;
+    }
+
+    sanitized.push(msg);
   }
+
+  discardPendingBatch();
 
   if (removedCount > 0) {
     log.info(`Sanitized ${removedCount} orphaned/out-of-order toolResult(s) from transcript`);
@@ -131,6 +173,7 @@ export function readTranscript(sessionId: string): (Message | AssistantMessage)[
   const transcriptPath = getTranscriptPath(sessionId);
 
   if (!existsSync(transcriptPath)) {
+    transcriptCache.set(sessionId, []);
     return [];
   }
 
@@ -155,7 +198,7 @@ export function readTranscript(sessionId: string): (Message | AssistantMessage)[
       log.warn(`${corruptCount} corrupt line(s) skipped in transcript ${sessionId}`);
     }
 
-    const sanitized = sanitizeMessages(messages);
+    const sanitized = sanitizeTranscriptMessages(messages);
     transcriptCache.set(sessionId, sanitized);
     return sanitized;
   } catch (error) {
@@ -165,22 +208,24 @@ export function readTranscript(sessionId: string): (Message | AssistantMessage)[
 }
 
 export function transcriptExists(sessionId: string): boolean {
-  return existsSync(getTranscriptPath(sessionId));
+  return (
+    (transcriptCache.get(sessionId)?.length ?? 0) > 0 ||
+    transcriptWriteQueues.has(sessionId) ||
+    existsSync(getTranscriptPath(sessionId))
+  );
 }
 
 /**
  * Archive a transcript (rename with timestamped .archived suffix).
  */
-export function archiveTranscript(sessionId: string): boolean {
+export async function archiveTranscript(sessionId: string): Promise<boolean> {
   const transcriptPath = getTranscriptPath(sessionId);
   const timestamp = Date.now();
   const archivePath = `${transcriptPath}.${timestamp}.archived`;
 
-  if (!existsSync(transcriptPath)) {
-    return false;
-  }
-
   try {
+    await flushTranscript(sessionId);
+    if (!existsSync(transcriptPath)) return false;
     renameSync(transcriptPath, archivePath);
     transcriptCache.delete(sessionId);
     log.info(`Archived transcript: ${sessionId} → ${timestamp}.archived`);

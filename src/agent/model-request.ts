@@ -20,6 +20,8 @@ export interface ModelRequestOptions {
   maxTokens?: number;
   temperature?: number;
   tools?: Tool[];
+  signal?: AbortSignal;
+  timeoutMs?: number;
 }
 
 export interface PreparedModelRequest {
@@ -100,6 +102,8 @@ export function prepareModelRequest(
       ...(providerSupportsTemperature(provider) && { temperature }),
       sessionId: request.sessionId,
       cacheRetention: getCacheRetention(provider),
+      signal: request.signal,
+      timeoutMs: request.timeoutMs,
       ...getProviderPayloadOptions(provider),
     } as ProviderStreamOptions,
   };

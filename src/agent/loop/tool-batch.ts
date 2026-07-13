@@ -49,10 +49,12 @@ export async function executeToolBatch(
   fullContext: ToolContext,
   chatId: string,
   effectiveIsGroup: boolean,
-  executionLimit = Number.POSITIVE_INFINITY
+  executionLimit = Number.POSITIVE_INFINITY,
+  executionBlockReason = "Per-turn tool-call budget exhausted"
 ): Promise<{ toolPlans: ToolPlan[]; execResults: ToolExecResult[] }> {
   // Phase 1: Run tool:before hooks sequentially (hooks may cross-reference)
   const toolPlans: ToolPlan[] = [];
+  let scheduledExecutions = 0;
 
   for (const block of toolCalls) {
     if (block.type !== "toolCall") continue;
@@ -61,9 +63,9 @@ export async function executeToolBatch(
     let blocked = false;
     let blockReason = "";
 
-    if (toolPlans.length >= executionLimit) {
+    if (scheduledExecutions >= executionLimit) {
       blocked = true;
-      blockReason = "Per-turn tool-call budget exhausted";
+      blockReason = executionBlockReason;
     }
 
     if (hookRunner && !blocked) {
@@ -84,48 +86,70 @@ export async function executeToolBatch(
       }
     }
 
+    if (!blocked) scheduledExecutions++;
+
     toolPlans.push({ block, blocked, blockReason, params: toolParams });
   }
 
-  // Phase 2: Execute tools with concurrency limit (blocked tools resolve instantly)
+  // Phase 2: preserve model order for actions; parallelize only contiguous reads.
   const execResults: ToolExecResult[] = new Array(toolPlans.length);
-  {
-    let cursor = 0;
-    const runWorker = async (): Promise<void> => {
-      while (cursor < toolPlans.length) {
-        const idx = cursor++;
-        const plan = toolPlans[idx];
+  const runPlan = async (idx: number): Promise<void> => {
+    const plan = toolPlans[idx];
+    if (plan.blocked) {
+      execResults[idx] = {
+        result: { success: false, error: plan.blockReason },
+        durationMs: 0,
+        attempted: false,
+      };
+      return;
+    }
 
-        if (plan.blocked) {
-          execResults[idx] = {
-            result: { success: false, error: plan.blockReason },
-            durationMs: 0,
-            attempted: false,
-          };
-          continue;
-        }
+    const startTime = Date.now();
+    try {
+      const result = await toolRegistry.execute(
+        { ...plan.block, arguments: plan.params },
+        fullContext
+      );
+      execResults[idx] = { result, durationMs: Date.now() - startTime, attempted: true };
+    } catch (execErr) {
+      const errMsg = getErrorMessage(execErr);
+      const errStack = execErr instanceof Error ? execErr.stack : undefined;
+      execResults[idx] = {
+        result: { success: false, error: errMsg },
+        durationMs: Date.now() - startTime,
+        attempted: true,
+        execError: { message: errMsg, stack: errStack },
+      };
+    }
+  };
 
-        const startTime = Date.now();
-        try {
-          const result = await toolRegistry.execute(
-            { ...plan.block, arguments: plan.params },
-            fullContext
-          );
-          execResults[idx] = { result, durationMs: Date.now() - startTime, attempted: true };
-        } catch (execErr) {
-          const errMsg = getErrorMessage(execErr);
-          const errStack = execErr instanceof Error ? execErr.stack : undefined;
-          execResults[idx] = {
-            result: { success: false, error: errMsg },
-            durationMs: Date.now() - startTime,
-            attempted: true,
-            execError: { message: errMsg, stack: errStack },
-          };
-        }
+  let cursor = 0;
+  while (cursor < toolPlans.length) {
+    const plan = toolPlans[cursor];
+    const isRead =
+      !plan.blocked && toolRegistry.getToolCategory(plan.block.name) === "data-bearing";
+    if (!isRead) {
+      await runPlan(cursor++);
+      continue;
+    }
+
+    const readIndexes: number[] = [];
+    while (
+      cursor < toolPlans.length &&
+      !toolPlans[cursor].blocked &&
+      toolRegistry.getToolCategory(toolPlans[cursor].block.name) === "data-bearing"
+    ) {
+      readIndexes.push(cursor++);
+    }
+
+    let readCursor = 0;
+    const runReadWorker = async (): Promise<void> => {
+      while (readCursor < readIndexes.length) {
+        await runPlan(readIndexes[readCursor++]);
       }
     };
-    const workers = Math.min(TOOL_CONCURRENCY_LIMIT, toolPlans.length);
-    await Promise.all(Array.from({ length: workers }, () => runWorker()));
+    const workers = Math.min(TOOL_CONCURRENCY_LIMIT, readIndexes.length);
+    await Promise.all(Array.from({ length: workers }, () => runReadWorker()));
   }
 
   return { toolPlans, execResults };

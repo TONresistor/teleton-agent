@@ -1,6 +1,6 @@
 import type { Context, Message, TextContent } from "@earendil-works/pi-ai";
 import { truncate } from "../utils/pi-message.js";
-import { appendToTranscript } from "../session/transcript.js";
+import { appendToTranscript, flushTranscript } from "../session/transcript.js";
 import { randomUUID } from "crypto";
 import { writeSummaryToDailyLog } from "./daily-logs.js";
 import { summarizeWithFallback } from "./ai-summarization.js";
@@ -336,6 +336,7 @@ export async function compactAndSaveTranscript(
   for (const message of compactedContext.messages) {
     appendToTranscript(newSessionId, message);
   }
+  await flushTranscript(newSessionId);
 
   return newSessionId;
 }

@@ -46,7 +46,9 @@ export async function runModelIteration(
   systemPrompt: string,
   sessionId: string,
   tools: PiAiTool[] | undefined,
-  streamAccumulatedText: string
+  streamAccumulatedText: string,
+  signal?: AbortSignal,
+  timeoutMs?: number
 ): Promise<{ response: ChatResponse; streamed: boolean; streamAccumulatedText: string }> {
   const streamMode = streamTarget?.mode;
   const shouldStream =
@@ -58,6 +60,8 @@ export async function runModelIteration(
       sessionId,
       persistTranscript: true,
       tools,
+      signal,
+      timeoutMs,
     });
     return { response, streamed: false, streamAccumulatedText };
   }
@@ -70,6 +74,8 @@ export async function runModelIteration(
       sessionId,
       persistTranscript: true,
       tools,
+      signal,
+      timeoutMs,
     });
     return { response, streamed: true, streamAccumulatedText };
   }
@@ -84,6 +90,8 @@ export async function runModelIteration(
     sessionId,
     persistTranscript: true,
     tools,
+    signal,
+    timeoutMs,
   });
   const prefix = streamMode === "all" ? streamAccumulatedText : "";
   async function* prefixedStream(): AsyncIterable<string> {
@@ -112,6 +120,7 @@ export interface LlmErrorContext {
   session: ReturnType<typeof getOrCreateSession>;
   context: Context;
   chatId: string;
+  sessionKey: string;
   effectiveIsGroup: boolean;
   provider: SupportedProvider;
   processStartTime: number;
@@ -157,11 +166,11 @@ export async function recoverLlmError(
     log.info("Saving session memory before reset...");
     appendToDailyLog(extractContextSummary(context, CONTEXT_OVERFLOW_SUMMARY_MESSAGES));
     log.info("Memory saved to daily log");
-    if (!archiveTranscript(session.sessionId)) {
+    if (!(await archiveTranscript(session.sessionId))) {
       log.error(`Failed to archive transcript ${session.sessionId}, proceeding with reset anyway`);
     }
     log.info("Resetting session due to context overflow...");
-    session = resetSession(ctx.chatId);
+    session = resetSession(ctx.sessionKey);
     context = { messages: [ctx.userMsg] };
     appendToTranscript(session.sessionId, ctx.userMsg);
     log.info("Retrying with fresh context...");

@@ -17,7 +17,7 @@ interface DebounceConfig {
 
 export class MessageDebouncer {
   private buffers: Map<string, DebounceBuffer> = new Map();
-  private readonly maxDebounceMs: number;
+  private maxDebounceMs: number;
   private readonly maxBufferSize: number;
 
   constructor(
@@ -28,6 +28,12 @@ export class MessageDebouncer {
   ) {
     this.maxDebounceMs = config.maxDebounceMs ?? config.debounceMs * DEBOUNCE_MAX_MULTIPLIER;
     this.maxBufferSize = config.maxBufferSize ?? DEBOUNCE_MAX_BUFFER_SIZE;
+  }
+
+  updateDebounceMs(debounceMs: number): void {
+    this.config = { ...this.config, debounceMs };
+    this.maxDebounceMs = debounceMs * DEBOUNCE_MAX_MULTIPLIER;
+    for (const [key, buffer] of this.buffers) this.resetTimer(key, buffer);
   }
 
   async enqueue(message: TelegramMessage): Promise<void> {

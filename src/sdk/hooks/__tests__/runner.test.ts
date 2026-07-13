@@ -138,7 +138,7 @@ describe("Hook Runner", () => {
     expect(event.params.seenModified).toBe(true);
   });
 
-  it("3.5 runModifyingHook times out after 5s per handler (fail-open)", async () => {
+  it("3.5 runModifyingHook fails closed when an enforcement hook times out", async () => {
     vi.useFakeTimers();
 
     registry.register({
@@ -163,8 +163,8 @@ describe("Hook Runner", () => {
     await promise;
 
     expect(mockLogger.error).toHaveBeenCalledWith(expect.stringContaining("Hook timeout"));
-    // Event not blocked — fail-open
-    expect(event.block).toBe(false);
+    expect(event.block).toBe(true);
+    expect(event.blockReason).toContain("Hook timeout");
 
     vi.useRealTimers();
   });
@@ -453,5 +453,49 @@ describe("Hook Runner", () => {
     await expect(runner.runObservingHook("tool:after", event)).rejects.toThrow(
       "observing-propagated"
     );
+  });
+
+  it("3.16 does not confuse concurrent hook events with nested reentrancy", async () => {
+    let releaseFirst!: () => void;
+    let firstStarted!: () => void;
+    const started = new Promise<void>((resolve) => (firstStarted = resolve));
+    const gate = new Promise<void>((resolve) => (releaseFirst = resolve));
+    const seen: string[] = [];
+
+    registry.register({
+      pluginId: "observer",
+      hookName: "tool:after",
+      handler: async (event) => {
+        seen.push(event.toolName);
+        if (event.toolName === "first") {
+          firstStarted();
+          await gate;
+        }
+      },
+      priority: 0,
+    });
+
+    const runner = createHookRunner(registry, { logger: mockLogger });
+    const first = runner.runObservingHook("tool:after", {
+      toolName: "first",
+      params: {},
+      result: { success: true },
+      durationMs: 1,
+      chatId: "chat-a",
+      isGroup: false,
+    });
+    await started;
+    const second = runner.runObservingHook("tool:after", {
+      toolName: "second",
+      params: {},
+      result: { success: true },
+      durationMs: 1,
+      chatId: "chat-b",
+      isGroup: false,
+    });
+    releaseFirst();
+    await Promise.all([first, second]);
+
+    expect(seen).toEqual(["first", "second"]);
   });
 });

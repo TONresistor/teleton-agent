@@ -254,6 +254,34 @@ describe("ToolRegistry", () => {
     });
   });
 
+  describe("external tool generations", () => {
+    it("re-registers an existing plugin without losing ownership tracking", () => {
+      registry.registerPluginTools("plugin", [
+        { tool: createMockTool("plugin_old"), executor: createMockExecutor() },
+      ]);
+      registry.registerPluginTools("plugin", [
+        { tool: createMockTool("plugin_new"), executor: createMockExecutor() },
+      ]);
+
+      expect(registry.has("plugin_old")).toBe(false);
+      expect(registry.has("plugin_new")).toBe(true);
+      registry.removePluginTools("plugin");
+      expect(registry.has("plugin_new")).toBe(false);
+    });
+
+    it("returns a disposer for tool-index subscriptions", () => {
+      const listener = vi.fn();
+      const dispose = registry.onToolsChanged(listener);
+      dispose();
+
+      registry.registerPluginTools("plugin", [
+        { tool: createMockTool("plugin_tool"), executor: createMockExecutor() },
+      ]);
+
+      expect(listener).not.toHaveBeenCalled();
+    });
+  });
+
   describe("getToolCategory()", () => {
     it("should return correct category for data-bearing tool", () => {
       const tool = createMockTool("test_tool", "data-bearing");
@@ -626,6 +654,24 @@ describe("ToolRegistry", () => {
       const result = await registry.execute(toolCall, adminContext);
 
       expect(result.success).toBe(true);
+    });
+
+    it("uses the authoritative registry admin set instead of caller-supplied config", async () => {
+      registry.register(createMockTool("admin_tool"), createMockExecutor(), "admin-only");
+      registry.setAdminIds([111]);
+      const call: ToolCall = {
+        type: "toolCall",
+        id: "call-1",
+        name: "admin_tool",
+        arguments: { message: "test" },
+      };
+
+      await expect(
+        registry.execute(call, { ...mockContext, senderId: 99999 })
+      ).resolves.toMatchObject({ success: false });
+      await expect(
+        registry.execute(call, { ...mockContext, senderId: 111 })
+      ).resolves.toMatchObject({ success: true });
     });
 
     it("should catch and return errors from executor", async () => {

@@ -3,12 +3,18 @@
  * from the community registry at GitHub.
  */
 
-import { existsSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
+import { existsSync, mkdirSync, writeFileSync, rmSync, renameSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { WORKSPACE_PATHS } from "../../workspace/paths.js";
-import { adaptPlugin, ensurePluginDeps } from "../../agent/tools/plugin-loader.js";
+import {
+  adaptPlugin,
+  assertTrustedPluginPath,
+  ensurePluginDeps,
+} from "../../agent/tools/plugin-loader.js";
 import type { ToolRegistry } from "../../agent/tools/registry.js";
+import type { PluginModule } from "../../agent/tools/types.js";
+import { HookRegistry } from "../../sdk/hooks/registry.js";
 import type { MarketplaceDeps, RegistryEntry, MarketplacePlugin } from "../types.js";
 import { createLogger } from "../../utils/logger.js";
 
@@ -42,6 +48,7 @@ export class MarketplaceService {
   private fetchPromise: Promise<RegistryEntry[]> | null = null;
   private manifestCache = new Map<string, { data: ManifestData; fetchedAt: number }>();
   private installing = new Set<string>();
+  private updating = new Set<string>();
 
   constructor(deps: ServiceDeps) {
     this.deps = deps;
@@ -197,11 +204,12 @@ export class MarketplaceService {
   // ── Install ─────────────────────────────────────────────────────────
 
   async installPlugin(
-    pluginId: string
+    pluginId: string,
+    fromUpdate = false
   ): Promise<{ name: string; version: string; toolCount: number }> {
     this.validateId(pluginId);
 
-    if (this.installing.has(pluginId)) {
+    if (this.installing.has(pluginId) || (!fromUpdate && this.updating.has(pluginId))) {
       throw new ConflictError(`Plugin "${pluginId}" is already being installed`);
     }
 
@@ -213,6 +221,8 @@ export class MarketplaceService {
 
     this.installing.add(pluginId);
     const pluginDir = join(PLUGINS_DIR, pluginId);
+    let stagedModule: PluginModule | null = null;
+    let runtimeStaged = false;
 
     try {
       // Find entry in registry
@@ -234,27 +244,44 @@ export class MarketplaceService {
 
       // Import the plugin module
       const indexPath = join(pluginDir, "index.js");
+      assertTrustedPluginPath(indexPath, PLUGINS_DIR);
       const moduleUrl = pathToFileURL(indexPath).href + `?t=${Date.now()}`;
       const mod = await import(moduleUrl);
 
       // Adapt plugin (validates manifest, tools, SDK version, etc.)
+      const candidateHooks = new HookRegistry();
       const adapted = adaptPlugin(
         mod,
         pluginId,
         this.deps.config,
-        this.deps.loadedModuleNames,
-        this.deps.sdkDeps
+        typeof this.deps.loadedModuleNames === "function"
+          ? this.deps.loadedModuleNames()
+          : this.deps.loadedModuleNames,
+        this.deps.sdkDeps,
+        candidateHooks
       );
+      stagedModule = adapted;
+      if (this.deps.modules.some((module) => module.name === adapted.name)) {
+        throw new ConflictError(`Plugin manifest name "${adapted.name}" is already installed`);
+      }
 
       // Run migrations
       adapted.migrate?.(this.deps.pluginContext.db);
 
       // Register tools
       const tools = adapted.tools(this.deps.config);
+      if (tools.length === 0) throw new Error(`Plugin "${adapted.name}" produced zero tools`);
       const toolCount = this.deps.toolRegistry.registerPluginTools(adapted.name, tools);
+      const hookRegistry =
+        typeof this.deps.hookRegistry === "function"
+          ? this.deps.hookRegistry()
+          : this.deps.hookRegistry;
+      hookRegistry?.replacePlugin(adapted.name, candidateHooks.getRegistrations(adapted.name));
+      runtimeStaged = true;
 
       // Start plugin
       await adapted.start?.(this.deps.pluginContext);
+      hookRegistry?.replacePlugin(adapted.name, candidateHooks.getRegistrations(adapted.name));
 
       // Add to modules array (shared reference)
       this.deps.modules.push(adapted);
@@ -268,6 +295,22 @@ export class MarketplaceService {
         toolCount,
       };
     } catch (error: unknown) {
+      if (stagedModule) {
+        if (runtimeStaged) this.deps.toolRegistry.removePluginTools(stagedModule.name);
+        const hookRegistry =
+          typeof this.deps.hookRegistry === "function"
+            ? this.deps.hookRegistry()
+            : this.deps.hookRegistry;
+        if (runtimeStaged) hookRegistry?.unregister(stagedModule.name);
+        const moduleIndex = this.deps.modules.indexOf(stagedModule);
+        if (moduleIndex >= 0) this.deps.modules.splice(moduleIndex, 1);
+        try {
+          await stagedModule.stop?.();
+        } catch (cleanupError) {
+          log.error({ error: cleanupError }, `Failed to stop staged plugin ${pluginId}`);
+        }
+        this.deps.rewireHooks();
+      }
       // Cleanup on failure
       if (existsSync(pluginDir)) {
         try {
@@ -284,10 +327,10 @@ export class MarketplaceService {
 
   // ── Uninstall ───────────────────────────────────────────────────────
 
-  async uninstallPlugin(pluginId: string): Promise<{ message: string }> {
+  async uninstallPlugin(pluginId: string, fromUpdate = false): Promise<{ message: string }> {
     this.validateId(pluginId);
 
-    if (this.installing.has(pluginId)) {
+    if (this.installing.has(pluginId) || (!fromUpdate && this.updating.has(pluginId))) {
       throw new ConflictError(`Plugin "${pluginId}" has an operation in progress`);
     }
 
@@ -306,6 +349,11 @@ export class MarketplaceService {
 
       // Remove tools from registry (use actual module name, not registry ID)
       this.deps.toolRegistry.removePluginTools(moduleName);
+      const hookRegistry =
+        typeof this.deps.hookRegistry === "function"
+          ? this.deps.hookRegistry()
+          : this.deps.hookRegistry;
+      hookRegistry?.unregister(moduleName);
 
       // Remove from modules array
       if (idx >= 0) this.deps.modules.splice(idx, 1);
@@ -330,8 +378,61 @@ export class MarketplaceService {
   async updatePlugin(
     pluginId: string
   ): Promise<{ name: string; version: string; toolCount: number }> {
-    await this.uninstallPlugin(pluginId);
-    return this.installPlugin(pluginId);
+    this.validateId(pluginId);
+    if (this.installing.has(pluginId) || this.updating.has(pluginId)) {
+      throw new ConflictError(`Plugin "${pluginId}" has an operation in progress`);
+    }
+    const previousModule = this.findModuleByPluginId(pluginId);
+    if (!previousModule) throw new Error(`Plugin "${pluginId}" is not installed`);
+
+    const previousIndex = this.deps.modules.indexOf(previousModule);
+    const pluginDir = join(PLUGINS_DIR, pluginId);
+    const backupDir = `${pluginDir}.update-backup-${Date.now()}`;
+    const hookRegistry =
+      typeof this.deps.hookRegistry === "function"
+        ? this.deps.hookRegistry()
+        : this.deps.hookRegistry;
+    const previousHooks = hookRegistry?.getRegistrations(previousModule.name) ?? [];
+
+    if (existsSync(pluginDir)) renameSync(pluginDir, backupDir);
+    this.updating.add(pluginId);
+    let updated = false;
+    try {
+      await this.uninstallPlugin(pluginId, true);
+      const result = await this.installPlugin(pluginId, true);
+      updated = true;
+      return result;
+    } catch (updateError) {
+      if (existsSync(pluginDir)) rmSync(pluginDir, { recursive: true, force: true });
+      if (existsSync(backupDir)) renameSync(backupDir, pluginDir);
+
+      try {
+        previousModule.migrate?.(this.deps.pluginContext.db);
+        const previousTools = previousModule.tools(this.deps.config);
+        this.deps.toolRegistry.registerPluginTools(previousModule.name, previousTools);
+        hookRegistry?.replacePlugin(previousModule.name, previousHooks);
+        await previousModule.start?.(this.deps.pluginContext);
+        if (!this.deps.modules.includes(previousModule)) {
+          this.deps.modules.splice(Math.max(0, previousIndex), 0, previousModule);
+        }
+        this.deps.rewireHooks();
+      } catch (rollbackError) {
+        throw new AggregateError(
+          [updateError, rollbackError],
+          `Plugin "${pluginId}" update and rollback both failed`
+        );
+      }
+      throw updateError;
+    } finally {
+      if (updated && existsSync(backupDir)) {
+        try {
+          rmSync(backupDir, { recursive: true, force: true });
+        } catch (cleanupError) {
+          log.error({ error: cleanupError }, `Failed to remove update backup ${backupDir}`);
+        }
+      }
+      this.updating.delete(pluginId);
+    }
   }
 
   // ── Helpers ─────────────────────────────────────────────────────────
@@ -342,7 +443,7 @@ export class MarketplaceService {
    */
   private findModuleByPluginId(pluginId: string) {
     // Direct match (module name === registry id)
-    let mod = this.deps.modules.find((m) => m.name === pluginId);
+    let mod = this.deps.modules.find((m) => m.sourceId === pluginId || m.name === pluginId);
     if (mod) return mod;
 
     // Via registry display name (registry id → registry name → module name)

@@ -230,6 +230,12 @@ describe("Memory Schema", () => {
       expect(columnNames).toContain("media_type");
       expect(columnNames).toContain("timestamp");
       expect(columnNames).toContain("indexed_at");
+
+      const primaryKey = info
+        .filter((column) => (column as { pk?: number }).pk)
+        .sort((a, b) => ((a as { pk?: number }).pk ?? 0) - ((b as { pk?: number }).pk ?? 0))
+        .map((column) => column.name);
+      expect(primaryKey).toEqual(["chat_id", "id"]);
     });
 
     it("creates embedding_cache table with correct schema", () => {
@@ -1084,7 +1090,7 @@ describe("Memory Schema", () => {
     });
 
     it("CURRENT_SCHEMA_VERSION is set to expected value", () => {
-      expect(CURRENT_SCHEMA_VERSION).toBe("1.21.0");
+      expect(CURRENT_SCHEMA_VERSION).toBe("1.23.0");
     });
   });
 
@@ -1099,6 +1105,56 @@ describe("Memory Schema", () => {
 
       const version = getSchemaVersion(db);
       expect(version).toBe(CURRENT_SCHEMA_VERSION);
+    });
+
+    it("migration 1.22.0 preserves legacy messages and scopes IDs by chat", () => {
+      db.exec(`
+        CREATE TABLE meta (
+          key TEXT PRIMARY KEY,
+          value TEXT NOT NULL,
+          updated_at INTEGER NOT NULL DEFAULT (unixepoch())
+        );
+        INSERT INTO meta (key, value) VALUES ('schema_version', '1.21.0');
+        CREATE TABLE tg_chats (id TEXT PRIMARY KEY, type TEXT NOT NULL);
+        CREATE TABLE tg_users (id TEXT PRIMARY KEY);
+        INSERT INTO tg_chats (id, type) VALUES ('chat-a', 'dm'), ('chat-b', 'dm');
+        CREATE TABLE tg_messages (
+          id TEXT PRIMARY KEY,
+          chat_id TEXT NOT NULL,
+          sender_id TEXT,
+          text TEXT,
+          embedding TEXT,
+          reply_to_id TEXT,
+          forward_from_id TEXT,
+          is_from_agent INTEGER DEFAULT 0,
+          is_edited INTEGER DEFAULT 0,
+          has_media INTEGER DEFAULT 0,
+          media_type TEXT,
+          timestamp INTEGER NOT NULL,
+          indexed_at INTEGER NOT NULL DEFAULT (unixepoch())
+        );
+        INSERT INTO tg_messages (id, chat_id, text, timestamp)
+        VALUES ('42', 'chat-a', 'legacy', 1);
+      `);
+
+      runMigrations(db);
+      db.prepare(
+        `INSERT INTO tg_messages (id, chat_id, text, timestamp)
+         VALUES ('42', 'chat-b', 'new chat', 2)`
+      ).run();
+
+      expect(
+        db.prepare("SELECT chat_id, id, text FROM tg_messages ORDER BY chat_id").all()
+      ).toEqual([
+        { chat_id: "chat-a", id: "42", text: "legacy" },
+        { chat_id: "chat-b", id: "42", text: "new chat" },
+      ]);
+      expect(
+        db.prepare("SELECT text FROM tg_messages_fts WHERE tg_messages_fts MATCH 'legacy'").get()
+      ).toEqual({ text: "legacy" });
+      expect(
+        db.prepare("SELECT value FROM meta WHERE key = 'tg_messages_vector_rebuild_required'").get()
+      ).toEqual({ value: "1" });
     });
 
     it("runMigrations on fresh database creates all tables and sets version", () => {

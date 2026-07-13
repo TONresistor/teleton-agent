@@ -31,16 +31,6 @@ interface Cluster {
 }
 
 /**
- * Extract the raw numeric chat ID from the context chatId.
- * "telegram:direct:123456" → "123456"
- * "telegram:group:-100123" → "-100123"
- */
-function extractRawChatId(chatId: string): string {
-  const parts = chatId.split(":");
-  return parts[parts.length - 1];
-}
-
-/**
  * Group messages into clusters where consecutive messages
  * are within CLUSTER_GAP_S of each other.
  */
@@ -84,7 +74,7 @@ function formatWhen(cluster: Cluster): string {
 export const sessionSearchTool: Tool = {
   name: "session_search",
   description:
-    "Search the locally stored history of THIS chat by keywords. Results are clustered by time and AI-summarized. Use to recall past discussions from previous sessions. NOT for searching other chats — use telegram_search_messages. NOT for knowledge/documents — use memory_search.",
+    "Search locally stored history across ALL chats by keywords. Results are clustered by time and AI-summarized. Use to recall past discussions from any previous session. NOT for live Telegram search — use telegram_search_messages. NOT for knowledge/documents — use memory_search.",
   category: "data-bearing",
   parameters: Type.Object({
     query: Type.String({
@@ -111,8 +101,6 @@ export const sessionSearchExecutor: ToolExecutor<SessionSearchParams> = async (
     }
 
     const limit = Math.min(params.limit ?? 3, 5);
-    const rawChatId = extractRawChatId(context.chatId);
-
     // FTS5 search across tg_messages
     const rows = context.db
       .prepare(
@@ -125,18 +113,22 @@ export const sessionSearchExecutor: ToolExecutor<SessionSearchParams> = async (
       )
       .all(safeQuery) as FtsRow[];
 
-    // Filter to current chat only
-    const filtered = rows.filter((r) => String(r.chat_id) === rawChatId);
-
-    if (filtered.length === 0) {
+    if (rows.length === 0) {
       return {
         success: true,
         data: { results: [], message: "No matching conversations found." },
       };
     }
 
-    // Cluster by time proximity
-    const clusters = clusterMessages(filtered);
+    // Keep conversations from different chats separate even when their
+    // timestamps overlap.
+    const rowsByChat = new Map<string, FtsRow[]>();
+    for (const row of rows) {
+      const chatRows = rowsByChat.get(row.chat_id) ?? [];
+      chatRows.push(row);
+      rowsByChat.set(row.chat_id, chatRows);
+    }
+    const clusters = [...rowsByChat.values()].flatMap(clusterMessages);
 
     // Sort by total FTS5 rank score (higher absolute rank = more relevant)
     clusters.sort((a, b) => b.totalRank - a.totalRank);
@@ -149,7 +141,12 @@ export const sessionSearchExecutor: ToolExecutor<SessionSearchParams> = async (
       ? getEffectiveApiKey(provider, context.config.agent.api_key)
       : "";
 
-    const results: Array<{ when: string; summary: string; messageCount: number }> = [];
+    const results: Array<{
+      chatId: string;
+      when: string;
+      summary: string;
+      messageCount: number;
+    }> = [];
 
     for (const cluster of topClusters) {
       const when = formatWhen(cluster);
@@ -181,7 +178,12 @@ export const sessionSearchExecutor: ToolExecutor<SessionSearchParams> = async (
         summary = transcript.slice(0, 500) + (transcript.length > 500 ? "…" : "");
       }
 
-      results.push({ when, summary, messageCount: cluster.messages.length });
+      results.push({
+        chatId: cluster.messages[0].chat_id,
+        when,
+        summary,
+        messageCount: cluster.messages.length,
+      });
     }
 
     return {

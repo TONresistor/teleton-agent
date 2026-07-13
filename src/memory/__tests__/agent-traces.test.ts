@@ -6,6 +6,7 @@ import {
   finishAgentTurnTrace,
   startAgentTurnTrace,
   updateAgentTurnTraceProgress,
+  updateAgentTurnTraceTarget,
 } from "../agent-traces.js";
 
 describe("agent turn traces", () => {
@@ -26,6 +27,8 @@ describe("agent turn traces", () => {
       startedAt: 10,
       provider: "codex",
       model: "gpt-5.6-terra",
+      requestedModel: "gpt-5.6-terra",
+      endpointFingerprint: "endpoint-a",
       selectedTools: ["tool_search"],
     });
     finishAgentTurnTrace(db, "turn-1", {
@@ -63,6 +66,8 @@ describe("agent turn traces", () => {
       startedAt: 10,
       provider: "codex",
       model: "gpt-5.6-terra",
+      requestedModel: "gpt-5.6-terra",
+      endpointFingerprint: "endpoint-a",
       selectedTools: ["tool_search"],
     });
     updateAgentTurnTraceProgress(db, "turn-2", {
@@ -72,6 +77,11 @@ describe("agent turn traces", () => {
       outputTokens: 5,
       totalCost: 0,
     });
+    updateAgentTurnTraceTarget(db, "turn-2", {
+      provider: "openai",
+      model: "gpt-5.6",
+      endpointFingerprint: "endpoint-b",
+    });
     failAgentTurnTrace(db, "turn-2", "provider unavailable");
 
     const row = db.prepare("SELECT * FROM agent_turn_traces WHERE id = ?").get("turn-2") as {
@@ -79,10 +89,16 @@ describe("agent turn traces", () => {
       tool_calls: number;
       tools_json: string;
       error_message: string;
+      provider: string;
+      model: string;
+      endpoint_fingerprint: string;
     };
     expect(row.status).toBe("error");
     expect(row.tool_calls).toBe(1);
     expect(JSON.parse(row.tools_json)[0].name).toBe("ton_get_balance");
     expect(row.error_message).toBe("provider unavailable");
+    expect(row.provider).toBe("openai");
+    expect(row.model).toBe("gpt-5.6");
+    expect(row.endpoint_fingerprint).toBe("endpoint-b");
   });
 });

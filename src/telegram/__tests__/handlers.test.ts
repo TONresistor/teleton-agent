@@ -47,7 +47,7 @@ vi.mock("../../agent/tools/telegram/media/transcribe-audio.js", () => ({
   telegramTranscribeAudioExecutor: vi.fn().mockResolvedValue({ success: false }),
 }));
 
-import { MessageHandler, type MessageContext } from "../handlers.js";
+import { ChatQueue, MessageHandler, type MessageContext } from "../handlers.js";
 import type { TelegramMessage } from "../bridge.js";
 import type { TelegramConfig } from "../../config/schema.js";
 import { TELEGRAM_SEND_TOOLS } from "../../constants/tools.js";
@@ -768,5 +768,21 @@ describe("MessageHandler", () => {
 
       expect(agent.processMessage).not.toHaveBeenCalled();
     });
+  });
+});
+
+describe("ChatQueue", () => {
+  it("rejects excess messages instead of growing without bound", async () => {
+    const queue = new ChatQueue(1, 1);
+    let release!: () => void;
+    const first = queue.enqueue(
+      "chat-a",
+      () => new Promise<void>((resolve) => (release = resolve))
+    );
+
+    await expect(queue.enqueue("chat-b", async () => {})).rejects.toThrow(/capacity/i);
+    await vi.waitFor(() => expect(release).toBeTypeOf("function"));
+    release();
+    await first;
   });
 });

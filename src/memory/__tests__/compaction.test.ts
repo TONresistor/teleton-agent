@@ -13,6 +13,7 @@ vi.mock("../../session/transcript.js", () => ({
     mocks.transcripts.set(sessionId, transcript);
   },
   readTranscript: (sessionId: string) => [...(mocks.transcripts.get(sessionId) ?? [])],
+  flushTranscript: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock("../ai-summarization.js", () => ({

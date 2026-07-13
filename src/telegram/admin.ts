@@ -53,6 +53,10 @@ export class AdminHandler {
     return this.config.admin_ids.includes(userId);
   }
 
+  updateConfig(config: TelegramConfig): void {
+    this.config = config;
+  }
+
   isPaused(): boolean {
     return this.paused;
   }
