@@ -10,6 +10,7 @@ import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { sanitizeForContext, sanitizeForPrompt } from "../../utils/sanitize.js";
+import { wrapExternalToolData } from "./external-provenance.js";
 import type { Tool, ToolExecutor, ToolResult, ToolScope } from "./types.js";
 import type { ToolRegistry } from "./registry.js";
 import type { McpConfig, McpServerConfig } from "../../config/schema.js";
@@ -235,7 +236,10 @@ export async function registerMcpTools(
             const text = extractText(result.content as Array<{ type: string; text?: string }>);
             return {
               success: true,
-              data: sanitizeForContext(text),
+              data: wrapExternalToolData(
+                { source: "mcp", origin: conn.serverName, trust: "untrusted" },
+                sanitizeForContext(text)
+              ),
             };
           } catch (innerError: unknown) {
             if (innerError instanceof McpToolDeadlineError) {

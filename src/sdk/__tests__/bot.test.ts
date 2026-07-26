@@ -3,7 +3,6 @@ import { createBotSDK } from "../bot.js";
 import type { InlineRouter, PluginBotHandlers } from "../../bot/inline-router.js";
 import type { PluginRateLimiter } from "../../bot/rate-limiter.js";
 import type { PluginLogger, BotManifest } from "@teleton-agent/sdk";
-import { PluginExecutionGate } from "../../agent/tools/plugin-execution-gate.js";
 
 function createMockRouter(): InlineRouter & { _plugins: Map<string, PluginBotHandlers> } {
   const plugins = new Map<string, PluginBotHandlers>();
@@ -141,20 +140,6 @@ describe("createBotSDK", () => {
 
     expect(limiter.check).toHaveBeenCalledWith("cats", "inline", 30);
     expect(handler).toHaveBeenCalled();
-  });
-
-  it("blocks Bot SDK handlers while their plugin is quiesced", async () => {
-    const gate = new PluginExecutionGate();
-    const sdk = createBotSDK(router, null, null, "cats", manifest, null, log, gate)!;
-    const handler = vi.fn(async () => []);
-    sdk.onInlineQuery(handler);
-    await gate.quiesce(["cats"]);
-
-    const registeredHandler = router._plugins.get("cats")!.onInlineQuery!;
-    await expect(
-      registeredHandler({ query: "test", queryId: "q1", userId: 1, offset: "" })
-    ).rejects.toThrow('Plugin "cats" is reloading');
-    expect(handler).not.toHaveBeenCalled();
   });
 
   it("checks rate limit on callback handler", async () => {

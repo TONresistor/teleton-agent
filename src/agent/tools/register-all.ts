@@ -16,7 +16,12 @@ import { tools as dedustTools } from "./dedust/index.js";
 import { tools as journalTools } from "./journal/index.js";
 import { tools as workspaceTools } from "./workspace/index.js";
 import { tools as webTools } from "./web/index.js";
-import { toolSearchTool, createToolSearchExecutor } from "./search/index.js";
+import {
+  toolResultReadExecutor,
+  toolResultReadTool,
+  toolSearchTool,
+  createToolSearchExecutor,
+} from "./search/index.js";
 import { getBuiltinMinimumAccess } from "./security-policy.js";
 
 const ALL_CATEGORIES: ToolEntry[][] = [
@@ -43,6 +48,8 @@ export function registerAllTools(registry: ToolRegistry): void {
       );
     }
   }
+
+  registry.register(toolResultReadTool, toolResultReadExecutor, "open", "both", ["core"], "all");
 
   // Register tool_search LAST so its executor closure captures a fully-populated registry.
   // scope "open" (always available), tags ["core"] so getCoreTools() includes it.

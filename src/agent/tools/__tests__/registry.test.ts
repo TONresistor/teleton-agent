@@ -4,7 +4,6 @@ import { ToolRegistry } from "../registry.js";
 import { Type } from "@sinclair/typebox";
 import type { Tool, ToolExecutor, ToolContext, ToolScope } from "../types.js";
 import type { ToolCall } from "@earendil-works/pi-ai";
-import { PluginExecutionGate } from "../plugin-execution-gate.js";
 
 // Mock modules
 vi.mock("@earendil-works/pi-ai", () => ({
@@ -53,6 +52,19 @@ describe("ToolRegistry", () => {
         updated_by INTEGER
       )
     `);
+    db.exec(`
+      CREATE TABLE action_executions (
+        turn_id TEXT NOT NULL,
+        tool_name TEXT NOT NULL,
+        args_hash TEXT NOT NULL,
+        status TEXT NOT NULL,
+        result_json TEXT,
+        started_at INTEGER NOT NULL,
+        completed_at INTEGER,
+        PRIMARY KEY (turn_id, tool_name, args_hash)
+      )
+    `);
+
     mockContext = {
       bridge: { getMode: () => "user" } as any,
       db,
@@ -489,74 +501,6 @@ describe("ToolRegistry", () => {
   // ---------- Tool execution ----------
 
   describe("execute()", () => {
-    it("rejects new plugin tool calls while that plugin is quiesced", async () => {
-      const gate = new PluginExecutionGate();
-      const gatedRegistry = new ToolRegistry("user", gate);
-      const executor = createMockExecutor();
-      gatedRegistry.registerPluginTools("stateful-plugin", [
-        { tool: createMockTool("stateful_read", "data-bearing"), executor },
-      ]);
-      await gate.quiesce(["stateful-plugin"]);
-
-      const result = await gatedRegistry.execute(
-        {
-          type: "toolCall",
-          id: "blocked-during-reload",
-          name: "stateful_read",
-          arguments: { message: "hello" },
-        },
-        mockContext
-      );
-
-      expect(result).toEqual({
-        success: false,
-        error: 'Plugin "stateful-plugin" is reloading; retry after reload completes',
-      });
-      expect(executor).not.toHaveBeenCalled();
-    });
-
-    it("retains the reload lease when a timed-out plugin tool is still running", async () => {
-      vi.useFakeTimers();
-      try {
-        const gate = new PluginExecutionGate();
-        const gatedRegistry = new ToolRegistry("user", gate);
-        let finish: ((result: { success: true }) => void) | undefined;
-        const executor = vi.fn(
-          () =>
-            new Promise<{ success: true }>((resolve) => {
-              finish = resolve;
-            })
-        );
-        gatedRegistry.registerPluginTools("stateful-plugin", [
-          { tool: createMockTool("stateful_slow", "data-bearing"), executor },
-        ]);
-
-        const resultPromise = gatedRegistry.execute(
-          {
-            type: "toolCall",
-            id: "timed-out-plugin-tool",
-            name: "stateful_slow",
-            arguments: { message: "hello" },
-          },
-          mockContext
-        );
-        await vi.advanceTimersByTimeAsync(90_000);
-
-        await expect(resultPromise).resolves.toMatchObject({
-          success: false,
-          error: expect.stringMatching(/timed out/),
-        });
-        expect(gate.getActiveCount("stateful-plugin")).toBe(1);
-
-        finish?.({ success: true });
-        await gate.quiesce(["stateful-plugin"]);
-        expect(gate.getActiveCount("stateful-plugin")).toBe(0);
-        gate.resume(["stateful-plugin"]);
-      } finally {
-        vi.useRealTimers();
-      }
-    });
-
     it("executes directly when a legacy approval flag is present", async () => {
       const tool = createMockTool("financial_tool", "action");
       const executor = createMockExecutor({ success: true, data: { tx: "abc" } });
@@ -751,8 +695,8 @@ describe("ToolRegistry", () => {
       expect(result.error).toBe("Execution failed");
     });
 
-    it("should execute distinct action calls even with identical arguments", async () => {
-      const tool = createMockTool("repeatable_action", "action");
+    it("should execute an action only once for the same turn and arguments", async () => {
+      const tool = createMockTool("idempotent_action", "action");
       const executor = createMockExecutor({ success: true, data: { remoteId: "one" } });
       registry.register(tool, executor);
       const toolCall: ToolCall = {
@@ -761,14 +705,14 @@ describe("ToolRegistry", () => {
         name: tool.name,
         arguments: { message: "perform once" },
       };
-      const context = { ...mockContext };
+      const context = { ...mockContext, turnId: "turn-1" };
 
       const first = await registry.execute(toolCall, context);
-      const second = await registry.execute({ ...toolCall, id: "call-2" }, context);
+      const replay = await registry.execute({ ...toolCall, id: "call-2" }, context);
 
       expect(first).toEqual({ success: true, data: { remoteId: "one" } });
-      expect(second).toEqual(first);
-      expect(executor).toHaveBeenCalledTimes(2);
+      expect(replay).toEqual(first);
+      expect(executor).toHaveBeenCalledTimes(1);
     });
 
     it("should timeout long-running data-bearing tools", async () => {

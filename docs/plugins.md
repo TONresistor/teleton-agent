@@ -801,7 +801,7 @@ async execute(params, context) {
 ### Category
 
 - `"data-bearing"` -- Tool results are subject to observation masking. After a few agentic iterations, older results from data-bearing tools are summarized to reduce token usage (~90% reduction).
-- `"action"` -- Side-effecting operation. Teleton never cancels it after start and preserves its result in full. Use for sends, writes, trades, and transactions.
+- `"action"` -- Side-effecting operation. Teleton never cancels it after start and deduplicates identical retries within the same inbound turn. Use for sends, writes, trades, and transactions.
 
 External `action` tools require a trusted Telegram identity by default and execute directly once authorized. Tools without a category are treated as actions for backward-compatible safety. The legacy `requiresApproval` field remains accepted for compatibility but is ignored at runtime.
 

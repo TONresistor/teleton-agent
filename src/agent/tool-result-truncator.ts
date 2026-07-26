@@ -51,3 +51,24 @@ export function serializeToolResult(result: {
     typeof value === "bigint" ? value.toString() : value
   );
 }
+
+export function attachArtifactReference(
+  truncatedResult: string,
+  artifact: { id: string; sizeBytes: number }
+): string {
+  const parsed = JSON.parse(truncatedResult) as {
+    success: boolean;
+    data?: Record<string, unknown>;
+    error?: string;
+  };
+  parsed.data = {
+    ...(parsed.data ?? {}),
+    _artifact: {
+      id: artifact.id,
+      size_bytes: artifact.sizeBytes,
+      read_with: "tool_result_read",
+      hint: "Read the full result in pages with tool_result_read.",
+    },
+  };
+  return JSON.stringify(parsed);
+}

@@ -57,6 +57,65 @@ const DDL_USER_HOOK_CONFIG = `
     );
 `;
 
+const DDL_AGENT_RUNTIME = `
+    CREATE TABLE IF NOT EXISTS agent_turn_traces (
+      id TEXT PRIMARY KEY,
+      session_id TEXT NOT NULL,
+      chat_id TEXT NOT NULL,
+      started_at INTEGER NOT NULL,
+      completed_at INTEGER,
+      status TEXT NOT NULL CHECK(status IN ('running', 'completed', 'error', 'budget_exhausted')),
+      provider TEXT NOT NULL,
+      model TEXT NOT NULL,
+      requested_model TEXT,
+      endpoint_fingerprint TEXT,
+      selected_tools_json TEXT NOT NULL DEFAULT '[]',
+      tools_json TEXT NOT NULL DEFAULT '[]',
+      iterations INTEGER NOT NULL DEFAULT 0,
+      tool_calls INTEGER NOT NULL DEFAULT 0,
+      input_tokens INTEGER NOT NULL DEFAULT 0,
+      output_tokens INTEGER NOT NULL DEFAULT 0,
+      total_cost REAL NOT NULL DEFAULT 0,
+      stop_reason TEXT,
+      error_message TEXT
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_agent_turn_traces_chat
+      ON agent_turn_traces(chat_id, started_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_agent_turn_traces_session
+      ON agent_turn_traces(session_id, started_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_agent_turn_traces_started
+      ON agent_turn_traces(started_at DESC);
+
+    CREATE TABLE IF NOT EXISTS tool_result_artifacts (
+      id TEXT PRIMARY KEY,
+      session_id TEXT NOT NULL,
+      chat_id TEXT NOT NULL,
+      tool_name TEXT NOT NULL,
+      content TEXT NOT NULL,
+      size_bytes INTEGER NOT NULL,
+      created_at INTEGER NOT NULL,
+      expires_at INTEGER NOT NULL
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_tool_result_artifacts_expiry
+      ON tool_result_artifacts(expires_at);
+
+    CREATE TABLE IF NOT EXISTS action_executions (
+      turn_id TEXT NOT NULL,
+      tool_name TEXT NOT NULL,
+      args_hash TEXT NOT NULL,
+      status TEXT NOT NULL CHECK(status IN ('running', 'succeeded', 'failed', 'unknown')),
+      result_json TEXT,
+      started_at INTEGER NOT NULL,
+      completed_at INTEGER,
+      PRIMARY KEY (turn_id, tool_name, args_hash)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_action_executions_started
+      ON action_executions(started_at DESC);
+`;
+
 /**
  * Idempotent ALTER TABLE ... ADD COLUMN: swallows the "duplicate column name"
  * error so migrations can re-run. Single definition shared by all migrations.
@@ -208,6 +267,9 @@ export function ensureSchema(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_tasks_priority ON tasks(priority DESC, created_at ASC);
     CREATE INDEX IF NOT EXISTS idx_tasks_scheduled ON tasks(scheduled_for) WHERE scheduled_for IS NOT NULL;
     CREATE INDEX IF NOT EXISTS idx_tasks_created_by ON tasks(created_by) WHERE created_by IS NOT NULL;
+
+    -- Agent loop observability, paged tool artifacts, and action idempotency.
+    ${DDL_AGENT_RUNTIME}
 
     -- Task Dependencies (for chained tasks)
     ${DDL_TASK_DEPENDENCIES}
@@ -407,7 +469,7 @@ export function setSchemaVersion(db: Database.Database, version: string): void {
   ).run(version);
 }
 
-export const CURRENT_SCHEMA_VERSION = "1.24.0";
+export const CURRENT_SCHEMA_VERSION = "1.23.0";
 
 export function runMigrations(db: Database.Database): void {
   const currentVersion = getSchemaVersion(db);
@@ -815,6 +877,17 @@ export function runMigrations(db: Database.Database): void {
     }
   }
 
+  if (!currentVersion || versionLessThan(currentVersion, "1.21.0")) {
+    log.info("Running migration 1.21.0: Add agent runtime resilience tables");
+    try {
+      db.exec(DDL_AGENT_RUNTIME);
+      log.info("Migration 1.21.0 complete: Runtime trace, artifact, and action tables created");
+    } catch (error) {
+      log.error({ err: error }, "Migration 1.21.0 failed");
+      throw error;
+    }
+  }
+
   if (!currentVersion || versionLessThan(currentVersion, "1.22.0")) {
     log.info("Running migration 1.22.0: Scope Telegram message IDs by chat");
     try {
@@ -930,17 +1003,16 @@ export function runMigrations(db: Database.Database): void {
     }
   }
 
-  if (!currentVersion || versionLessThan(currentVersion, "1.24.0")) {
-    log.info("Running migration 1.24.0: Remove unused agent runtime state");
+  if (!currentVersion || versionLessThan(currentVersion, "1.23.0")) {
+    log.info("Running migration 1.23.0: Trace requested and resolved model identity");
     try {
-      db.exec(`
-        DROP TABLE IF EXISTS action_executions;
-        DROP TABLE IF EXISTS agent_turn_traces;
-        DROP TABLE IF EXISTS tool_result_artifacts;
-      `);
-      log.info("Migration 1.24.0 complete: Unused agent runtime state removed");
+      db.exec(DDL_AGENT_RUNTIME);
+      addColumnIfNotExists(db, "agent_turn_traces", "requested_model", "TEXT");
+      addColumnIfNotExists(db, "agent_turn_traces", "endpoint_fingerprint", "TEXT");
+      db.exec("UPDATE agent_turn_traces SET requested_model = model WHERE requested_model IS NULL");
+      log.info("Migration 1.23.0 complete: Model trace identity added");
     } catch (error) {
-      log.error({ err: error }, "Migration 1.24.0 failed");
+      log.error({ err: error }, "Migration 1.23.0 failed");
       throw error;
     }
   }

@@ -4,46 +4,35 @@ import type { PluginModuleWithHooks } from "../agent/tools/plugin-loader.js";
 import type { GramJSUserBridge } from "../telegram/bridges/user.js";
 import { getErrorMessage } from "../utils/errors.js";
 import { createLogger } from "../utils/logger.js";
-import type { PluginExecutionGate } from "../agent/tools/plugin-execution-gate.js";
 
 const log = createLogger("App");
 
 export async function dispatchPluginMessage(
   modules: PluginModule[],
-  event: PluginMessageEvent,
-  executionGate?: PluginExecutionGate
+  event: PluginMessageEvent
 ): Promise<void> {
   for (const module of modules) {
     const withHooks = module as PluginModuleWithHooks;
     if (!withHooks.onMessage) continue;
-    const release = executionGate?.enter(module.name);
-    if (executionGate && !release) continue;
     try {
       await withHooks.onMessage(event);
     } catch (error: unknown) {
       log.error(`❌ [${module.name}] onMessage error: ${getErrorMessage(error)}`);
-    } finally {
-      release?.();
     }
   }
 }
 
 export async function dispatchPluginCallback(
   modules: PluginModule[],
-  event: PluginCallbackEvent,
-  executionGate?: PluginExecutionGate
+  event: PluginCallbackEvent
 ): Promise<void> {
   for (const module of modules) {
     const withHooks = module as PluginModuleWithHooks;
     if (!withHooks.onCallbackQuery) continue;
-    const release = executionGate?.enter(module.name);
-    if (executionGate && !release) continue;
     try {
       await withHooks.onCallbackQuery(event);
     } catch (error: unknown) {
       log.error(`❌ [${module.name}] onCallbackQuery error: ${getErrorMessage(error)}`);
-    } finally {
-      release?.();
     }
   }
 }

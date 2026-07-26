@@ -141,6 +141,8 @@ export class AdminHandler {
     status += `🧠 Provider: ${cfg.agent.provider}\n`;
     status += `🤖 Model: ${cfg.agent.model}\n`;
     status += `🔄 Max iterations: ${cfg.agent.max_agentic_iterations}\n`;
+    status += `🧰 Max tool calls: ${cfg.agent.max_tool_calls_per_turn}\n`;
+    status += `⏱️ Turn budget: ${Math.round(cfg.agent.max_turn_duration_ms / 1000)}s\n`;
     status += `📬 DM policy: ${this.config.dm_policy}\n`;
     status += `👥 Group policy: ${this.config.group_policy}\n`;
 

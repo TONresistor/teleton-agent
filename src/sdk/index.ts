@@ -16,12 +16,11 @@ import { createTelegramSDK } from "./telegram.js";
 import { createSecretsSDK } from "./secrets.js";
 import { createStorageSDK } from "./storage.js";
 import { createBotSDK } from "./bot.js";
-import type { PluginBotRegistrationTarget } from "../bot/inline-router.js";
+import type { InlineRouter } from "../bot/inline-router.js";
 import type { GramJSBotClient } from "../bot/gramjs-bot.js";
 import type { Bot } from "grammy";
 import type { PluginRateLimiter } from "../bot/rate-limiter.js";
 import { createLogger as pinoCreateLogger } from "../utils/logger.js";
-import type { PluginExecutionGate } from "../agent/tools/plugin-execution-gate.js";
 
 const sdkLog = pinoCreateLogger("SDK");
 
@@ -30,15 +29,13 @@ export { PluginSDKError, type SDKErrorCode, SDK_VERSION } from "@teleton-agent/s
 export interface SDKDependencies {
   bridge: ITelegramBridge;
   /** Inline router for bot SDK (null if bot not configured) */
-  inlineRouter?: PluginBotRegistrationTarget | null;
+  inlineRouter?: InlineRouter | null;
   /** GramJS bot client for MTProto operations */
   gramjsBot?: GramJSBotClient | null;
   /** Grammy bot instance */
   grammyBot?: Bot | null;
   /** Rate limiter for bot actions */
   rateLimiter?: PluginRateLimiter | null;
-  /** Coordinates plugin-owned tools, hooks, and Bot SDK handlers during reload. */
-  executionGate?: PluginExecutionGate;
 }
 
 export interface CreatePluginSDKOptions {
@@ -150,8 +147,7 @@ export function createPluginSDK(deps: SDKDependencies, opts: CreatePluginSDKOpti
         opts.pluginName,
         opts.botManifest,
         deps.rateLimiter ?? null,
-        frozenLog,
-        deps.executionGate
+        frozenLog
       );
       // Only cache non-null — retry on next access if deps aren't ready yet
       if (result) cachedBot = result;

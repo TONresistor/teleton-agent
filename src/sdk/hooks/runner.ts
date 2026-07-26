@@ -53,25 +53,13 @@ export function createHookRunner(registry: HookRegistry, opts: HookRunnerOptions
     event: Parameters<HookHandlerMap[K]>[0]
   ): Promise<void> {
     const label = `${hook.pluginId}:${name}`;
-    const release = registry.beginExecution(hook.pluginId);
-    if (!release) {
-      if (BLOCKABLE_HOOKS.has(name)) {
-        const blockable = event as { block?: boolean; blockReason?: string };
-        blockable.block = true;
-        blockable.blockReason = `Hook enforcement unavailable [${label}]: plugin is reloading`;
-      }
-      return;
-    }
     const t0 = Date.now();
-    // Keep the execution lease tied to the real handler promise. A timeout
-    // cannot cancel plugin code, so releasing earlier could let hot reload close
-    // the plugin database while that handler is still running.
-    const execution = Promise.resolve().then(() =>
-      (hook.handler as (e: typeof event) => void | Promise<void>)(event)
-    );
-    void execution.then(release, release);
     try {
-      await withTimeout(() => execution, timeoutMs, label);
+      await withTimeout(
+        () => (hook.handler as (e: typeof event) => void | Promise<void>)(event),
+        timeoutMs,
+        label
+      );
     } catch (error) {
       if (!catchErrors) throw error;
       const message = getErrorMessage(error);

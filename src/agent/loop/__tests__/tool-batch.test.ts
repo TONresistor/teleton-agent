@@ -55,7 +55,69 @@ describe("injectDiscoveredTools", () => {
   });
 });
 
-describe("executeToolBatch scheduling", () => {
+describe("executeToolBatch budgets", () => {
+  it("does not start tool calls beyond the remaining per-turn budget", async () => {
+    const execute = vi.fn(async () => ({ success: true }));
+    const calls = ["first_tool", "second_tool"].map((name, index) => ({
+      type: "toolCall" as const,
+      id: `call-${index}`,
+      name,
+      arguments: {},
+    }));
+
+    const { toolPlans, execResults } = await executeToolBatch(
+      { execute, getToolCategory: () => "action" } as never,
+      undefined,
+      calls,
+      {
+        bridge: {} as never,
+        db: {} as never,
+        chatId: "chat-1",
+        senderId: 1,
+        isGroup: false,
+      },
+      "chat-1",
+      false,
+      1
+    );
+
+    expect(execute).toHaveBeenCalledTimes(1);
+    expect(execResults.map((result) => result.attempted)).toEqual([true, false]);
+    expect(toolPlans[1]).toMatchObject({
+      blocked: true,
+      blockReason: "Per-turn tool-call budget exhausted",
+    });
+  });
+
+  it("does not consume execution budget for calls blocked by a hook", async () => {
+    const execute = vi.fn(async () => ({ success: true }));
+    const hookRunner = {
+      runModifyingHook: vi.fn(async (_name, event: { params: unknown; block: boolean }) => {
+        if ((event.params as { blocked?: boolean }).blocked) event.block = true;
+      }),
+    };
+
+    const { execResults } = await executeToolBatch(
+      { execute, getToolCategory: () => "action" } as never,
+      hookRunner as never,
+      [
+        { type: "toolCall", id: "blocked", name: "first", arguments: { blocked: true } },
+        { type: "toolCall", id: "allowed", name: "second", arguments: {} },
+      ],
+      { bridge: {} as never, db: {} as never, chatId: "chat", senderId: 1, isGroup: false },
+      "chat",
+      false,
+      1
+    );
+
+    expect(execute).toHaveBeenCalledTimes(1);
+    expect(execute).toHaveBeenCalledWith(
+      expect.objectContaining({ name: "second" }),
+      expect.anything()
+    );
+    expect(execResults.map((result) => result.attempted)).toEqual([false, true]);
+  });
+
   it("serializes actions in model order", async () => {
     let active = 0;
     let maxActive = 0;

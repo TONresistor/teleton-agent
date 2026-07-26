@@ -55,7 +55,15 @@ describe("MCP tool execution", () => {
       await vi.advanceTimersByTimeAsync(10_000);
       await expect(resultPromise).resolves.toEqual({
         success: true,
-        data: "done",
+        data: {
+          _provenance: {
+            source: "mcp",
+            origin: "test",
+            trust: "untrusted",
+            dataOnly: true,
+          },
+          content: "done",
+        },
       });
       expect(sideEffectCompleted).toBe(true);
       expect(callTool).toHaveBeenCalledWith(

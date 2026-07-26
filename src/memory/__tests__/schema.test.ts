@@ -56,9 +56,9 @@ describe("Memory Schema", () => {
       expect(tableNames).toContain("knowledge_fts_data");
       expect(tableNames).toContain("tg_messages_fts");
       expect(tableNames).toContain("tg_messages_fts_data");
-      expect(tableNames).not.toContain("agent_turn_traces");
-      expect(tableNames).not.toContain("tool_result_artifacts");
-      expect(tableNames).not.toContain("action_executions");
+      expect(tableNames).toContain("agent_turn_traces");
+      expect(tableNames).toContain("tool_result_artifacts");
+      expect(tableNames).toContain("action_executions");
     });
 
     it("creates meta table with correct schema", () => {
@@ -1090,7 +1090,7 @@ describe("Memory Schema", () => {
     });
 
     it("CURRENT_SCHEMA_VERSION is set to expected value", () => {
-      expect(CURRENT_SCHEMA_VERSION).toBe("1.24.0");
+      expect(CURRENT_SCHEMA_VERSION).toBe("1.23.0");
     });
   });
 
@@ -1239,34 +1239,30 @@ describe("Memory Schema", () => {
       expect(columnNames).toContain("output_tokens");
     });
 
-    it("migration 1.24.0 removes unused agent runtime state", () => {
+    it("runMigrations from 1.20.0 adds runtime resilience tables", () => {
       ensureSchema(db);
       db.exec(`
-        CREATE TABLE action_executions (
-          turn_id TEXT NOT NULL,
-          tool_name TEXT NOT NULL,
-          args_hash TEXT NOT NULL,
-          status TEXT NOT NULL,
-          result_json TEXT,
-          started_at INTEGER NOT NULL,
-          completed_at INTEGER,
-          PRIMARY KEY (turn_id, tool_name, args_hash)
-        );
-        CREATE TABLE agent_turn_traces (id TEXT PRIMARY KEY);
-        CREATE TABLE tool_result_artifacts (id TEXT PRIMARY KEY);
+        DROP TABLE agent_turn_traces;
+        DROP TABLE tool_result_artifacts;
+        DROP TABLE action_executions;
       `);
-      setSchemaVersion(db, "1.23.0");
+      setSchemaVersion(db, "1.20.0");
 
       runMigrations(db);
 
-      const tables = db
-        .prepare(
-          `SELECT name FROM sqlite_master WHERE type = 'table' AND name IN (
-            'action_executions', 'agent_turn_traces', 'tool_result_artifacts'
-          )`
-        )
-        .all();
-      expect(tables).toEqual([]);
+      const tables = (
+        db
+          .prepare(
+            `SELECT name FROM sqlite_master
+             WHERE type = 'table' AND name IN (
+               'agent_turn_traces', 'tool_result_artifacts', 'action_executions'
+             )`
+          )
+          .all() as Array<{ name: string }>
+      ).map((row) => row.name);
+      expect(tables.sort()).toEqual(
+        ["action_executions", "agent_turn_traces", "tool_result_artifacts"].sort()
+      );
     });
 
     it("runMigrations is idempotent (can run multiple times)", () => {

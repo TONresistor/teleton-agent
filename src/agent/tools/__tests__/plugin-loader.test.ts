@@ -10,7 +10,6 @@ const moduleDbMocks = vi.hoisted(() => ({
     close: vi.fn(),
     exec: vi.fn(),
     prepare: vi.fn(() => ({ all: () => [] })),
-    transaction: vi.fn((operation: () => unknown) => operation),
   },
 }));
 
@@ -419,54 +418,6 @@ describe("adaptPlugin — database isolation", () => {
     expect(receivedContext).not.toHaveProperty("bridge");
   });
 
-  it("refuses to construct an SDK before the plugin database is initialized", () => {
-    const raw = makeRawPlugin({
-      tools: (_sdk: unknown) => [
-        {
-          name: "sdk_probe",
-          description: "Inspect SDK initialization",
-          execute: async () => ({ success: true }),
-        },
-      ],
-    });
-
-    const module = adaptPlugin(raw, "sdk-probe", makeConfig(), [], minimalSdkDeps);
-
-    expect(() => module.tools(makeConfig())).toThrow(/SDK requested before database migration/);
-  });
-
-  it("constructs one stateful SDK after migration and reuses it for start()", async () => {
-    let toolsSdk: any;
-    let startSdk: any;
-    const raw = makeRawPlugin({
-      tools: (sdk: unknown) => {
-        toolsSdk = sdk;
-        return [
-          {
-            name: "stateful_probe",
-            description: "Inspect the stateful SDK",
-            execute: async () => ({ success: true }),
-          },
-        ];
-      },
-      start: async (context: { sdk: unknown }) => {
-        startSdk = context.sdk;
-      },
-    });
-
-    const module = adaptPlugin(raw, "stateful-probe", makeConfig(), [], minimalSdkDeps);
-    module.migrate?.();
-    module.tools(makeConfig());
-    await module.start?.({} as never);
-
-    expect(toolsSdk).toBe(startSdk);
-    expect(toolsSdk.db).not.toBeNull();
-    expect(toolsSdk.storage).not.toBeNull();
-    expect(moduleDbMocks.pluginDb.transaction).not.toHaveBeenCalled();
-
-    await module.stop?.();
-  });
-
   it("uses the protected plugin database for migrate(), tools, and start()", async () => {
     const agentDb = { kind: "agent" };
     const received: Record<string, unknown> = {};
@@ -507,7 +458,6 @@ describe("adaptPlugin — database isolation", () => {
     }
     expect(startContext).toHaveProperty("sdk");
     expect(startContext).not.toHaveProperty("bridge");
-    expect(moduleDbMocks.pluginDb.transaction).toHaveBeenCalledOnce();
   });
 
   it("propagates lifecycle failures so the runtime can roll back the plugin", async () => {

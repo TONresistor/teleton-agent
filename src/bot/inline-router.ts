@@ -43,17 +43,6 @@ export interface PluginBotHandlers {
   onChosenResult?: (ctx: ChosenResultContext) => Promise<void>;
 }
 
-export interface PluginBotRegistrationTarget {
-  registerPlugin(name: string, handlers: PluginBotHandlers): void;
-}
-
-export function clonePluginBotHandlers(handlers: PluginBotHandlers): PluginBotHandlers {
-  return {
-    ...handlers,
-    onCallback: handlers.onCallback?.map((entry) => ({ ...entry })),
-  };
-}
-
 /**
  * Match a pre-compiled glob regex against a string.
  * Returns match groups (the parts matched by `*`) or null.
@@ -75,18 +64,8 @@ export class InlineRouter {
   }
 
   registerPlugin(name: string, handlers: PluginBotHandlers): void {
-    this.plugins.set(name, clonePluginBotHandlers(handlers));
+    this.plugins.set(name, handlers);
     log.info(`Registered plugin "${name}" for inline routing`);
-  }
-
-  getPluginHandlers(name: string): PluginBotHandlers | null {
-    const handlers = this.plugins.get(name);
-    return handlers ? clonePluginBotHandlers(handlers) : null;
-  }
-
-  replacePlugin(name: string, handlers: PluginBotHandlers | null): void {
-    if (handlers) this.registerPlugin(name, handlers);
-    else this.unregisterPlugin(name);
   }
 
   unregisterPlugin(name: string): void {

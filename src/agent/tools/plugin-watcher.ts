@@ -3,10 +3,7 @@
  * and reloads plugins without restarting the agent.
  *
  * Key design decisions:
- * - Validates candidate metadata before disrupting the live runtime
- * - Quiesces every plugin execution surface before closing its database
- * - Stages hooks and Bot handlers until activation
- * - Restores the old runtime if candidate initialization fails
+ * - Validates new plugin BEFORE stopping old one ("keep old until new succeeds")
  * - Per-plugin debounce (300ms) to avoid reload storms
  * - ESM cache busting via ?t= query parameter
  * - Never crashes the main process on reload failure
@@ -25,15 +22,12 @@ import type { SDKDependencies } from "../../sdk/index.js";
 import { createLogger } from "../../utils/logger.js";
 import { getErrorMessage } from "../../utils/errors.js";
 import { HookRegistry } from "../../sdk/hooks/registry.js";
-import type { InlineRouter } from "../../bot/inline-router.js";
-import type { PluginExecutionGate } from "./plugin-execution-gate.js";
-import { botRegistrationShape, StagedBotRegistrar } from "./staged-bot-registrar.js";
-import { withPluginDrainTimeout } from "./plugin-drain-timeout.js";
 
 const log = createLogger("PluginWatcher");
 
 const RELOAD_DEBOUNCE_MS = 300;
-const PLUGIN_DRAIN_TIMEOUT_MS = 30_000;
+const PLUGIN_START_TIMEOUT_MS = 30_000;
+const PLUGIN_STOP_TIMEOUT_MS = 30_000;
 
 interface PluginWatcherDeps {
   config: Config;
@@ -43,8 +37,6 @@ interface PluginWatcherDeps {
   pluginContext: PluginContext;
   loadedModuleNames: string[];
   hookRegistry: HookRegistry;
-  inlineRouter: InlineRouter;
-  executionGate: PluginExecutionGate;
 }
 
 export class PluginWatcher {
@@ -196,17 +188,8 @@ export class PluginWatcher {
 
     this.reloading = true;
 
-    const {
-      config,
-      registry,
-      sdkDeps,
-      modules,
-      pluginContext,
-      loadedModuleNames,
-      hookRegistry,
-      inlineRouter,
-      executionGate,
-    } = this.deps;
+    const { config, registry, sdkDeps, modules, pluginContext, loadedModuleNames, hookRegistry } =
+      this.deps;
 
     // Find existing module
     const oldIndex = modules.findIndex((m) => m.sourceId === pluginName || m.name === pluginName);
@@ -215,16 +198,11 @@ export class PluginWatcher {
     log.info(`Reloading plugin "${pluginName}"${oldModule ? ` (v${oldModule.version})` : ""}...`);
 
     let oldStopped = false;
+    let runtimeStaged = false;
     let candidatePluginId = pluginName;
-    let candidateModule: PluginModule | null = null;
-    let candidateMigrated = false;
-    let runtimeActivated = false;
-    let stagedBotRegistrar: StagedBotRegistrar | null = null;
-    let quiescedPluginIds: string[] = [];
     const oldHookPluginId = oldModule?.name ?? pluginName;
     const oldToolPluginId = oldModule?.name ?? pluginName;
     const oldHooks = hookRegistry.getRegistrations(oldHookPluginId);
-    const oldBotHandlers = inlineRouter.getPluginHandlers(oldHookPluginId);
 
     try {
       // 1. Resolve module path
@@ -255,20 +233,15 @@ export class PluginWatcher {
       // 4. Adapt and validate (old plugin still running)
       const entryName = basename(modulePath) === "index.js" ? pluginName : `${pluginName}.js`;
       const candidateHooks = new HookRegistry();
-      stagedBotRegistrar = new StagedBotRegistrar();
-      const candidateSdkDeps: SDKDependencies = {
-        ...sdkDeps,
-        inlineRouter: sdkDeps.inlineRouter ? stagedBotRegistrar : null,
-      };
       const adapted = adaptPlugin(
         freshMod,
         entryName,
         config,
         loadedModuleNames,
-        candidateSdkDeps,
+        sdkDeps,
         candidateHooks
       );
-      candidateModule = adapted;
+      const newTools = adapted.tools(config);
       candidatePluginId = adapted.name;
       const conflictingModule = modules.find(
         (module, index) => index !== oldIndex && module.name === adapted.name
@@ -276,35 +249,34 @@ export class PluginWatcher {
       if (conflictingModule) {
         throw new Error(`Plugin manifest name "${adapted.name}" is already loaded`);
       }
-
-      // Stop new work and drain every plugin-owned execution surface before
-      // closing the old database or changing any live registration.
-      quiescedPluginIds = [...new Set([oldHookPluginId, oldToolPluginId, adapted.name])];
-      await withPluginDrainTimeout(
-        executionGate.quiesce(quiescedPluginIds),
-        PLUGIN_DRAIN_TIMEOUT_MS,
-        `Plugin "${pluginName}" in-flight work did not drain after 30s`
-      );
-
-      // Stop the old runtime only after the candidate passed static validation.
-      if (oldModule) {
-        try {
-          await oldModule.stop?.();
-        } finally {
-          oldStopped = true;
-        }
+      if (newTools.length === 0) {
+        throw new Error("Plugin produced zero valid tools");
       }
 
-      // Initialize the candidate completely before publishing any of its live
-      // tools, hooks, module callbacks, or Bot SDK handlers.
-      adapted.migrate?.(pluginContext.db);
-      candidateMigrated = true;
-      const newTools = adapted.tools(config);
-      if (newTools.length === 0) throw new Error("Plugin produced zero valid tools");
-      await adapted.start?.(pluginContext);
+      // 5. Stop old plugin (new one is fully validated at this point)
+      if (oldModule) {
+        try {
+          await Promise.race([
+            oldModule.stop?.(),
+            new Promise<never>((_, reject) =>
+              setTimeout(
+                () => reject(new Error(`Plugin "${pluginName}" stop() timed out after 30s`)),
+                PLUGIN_STOP_TIMEOUT_MS
+              )
+            ),
+          ]);
+        } catch (stopErr: unknown) {
+          log.warn(`Old plugin "${pluginName}" stop() failed: ${getErrorMessage(stopErr)}`);
+        }
+        oldStopped = true;
+      }
 
-      // Publish the prepared runtime synchronously while its execution gate is
-      // still closed. No request can observe a partially activated plugin.
+      // 6. Run migration if needed
+      adapted.migrate?.(pluginContext.db);
+
+      // 7. Replace tools in registry
+      // Tools are owned by the manifest name, which may differ from the
+      // directory name used by the watcher.
       if (oldToolPluginId !== adapted.name) {
         registry.removePluginTools(oldToolPluginId);
         registry.registerPluginTools(adapted.name, newTools);
@@ -313,76 +285,70 @@ export class PluginWatcher {
       }
       hookRegistry.unregister(oldHookPluginId);
       hookRegistry.replacePlugin(adapted.name, candidateHooks.getRegistrations(adapted.name));
-      stagedBotRegistrar.activate(inlineRouter, oldHookPluginId, adapted.name);
+      runtimeStaged = true;
 
+      // 8. Start new plugin
+      await Promise.race([
+        adapted.start?.(pluginContext),
+        new Promise<never>((_, reject) =>
+          setTimeout(
+            () => reject(new Error(`Plugin "${pluginName}" start() timed out after 30s`)),
+            PLUGIN_START_TIMEOUT_MS
+          )
+        ),
+      ]);
+      hookRegistry.replacePlugin(adapted.name, candidateHooks.getRegistrations(adapted.name));
+
+      // 9. Update modules array
       if (oldIndex >= 0) {
         modules[oldIndex] = adapted;
       } else {
         modules.push(adapted);
       }
-      runtimeActivated = true;
 
       log.info(`Plugin "${pluginName}" v${adapted.version} reloaded (${newTools.length} tools)`);
       return true;
     } catch (error: unknown) {
       log.error(`Failed to reload "${pluginName}": ${getErrorMessage(error)}`);
 
-      stagedBotRegistrar?.deactivate();
-      if (candidateModule && candidateMigrated) {
-        try {
-          await candidateModule.stop?.();
-        } catch (cleanupError) {
-          log.error(`Candidate plugin cleanup failed: ${getErrorMessage(cleanupError)}`);
-        }
-      }
-
+      // Rollback: only if we actually stopped the old plugin (steps 1-4 errors
+      // don't need rollback — old module is still running)
       if (oldModule && oldIndex >= 0 && oldStopped) {
         try {
           registry.removePluginTools(candidatePluginId);
-          registry.removePluginTools(oldToolPluginId);
           hookRegistry.unregister(candidatePluginId);
-          hookRegistry.unregister(oldHookPluginId);
-          inlineRouter.unregisterPlugin(candidatePluginId);
-          inlineRouter.unregisterPlugin(oldHookPluginId);
-
+          // Reopen plugin DB (stop() closed it)
           oldModule.migrate?.(pluginContext.db);
-          const restoredTools = oldModule.tools(config);
-          await oldModule.start?.(pluginContext);
-          registry.registerPluginTools(oldToolPluginId, restoredTools);
-
-          // Reusing the old handler snapshots would retain the closed SDK and
-          // database. Rollback therefore succeeds only if the reopened runtime
-          // recreated every registration surface itself.
-          if (hookRegistry.getRegistrations(oldHookPluginId).length !== oldHooks.length) {
-            throw new Error(`Plugin "${pluginName}" did not restore all hooks during rollback`);
-          }
-          if (
-            botRegistrationShape(inlineRouter.getPluginHandlers(oldHookPluginId)) !==
-            botRegistrationShape(oldBotHandlers)
-          ) {
-            throw new Error(`Plugin "${pluginName}" did not restore Bot handlers during rollback`);
-          }
+          registry.registerPluginTools(oldToolPluginId, oldModule.tools(config));
+          await Promise.race([
+            oldModule.start?.(pluginContext),
+            new Promise<never>((_, reject) =>
+              setTimeout(
+                () => reject(new Error(`Plugin "${pluginName}" start() timed out after 30s`)),
+                PLUGIN_START_TIMEOUT_MS
+              )
+            ),
+          ]);
+          // Replaying tools/start may register hooks again. Restore the exact
+          // pre-reload set once the old runtime is active.
+          hookRegistry.replacePlugin(oldHookPluginId, oldHooks);
           log.warn(`Rolled back to previous version of "${pluginName}"`);
         } catch {
           log.error(`Rollback also failed for "${pluginName}" — plugin disabled`);
           registry.removePluginTools(candidatePluginId);
           registry.removePluginTools(oldToolPluginId);
           hookRegistry.unregister(oldHookPluginId);
-          inlineRouter.unregisterPlugin(candidatePluginId);
-          inlineRouter.unregisterPlugin(oldHookPluginId);
           modules.splice(oldIndex, 1);
         }
-      } else if (!oldModule && runtimeActivated) {
+      } else if (!oldModule && runtimeStaged) {
+        // A newly added plugin may fail after its tools/hooks were staged.
+        // Leave no partial runtime state behind.
         registry.removePluginTools(candidatePluginId);
         hookRegistry.unregister(candidatePluginId);
-        inlineRouter.unregisterPlugin(candidatePluginId);
-        const candidateIndex = modules.findIndex((module) => module.name === candidatePluginId);
-        if (candidateIndex >= 0) modules.splice(candidateIndex, 1);
       }
 
       return false;
     } finally {
-      executionGate.resume(quiescedPluginIds);
       this.reloading = false;
       // Process any queued reloads
       if (!this.stopping && this.pendingReloads.size > 0) {

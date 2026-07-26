@@ -209,9 +209,6 @@ export function adaptPlugin(
   let pluginSdk: PluginSDK | null = null;
   let lifecycleActive = false;
   const getSdk = (): PluginSDK => {
-    if (!exposedPluginDb) {
-      throw new Error(`Plugin "${pluginName}" SDK requested before database migration`);
-    }
     pluginSdk ??= createPluginSDK(sdkDeps, {
       pluginName,
       db: exposedPluginDb,
@@ -238,7 +235,6 @@ export function adaptPlugin(
     configure() {},
 
     migrate() {
-      if (pluginDb && exposedPluginDb) return;
       try {
         // Always create plugin DB (needed for sdk.storage even without migrate())
         const dbPath = join(PLUGIN_DATA_DIR, `${pluginName}.db`);
@@ -247,8 +243,7 @@ export function adaptPlugin(
 
         // Run plugin's custom migrations if provided
         if (hasMigrate) {
-          const migrationDb = exposedPluginDb;
-          pluginDb.transaction(() => raw.migrate?.(migrationDb))();
+          raw.migrate?.(exposedPluginDb);
 
           const pluginTables = (
             pluginDb
@@ -426,7 +421,7 @@ export async function loadEnhancedPlugins(
   sdkDeps: SDKDependencies,
   db?: import("better-sqlite3").Database // eslint-disable-line @typescript-eslint/consistent-type-imports
 ): Promise<LoadEnhancedPluginsResult> {
-  const hookRegistry = new HookRegistry(sdkDeps.executionGate);
+  const hookRegistry = new HookRegistry();
   const pluginsDir = WORKSPACE_PATHS.PLUGINS_DIR;
 
   if (!existsSync(pluginsDir)) {

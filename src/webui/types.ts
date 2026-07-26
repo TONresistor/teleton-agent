@@ -10,8 +10,6 @@ import type { AgentLifecycle } from "../agent/lifecycle.js";
 import type { UserHookEvaluator } from "../agent/hooks/user-hook-evaluator.js";
 import type { McpServerInfo } from "./contracts.js";
 import type { HookRegistry } from "../sdk/hooks/registry.js";
-import type { InlineRouter } from "../bot/inline-router.js";
-import type { PluginExecutionGate } from "../agent/tools/plugin-execution-gate.js";
 
 export type {
   APIResponse,
@@ -76,8 +74,6 @@ export interface MarketplaceDeps {
   loadedModuleNames: string[] | (() => string[]);
   rewireHooks: () => void;
   hookRegistry?: HookRegistry | (() => HookRegistry);
-  inlineRouter: InlineRouter;
-  executionGate: PluginExecutionGate;
 }
 
 export interface SessionInfo {

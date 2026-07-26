@@ -10,9 +10,12 @@ const log = createLogger("Agent");
 
 export function enforceProviderToolLimit(tools: PiAiTool[], toolLimit: number | null): PiAiTool[] {
   if (toolLimit === null || tools.length <= toolLimit) return tools;
-  const priority = new Map([["tool_search", 0]]);
+  const priority = new Map([
+    ["tool_search", 0],
+    ["tool_result_read", 1],
+  ]);
   return tools
-    .map((tool, index) => ({ tool, index, priority: priority.get(tool.name) ?? 1 }))
+    .map((tool, index) => ({ tool, index, priority: priority.get(tool.name) ?? 2 }))
     .sort((left, right) => left.priority - right.priority || left.index - right.index)
     .slice(0, toolLimit)
     .map(({ tool }) => tool);

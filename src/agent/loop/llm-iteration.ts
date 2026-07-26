@@ -46,7 +46,9 @@ export async function runModelIteration(
   systemPrompt: string,
   sessionId: string,
   tools: PiAiTool[] | undefined,
-  streamAccumulatedText: string
+  streamAccumulatedText: string,
+  signal?: AbortSignal,
+  timeoutMs?: number
 ): Promise<{ response: ChatResponse; streamed: boolean; streamAccumulatedText: string }> {
   const streamMode = streamTarget?.mode;
   const shouldStream =
@@ -58,6 +60,8 @@ export async function runModelIteration(
       sessionId,
       persistTranscript: true,
       tools,
+      signal,
+      timeoutMs,
     });
     return { response, streamed: false, streamAccumulatedText };
   }
@@ -70,6 +74,8 @@ export async function runModelIteration(
       sessionId,
       persistTranscript: true,
       tools,
+      signal,
+      timeoutMs,
     });
     return { response, streamed: true, streamAccumulatedText };
   }
@@ -84,6 +90,8 @@ export async function runModelIteration(
     sessionId,
     persistTranscript: true,
     tools,
+    signal,
+    timeoutMs,
   });
   const prefix = streamMode === "all" ? streamAccumulatedText : "";
   async function* prefixedStream(): AsyncIterable<string> {

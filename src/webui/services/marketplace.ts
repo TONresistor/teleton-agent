@@ -17,12 +17,6 @@ import type { PluginModule } from "../../agent/tools/types.js";
 import { HookRegistry } from "../../sdk/hooks/registry.js";
 import type { MarketplaceDeps, RegistryEntry, MarketplacePlugin } from "../types.js";
 import { createLogger } from "../../utils/logger.js";
-import {
-  botRegistrationShape,
-  StagedBotRegistrar,
-} from "../../agent/tools/staged-bot-registrar.js";
-import { withPluginDrainTimeout } from "../../agent/tools/plugin-drain-timeout.js";
-import type { SDKDependencies } from "../../sdk/index.js";
 
 const log = createLogger("WebUI");
 
@@ -31,7 +25,6 @@ const REGISTRY_URL =
 const PLUGIN_BASE_URL = "https://raw.githubusercontent.com/TONresistor/teleton-plugins/main";
 const GITHUB_API_BASE = "https://api.github.com/repos/TONresistor/teleton-plugins/contents";
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
-const PLUGIN_DRAIN_TIMEOUT_MS = 30_000;
 const PLUGINS_DIR = WORKSPACE_PATHS.PLUGINS_DIR;
 
 const VALID_ID = /^[a-z0-9][a-z0-9-]*$/;
@@ -229,10 +222,7 @@ export class MarketplaceService {
     this.installing.add(pluginId);
     const pluginDir = join(PLUGINS_DIR, pluginId);
     let stagedModule: PluginModule | null = null;
-    let candidateMigrated = false;
-    let runtimeActivated = false;
-    let stagedBotRegistrar: StagedBotRegistrar | null = null;
-    let quiescedPluginIds: string[] = [];
+    let runtimeStaged = false;
 
     try {
       // Find entry in registry
@@ -260,11 +250,6 @@ export class MarketplaceService {
 
       // Adapt plugin (validates manifest, tools, SDK version, etc.)
       const candidateHooks = new HookRegistry();
-      stagedBotRegistrar = new StagedBotRegistrar();
-      const candidateSdkDeps: SDKDependencies = {
-        ...this.deps.sdkDeps,
-        inlineRouter: this.deps.sdkDeps.inlineRouter ? stagedBotRegistrar : null,
-      };
       const adapted = adaptPlugin(
         mod,
         pluginId,
@@ -272,7 +257,7 @@ export class MarketplaceService {
         typeof this.deps.loadedModuleNames === "function"
           ? this.deps.loadedModuleNames()
           : this.deps.loadedModuleNames,
-        candidateSdkDeps,
+        this.deps.sdkDeps,
         candidateHooks
       );
       stagedModule = adapted;
@@ -282,29 +267,24 @@ export class MarketplaceService {
 
       // Run migrations
       adapted.migrate?.(this.deps.pluginContext.db);
-      candidateMigrated = true;
 
-      // Prepare the complete runtime before publishing any live registration.
+      // Register tools
       const tools = adapted.tools(this.deps.config);
       if (tools.length === 0) throw new Error(`Plugin "${adapted.name}" produced zero tools`);
-      await adapted.start?.(this.deps.pluginContext);
-
-      quiescedPluginIds = [adapted.name];
-      await withPluginDrainTimeout(
-        this.deps.executionGate.quiesce(quiescedPluginIds),
-        PLUGIN_DRAIN_TIMEOUT_MS,
-        `Plugin "${adapted.name}" activation did not quiesce after 30s`
-      );
-
-      // Publish synchronously while execution is blocked.
       const toolCount = this.deps.toolRegistry.registerPluginTools(adapted.name, tools);
-      const hookRegistry = this.getHookRegistry();
+      const hookRegistry =
+        typeof this.deps.hookRegistry === "function"
+          ? this.deps.hookRegistry()
+          : this.deps.hookRegistry;
       hookRegistry?.replacePlugin(adapted.name, candidateHooks.getRegistrations(adapted.name));
-      stagedBotRegistrar.activate(this.deps.inlineRouter, adapted.name, adapted.name);
+      runtimeStaged = true;
+
+      // Start plugin
+      await adapted.start?.(this.deps.pluginContext);
+      hookRegistry?.replacePlugin(adapted.name, candidateHooks.getRegistrations(adapted.name));
 
       // Add to modules array (shared reference)
       this.deps.modules.push(adapted);
-      runtimeActivated = true;
 
       // Re-wire plugin event hooks
       this.deps.rewireHooks();
@@ -315,16 +295,21 @@ export class MarketplaceService {
         toolCount,
       };
     } catch (error: unknown) {
-      stagedBotRegistrar?.deactivate();
       if (stagedModule) {
-        if (runtimeActivated) this.detachRuntime(stagedModule);
-        if (candidateMigrated) {
-          try {
-            await stagedModule.stop?.();
-          } catch (cleanupError) {
-            log.error({ error: cleanupError }, `Failed to stop staged plugin ${pluginId}`);
-          }
+        if (runtimeStaged) this.deps.toolRegistry.removePluginTools(stagedModule.name);
+        const hookRegistry =
+          typeof this.deps.hookRegistry === "function"
+            ? this.deps.hookRegistry()
+            : this.deps.hookRegistry;
+        if (runtimeStaged) hookRegistry?.unregister(stagedModule.name);
+        const moduleIndex = this.deps.modules.indexOf(stagedModule);
+        if (moduleIndex >= 0) this.deps.modules.splice(moduleIndex, 1);
+        try {
+          await stagedModule.stop?.();
+        } catch (cleanupError) {
+          log.error({ error: cleanupError }, `Failed to stop staged plugin ${pluginId}`);
         }
+        this.deps.rewireHooks();
       }
       // Cleanup on failure
       if (existsSync(pluginDir)) {
@@ -336,7 +321,6 @@ export class MarketplaceService {
       }
       throw error;
     } finally {
-      this.deps.executionGate.resume(quiescedPluginIds);
       this.installing.delete(pluginId);
     }
   }
@@ -356,26 +340,26 @@ export class MarketplaceService {
       throw new Error(`Plugin "${pluginId}" is not installed`);
     }
     const moduleName = mod.name;
+    const idx = this.deps.modules.indexOf(mod);
 
     this.installing.add(pluginId);
-    let quiesced = false;
     try {
-      quiesced = true;
-      await withPluginDrainTimeout(
-        this.deps.executionGate.quiesce([moduleName]),
-        PLUGIN_DRAIN_TIMEOUT_MS,
-        `Plugin "${moduleName}" in-flight work did not drain after 30s`
-      );
-      try {
-        await mod.stop?.();
-      } catch (error) {
-        // stop() invalidates the isolated SDK before invoking plugin cleanup.
-        // Never leave tools or handlers pointing at that closed database.
-        this.detachRuntime(mod);
-        throw new Error(`Plugin "${moduleName}" stop failed`, { cause: error });
-      }
+      // Stop plugin
+      await mod.stop?.();
 
-      this.detachRuntime(mod);
+      // Remove tools from registry (use actual module name, not registry ID)
+      this.deps.toolRegistry.removePluginTools(moduleName);
+      const hookRegistry =
+        typeof this.deps.hookRegistry === "function"
+          ? this.deps.hookRegistry()
+          : this.deps.hookRegistry;
+      hookRegistry?.unregister(moduleName);
+
+      // Remove from modules array
+      if (idx >= 0) this.deps.modules.splice(idx, 1);
+
+      // Re-wire hooks without this plugin
+      this.deps.rewireHooks();
 
       // Delete plugin directory (keep data DB)
       const pluginDir = join(PLUGINS_DIR, pluginId);
@@ -385,7 +369,6 @@ export class MarketplaceService {
 
       return { message: `Plugin "${pluginId}" uninstalled successfully` };
     } finally {
-      if (quiesced) this.deps.executionGate.resume([moduleName]);
       this.installing.delete(pluginId);
     }
   }
@@ -405,11 +388,11 @@ export class MarketplaceService {
     const previousIndex = this.deps.modules.indexOf(previousModule);
     const pluginDir = join(PLUGINS_DIR, pluginId);
     const backupDir = `${pluginDir}.update-backup-${Date.now()}`;
-    const hookRegistry = this.getHookRegistry();
+    const hookRegistry =
+      typeof this.deps.hookRegistry === "function"
+        ? this.deps.hookRegistry()
+        : this.deps.hookRegistry;
     const previousHooks = hookRegistry?.getRegistrations(previousModule.name) ?? [];
-    const previousBotShape = botRegistrationShape(
-      this.deps.inlineRouter.getPluginHandlers(previousModule.name)
-    );
 
     if (existsSync(pluginDir)) renameSync(pluginDir, backupDir);
     this.updating.add(pluginId);
@@ -423,48 +406,21 @@ export class MarketplaceService {
       if (existsSync(pluginDir)) rmSync(pluginDir, { recursive: true, force: true });
       if (existsSync(backupDir)) renameSync(backupDir, pluginDir);
 
-      if (this.deps.modules.includes(previousModule)) {
-        // The old runtime is still active, so restarting it here would duplicate
-        // background jobs.
-        throw updateError;
-      }
-
-      let rollbackQuiesced = false;
       try {
-        rollbackQuiesced = true;
-        await withPluginDrainTimeout(
-          this.deps.executionGate.quiesce([previousModule.name]),
-          PLUGIN_DRAIN_TIMEOUT_MS,
-          `Plugin "${previousModule.name}" rollback did not quiesce after 30s`
-        );
-        this.detachRuntime(previousModule);
         previousModule.migrate?.(this.deps.pluginContext.db);
         const previousTools = previousModule.tools(this.deps.config);
-        await previousModule.start?.(this.deps.pluginContext);
         this.deps.toolRegistry.registerPluginTools(previousModule.name, previousTools);
-        if (
-          (hookRegistry?.getRegistrations(previousModule.name).length ?? 0) !== previousHooks.length
-        ) {
-          throw new Error(`Plugin "${pluginId}" did not restore all hooks during rollback`);
-        }
-        if (
-          botRegistrationShape(this.deps.inlineRouter.getPluginHandlers(previousModule.name)) !==
-          previousBotShape
-        ) {
-          throw new Error(`Plugin "${pluginId}" did not restore Bot handlers during rollback`);
-        }
+        hookRegistry?.replacePlugin(previousModule.name, previousHooks);
+        await previousModule.start?.(this.deps.pluginContext);
         if (!this.deps.modules.includes(previousModule)) {
           this.deps.modules.splice(Math.max(0, previousIndex), 0, previousModule);
         }
         this.deps.rewireHooks();
       } catch (rollbackError) {
-        this.detachRuntime(previousModule);
         throw new AggregateError(
           [updateError, rollbackError],
           `Plugin "${pluginId}" update and rollback both failed`
         );
-      } finally {
-        if (rollbackQuiesced) this.deps.executionGate.resume([previousModule.name]);
       }
       throw updateError;
     } finally {
@@ -480,21 +436,6 @@ export class MarketplaceService {
   }
 
   // ── Helpers ─────────────────────────────────────────────────────────
-
-  private getHookRegistry(): HookRegistry | undefined {
-    return typeof this.deps.hookRegistry === "function"
-      ? this.deps.hookRegistry()
-      : this.deps.hookRegistry;
-  }
-
-  private detachRuntime(module: PluginModule): void {
-    this.deps.toolRegistry.removePluginTools(module.name);
-    this.getHookRegistry()?.unregister(module.name);
-    this.deps.inlineRouter.unregisterPlugin(module.name);
-    const moduleIndex = this.deps.modules.indexOf(module);
-    if (moduleIndex >= 0) this.deps.modules.splice(moduleIndex, 1);
-    this.deps.rewireHooks();
-  }
 
   /**
    * Resolve a registry plugin ID to the actual loaded module.

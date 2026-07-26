@@ -1,5 +1,4 @@
 import type { HookName, HookRegistration } from "./types.js";
-import type { PluginExecutionGate } from "../../agent/tools/plugin-execution-gate.js";
 
 /** Maximum hook registrations per plugin (13 hooks × ~7 handlers ≈ 91, so 100 is generous) */
 export const MAX_HOOKS_PER_PLUGIN = 100;
@@ -7,8 +6,6 @@ export const MAX_HOOKS_PER_PLUGIN = 100;
 export class HookRegistry {
   private hooks: HookRegistration[] = [];
   private hookMap = new Map<HookName, HookRegistration[]>();
-
-  constructor(private readonly executionGate?: PluginExecutionGate) {}
 
   private rebuildMap(): void {
     this.hookMap.clear();
@@ -51,11 +48,6 @@ export class HookRegistry {
 
   hasAnyHooks(): boolean {
     return this.hooks.length > 0;
-  }
-
-  beginExecution(pluginId: string): (() => void) | null {
-    if (!this.executionGate) return () => {};
-    return this.executionGate.enter(pluginId);
   }
 
   unregister(pluginId: string): number {

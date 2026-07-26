@@ -1,3 +1,4 @@
+import { createHash, randomUUID } from "crypto";
 import type { Config } from "../config/schema.js";
 import type { ITelegramBridge } from "../telegram/bridge-interface.js";
 import {
@@ -63,12 +64,32 @@ import {
   recordToolResults,
 } from "./loop/tool-batch.js";
 import { recoverLlmError, runModelIteration } from "./loop/llm-iteration.js";
-import { computeRagEmbedding, selectTools } from "./tool-selector.js";
+import { computeRagEmbedding, enforceProviderToolLimit, selectTools } from "./tool-selector.js";
+import { resolveProviderFallback } from "./provider-fallback.js";
+import { AgentTurnTraceRecorder } from "./turn-trace.js";
+import { TurnCoordinator } from "./turn-coordinator.js";
 
 export { isContextOverflowError, isTrivialMessage } from "./runtime-utils.js";
 export { getTokenUsage } from "./token-usage.js";
 
 const log = createLogger("Agent");
+
+function resolveModelTarget(
+  provider: SupportedProvider,
+  requestedModel: string
+): {
+  resolvedModel: string;
+  endpointFingerprint: string;
+} {
+  const model = getProviderModel(provider, requestedModel);
+  return {
+    resolvedModel: model.id,
+    endpointFingerprint: createHash("sha256")
+      .update(model.baseUrl ?? `${model.provider}:${model.api}`)
+      .digest("hex")
+      .slice(0, 16),
+  };
+}
 
 export interface ProcessMessageOptions {
   chatId: string;
@@ -87,6 +108,8 @@ export interface ProcessMessageOptions {
   isHeartbeat?: boolean;
   isGuest?: boolean;
   streamToChat?: { chatId: string; bridge: ITelegramBridge; mode: "all" | "replace" | "off" };
+  /** Stable inbound-event identifier used for idempotent action execution. */
+  turnId?: string;
   /** Optional conversation-state key when delivery chat and session identity differ. */
   sessionKey?: string;
 }
@@ -98,6 +121,7 @@ export interface AgentResponse {
 }
 
 interface TurnContext {
+  turnId: string;
   chatId: string;
   effectiveIsGroup: boolean;
   processStartTime: number;
@@ -107,6 +131,9 @@ interface TurnContext {
   tools: PiAiTool[] | undefined;
   userMsg: UserMessage;
   provider: SupportedProvider;
+  requestedModel: string;
+  resolvedModel: string;
+  endpointFingerprint: string;
   sessionKey: string;
 }
 
@@ -122,6 +149,11 @@ interface LoopResult {
   accumulatedTexts: string[];
   accumulatedUsage: UsageAccumulator;
   wasStreamed: boolean;
+  iterations: number;
+  stopReason: string;
+  activeProvider: SupportedProvider;
+  activeModel: string;
+  forcedContent?: string;
 }
 
 export class AgentRuntime {
@@ -133,6 +165,12 @@ export class AgentRuntime {
   private embedder: EmbeddingProvider | null = null;
   private hookRunner?: ReturnType<typeof createHookRunner>;
   private userHookEvaluator?: UserHookEvaluator;
+  private readonly turnCoordinator = new TurnCoordinator({
+    maxConcurrent: 10,
+    maxPending: 100,
+    maxQueueWaitMs: 60_000,
+  });
+
   constructor(config: Config, soul?: string, toolRegistry?: ToolRegistry) {
     this.config = config;
     this.soul = soul ?? "";
@@ -204,25 +242,74 @@ export class AgentRuntime {
   }
 
   async processMessage(opts: ProcessMessageOptions): Promise<AgentResponse> {
+    return this.turnCoordinator.run(opts.sessionKey ?? opts.chatId, () =>
+      this.processCoordinatedMessage(opts)
+    );
+  }
+
+  private async processCoordinatedMessage(opts: ProcessMessageOptions): Promise<AgentResponse> {
     const processStartTime = Date.now();
+    const turnId =
+      opts.turnId ??
+      (opts.messageId !== undefined
+        ? `telegram:${opts.chatId}:${opts.messageId}`
+        : `turn:${randomUUID()}`);
+    let trace: AgentTurnTraceRecorder | undefined;
     try {
-      const built = await this.buildTurnContext(opts, processStartTime);
+      const built = await this.buildTurnContext({ ...opts, turnId }, processStartTime);
       if (built.kind === "early") return built.response;
 
-      const loop = await this.runAgenticLoop(built.turn, opts);
+      trace = new AgentTurnTraceRecorder(getDatabase().getDb(), turnId);
+      trace.start({
+        sessionId: built.turn.session.sessionId,
+        chatId: built.turn.chatId,
+        startedAt: processStartTime,
+        provider: built.turn.provider,
+        model: built.turn.resolvedModel,
+        requestedModel: built.turn.requestedModel,
+        endpointFingerprint: built.turn.endpointFingerprint,
+        selectedTools: built.turn.tools?.map((tool) => tool.name) ?? [],
+      });
+
+      const loop = await this.runAgenticLoop(built.turn, opts, trace);
       if (!loop.finalResponse) {
         log.error("Agentic loop exited early without final response");
+        trace.finish({
+          status: "error",
+          calls: loop.totalToolCalls,
+          iterations: loop.iterations,
+          usage: loop.accumulatedUsage,
+          stopReason: loop.stopReason,
+          provider: loop.activeProvider,
+          model: loop.activeModel,
+          errorMessage: "Agent loop failed to produce a response",
+        });
         return {
           content: "Internal error: Agent loop failed to produce a response.",
           toolCalls: [],
         };
       }
 
-      return await this.finalizeResponse(built.turn, loop, loop.finalResponse, opts);
+      const response = await this.finalizeResponse(built.turn, loop, loop.finalResponse, opts);
+      trace.finish({
+        status: loop.stopReason.endsWith("budget") ? "budget_exhausted" : "completed",
+        calls: loop.totalToolCalls,
+        iterations: loop.iterations,
+        usage: loop.accumulatedUsage,
+        stopReason: loop.stopReason,
+        provider: loop.activeProvider,
+        model: loop.activeModel,
+      });
+      return response;
     } catch (error) {
       log.error({ err: error }, "Agent error");
+      trace?.fail(error);
       throw error;
     }
+  }
+
+  async drainTurns(): Promise<void> {
+    await this.turnCoordinator.drain();
   }
 
   private async buildTurnContext(
@@ -555,6 +642,8 @@ export class AgentRuntime {
 
     const provider = (this.config.agent.provider || "anthropic") as SupportedProvider;
     const providerMeta = getProviderMetadata(provider);
+    const requestedModel = this.config.agent.model;
+    const target = resolveModelTarget(provider, requestedModel);
     let tools = await selectTools(
       this.config,
       this.toolRegistry,
@@ -574,6 +663,7 @@ export class AgentRuntime {
     return {
       kind: "ready",
       turn: {
+        turnId: opts.turnId ?? `turn:${randomUUID()}`,
         chatId,
         effectiveIsGroup,
         processStartTime,
@@ -583,6 +673,9 @@ export class AgentRuntime {
         tools,
         userMsg,
         provider,
+        requestedModel,
+        resolvedModel: target.resolvedModel,
+        endpointFingerprint: target.endpointFingerprint,
         sessionKey,
       },
     };
@@ -590,18 +683,31 @@ export class AgentRuntime {
 
   private async runAgenticLoop(
     turn: TurnContext,
-    opts: ProcessMessageOptions
+    opts: ProcessMessageOptions,
+    trace: AgentTurnTraceRecorder
   ): Promise<LoopResult> {
     const { chatId, effectiveIsGroup, processStartTime, systemPrompt, userMsg, sessionKey } = turn;
     const { toolContext } = opts;
     let session = turn.session;
     let context = turn.context;
-    const activeTools = turn.tools ? [...turn.tools] : undefined;
+    let activeProvider = turn.provider;
+    let activeAgentConfig = this.config.agent;
+    let activeTools = turn.tools ? [...turn.tools] : undefined;
+    let fallbackIndex = 0;
 
     const maxIterations = Math.max(1, this.config.agent.max_agentic_iterations || 5);
+    const maxToolCalls = Math.max(1, this.config.agent.max_tool_calls_per_turn);
+    const maxDurationMs = Math.max(10_000, this.config.agent.max_turn_duration_ms);
+    const providerSignal = AbortSignal.timeout(
+      Math.max(1, maxDurationMs - (Date.now() - processStartTime))
+    );
     let iteration = 0;
+    let toolExecutions = 0;
     const retry = { overflowResets: 0, rateLimitRetries: 0, serverErrorRetries: 0 };
     let finalResponse: ChatResponse | null = null;
+    let lastResponse: ChatResponse | null = null;
+    let stopReason = "completed";
+    let forcedContent: string | undefined;
     const totalToolCalls: CompletedToolCall[] = [];
     const accumulatedTexts: string[] = [];
     const accumulatedUsage = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalCost: 0 };
@@ -611,6 +717,18 @@ export class AgentRuntime {
     let streamAccumulatedText = ""; // For "all" mode: concatenate text across iterations
 
     while (iteration < maxIterations) {
+      if (Date.now() - processStartTime >= maxDurationMs) {
+        if (!lastResponse) {
+          throw new Error("Agent turn time budget exhausted before the first model response");
+        }
+        stopReason = "time_budget";
+        forcedContent =
+          "I stopped at a safe boundary because this turn reached its time budget. " +
+          "Send a follow-up to continue.";
+        finalResponse = lastResponse;
+        break;
+      }
+
       iteration++;
       log.debug(`Agentic iteration ${iteration}/${maxIterations}`);
 
@@ -624,15 +742,18 @@ export class AgentRuntime {
       const maskedContext: Context = { ...context, messages: maskedMessages };
 
       const iterationResult = await runModelIteration(
-        this.config.agent,
+        activeAgentConfig,
         opts.streamToChat,
         maskedContext,
         systemPrompt,
         session.sessionId,
         activeTools,
-        streamAccumulatedText
+        streamAccumulatedText,
+        providerSignal,
+        Math.max(1, maxDurationMs - (Date.now() - processStartTime))
       );
       const response = iterationResult.response;
+      lastResponse = response;
       const streamed = iterationResult.streamed;
       streamAccumulatedText = iterationResult.streamAccumulatedText;
 
@@ -647,26 +768,70 @@ export class AgentRuntime {
       if (assistantMsg.stopReason === "error") {
         // Recover from LLM errors (overflow reset / rate-limit / server backoff) or throw
         // on terminal cases. When it returns, this is a retry that must not consume budget.
-        const recovered = await recoverLlmError(
-          this.config.agent,
-          this.hookRunner,
-          assistantMsg,
-          retry,
-          {
-            session,
-            context,
-            chatId,
-            sessionKey,
-            effectiveIsGroup,
-            provider: turn.provider,
-            processStartTime,
-            userMsg,
+        try {
+          const recovered = await recoverLlmError(
+            activeAgentConfig,
+            this.hookRunner,
+            assistantMsg,
+            retry,
+            {
+              session,
+              context,
+              chatId,
+              sessionKey,
+              effectiveIsGroup,
+              provider: activeProvider,
+              processStartTime,
+              userMsg,
+            }
+          );
+          session = recovered.session;
+          context = recovered.context;
+          iteration--; // recovery retry, not a productive iteration — don't consume the budget
+          continue;
+        } catch (error) {
+          const actionAlreadyAttempted = totalToolCalls.some(
+            (call) =>
+              call.attempted !== false &&
+              this.toolRegistry?.getToolCategory(call.name) !== "data-bearing"
+          );
+          const previousProvider = activeProvider;
+          const previousModel = activeAgentConfig.model;
+          const fallback = resolveProviderFallback(
+            this.config.agent,
+            fallbackIndex,
+            assistantMsg.errorMessage || "",
+            actionAlreadyAttempted
+          );
+          if (!fallback) throw error;
+
+          fallbackIndex = fallback.nextIndex;
+          activeProvider = fallback.provider;
+          activeAgentConfig = fallback.config;
+          const fallbackTarget = resolveModelTarget(activeProvider, activeAgentConfig.model);
+          trace.updateTarget(
+            activeProvider,
+            fallbackTarget.resolvedModel,
+            fallbackTarget.endpointFingerprint
+          );
+          retry.overflowResets = 0;
+          retry.rateLimitRetries = 0;
+          retry.serverErrorRetries = 0;
+          const fallbackLimit = getProviderMetadata(activeProvider).toolLimit;
+          if (activeTools) {
+            activeTools = enforceProviderToolLimit(activeTools, fallbackLimit);
           }
-        );
-        session = recovered.session;
-        context = recovered.context;
-        iteration--; // recovery retry, not a productive iteration — don't consume the budget
-        continue;
+          streamAccumulatedText = "";
+          if (opts.streamToChat && isBotBridge(opts.streamToChat.bridge)) {
+            await opts.streamToChat.bridge.clearDraft(opts.streamToChat.chatId);
+          }
+          log.warn(
+            `Provider fallback: ${previousProvider}/${previousModel} → ` +
+              `${activeProvider}/${activeAgentConfig.model}`
+          );
+          iteration--;
+          continue;
+        }
       }
 
       if (response.text) {
@@ -679,6 +844,7 @@ export class AgentRuntime {
         log.info(`${iteration}/${maxIterations} → done`);
         finalResponse = response;
         wasStreamed = streamed;
+        stopReason = fallbackIndex > 0 ? "completed_with_fallback" : "completed";
         break;
       }
 
@@ -698,7 +864,12 @@ export class AgentRuntime {
         chatId,
         isGroup: effectiveIsGroup,
         isGuest: opts.isGuest,
+        turnId: turn.turnId,
+        sessionId: session.sessionId,
       };
+
+      const turnTimeExpired = Date.now() - processStartTime >= maxDurationMs;
+      const remainingToolCalls = turnTimeExpired ? 0 : Math.max(0, maxToolCalls - toolExecutions);
 
       // Phases 1-2: build the tool plans (tool:before hooks) and execute them.
       const { toolPlans, execResults } = await executeToolBatch(
@@ -707,8 +878,13 @@ export class AgentRuntime {
         toolCalls,
         fullContext,
         chatId,
-        effectiveIsGroup
+        effectiveIsGroup,
+        remainingToolCalls,
+        turnTimeExpired
+          ? "Per-turn time budget exhausted before action execution"
+          : "Per-turn tool-call budget exhausted"
       );
+      toolExecutions += execResults.filter((result) => result.attempted).length;
 
       // Mid-loop tool injection: when tool_search returns discoveries, inject schemas
       // before recording the result. The result is pruned to tools that are actually
@@ -719,7 +895,7 @@ export class AgentRuntime {
           toolPlans,
           execResults,
           activeTools,
-          getProviderMetadata(turn.provider).toolLimit,
+          getProviderMetadata(activeProvider).toolLimit,
           opts.isGuest ? TELEGRAM_SEND_TOOLS : undefined
         );
         if (injected > 0) {
@@ -736,12 +912,33 @@ export class AgentRuntime {
         sessionId: session.sessionId,
         chatId,
         effectiveIsGroup,
+        db: fullContext.db,
       });
       for (const resultMsg of resultMessages) {
         context.messages.push(resultMsg);
       }
 
+      trace.progress(totalToolCalls, iteration, accumulatedUsage);
+
       log.info(`${iteration}/${maxIterations} → ${iterationToolNames.join(", ")}`);
+
+      if (toolExecutions >= maxToolCalls) {
+        stopReason = "tool_call_budget";
+        forcedContent =
+          "I stopped at a safe boundary because this turn reached its tool-call budget. " +
+          "Send a follow-up to continue.";
+        finalResponse = response;
+        break;
+      }
+
+      if (Date.now() - processStartTime >= maxDurationMs) {
+        stopReason = "time_budget";
+        forcedContent =
+          "I stopped at a safe boundary because this turn reached its time budget. " +
+          "Send a follow-up to continue.";
+        finalResponse = response;
+        break;
+      }
 
       // Stall detection: break only after 2 *consecutive* iterations where every tool
       // call (name + sorted args) was already seen — a single fully-repeated batch can
@@ -754,12 +951,17 @@ export class AgentRuntime {
           `Loop stall detected: ${consecutiveStalls} consecutive fully-repeated iterations — breaking early`
         );
         finalResponse = response;
+        stopReason = "stall";
         break;
       }
 
       if (iteration === maxIterations) {
         log.info(`Max iterations reached (${maxIterations})`);
         finalResponse = response;
+        stopReason = "iteration_budget";
+        forcedContent =
+          "I stopped at a safe boundary because this turn reached its iteration budget. " +
+          "Send a follow-up to continue.";
       }
     }
 
@@ -775,6 +977,11 @@ export class AgentRuntime {
       accumulatedTexts,
       accumulatedUsage,
       wasStreamed,
+      iterations: iteration,
+      stopReason,
+      activeProvider,
+      activeModel: lastResponse?.message.model ?? activeAgentConfig.model,
+      forcedContent,
     };
   }
 
@@ -793,8 +1000,8 @@ export class AgentRuntime {
     const sessionUpdate: Parameters<typeof updateSession>[1] = {
       updatedAt: Date.now(),
       messageCount: session.messageCount + 1,
-      model: this.config.agent.model,
-      provider: this.config.agent.provider,
+      model: loop.activeModel,
+      provider: loop.activeProvider,
       inputTokens:
         (session.inputTokens ?? 0) +
         accumulatedUsage.input +
@@ -817,7 +1024,7 @@ export class AgentRuntime {
       accumulateTokenUsage(u);
     }
 
-    let content = accumulatedTexts.join("\n").trim() || finalResponse.text;
+    let content = loop.forcedContent ?? (accumulatedTexts.join("\n").trim() || finalResponse.text);
 
     const sentToCurrentChat = totalToolCalls.some((call) => sentSuccessfullyToChat(call, chatId));
 

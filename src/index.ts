@@ -54,7 +54,6 @@ import { createServerDeps } from "./app/server-deps.js";
 import { startPluginModules, stopPluginModules } from "./app/plugin-lifecycle.js";
 import { resolveOwnerInfo } from "./app/owner-info.js";
 import { deleteNestedValue, setNestedValue } from "./config/configurable-keys.js";
-import { PluginExecutionGate } from "./agent/tools/plugin-execution-gate.js";
 
 const log = createLogger("App");
 
@@ -86,9 +85,8 @@ export class TeletonApp {
   private scheduledTaskHandler: ScheduledTaskHandler;
   private inlineRouter = new InlineRouter();
   private pluginRateLimiter = new PluginRateLimiter();
-  private pluginExecutionGate = new PluginExecutionGate();
   private inlineMiddlewareBridge: ITelegramBridge | null = null;
-  private pluginHookRegistry = new HookRegistry(this.pluginExecutionGate);
+  private pluginHookRegistry = new HookRegistry();
   private disposeToolIndexSubscription: (() => void) | null = null;
   private acceptingMessages = false;
 
@@ -112,8 +110,6 @@ export class TeletonApp {
       reloadConfig: () => loadConfig(this.configPath),
       applyConfigKey: (key, value) => this.applyHotConfigKey(key, value),
       getHookRegistry: () => this.pluginHookRegistry,
-      inlineRouter: this.inlineRouter,
-      pluginExecutionGate: this.pluginExecutionGate,
     });
   }
 
@@ -170,7 +166,7 @@ export class TeletonApp {
 
     const soul = loadSoul();
 
-    this.toolRegistry = new ToolRegistry(this.config.telegram.mode, this.pluginExecutionGate);
+    this.toolRegistry = new ToolRegistry(this.config.telegram.mode);
     registerAllTools(this.toolRegistry);
 
     this.agent = new AgentRuntime(this.config, soul, this.toolRegistry);
@@ -201,7 +197,7 @@ export class TeletonApp {
     this.userHookEvaluator = new UserHookEvaluator(db);
     this.agent.setUserHookEvaluator(this.userHookEvaluator);
 
-    this.sdkDeps = { bridge: this.bridge, executionGate: this.pluginExecutionGate };
+    this.sdkDeps = { bridge: this.bridge };
 
     this.modules = loadModules(this.toolRegistry, this.config, db);
 
@@ -487,8 +483,6 @@ ${blue}  ┌──────────────────────�
         pluginContext,
         loadedModuleNames: builtinNames,
         hookRegistry,
-        inlineRouter: this.inlineRouter,
-        executionGate: this.pluginExecutionGate,
       });
       this.pluginWatcher.start();
     }
@@ -857,7 +851,7 @@ ${blue}  ┌──────────────────────�
    */
   private wirePluginEventHooks(): void {
     this.messageHandler.setPluginMessageHooks([
-      (event) => dispatchPluginMessage(this.modules, event, this.pluginExecutionGate),
+      (event) => dispatchPluginMessage(this.modules, event),
     ]);
 
     const hookCount = countPluginEventHooks(this.modules, "onMessage");
@@ -871,7 +865,7 @@ ${blue}  ┌──────────────────────�
         .getClient()
         .addCallbackQueryHandler(
           createUserPluginCallbackHandler(userBridge, (event) =>
-            dispatchPluginCallback(this.modules, event, this.pluginExecutionGate)
+            dispatchPluginCallback(this.modules, event)
           )
         );
       this.callbackHandlerRegistered = true;
@@ -881,9 +875,7 @@ ${blue}  ┌──────────────────────�
         log.info(`${cbCount} plugin onCallbackQuery hook(s) registered`);
       }
     } else if (!this.callbackHandlerRegistered && isBotBridge(this.bridge)) {
-      this.inlineRouter.setCallbackObserver((event) =>
-        dispatchPluginCallback(this.modules, event, this.pluginExecutionGate)
-      );
+      this.inlineRouter.setCallbackObserver((event) => dispatchPluginCallback(this.modules, event));
       this.callbackHandlerRegistered = true;
 
       const cbCount = countPluginEventHooks(this.modules, "onCallbackQuery");
@@ -964,6 +956,12 @@ ${blue}  ┌──────────────────────�
       await this.messageHandler.drain();
     } catch (error: unknown) {
       log.error({ err: error }, "Message queue drain failed");
+    }
+
+    try {
+      await this.agent.drainTurns();
+    } catch (error: unknown) {
+      log.error({ err: error }, "Agent turn drain failed");
     }
 
     try {

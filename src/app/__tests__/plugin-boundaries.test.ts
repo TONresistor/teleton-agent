@@ -4,7 +4,6 @@ import type { PluginModuleWithHooks } from "../../agent/tools/plugin-loader.js";
 import type { GramJSUserBridge } from "../../telegram/bridges/user.js";
 import { createUserPluginCallbackHandler, dispatchPluginMessage } from "../plugin-events.js";
 import { startPluginModules, stopPluginModules } from "../plugin-lifecycle.js";
-import { PluginExecutionGate } from "../../agent/tools/plugin-execution-gate.js";
 
 function module(
   name: string,
@@ -47,20 +46,6 @@ describe("application plugin boundaries", () => {
       { chatId: "1", senderId: 2, text: "hello", isGroup: false }
     );
     expect(healthy).toHaveBeenCalledOnce();
-  });
-
-  it("does not dispatch plugin events while that plugin is quiesced", async () => {
-    const gate = new PluginExecutionGate();
-    const onMessage = vi.fn().mockResolvedValue(undefined);
-    await gate.quiesce(["reloading"]);
-
-    await dispatchPluginMessage(
-      [module("reloading", { onMessage })],
-      { chatId: "1", senderId: 2, text: "hello", isGroup: false },
-      gate
-    );
-
-    expect(onMessage).not.toHaveBeenCalled();
   });
 
   it("converts GramJS callback updates to the stable plugin event", async () => {

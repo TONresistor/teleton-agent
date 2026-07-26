@@ -27,13 +27,13 @@ import type { ToolIndex } from "./tool-index.js";
 import { getErrorMessage } from "../../utils/errors.js";
 import { createLogger } from "../../utils/logger.js";
 import { TELEGRAM_SEND_TOOLS } from "../../constants/tools.js";
+import { completeActionExecution, reserveActionExecution } from "../../memory/action-executions.js";
 import {
   buildToolNamespaceCatalog,
   formatNamespaceCatalogForPrompt,
   resolveToolNamespace,
   type ToolNamespaceCatalogEntry,
 } from "./tool-namespaces.js";
-import type { PluginExecutionGate } from "./plugin-execution-gate.js";
 
 const log = createLogger("Registry");
 
@@ -82,10 +82,7 @@ export class ToolRegistry {
   private adminIds: Set<number> = new Set();
   private adminIdsConfigured = false;
 
-  constructor(
-    mode: RuntimeMode = "user",
-    private readonly pluginExecutionGate?: PluginExecutionGate
-  ) {
+  constructor(mode: RuntimeMode = "user") {
     this.mode = mode;
   }
 
@@ -332,41 +329,7 @@ export class ToolRegistry {
     try {
       const validatedArgs = validateToolCall(this.getAll(), toolCall);
 
-      const release = this.pluginExecutionGate?.enter(registered.module);
-      if (this.pluginExecutionGate && !release) {
-        return {
-          success: false,
-          error: `Plugin "${registered.module}" is reloading; retry after reload completes`,
-        };
-      }
-
-      // A timeout only stops waiting for a data-bearing tool; it cannot cancel
-      // the underlying promise. Keep the reload lease until the actual executor
-      // settles so its plugin database is never closed underneath it.
-      let executionStarted = false;
-      const executionTracked = release
-        ? {
-            ...registered,
-            executor: (params: unknown, toolContext: ToolContext) => {
-              executionStarted = true;
-              const execution = Promise.resolve().then(() =>
-                registered.executor(params, toolContext)
-              );
-              void execution.then(release, release);
-              return execution;
-            },
-          }
-        : registered;
-      try {
-        return await this.executeRegistered(
-          toolCall.name,
-          executionTracked,
-          validatedArgs,
-          context
-        );
-      } finally {
-        if (!executionStarted) release?.();
-      }
+      return await this.executeRegistered(toolCall.name, registered, validatedArgs, context);
     } catch (error) {
       log.error({ err: error }, `Error executing tool ${toolCall.name}`);
       return {
@@ -382,11 +345,35 @@ export class ToolRegistry {
     validatedArgs: unknown,
     context: ToolContext
   ): Promise<ToolResult> {
+    let actionArgsHash: string | null = null;
     try {
+      if (registered.tool.category !== "data-bearing" && context.turnId) {
+        const reservation = reserveActionExecution(
+          context.db,
+          context.turnId,
+          toolName,
+          validatedArgs
+        );
+        if (reservation.kind === "replay") return reservation.result;
+        if (reservation.kind === "unknown") {
+          return {
+            success: false,
+            error:
+              `Action "${toolName}" already started in this turn and its outcome is unknown. ` +
+              "Do not retry it automatically; inspect the remote state first.",
+          };
+        }
+        actionArgsHash = reservation.argsHash;
+      }
+
       // Do not race external actions against a timeout: the side effect could
       // continue after a reported failure and invite an unsafe duplicate retry.
       if (registered.tool.category !== "data-bearing") {
-        return await registered.executor(validatedArgs, context);
+        const result = await registered.executor(validatedArgs, context);
+        if (actionArgsHash && context.turnId) {
+          completeActionExecution(context.db, context.turnId, toolName, actionArgsHash, result);
+        }
+        return result;
       }
 
       let timeoutHandle: ReturnType<typeof setTimeout>;
@@ -410,6 +397,9 @@ export class ToolRegistry {
         success: false,
         error: getErrorMessage(error),
       };
+      if (actionArgsHash && context.turnId) {
+        completeActionExecution(context.db, context.turnId, toolName, actionArgsHash, result);
+      }
       return result;
     }
   }

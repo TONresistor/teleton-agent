@@ -108,13 +108,17 @@ class RateLimiter {
   }
 }
 
-class ChatQueue {
+export class ChatQueue {
   private chains = new Map<string, Promise<void>>();
   private activeTasks = 0;
   private maxConcurrent: number;
   private waitQueue: Array<() => void> = [];
+  private pendingTasks = 0;
 
-  constructor(maxConcurrent = 10) {
+  constructor(
+    maxConcurrent = 10,
+    private readonly maxPending = 100
+  ) {
     this.maxConcurrent = maxConcurrent;
   }
 
@@ -141,6 +145,10 @@ class ChatQueue {
   }
 
   enqueue(chatId: string, task: () => Promise<void>): Promise<void> {
+    if (this.pendingTasks >= this.maxPending) {
+      return Promise.reject(new Error("Telegram message queue capacity reached"));
+    }
+    this.pendingTasks++;
     const prev = this.chains.get(chatId) ?? Promise.resolve();
     const next = prev
       .then(
@@ -148,6 +156,7 @@ class ChatQueue {
         () => this.acquireSlot(chatId).then(task)
       )
       .finally(() => {
+        this.pendingTasks--;
         this.releaseSlot();
         if (this.chains.get(chatId) === next) {
           this.chains.delete(chatId);

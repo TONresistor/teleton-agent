@@ -11,8 +11,6 @@ import type { ITelegramBridge } from "../telegram/bridge-interface.js";
 import type { UserHookEvaluator } from "../agent/hooks/user-hook-evaluator.js";
 import type { WebUIServerDeps } from "../webui/types.js";
 import type { HookRegistry } from "../sdk/hooks/registry.js";
-import type { InlineRouter } from "../bot/inline-router.js";
-import type { PluginExecutionGate } from "../agent/tools/plugin-execution-gate.js";
 
 export interface ServerDepsInput {
   agent: AgentRuntime;
@@ -31,8 +29,6 @@ export interface ServerDepsInput {
   reloadConfig: () => Config;
   applyConfigKey: (key: string, value: unknown) => void;
   getHookRegistry: () => HookRegistry;
-  inlineRouter: InlineRouter;
-  pluginExecutionGate: PluginExecutionGate;
 }
 
 /** Build the shared dependency boundary used by WebUI and Management API servers. */
@@ -85,8 +81,6 @@ export function createServerDeps(input: ServerDepsInput): WebUIServerDeps {
       loadedModuleNames: () => input.modules.map((module) => module.name),
       rewireHooks: input.rewireHooks,
       hookRegistry: input.getHookRegistry,
-      inlineRouter: input.inlineRouter,
-      executionGate: input.pluginExecutionGate,
     },
     userHookEvaluator: input.userHookEvaluator,
     gocoonControl: { stopRunner: input.stopGocoonRunner },
