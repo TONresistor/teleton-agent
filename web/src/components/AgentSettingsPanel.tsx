@@ -119,20 +119,6 @@ export function AgentSettingsPanel({
               inline
             />
             <EditableField
-              label="Max Tool Calls"
-              description="Maximum tool executions per inbound turn"
-              configKey="agent.max_tool_calls_per_turn"
-              type="number"
-              value={getLocal('agent.max_tool_calls_per_turn')}
-              serverValue={getServer('agent.max_tool_calls_per_turn')}
-              onChange={(v) => setLocal('agent.max_tool_calls_per_turn', v)}
-              onSave={(v) => saveConfig('agent.max_tool_calls_per_turn', v)}
-              onCancel={() => cancelLocal('agent.max_tool_calls_per_turn')}
-              min={1}
-              max={100}
-              inline
-            />
-            <EditableField
               label="Turn Time Budget"
               description="Maximum turn duration in milliseconds"
               configKey="agent.max_turn_duration_ms"

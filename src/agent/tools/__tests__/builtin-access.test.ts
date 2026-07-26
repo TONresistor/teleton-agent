@@ -20,6 +20,7 @@ const ADMIN_ONLY_TOOLS = [
   "memory_read",
   "memory_search",
   "session_search",
+  "vision_analyze",
 ] as const;
 
 const OWNER_PRIVATE_READS = [
@@ -43,6 +44,7 @@ const OWNER_PRIVATE_READS = [
   "telegram_get_stars_transactions",
   "telegram_get_user_info",
   "telegram_search_messages",
+  "vision_analyze",
 ] as const;
 
 describe("built-in tool access policy", () => {

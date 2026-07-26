@@ -37,7 +37,6 @@ function createGrokBuildModel(): Model<"openai-responses"> {
     contextWindow: 500_000,
     maxTokens: 128_000,
     compat: {
-      sendSessionIdHeader: false,
       supportsLongCacheRetention: false,
     },
   };

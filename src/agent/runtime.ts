@@ -57,12 +57,7 @@ import { isTrivialMessage, addUsage } from "./runtime-utils.js";
 import type { UsageAccumulator } from "./runtime-utils.js";
 import { isBotBridge } from "../telegram/bridge-guards.js";
 import { accumulateTokenUsage } from "./token-usage.js";
-import {
-  detectToolStall,
-  executeToolBatch,
-  injectDiscoveredTools,
-  recordToolResults,
-} from "./loop/tool-batch.js";
+import { executeToolBatch, injectDiscoveredTools, recordToolResults } from "./loop/tool-batch.js";
 import { recoverLlmError, runModelIteration } from "./loop/llm-iteration.js";
 import { computeRagEmbedding, enforceProviderToolLimit, selectTools } from "./tool-selector.js";
 import { resolveProviderFallback } from "./provider-fallback.js";
@@ -696,13 +691,11 @@ export class AgentRuntime {
     let fallbackIndex = 0;
 
     const maxIterations = Math.max(1, this.config.agent.max_agentic_iterations || 5);
-    const maxToolCalls = Math.max(1, this.config.agent.max_tool_calls_per_turn);
     const maxDurationMs = Math.max(10_000, this.config.agent.max_turn_duration_ms);
     const providerSignal = AbortSignal.timeout(
       Math.max(1, maxDurationMs - (Date.now() - processStartTime))
     );
     let iteration = 0;
-    let toolExecutions = 0;
     const retry = { overflowResets: 0, rateLimitRetries: 0, serverErrorRetries: 0 };
     let finalResponse: ChatResponse | null = null;
     let lastResponse: ChatResponse | null = null;
@@ -711,8 +704,6 @@ export class AgentRuntime {
     const totalToolCalls: CompletedToolCall[] = [];
     const accumulatedTexts: string[] = [];
     const accumulatedUsage = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalCost: 0 };
-    const seenToolSignatures = new Set<string>();
-    let consecutiveStalls = 0;
     let wasStreamed = false;
     let streamAccumulatedText = ""; // For "all" mode: concatenate text across iterations
 
@@ -868,9 +859,6 @@ export class AgentRuntime {
         sessionId: session.sessionId,
       };
 
-      const turnTimeExpired = Date.now() - processStartTime >= maxDurationMs;
-      const remainingToolCalls = turnTimeExpired ? 0 : Math.max(0, maxToolCalls - toolExecutions);
-
       // Phases 1-2: build the tool plans (tool:before hooks) and execute them.
       const { toolPlans, execResults } = await executeToolBatch(
         this.toolRegistry,
@@ -878,13 +866,8 @@ export class AgentRuntime {
         toolCalls,
         fullContext,
         chatId,
-        effectiveIsGroup,
-        remainingToolCalls,
-        turnTimeExpired
-          ? "Per-turn time budget exhausted before action execution"
-          : "Per-turn tool-call budget exhausted"
+        effectiveIsGroup
       );
-      toolExecutions += execResults.filter((result) => result.attempted).length;
 
       // Mid-loop tool injection: when tool_search returns discoveries, inject schemas
       // before recording the result. The result is pruned to tools that are actually
@@ -922,15 +905,6 @@ export class AgentRuntime {
 
       log.info(`${iteration}/${maxIterations} → ${iterationToolNames.join(", ")}`);
 
-      if (toolExecutions >= maxToolCalls) {
-        stopReason = "tool_call_budget";
-        forcedContent =
-          "I stopped at a safe boundary because this turn reached its tool-call budget. " +
-          "Send a follow-up to continue.";
-        finalResponse = response;
-        break;
-      }
-
       if (Date.now() - processStartTime >= maxDurationMs) {
         stopReason = "time_budget";
         forcedContent =
@@ -939,22 +913,6 @@ export class AgentRuntime {
         finalResponse = response;
         break;
       }
-
-      // Stall detection: break only after 2 *consecutive* iterations where every tool
-      // call (name + sorted args) was already seen — a single fully-repeated batch can
-      // be a legitimate step (e.g. re-checking), so give the model a chance to recover.
-      const allDuplicates = detectToolStall(toolPlans, seenToolSignatures);
-
-      consecutiveStalls = allDuplicates ? consecutiveStalls + 1 : 0;
-      if (consecutiveStalls >= 2) {
-        log.warn(
-          `Loop stall detected: ${consecutiveStalls} consecutive fully-repeated iterations — breaking early`
-        );
-        finalResponse = response;
-        stopReason = "stall";
-        break;
-      }
-
       if (iteration === maxIterations) {
         log.info(`Max iterations reached (${maxIterations})`);
         finalResponse = response;

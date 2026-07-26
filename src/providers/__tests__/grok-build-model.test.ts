@@ -26,7 +26,7 @@ describe("Grok Build model", () => {
     expect(model.contextWindow).toBe(500_000);
   });
 
-  it("sends the CLI session headers to the Responses endpoint", async () => {
+  it("omits session-affinity headers when caching is disabled", async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(JSON.stringify({ error: { message: "test stop" } }), {
         status: 400,
@@ -42,6 +42,7 @@ describe("Grok Build model", () => {
       {
         apiKey: "local-session-token",
         cacheRetention: "none",
+        sessionId: "teleton-session",
       }
     );
 
@@ -53,6 +54,8 @@ describe("Grok Build model", () => {
     expect(headers.get("x-xai-token-auth")).toBe("xai-grok-cli");
     expect(headers.get("x-grok-model-override")).toBe("grok-build");
     expect(headers.get("x-grok-client-version")).toBe("0.2.77");
+    expect(headers.get("x-client-request-id")).toBeNull();
+    expect(headers.get("session_id")).toBeNull();
 
     const payload = JSON.parse(String(init.body)) as Record<string, unknown>;
     expect(payload).toMatchObject({

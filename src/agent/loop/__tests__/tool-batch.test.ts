@@ -55,18 +55,18 @@ describe("injectDiscoveredTools", () => {
   });
 });
 
-describe("executeToolBatch budgets", () => {
-  it("does not start tool calls beyond the remaining per-turn budget", async () => {
+describe("executeToolBatch scheduling", () => {
+  it("executes complete batches without a per-turn tool-call limit", async () => {
     const execute = vi.fn(async () => ({ success: true }));
-    const calls = ["first_tool", "second_tool"].map((name, index) => ({
+    const calls = Array.from({ length: 25 }, (_, index) => ({
       type: "toolCall" as const,
       id: `call-${index}`,
-      name,
+      name: `read_tool_${index}`,
       arguments: {},
     }));
 
-    const { toolPlans, execResults } = await executeToolBatch(
-      { execute, getToolCategory: () => "action" } as never,
+    const { execResults } = await executeToolBatch(
+      { execute, getToolCategory: () => "data-bearing" } as never,
       undefined,
       calls,
       {
@@ -77,19 +77,14 @@ describe("executeToolBatch budgets", () => {
         isGroup: false,
       },
       "chat-1",
-      false,
-      1
+      false
     );
 
-    expect(execute).toHaveBeenCalledTimes(1);
-    expect(execResults.map((result) => result.attempted)).toEqual([true, false]);
-    expect(toolPlans[1]).toMatchObject({
-      blocked: true,
-      blockReason: "Per-turn tool-call budget exhausted",
-    });
+    expect(execute).toHaveBeenCalledTimes(25);
+    expect(execResults.every((result) => result.attempted === true)).toBe(true);
   });
 
-  it("does not consume execution budget for calls blocked by a hook", async () => {
+  it("does not execute calls blocked by a hook", async () => {
     const execute = vi.fn(async () => ({ success: true }));
     const hookRunner = {
       runModifyingHook: vi.fn(async (_name, event: { params: unknown; block: boolean }) => {
@@ -106,8 +101,7 @@ describe("executeToolBatch budgets", () => {
       ],
       { bridge: {} as never, db: {} as never, chatId: "chat", senderId: 1, isGroup: false },
       "chat",
-      false,
-      1
+      false
     );
 
     expect(execute).toHaveBeenCalledTimes(1);

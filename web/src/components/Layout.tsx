@@ -1,4 +1,4 @@
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation } from 'react-router';
 import { Shell } from './Shell';
 import { AgentControl, AgentStatusBadge } from './AgentControl';
 import { ModeSwitch } from './ModeSwitch';

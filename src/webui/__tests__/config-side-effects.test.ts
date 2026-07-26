@@ -126,20 +126,20 @@ describe("Config side-effects on PUT/DELETE", () => {
   it("DELETE reapplies the validated schema default instead of leaving undefined", async () => {
     const applyConfigKey = vi.fn();
     app = createTestApp(
-      { agent: { max_tool_calls_per_turn: 7 } },
+      { agent: { max_agentic_iterations: 7 } },
       {
-        reloadConfig: () => ({ agent: { max_tool_calls_per_turn: 20 } }),
+        reloadConfig: () => ({ agent: { max_agentic_iterations: 5 } }),
         applyConfigKey,
       }
     );
-    mockReadRawConfig.mockReturnValue({ agent: { max_tool_calls_per_turn: 7 } });
+    mockReadRawConfig.mockReturnValue({ agent: { max_agentic_iterations: 7 } });
 
-    const res = await app.request("/api/config/agent.max_tool_calls_per_turn", {
+    const res = await app.request("/api/config/agent.max_agentic_iterations", {
       method: "DELETE",
     });
 
     expect(res.status).toBe(200);
-    expect(applyConfigKey).toHaveBeenCalledWith("agent.max_tool_calls_per_turn", 20);
+    expect(applyConfigKey).toHaveBeenCalledWith("agent.max_agentic_iterations", 5);
   });
 
   it("does not mutate runtime state for restart-only keys", async () => {

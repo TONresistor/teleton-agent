@@ -60,7 +60,7 @@ jobs:
         run: npm run dupcheck
 
       - name: Security audit
-        run: npm run audit:ci
+        run: npm run audit:ci && npm run audit:web
 
   # Build + test on each supported Node version.
   test:

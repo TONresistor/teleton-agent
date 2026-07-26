@@ -193,17 +193,6 @@ export const CONFIGURABLE_KEYS: Record<string, ConfigKeyMeta> = {
     mask: identity,
     parse: (v) => Number(v),
   },
-  "agent.max_tool_calls_per_turn": {
-    type: "number",
-    category: "Agent",
-    label: "Max Tool Calls",
-    description: "Maximum tool executions per inbound turn",
-    sensitive: false,
-    hotReload: "instant",
-    validate: numberInRange(1, 100),
-    mask: identity,
-    parse: (v) => Number(v),
-  },
   "agent.max_turn_duration_ms": {
     type: "number",
     category: "Agent",

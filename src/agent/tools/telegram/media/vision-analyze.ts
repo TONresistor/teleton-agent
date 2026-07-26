@@ -1,12 +1,11 @@
 import { Type } from "@sinclair/typebox";
 import {
-  completeSimple,
   type Context,
   type UserMessage,
   type ImageContent,
   type TextContent,
 } from "@earendil-works/pi-ai/compat";
-import { getProviderModel, getEffectiveApiKey } from "../../../client.js";
+import { chatWithContext, getProviderModel } from "../../../client.js";
 import { getProviderMetadata, type SupportedProvider } from "../../../../config/providers.js";
 import { readFileSync, existsSync } from "fs";
 import { extname } from "path";
@@ -29,7 +28,7 @@ interface VisionAnalyzeParams {
 }
 
 /**
- * Tool definition for analyzing images with Claude vision
+ * Tool definition for analyzing images with the configured vision-capable model
  */
 export const visionAnalyzeTool: Tool = {
   name: "vision_analyze",
@@ -63,7 +62,7 @@ export const visionAnalyzeTool: Tool = {
   }),
 };
 
-// Supported image MIME types for Claude vision
+// Supported image MIME types for vision analysis
 const SUPPORTED_IMAGE_TYPES = ["image/jpeg", "image/png", "image/gif", "image/webp"];
 
 // Extension to MIME type mapping
@@ -78,6 +77,80 @@ const EXT_TO_MIME: Record<string, string> = {
 // Max image size (5MB)
 const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
 
+function getVisionProviderFailure(
+  provider: string,
+  modelId: string,
+  errorMessage?: string
+): { code: string; error: string } {
+  const normalized = errorMessage?.toLowerCase() || "";
+
+  if (
+    normalized.includes("401") ||
+    normalized.includes("unauthorized") ||
+    normalized.includes("authentication") ||
+    normalized.includes("api key")
+  ) {
+    return {
+      code: "VISION_AUTH",
+      error: `Vision authentication failed for ${provider}. Check the configured credentials.`,
+    };
+  }
+
+  if (normalized.includes("429") || normalized.includes("rate limit")) {
+    return {
+      code: "VISION_RATE_LIMIT",
+      error: `Vision request was rate-limited by ${provider}. Try again later.`,
+    };
+  }
+
+  return {
+    code: "VISION_PROVIDER",
+    error: `Vision request failed for ${provider}/${modelId}. Check the service logs for details.`,
+  };
+}
+
+type VisionFailureStage = "setup" | "media" | "provider";
+
+function getVisionExceptionFailure(
+  provider: string,
+  modelId: string,
+  stage: VisionFailureStage,
+  error: unknown
+): { code: string; error: string } {
+  const errorMessage = getErrorMessage(error);
+  const normalized = errorMessage.toLowerCase();
+
+  if (normalized.includes("no codex credentials found")) {
+    return {
+      code: "VISION_AUTH",
+      error: "No Codex credentials found. Run 'codex' to authenticate.",
+    };
+  }
+
+  if (normalized.includes("no grok build credentials found")) {
+    return {
+      code: "VISION_AUTH",
+      error: "No Grok Build credentials found. Run 'grok login' to authenticate.",
+    };
+  }
+
+  if (stage === "provider") {
+    return getVisionProviderFailure(provider, modelId, errorMessage);
+  }
+
+  if (stage === "media") {
+    return {
+      code: "VISION_MEDIA",
+      error: "Failed to read or download the image for analysis.",
+    };
+  }
+
+  return {
+    code: "VISION_SETUP",
+    error: `Vision analysis could not be initialized for ${provider}/${modelId}.`,
+  };
+}
+
 /**
  * Executor for vision_analyze tool
  */
@@ -85,30 +158,49 @@ export const visionAnalyzeExecutor: ToolExecutor<VisionAnalyzeParams> = async (
   params,
   context
 ): Promise<ToolResult> => {
+  let failureStage: VisionFailureStage = "setup";
+
   try {
     const { chatId, messageId, filePath, prompt } = params;
 
     // Validate params - need either filePath OR (chatId + messageId)
     const hasFilePath = !!filePath;
-    const hasTelegramParams = !!chatId && !!messageId;
+    const hasAnyTelegramParam = chatId !== undefined || messageId !== undefined;
+    const hasTelegramParams = !!chatId && messageId !== undefined;
 
-    if (!hasFilePath && !hasTelegramParams) {
+    if (
+      (!hasFilePath && !hasTelegramParams) ||
+      (hasFilePath && hasAnyTelegramParam) ||
+      (hasAnyTelegramParam && !hasTelegramParams)
+    ) {
       return {
         success: false,
         error:
-          "Must provide either 'filePath' for local files OR both 'chatId' and 'messageId' for Telegram images",
+          "Provide exactly one image source: either 'filePath' OR both 'chatId' and 'messageId'",
       };
     }
 
-    // Get API key from context
-    const currentProvider = context.config?.agent?.provider;
-    const apiKey = context.config?.agent?.api_key;
-    if (!apiKey && currentProvider !== "local" && currentProvider !== "gocoon") {
+    const agentConfig = context.config?.agent;
+    if (!agentConfig) {
       return {
         success: false,
-        error: "No API key configured for vision analysis",
+        error: "Agent configuration is unavailable for vision analysis",
       };
     }
+
+    const provider = (agentConfig.provider || "anthropic") as SupportedProvider;
+    const providerMeta = getProviderMetadata(provider);
+    const modelId = agentConfig.model || providerMeta.defaultModel;
+    const model = getProviderModel(provider, modelId);
+
+    if (!model.input.includes("image")) {
+      return {
+        success: false,
+        error: `Model ${modelId} (${provider}) does not support image analysis. Use a vision-capable model.`,
+      };
+    }
+
+    failureStage = "media";
 
     let data: Buffer;
     let mimeType: string;
@@ -258,31 +350,31 @@ export const visionAnalyzeExecutor: ToolExecutor<VisionAnalyzeParams> = async (
       messages: [userMsg],
     };
 
-    // Get model from configured provider
-    const provider = (context.config?.agent?.provider || "anthropic") as SupportedProvider;
-    const providerMeta = getProviderMetadata(provider);
-    const modelId = context.config?.agent?.model || providerMeta.defaultModel;
-    const model = getProviderModel(provider, modelId);
-
-    // Check if model supports vision
-    if (!model.input.includes("image")) {
-      return {
-        success: false,
-        error: `Model ${modelId} (${provider}) does not support image analysis. Use a vision-capable model.`,
-      };
-    }
-
     log.info(`Analyzing image with ${provider}/${modelId} vision...`);
 
-    // Call LLM with the image
-    const response = await completeSimple(model, visionContext, {
-      apiKey: currentProvider ? getEffectiveApiKey(currentProvider, apiKey || "") : apiKey,
+    // Use the shared request path so API-key and CLI-auth providers resolve
+    // credentials consistently and can refresh rejected CLI tokens once.
+    failureStage = "provider";
+    const response = await chatWithContext(agentConfig, {
+      context: visionContext,
       maxTokens: 1024,
     });
 
-    // Extract text response
-    const textBlock = response.content.find((block) => block.type === "text");
-    const analysisText = textBlock?.type === "text" ? textBlock.text : "";
+    if (response.message.stopReason === "error") {
+      const failure = getVisionProviderFailure(provider, modelId, response.message.errorMessage);
+
+      log.error(
+        {
+          provider,
+          modelId,
+          errorCode: failure.code,
+        },
+        "Vision model request failed"
+      );
+      return { success: false, error: failure.error };
+    }
+
+    const analysisText = response.text;
 
     if (!analysisText) {
       return {
@@ -300,14 +392,26 @@ export const visionAnalyzeExecutor: ToolExecutor<VisionAnalyzeParams> = async (
         source,
         imageSize: data.length,
         mimeType,
-        usage: response.usage,
+        usage: response.message.usage,
       },
     };
   } catch (error) {
-    log.error({ err: error }, "Error analyzing image");
+    const provider = context.config?.agent?.provider || "unknown";
+    const modelId = context.config?.agent?.model || "unknown";
+    const failure = getVisionExceptionFailure(provider, modelId, failureStage, error);
+
+    log.error(
+      {
+        provider,
+        modelId,
+        errorCode: failure.code,
+        stage: failureStage,
+      },
+      "Vision analysis failed"
+    );
     return {
       success: false,
-      error: getErrorMessage(error),
+      error: failure.error,
     };
   }
 };

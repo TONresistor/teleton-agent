@@ -48,13 +48,10 @@ export async function executeToolBatch(
   toolCalls: ToolCall[],
   fullContext: ToolContext,
   chatId: string,
-  effectiveIsGroup: boolean,
-  executionLimit = Number.POSITIVE_INFINITY,
-  executionBlockReason = "Per-turn tool-call budget exhausted"
+  effectiveIsGroup: boolean
 ): Promise<{ toolPlans: ToolPlan[]; execResults: ToolExecResult[] }> {
   // Phase 1: Run tool:before hooks sequentially (hooks may cross-reference)
   const toolPlans: ToolPlan[] = [];
-  let scheduledExecutions = 0;
 
   for (const block of toolCalls) {
     if (block.type !== "toolCall") continue;
@@ -63,12 +60,7 @@ export async function executeToolBatch(
     let blocked = false;
     let blockReason = "";
 
-    if (scheduledExecutions >= executionLimit) {
-      blocked = true;
-      blockReason = executionBlockReason;
-    }
-
-    if (hookRunner && !blocked) {
+    if (hookRunner) {
       const beforeEvent: BeforeToolCallEvent = {
         toolName: block.name,
         params: structuredClone(toolParams),
@@ -85,8 +77,6 @@ export async function executeToolBatch(
         toolParams = structuredClone(beforeEvent.params) as Record<string, unknown>;
       }
     }
-
-    if (!blocked) scheduledExecutions++;
 
     toolPlans.push({ block, blocked, blockReason, params: toolParams });
   }
@@ -267,20 +257,6 @@ export async function recordToolResults(
   }
 
   return resultMessages;
-}
-
-/**
- * Whether this iteration's tool batch was fully seen before (every name+sorted-args
- * signature already in `seen`). Records the new signatures into `seen`. The caller
- * tracks how many consecutive stalls have occurred.
- */
-export function detectToolStall(toolPlans: ToolPlan[], seen: Set<string>): boolean {
-  const iterSignatures = toolPlans.map(
-    (p) => `${p.block.name}:${JSON.stringify(p.params, Object.keys(p.params).sort())}`
-  );
-  const allDuplicates = iterSignatures.length > 0 && iterSignatures.every((sig) => seen.has(sig));
-  for (const sig of iterSignatures) seen.add(sig);
-  return allDuplicates;
 }
 
 export function injectDiscoveredTools(

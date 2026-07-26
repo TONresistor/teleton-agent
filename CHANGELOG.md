@@ -9,7 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- Persistent privacy-bounded agent-turn traces, paged artifacts for large tool results, safe provider/model fallbacks, and per-turn time/tool-call budgets.
+- Persistent privacy-bounded agent-turn traces, paged artifacts for large tool results, safe provider/model fallbacks, and a per-turn time budget.
 - Turn-scoped idempotency records for external actions.
 
 ### Fixed

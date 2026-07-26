@@ -58,13 +58,6 @@ export const AgentConfigSchema = z
       .describe(
         "Maximum number of agentic loop iterations (tool call → result → tool call cycles)"
       ),
-    max_tool_calls_per_turn: z
-      .number()
-      .int()
-      .min(1)
-      .max(100)
-      .default(20)
-      .describe("Maximum tool executions in one inbound turn"),
     max_turn_duration_ms: z
       .number()
       .int()
