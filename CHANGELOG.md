@@ -7,9 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.10.1] - 2026-07-27
+
 ### Added
 
 - Global Telegram account search with filters, page-local sorting, and cursor pagination, plus public channel post/hashtag search with quota preflight and no automatic Stars spending.
+- Telegram MTProto Layer 228 compatibility, including the new invite-result union.
 - Persistent privacy-bounded agent-turn traces, paged artifacts for large tool results, safe provider/model fallbacks, and a per-turn time budget.
 - Turn-scoped idempotency records for external actions.
 
@@ -17,6 +20,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Isolated iterative compaction summaries per conversation, preventing one chat summary from entering another chat.
 - Persist Telegram admin changes from `/model`, `/loop`, `/policy`, and `/rag` to the validated YAML config before applying them at runtime.
+- Removed the unintended `/approve` and `/reject` interruption so authorized actions execute directly.
+- Ignore Layer 228 Community pseudo-dialog entities during dialog indexing, preventing `Cannot cast Community` startup errors.
+- Return a clear guard-bot WebView result instead of falsely reporting a successfully joined chat.
 
 ## [0.10.0] - 2026-07-11
 
@@ -481,7 +487,8 @@ Git history rewritten to fix commit attribution (email update from `tonresistor@
 - Professional distribution (npm, Docker, CI/CD)
 - Pre-commit hooks and linting infrastructure
 
-[Unreleased]: https://github.com/TONresistor/teleton-agent/compare/v0.10.0...HEAD
+[Unreleased]: https://github.com/TONresistor/teleton-agent/compare/v0.10.1...HEAD
+[0.10.1]: https://github.com/TONresistor/teleton-agent/compare/v0.10.0...v0.10.1
 [0.10.0]: https://github.com/TONresistor/teleton-agent/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/TONresistor/teleton-agent/compare/v0.8.6...v0.9.0
 [0.8.6]: https://github.com/TONresistor/teleton-agent/compare/v0.8.5...v0.8.6

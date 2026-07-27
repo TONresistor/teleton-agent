@@ -24,6 +24,12 @@ jobs:
             package-lock.json
             web/package-lock.json
 
+      - name: Verify release metadata
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          test "$GITHUB_REF_NAME" = "v$VERSION"
+          grep -Fq "## [$VERSION]" CHANGELOG.md
+
       - run: npm ci
       - run: cd web && npm ci
       - run: npm run build -w packages/sdk
@@ -43,9 +49,25 @@ jobs:
           name: dist
           path: dist/
 
+  # Verify the image before any registry publication starts.
+  verify-docker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          cache-from: type=gha,scope=teleton-docker
+          cache-to: type=gha,mode=max,scope=teleton-docker
+
   # ---- Publish to npm ----
   publish-npm:
-    needs: build
+    needs: [build, verify-docker]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -93,7 +115,7 @@ jobs:
 
   # ---- Publish SDK to npm (if version changed) ----
   publish-sdk:
-    needs: build
+    needs: [build, verify-docker]
     runs-on: ubuntu-latest
     timeout-minutes: 15
     permissions:
@@ -133,7 +155,7 @@ jobs:
 
   # ---- Publish Docker image ----
   publish-docker:
-    needs: build
+    needs: [build, verify-docker]
     runs-on: ubuntu-latest
     timeout-minutes: 30
     permissions:
@@ -163,8 +185,8 @@ jobs:
         with:
           context: .
           push: true
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=teleton-docker
+          cache-to: type=gha,mode=max,scope=teleton-docker
           tags: |
             ghcr.io/${{ steps.meta.outputs.repo }}:${{ steps.meta.outputs.version }}
             ghcr.io/${{ steps.meta.outputs.repo }}:latest

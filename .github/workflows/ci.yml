@@ -102,9 +102,25 @@ jobs:
       - name: CLI smoke test
         run: node dist/cli/index.js --help
 
+  # Keep the release image buildable before a tag can trigger publication.
+  docker:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: false
+          cache-from: type=gha,scope=teleton-docker
+          cache-to: type=gha,mode=max,scope=teleton-docker
+
   # ---- Telegram notification (one summary per push, pushes only) ----
   notify:
-    needs: [checks, test]
+    needs: [checks, test, docker]
     if: always() && github.event_name == 'push'
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -122,6 +138,7 @@ jobs:
           AFTER_SHA: ${{ github.event.after }}
           CHECKS_RESULT: ${{ needs.checks.result }}
           TEST_RESULT: ${{ needs.test.result }}
+          DOCKER_RESULT: ${{ needs.docker.result }}
         run: |
           set -uo pipefail
           NULL_SHA="0000000000000000000000000000000000000000"
@@ -167,7 +184,7 @@ jobs:
             REPO_NAME=${REPO_URL##*/}
             LABEL=$(printf '%s' "$BRANCH" | tr '[:lower:]' '[:upper:]')
             TEXT="<b>[$LABEL] $REPO_NAME</b>"
-            if [ "$CHECKS_RESULT" = "success" ] && [ "$TEST_RESULT" = "success" ]; then
+            if [ "$CHECKS_RESULT" = "success" ] && [ "$TEST_RESULT" = "success" ] && [ "$DOCKER_RESULT" = "success" ]; then
               printf -v TEXT '%s\n%s %s pushed to %s' "$TEXT" "$COUNT" "$NOUN" "$BRANCH"
             else
               printf -v TEXT '%s\nCI failed on %s (%s %s)' "$TEXT" "$BRANCH" "$COUNT" "$NOUN"
