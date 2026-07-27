@@ -9,6 +9,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- Global Telegram account search with filters, page-local sorting, and cursor pagination, plus public channel post/hashtag search with quota preflight and no automatic Stars spending.
 - Persistent privacy-bounded agent-turn traces, paged artifacts for large tool results, safe provider/model fallbacks, and a per-turn time budget.
 - Turn-scoped idempotency records for external actions.
 

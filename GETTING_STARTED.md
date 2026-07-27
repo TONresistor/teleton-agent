@@ -98,7 +98,7 @@ You should see:
 ✅ Knowledge indexed
 ✅ Telegram: @your_agent connected
 ✅ TON Blockchain: connected
-✅ Agent is ready! (129 base tools)
+✅ Agent is ready! (131 base tools)
 ```
 
 **Verify:** Send `/ping` to your agent on Telegram.
@@ -169,7 +169,7 @@ Admin commands are only available to users listed in `admin_ids`. All commands w
 
 ## Tool Categories
 
-Teleton has **129 always-registered tools**, plus 5 optional system tools:
+Teleton has **131 always-registered tools**, plus 5 optional system tools:
 
 | Category | Count | Highlights |
 |----------|-------|------------|

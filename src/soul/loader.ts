@@ -310,7 +310,7 @@ Your conversation context is approaching the limit and may be compacted soon.
       : "_No HEARTBEAT.md found._";
     let heartbeatPreamble = "";
     if (options.telegramMode === "bot") {
-      heartbeatPreamble = `\nIMPORTANT: You are running in BOT mode. User-mode tools like telegram_get_dialogs, telegram_get_history, telegram_search_messages are NOT available. Skip any checklist steps that require them. Only use tools that are in your available tool list.\n`;
+      heartbeatPreamble = `\nIMPORTANT: You are running in BOT mode. User-mode tools like telegram_get_dialogs, telegram_get_history, telegram_search_messages, telegram_search_global, and telegram_search_posts are NOT available. Skip any checklist steps that require them. Only use tools that are in your available tool list.\n`;
     }
     parts.push(`\n## Heartbeat Protocol
 You have been woken by your periodic heartbeat timer.

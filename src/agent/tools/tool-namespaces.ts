@@ -71,9 +71,12 @@ const BUILTIN_NAMESPACE_RULES: NamespaceRule[] = [
   },
   {
     name: "telegram.chats",
-    description: "Search and read Telegram dialogs, messages, histories, and chat information.",
+    description:
+      "Search and read Telegram dialogs, account messages, public posts, histories, and chat information.",
     matches: (name) =>
-      /telegram_(get_dialogs|get_history|get_chat_info|mark_as_read|search_messages)/.test(name),
+      /telegram_(get_dialogs|get_history|get_chat_info|mark_as_read|search_messages|search_global|search_posts)/.test(
+        name
+      ),
   },
   {
     name: "telegram.groups",

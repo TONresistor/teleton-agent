@@ -74,7 +74,7 @@ function formatWhen(cluster: Cluster): string {
 export const sessionSearchTool: Tool = {
   name: "session_search",
   description:
-    "Search locally stored history across ALL chats by keywords. Results are clustered by time and AI-summarized. Use to recall past discussions from any previous session. NOT for live Telegram search — use telegram_search_messages. NOT for knowledge/documents — use memory_search.",
+    "Search locally stored agent-session history across ALL chats by keywords. Results are clustered by time and AI-summarized. Use to recall past discussions from previous sessions. NOT for live Telegram data — use telegram_search_messages for one chat, telegram_search_global for the account, or telegram_search_posts for public posts. NOT for knowledge/documents — use memory_search.",
   category: "data-bearing",
   parameters: Type.Object({
     query: Type.String({

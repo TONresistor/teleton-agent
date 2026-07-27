@@ -10,6 +10,8 @@ const ADMIN_ONLY_TOOLS = [
   "dedust_swap",
   "telegram_get_dialogs",
   "telegram_get_history",
+  "telegram_search_global",
+  "telegram_search_posts",
   "telegram_create_scheduled_task",
   "workspace_list",
   "workspace_read",
@@ -43,7 +45,9 @@ const OWNER_PRIVATE_READS = [
   "telegram_get_stars_balance",
   "telegram_get_stars_transactions",
   "telegram_get_user_info",
+  "telegram_search_global",
   "telegram_search_messages",
+  "telegram_search_posts",
   "vision_analyze",
 ] as const;
 
@@ -87,5 +91,17 @@ describe("built-in tool access policy", () => {
     for (const name of OWNER_PRIVATE_READS) {
       expect(visible.has(name), `${name} must remain owner-only`).toBe(false);
     }
+  });
+
+  it("hides global Telegram search tools in bot mode", () => {
+    const registry = new ToolRegistry("bot");
+    registerAllTools(registry);
+
+    const visible = new Set(
+      registry.getForContext(false, null, "dm", true, 42).map((tool) => tool.name)
+    );
+
+    expect(visible.has("telegram_search_global")).toBe(false);
+    expect(visible.has("telegram_search_posts")).toBe(false);
   });
 });

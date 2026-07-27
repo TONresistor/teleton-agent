@@ -32,6 +32,8 @@ describe("tool namespaces", () => {
     ["exec_run", "exec", "exec"],
     ["telegram_send_message", "telegram", "telegram.messaging"],
     ["telegram_schedule_message", "telegram", "telegram.scheduling"],
+    ["telegram_search_global", "telegram", "telegram.chats"],
+    ["telegram_search_posts", "telegram", "telegram.chats"],
     ["telegram_get_resale_gifts", "telegram", "telegram.gifts.market"],
     ["telegram_get_collectible_info", "telegram", "telegram.gifts.market"],
     ["telegram_buy_resale_gift", "telegram", "telegram.gifts.manage"],

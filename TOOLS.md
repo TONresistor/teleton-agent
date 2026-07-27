@@ -1,6 +1,6 @@
-# Tools — 133 total
+# Tools — 135 total
 
-## Telegram — Messaging (13)
+## Telegram — Messaging (15)
 
 | Tool | Description |
 |------|-------------|
@@ -10,7 +10,9 @@
 | `telegram_forward_message` | Forward messages to another chat |
 | `telegram_quote_reply` | Reply to a specific excerpt within a message |
 | `telegram_get_replies` | Fetch all replies in a message thread |
-| `telegram_search_messages` | Search messages by text query |
+| `telegram_search_messages` | Search messages by text query within one chat |
+| `telegram_search_global` | Search live messages across all account chats |
+| `telegram_search_posts` | Search posts across public Telegram channels |
 | `telegram_schedule_message` | Queue a message for delayed delivery |
 | `telegram_get_scheduled_messages` | List pending scheduled messages |
 | `telegram_delete_scheduled_message` | Cancel scheduled messages |
