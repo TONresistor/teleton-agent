@@ -44,7 +44,7 @@ jobs:
       - name: Enforce SDK coverage
         run: npm run test:sdk:coverage
 
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: dist
           path: dist/
@@ -102,7 +102,7 @@ jobs:
       - run: cd web && npm ci
         if: steps.check.outputs.publish == 'true'
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v8
         if: steps.check.outputs.publish == 'true'
         with:
           name: dist
@@ -234,7 +234,7 @@ jobs:
 
       - name: Create GitHub Release
         if: steps.check.outputs.exists == 'false'
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           generate_release_notes: true
           body: |
