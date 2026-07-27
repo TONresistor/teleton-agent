@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router';
 import { api } from '../lib/api';
 import { useConfigState } from '../hooks/useConfigState';
 import { PillBar } from '../components/PillBar';

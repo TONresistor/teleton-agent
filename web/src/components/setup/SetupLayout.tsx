@@ -1,4 +1,4 @@
-import { Outlet } from 'react-router-dom';
+import { Outlet } from 'react-router';
 import { Shell } from '../Shell';
 import { SetupProvider } from './SetupContext';
 import { SetupNav } from './SetupNav';

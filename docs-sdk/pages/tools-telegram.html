@@ -4,7 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Telegram Tools - Teleton Agent Documentation</title>
-    <meta name="description" content="Complete reference for all 76 Telegram tools: messaging, chats, contacts, groups, media, interactive, folders, profile, stickers, Stars, and gifts.">
+    <meta name="description" content="Complete reference for all 85 Telegram tools: messaging, chats, contacts, groups, media, interactive, folders, profile, stickers, Stars, and gifts.">
     <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg">
     <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
     <link href="https://cdn.jsdelivr.net/npm/geist@1.3.1/dist/fonts/geist-sans/style.min.css" rel="stylesheet">
@@ -29,7 +29,7 @@
         <aside class="sidebar" id="sidebar"><nav class="sidebar-nav">
             <div class="nav-section"><div class="nav-section-title">Start Here</div><ul class="nav-list"><div class="nav-list-inner"><li><a href="/index.html" class="nav-link">Introduction</a></li><li><a href="installation.html" class="nav-link">Installation</a></li><li><a href="quickstart.html" class="nav-link">Quick Start</a></li><li><a href="configuration.html" class="nav-link">Configuration</a></li></div></ul></div>
 <div class="nav-section"><div class="nav-section-title">Understand</div><ul class="nav-list"><div class="nav-list-inner"><li><a href="architecture.html" class="nav-link">Architecture</a></li><li><a href="agentic-loop.html" class="nav-link">Agentic Loop</a></li><li><a href="memory-system.html" class="nav-link">Memory System</a></li><li><a href="security.html" class="nav-link">Security</a></li></div></ul></div>
-<div class="nav-section"><div class="nav-section-title">Tools</div><ul class="nav-list"><div class="nav-list-inner"><li><a href="tools-telegram.html" class="nav-link active">Telegram (83)</a></li><li><a href="tools-ton.html" class="nav-link">TON Blockchain (15)</a></li><li><a href="tools-dex.html" class="nav-link">DEX Trading (10)</a></li><li><a href="tools-dns.html" class="nav-link">DNS &amp; Domains (8)</a></li><li><a href="tools-other.html" class="nav-link">Utilities</a></li></div></ul></div>
+<div class="nav-section"><div class="nav-section-title">Tools</div><ul class="nav-list"><div class="nav-list-inner"><li><a href="tools-telegram.html" class="nav-link active">Telegram (85)</a></li><li><a href="tools-ton.html" class="nav-link">TON Blockchain (15)</a></li><li><a href="tools-dex.html" class="nav-link">DEX Trading (10)</a></li><li><a href="tools-dns.html" class="nav-link">DNS &amp; Domains (8)</a></li><li><a href="tools-other.html" class="nav-link">Utilities</a></li></div></ul></div>
 <div class="nav-section"><div class="nav-section-title">Build Plugins</div><ul class="nav-list"><div class="nav-list-inner"><li><a href="plugin-sdk.html" class="nav-link">Plugin SDK</a></li></div></ul></div>
 <div class="nav-section"><div class="nav-section-title">SDK Reference</div><ul class="nav-list"><div class="nav-list-inner"><li><a href="sdk-overview.html" class="nav-link">Overview</a></li><li><a href="sdk-ton.html" class="nav-link">TON Blockchain</a></li><li><a href="sdk-dex.html" class="nav-link">DEX Trading</a></li><li><a href="sdk-dns.html" class="nav-link">DNS &amp; Domains</a></li><li><a href="sdk-telegram.html" class="nav-link">Telegram</a></li><li><a href="sdk-bot.html" class="nav-link">Bot SDK</a></li><li><a href="sdk-utilities.html" class="nav-link">Utilities</a></li><li><a href="sdk-errors.html" class="nav-link">Error Handling</a></li><li><a href="tutorial-payment-bot.html" class="nav-link">Tutorial: Payment Bot</a></li><li><a href="tutorial-dex-bot.html" class="nav-link">Tutorial: DEX Bot</a></li><li><a href="tutorial-inline-bot.html" class="nav-link">Tutorial: Inline Bot</a></li></div></ul></div>
 <div class="nav-section"><div class="nav-section-title">Deploy &amp; Manage</div><ul class="nav-list"><div class="nav-list-inner"><li><a href="deploy-docker.html" class="nav-link">Docker</a></li><li><a href="cli-reference.html" class="nav-link">CLI Reference</a></li></div></ul></div>
@@ -37,10 +37,10 @@
         <main class="main"><article class="content">
 
             <h1>Telegram Tools</h1>
-            <p class="lead">83 tools covering messaging, chats, contacts, groups, media, interactive features, folders, profile, stickers, Stars, and gifts. Tools marked <strong>user</strong> require userbot mode; <strong>bot</strong> requires bot mode.</p>
+            <p class="lead">85 tools covering messaging, chats, contacts, groups, media, interactive features, folders, profile, stickers, Stars, and gifts. Tools marked <strong>user</strong> require userbot mode; <strong>bot</strong> requires bot mode.</p>
 
             <section class="section" id="messaging">
-                <h2>Messaging (14)</h2>
+                <h2>Messaging (16)</h2>
 
                 <h3 id="telegram_send_message"><code>telegram_send_message</code></h3>
                 <p>Send a text message to a Telegram chat. For custom keyboards use <code>telegram_reply_keyboard</code>; for media use <code>telegram_send_photo</code>/<code>gif</code>/<code>sticker</code>.</p>
@@ -112,13 +112,43 @@
                 </table></div>
 
                 <h3 id="telegram_search_messages"><code>telegram_search_messages</code> <small>user</small></h3>
-                <p>Search messages by text query in a chat or globally.</p>
+                <p>Search messages by text query within one known chat.</p>
                 <div class="table-wrapper"><table>
                     <thead><tr><th>Parameter</th><th>Type</th><th>Description</th></tr></thead>
                     <tbody>
+                        <tr><td><code>chatId</code></td><td>string</td><td>Chat ID to search</td></tr>
                         <tr><td><code>query</code></td><td>string</td><td>Search query string</td></tr>
-                        <tr><td><code>chatId</code></td><td>string?</td><td>Limit search to this chat (omit for global)</td></tr>
-                        <tr><td><code>limit</code></td><td>number?</td><td>Max results (default: 20)</td></tr>
+                        <tr><td><code>limit</code></td><td>number?</td><td>Max results (default: 50)</td></tr>
+                    </tbody>
+                </table></div>
+
+                <h3 id="telegram_search_global"><code>telegram_search_global</code> <small>user</small></h3>
+                <p>Search live messages across all chats accessible to the account. Telegram may return at most one matching message per chat. Sorting applies to the returned page only.</p>
+                <div class="table-wrapper"><table>
+                    <thead><tr><th>Parameter</th><th>Type</th><th>Description</th></tr></thead>
+                    <tbody>
+                        <tr><td><code>query</code></td><td>string?</td><td>Keyword or phrase; optional only for a filtered media search</td></tr>
+                        <tr><td><code>peerType</code></td><td>string?</td><td><code>all</code>, <code>channels</code>, <code>groups</code>, or <code>users</code></td></tr>
+                        <tr><td><code>messageType</code></td><td>string?</td><td>Filter for photos, videos, documents, links, GIFs, audio, polls, pinned messages, and more</td></tr>
+                        <tr><td><code>after</code></td><td>string?</td><td>Only results after this ISO 8601 date or Unix timestamp</td></tr>
+                        <tr><td><code>before</code></td><td>string?</td><td>Only results before this ISO 8601 date or Unix timestamp</td></tr>
+                        <tr><td><code>folderId</code></td><td>number?</td><td>Restrict the search to a Telegram dialog folder</td></tr>
+                        <tr><td><code>limit</code></td><td>number?</td><td>Max results for this page (default: 20, max: 100)</td></tr>
+                        <tr><td><code>sort</code></td><td>string?</td><td>Telegram order, date, views, or forwards; page-local only</td></tr>
+                        <tr><td><code>cursor</code></td><td>string?</td><td>Opaque <code>nextCursor</code> from the previous identical search</td></tr>
+                    </tbody>
+                </table></div>
+
+                <h3 id="telegram_search_posts"><code>telegram_search_posts</code> <small>user</small></h3>
+                <p>Search posts across public Telegram channels, including channels the account has not joined. Provide exactly one full-text query or hashtag. A full-text search may consume a remaining free daily search; the tool never spends Telegram Stars. Hashtags and cursor pagination are free.</p>
+                <div class="table-wrapper"><table>
+                    <thead><tr><th>Parameter</th><th>Type</th><th>Description</th></tr></thead>
+                    <tbody>
+                        <tr><td><code>query</code></td><td>string?</td><td>Full-text query, mutually exclusive with <code>hashtag</code></td></tr>
+                        <tr><td><code>hashtag</code></td><td>string?</td><td>Hashtag with or without <code>#</code>, mutually exclusive with <code>query</code></td></tr>
+                        <tr><td><code>limit</code></td><td>number?</td><td>Max posts for this page (default: 20, max: 100)</td></tr>
+                        <tr><td><code>sort</code></td><td>string?</td><td>Telegram order, date, views, or forwards; page-local only</td></tr>
+                        <tr><td><code>cursor</code></td><td>string?</td><td>Opaque <code>nextCursor</code> from the previous identical search</td></tr>
                     </tbody>
                 </table></div>
 

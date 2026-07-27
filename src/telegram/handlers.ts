@@ -9,14 +9,17 @@ import { readOffset, writeOffset } from "./offset-store.js";
 import { PendingHistory } from "../memory/pending-history.js";
 import type { ToolContext } from "../agent/tools/types.js";
 import { isSilentReply } from "../constants/tokens.js";
-import { deliveredTelegramText } from "../agent/telegram-send-state.js";
+import { deliveredTelegramMessageId, deliveredTelegramText } from "../agent/telegram-send-state.js";
 import { transcribeAudio } from "../sdk/telegram-utils.js";
 import { TYPING_REFRESH_MS } from "../constants/timeouts.js";
 import { createLogger } from "../utils/logger.js";
 import { getErrorMessage } from "../utils/errors.js";
+import { randomUUID } from "crypto";
 
 const log = createLogger("Telegram");
 import type { PluginMessageEvent } from "@teleton-agent/sdk";
+
+type FeedTelegramMessage = Omit<TelegramMessage, "id"> & { id: number | string };
 
 function providerFailureReply(error: unknown): string {
   const message = getErrorMessage(error).toLowerCase();
@@ -105,13 +108,17 @@ class RateLimiter {
   }
 }
 
-class ChatQueue {
+export class ChatQueue {
   private chains = new Map<string, Promise<void>>();
   private activeTasks = 0;
   private maxConcurrent: number;
   private waitQueue: Array<() => void> = [];
+  private pendingTasks = 0;
 
-  constructor(maxConcurrent = 10) {
+  constructor(
+    maxConcurrent = 10,
+    private readonly maxPending = 100
+  ) {
     this.maxConcurrent = maxConcurrent;
   }
 
@@ -138,6 +145,10 @@ class ChatQueue {
   }
 
   enqueue(chatId: string, task: () => Promise<void>): Promise<void> {
+    if (this.pendingTasks >= this.maxPending) {
+      return Promise.reject(new Error("Telegram message queue capacity reached"));
+    }
+    this.pendingTasks++;
     const prev = this.chains.get(chatId) ?? Promise.resolve();
     const next = prev
       .then(
@@ -145,6 +156,7 @@ class ChatQueue {
         () => this.acquireSlot(chatId).then(task)
       )
       .finally(() => {
+        this.pendingTasks--;
         this.releaseSlot();
         if (this.chains.get(chatId) === next) {
           this.chains.delete(chatId);
@@ -218,6 +230,15 @@ export class MessageHandler {
     this.bridge = bridge;
     const uid = bridge.getOwnUserId();
     this.ownUserId = uid !== undefined ? String(uid) : this.ownUserId;
+  }
+
+  updateConfig(config: Config): void {
+    this.config = config.telegram;
+    this.fullConfig = config;
+    this.rateLimiter = new RateLimiter(
+      config.telegram.rate_limit_messages_per_second,
+      config.telegram.rate_limit_groups_per_minute
+    );
   }
 
   setPluginMessageHooks(hooks: Array<(e: PluginMessageEvent) => Promise<void>>): void {
@@ -611,9 +632,14 @@ export class MessageHandler {
             !isSilentReply(response.content)
           ) {
             // Tool already sent the message to Telegram — store in feed for conversation history
+            const deliveredMessageId = deliveredTelegramMessageId(
+              response.toolCalls,
+              message.chatId,
+              response.content
+            );
             await this.storeTelegramMessage(
               {
-                id: 0, // tool-sent message ID not propagated back
+                id: deliveredMessageId ?? `tool:${message.id}:${randomUUID()}`,
                 chatId: message.chatId,
                 senderId: this.ownUserId ? parseInt(this.ownUserId, 10) : 0,
                 text: response.content,
@@ -652,7 +678,7 @@ export class MessageHandler {
    * Store Telegram message to feed (with chat/user tracking)
    */
   private async storeTelegramMessage(
-    message: TelegramMessage,
+    message: FeedTelegramMessage,
     isFromAgent: boolean
   ): Promise<void> {
     try {

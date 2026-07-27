@@ -162,4 +162,60 @@ describe("HookRegistry", () => {
     // Both effective = 0, registration order preserved
     expect(hooks.map((h) => h.pluginId)).toEqual(["first", "second"]);
   });
+
+  it("2.9 getRegistrations filters by plugin and returns defensive copies", () => {
+    const registry = new HookRegistry();
+    registry.register({
+      pluginId: "plugin-a",
+      hookName: "tool:before",
+      handler: () => {},
+      priority: 1,
+    });
+    registry.register({
+      pluginId: "plugin-b",
+      hookName: "tool:after",
+      handler: () => {},
+      priority: 2,
+    });
+
+    const all = registry.getRegistrations();
+    const pluginA = registry.getRegistrations("plugin-a");
+
+    expect(all.map((registration) => registration.pluginId)).toEqual(["plugin-a", "plugin-b"]);
+    expect(pluginA).toHaveLength(1);
+    expect(pluginA[0].pluginId).toBe("plugin-a");
+
+    pluginA[0].priority = 99;
+    expect(registry.getHooks("tool:before")[0].priority).toBe(1);
+  });
+
+  it("2.10 replacePlugin replaces only the target plugin registrations", () => {
+    const registry = new HookRegistry();
+    registry.register({
+      pluginId: "plugin-a",
+      hookName: "tool:before",
+      handler: () => {},
+      priority: 0,
+    });
+    registry.register({
+      pluginId: "plugin-b",
+      hookName: "tool:before",
+      handler: () => {},
+      priority: 0,
+    });
+    const replacement: HookRegistration = {
+      pluginId: "ignored",
+      hookName: "tool:after",
+      handler: () => {},
+      priority: -5,
+      globalPriority: 10,
+    };
+
+    registry.replacePlugin("plugin-a", [replacement]);
+
+    expect(registry.getHooks("tool:before").map((hook) => hook.pluginId)).toEqual(["plugin-b"]);
+    expect(registry.getHooks("tool:after")).toMatchObject([
+      { pluginId: "plugin-a", priority: -5, globalPriority: 10 },
+    ]);
+  });
 });

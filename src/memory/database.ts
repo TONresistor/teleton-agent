@@ -13,6 +13,7 @@ import {
   CURRENT_SCHEMA_VERSION,
 } from "./schema.js";
 import { SQLITE_CACHE_SIZE_KB, SQLITE_MMAP_SIZE } from "../constants/limits.js";
+import { telegramMessageKey } from "./feed/messages.js";
 
 export interface DatabaseConfig {
   path: string;
@@ -83,12 +84,55 @@ export class MemoryDatabase {
       this.db.prepare("SELECT vec_version() as vec_version").get();
       const dims = this.config.vectorDimensions ?? 512;
       this._dimensionsChanged = ensureVectorTables(this.db, dims);
+      if (this._dimensionsChanged) {
+        // Stored vectors have the old width and cannot be copied into the new
+        // vec table. Keep the raw messages and schedule fresh embeddings.
+        this.db.transaction(() => {
+          this.db
+            .prepare(
+              `UPDATE tg_messages
+               SET embedding = NULL, embedding_status = 'pending', indexed_at = unixepoch()
+               WHERE text IS NOT NULL`
+            )
+            .run();
+          this.db
+            .prepare("DELETE FROM meta WHERE key = 'tg_messages_vector_rebuild_required'")
+            .run();
+        })();
+      } else {
+        this.rebuildTelegramMessageVectorsIfRequired();
+      }
       this.vectorReady = true;
     } catch (error) {
       log.warn(`sqlite-vec not available, vector search disabled: ${(error as Error).message}`);
       log.warn("Falling back to keyword-only search");
       this.config.enableVectorSearch = false;
     }
+  }
+
+  private rebuildTelegramMessageVectorsIfRequired(): void {
+    const marker = this.db
+      .prepare("SELECT value FROM meta WHERE key = 'tg_messages_vector_rebuild_required'")
+      .get() as { value: string } | undefined;
+    if (marker?.value !== "1") return;
+
+    const rows = this.db
+      .prepare(
+        `SELECT chat_id, id, embedding FROM tg_messages
+         WHERE embedding IS NOT NULL AND embedding_status = 'ready'`
+      )
+      .all() as Array<{ chat_id: string; id: string; embedding: Buffer }>;
+    const insert = this.db.prepare("INSERT INTO tg_messages_vec (id, embedding) VALUES (?, ?)");
+
+    this.db.transaction(() => {
+      this.db.exec("DELETE FROM tg_messages_vec");
+      for (const row of rows) {
+        insert.run(telegramMessageKey(row.chat_id, row.id), row.embedding);
+      }
+      this.db.prepare("DELETE FROM meta WHERE key = 'tg_messages_vector_rebuild_required'").run();
+    })();
+
+    log.info({ messages: rows.length }, "Rebuilt chat-scoped Telegram message vectors");
   }
 
   private migrate(from: string, to: string): void {
@@ -104,6 +148,38 @@ export class MemoryDatabase {
 
   isVectorSearchReady(): boolean {
     return this.vectorReady;
+  }
+
+  configureVectorSearch(enabled: boolean, dimensions?: number): void {
+    const previousDimensions = this.config.vectorDimensions ?? 512;
+    const targetDimensions = dimensions ?? previousDimensions;
+    const dimensionsChanged = targetDimensions !== previousDimensions;
+    this.config.enableVectorSearch = enabled;
+    this.config.vectorDimensions = targetDimensions;
+
+    if (!enabled) {
+      this.vectorReady = false;
+      this._dimensionsChanged = false;
+      return;
+    }
+    if (!this.vectorReady || dimensionsChanged) this.loadVectorExtension();
+  }
+
+  invalidateTelegramMessageEmbeddings(): void {
+    const hasVectorTable = this.db
+      .prepare("SELECT 1 FROM sqlite_master WHERE name = 'tg_messages_vec'")
+      .get();
+    this.db.transaction(() => {
+      this.db
+        .prepare(
+          `UPDATE tg_messages
+           SET embedding = NULL, embedding_status = 'pending', indexed_at = unixepoch()
+           WHERE text IS NOT NULL`
+        )
+        .run();
+      if (hasVectorTable) this.db.exec("DELETE FROM tg_messages_vec");
+      this.db.prepare("DELETE FROM meta WHERE key = 'tg_messages_vector_rebuild_required'").run();
+    })();
   }
 
   didDimensionsChange(): boolean {

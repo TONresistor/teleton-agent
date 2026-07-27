@@ -339,8 +339,6 @@ All admin commands require the sender's Telegram user ID to be listed in `admin_
 | `/modules` | `/modules [set\|info\|reset] ...` | Manage per-group module permissions (group-only). |
 | `/plugin` | `/plugin <set\|unset\|keys> ...` | Manage plugin secrets. |
 | `/wallet` | `/wallet` | Check TON wallet balance and address. |
-| `/approve` | `/approve <request_id>` | Approve a pending financial action. |
-| `/reject` | `/reject <request_id>` | Reject a pending financial action. |
 | `/verbose` | `/verbose` | Toggle verbose debug logging. |
 | `/rag` | `/rag [status\|topk <n>]` | Toggle Tool RAG or view its status. |
 | `/guest` | `/guest [on\|off]` | View or toggle guest mode. |

@@ -44,6 +44,7 @@ export const tools: ToolEntry[] = [
   {
     tool: visionAnalyzeTool,
     executor: visionAnalyzeExecutor,
+    minimumAccess: "admin",
     mode: "user",
     tags: ["media"],
   },

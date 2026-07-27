@@ -52,6 +52,18 @@ describe("ToolRegistry", () => {
         updated_by INTEGER
       )
     `);
+    db.exec(`
+      CREATE TABLE action_executions (
+        turn_id TEXT NOT NULL,
+        tool_name TEXT NOT NULL,
+        args_hash TEXT NOT NULL,
+        status TEXT NOT NULL,
+        result_json TEXT,
+        started_at INTEGER NOT NULL,
+        completed_at INTEGER,
+        PRIMARY KEY (turn_id, tool_name, args_hash)
+      )
+    `);
 
     mockContext = {
       bridge: { getMode: () => "user" } as any,
@@ -194,6 +206,79 @@ describe("ToolRegistry", () => {
       const second = registry.getAll();
 
       expect(first).toBe(second); // Same reference
+    });
+  });
+
+  describe("getCoreTools()", () => {
+    it("adds a permission-filtered namespace catalog without mutating tool_search", () => {
+      const searchTool: Tool = {
+        name: "tool_search",
+        description: "Find tools.",
+        parameters: Type.Object({ query: Type.String() }),
+      };
+      registry.register(searchTool, createMockExecutor(), "open", "both", ["core"]);
+      registry.register(createMockTool("web_search"), createMockExecutor());
+      registry.register(createMockTool("exec_run"), createMockExecutor(), "admin-only", "both");
+
+      const nonAdmin = registry.getCoreTools(false, "test-chat", false, 12345)[0];
+      const admin = registry.getCoreTools(false, "test-chat", true, 99999)[0];
+
+      expect(nonAdmin.description).toContain("- web (1)");
+      expect(nonAdmin.description).not.toContain("- exec (1)");
+      expect(admin.description).toContain("- exec (1)");
+      expect(searchTool.description).toBe("Find tools.");
+    });
+
+    it("reflects plugin hot reloads in the live namespace catalog", () => {
+      const pluginTool = (name: string): Tool => ({
+        name,
+        description: `Read ${name}`,
+        parameters: Type.Object({}),
+        category: "data-bearing",
+      });
+
+      registry.registerPluginTools("uranus", [
+        { tool: pluginTool("uranus_old_read"), executor: createMockExecutor() },
+      ]);
+      expect(registry.getNamespaceCatalog(false, "test-chat", false, 12345)[0].toolNames).toEqual([
+        "uranus_old_read",
+      ]);
+
+      registry.replacePluginTools("uranus", [
+        { tool: pluginTool("uranus_new_read"), executor: createMockExecutor() },
+      ]);
+
+      expect(registry.getNamespaceCatalog(false, "test-chat", false, 12345)[0].toolNames).toEqual([
+        "uranus_new_read",
+      ]);
+    });
+  });
+
+  describe("external tool generations", () => {
+    it("re-registers an existing plugin without losing ownership tracking", () => {
+      registry.registerPluginTools("plugin", [
+        { tool: createMockTool("plugin_old"), executor: createMockExecutor() },
+      ]);
+      registry.registerPluginTools("plugin", [
+        { tool: createMockTool("plugin_new"), executor: createMockExecutor() },
+      ]);
+
+      expect(registry.has("plugin_old")).toBe(false);
+      expect(registry.has("plugin_new")).toBe(true);
+      registry.removePluginTools("plugin");
+      expect(registry.has("plugin_new")).toBe(false);
+    });
+
+    it("returns a disposer for tool-index subscriptions", () => {
+      const listener = vi.fn();
+      const dispose = registry.onToolsChanged(listener);
+      dispose();
+
+      registry.registerPluginTools("plugin", [
+        { tool: createMockTool("plugin_tool"), executor: createMockExecutor() },
+      ]);
+
+      expect(listener).not.toHaveBeenCalled();
     });
   });
 
@@ -416,164 +501,52 @@ describe("ToolRegistry", () => {
   // ---------- Tool execution ----------
 
   describe("execute()", () => {
-    it("should defer approval-required tools without calling their executor", async () => {
-      const tool = createMockTool("financial_tool", "action");
-      const executor = createMockExecutor({ success: true });
-      const sendMessage = vi.fn(async () => ({ id: 1, date: 1, chatId: "test-chat" }));
-      mockContext.bridge = { getMode: () => "user", sendMessage } as any;
-      mockContext.senderId = 99999;
-
-      registry.register(tool, executor, "admin-only", "both", [], "admin", true);
-
-      const result = await registry.execute(
-        {
-          type: "toolCall",
-          id: "call-approval",
-          name: tool.name,
-          arguments: { message: "send exactly 1 TON" },
-        },
-        mockContext
-      );
-
-      expect(result).toMatchObject({
-        success: false,
-        data: { approvalRequired: true },
-      });
-      expect(result.error).toContain("owner approval");
-      expect(executor).not.toHaveBeenCalled();
-      expect(sendMessage).toHaveBeenCalledOnce();
-      expect(sendMessage.mock.calls[0][0].text).toContain("send exactly 1 TON");
-      expect(sendMessage.mock.calls[0][0].text).toMatch(/\/approve [a-f0-9-]+/);
-      expect(JSON.stringify(result)).not.toMatch(/\/approve [a-f0-9-]+/);
-    });
-
-    it("should execute an approved request once for the same admin and chat", async () => {
+    it("executes directly when a legacy approval flag is present", async () => {
       const tool = createMockTool("financial_tool", "action");
       const executor = createMockExecutor({ success: true, data: { tx: "abc" } });
-      const sendMessage = vi.fn(async () => ({ id: 1, date: 1, chatId: "test-chat" }));
-      mockContext.bridge = { getMode: () => "user", sendMessage } as any;
-      mockContext.senderId = 99999;
-
-      registry.register(tool, executor, "admin-only", "both", [], "admin", true);
-      await registry.execute(
-        {
-          type: "toolCall",
-          id: "call-approval",
-          name: tool.name,
-          arguments: { message: "send exactly 1 TON" },
-        },
-        mockContext
-      );
-      const approvalId = sendMessage.mock.calls[0][0].text.match(/\/approve ([a-f0-9-]+)/)?.[1];
-      expect(approvalId).toBeTruthy();
-
-      await expect(
-        registry.approvePendingAction(approvalId!, 11111, "test-chat")
-      ).resolves.toMatchObject({ success: false });
-      await expect(
-        registry.approvePendingAction(approvalId!, 99999, "wrong-chat")
-      ).resolves.toMatchObject({ success: false });
-      expect(executor).not.toHaveBeenCalled();
-
-      await expect(registry.approvePendingAction(approvalId!, 99999, "test-chat")).resolves.toEqual(
-        { success: true, data: { tx: "abc" } }
-      );
-      expect(executor).toHaveBeenCalledOnce();
-      expect(executor).toHaveBeenCalledWith({ message: "send exactly 1 TON" }, mockContext);
-
-      await expect(
-        registry.approvePendingAction(approvalId!, 99999, "test-chat")
-      ).resolves.toMatchObject({ success: false });
-      expect(executor).toHaveBeenCalledOnce();
-    });
-
-    it("should reject a pending approval without executing it", async () => {
-      const tool = createMockTool("financial_tool", "action");
-      const executor = createMockExecutor({ success: true });
-      const sendMessage = vi.fn(async () => ({ id: 1, date: 1, chatId: "test-chat" }));
-      mockContext.bridge = { getMode: () => "user", sendMessage } as any;
-      mockContext.senderId = 99999;
-
-      registry.register(tool, executor, "admin-only", "both", [], "admin", true);
-      await registry.execute(
-        {
-          type: "toolCall",
-          id: "call-approval",
-          name: tool.name,
-          arguments: { message: "send exactly 1 TON" },
-        },
-        mockContext
-      );
-      const approvalId = sendMessage.mock.calls[0][0].text.match(/\/approve ([a-f0-9-]+)/)?.[1];
-
-      await expect(
-        registry.rejectPendingAction(approvalId!, 99999, "test-chat")
-      ).resolves.toMatchObject({ success: true });
-      await expect(
-        registry.approvePendingAction(approvalId!, 99999, "test-chat")
-      ).resolves.toMatchObject({ success: false });
-      expect(executor).not.toHaveBeenCalled();
-    });
-
-    it("should fail closed for self-originated autonomous financial actions", async () => {
-      const tool = createMockTool("financial_tool", "action");
-      const executor = createMockExecutor({ success: true });
       const sendMessage = vi.fn();
-      mockContext.bridge = {
-        getMode: () => "user",
-        getOwnUserId: () => 99999n,
-        sendMessage,
-      } as any;
+      mockContext.bridge = { getMode: () => "user", sendMessage } as any;
       mockContext.senderId = 99999;
 
       registry.register(tool, executor, "admin-only", "both", [], "admin", true);
+
       const result = await registry.execute(
         {
           type: "toolCall",
-          id: "call-self-approval",
+          id: "call-approval",
           name: tool.name,
           arguments: { message: "send exactly 1 TON" },
         },
         mockContext
       );
 
-      expect(result).toMatchObject({ success: false });
-      expect(result.error).toContain("interactive admin request");
+      expect(result).toEqual({ success: true, data: { tx: "abc" } });
+      expect(executor).toHaveBeenCalledOnce();
+      expect(executor).toHaveBeenCalledWith({ message: "send exactly 1 TON" }, mockContext);
       expect(sendMessage).not.toHaveBeenCalled();
-      expect(executor).not.toHaveBeenCalled();
     });
 
-    it("should expire pending approvals after five minutes", async () => {
-      vi.useFakeTimers();
-      try {
-        vi.setSystemTime(new Date("2026-07-09T00:00:00Z"));
-        const tool = createMockTool("financial_tool", "action");
-        const executor = createMockExecutor({ success: true });
-        const sendMessage = vi.fn(async () => ({ id: 1, date: 1, chatId: "test-chat" }));
-        mockContext.bridge = { getMode: () => "user", sendMessage } as any;
-        mockContext.senderId = 99999;
+    it("blocks Telegram send tools in guest mode even when called directly", async () => {
+      const tool = createMockTool("telegram_send_message", "action");
+      const executor = createMockExecutor();
+      registry.register(tool, executor);
+      mockContext.isGuest = true;
 
-        registry.register(tool, executor, "admin-only", "both", [], "admin", true);
-        await registry.execute(
-          {
-            type: "toolCall",
-            id: "call-expiring-approval",
-            name: tool.name,
-            arguments: { message: "send exactly 1 TON" },
-          },
-          mockContext
-        );
-        const approvalId = sendMessage.mock.calls[0][0].text.match(/\/approve ([a-f0-9-]+)/)?.[1];
+      const result = await registry.execute(
+        {
+          type: "toolCall",
+          id: "guest-send",
+          name: tool.name,
+          arguments: { message: "hello" },
+        },
+        mockContext
+      );
 
-        await vi.advanceTimersByTimeAsync(5 * 60 * 1000 + 1);
-
-        await expect(
-          registry.approvePendingAction(approvalId!, 99999, "test-chat")
-        ).resolves.toMatchObject({ success: false });
-        expect(executor).not.toHaveBeenCalled();
-      } finally {
-        vi.useRealTimers();
-      }
+      expect(result).toEqual({
+        success: false,
+        error: 'Tool "telegram_send_message" is unavailable in guest mode',
+      });
+      expect(executor).not.toHaveBeenCalled();
     });
 
     it("should execute tool successfully", async () => {
@@ -683,6 +656,24 @@ describe("ToolRegistry", () => {
       expect(result.success).toBe(true);
     });
 
+    it("uses the authoritative registry admin set instead of caller-supplied config", async () => {
+      registry.register(createMockTool("admin_tool"), createMockExecutor(), "admin-only");
+      registry.setAdminIds([111]);
+      const call: ToolCall = {
+        type: "toolCall",
+        id: "call-1",
+        name: "admin_tool",
+        arguments: { message: "test" },
+      };
+
+      await expect(
+        registry.execute(call, { ...mockContext, senderId: 99999 })
+      ).resolves.toMatchObject({ success: false });
+      await expect(
+        registry.execute(call, { ...mockContext, senderId: 111 })
+      ).resolves.toMatchObject({ success: true });
+    });
+
     it("should catch and return errors from executor", async () => {
       const tool = createMockTool("error_tool");
       const executor = vi.fn(async () => {
@@ -702,6 +693,26 @@ describe("ToolRegistry", () => {
 
       expect(result.success).toBe(false);
       expect(result.error).toBe("Execution failed");
+    });
+
+    it("should execute an action only once for the same turn and arguments", async () => {
+      const tool = createMockTool("idempotent_action", "action");
+      const executor = createMockExecutor({ success: true, data: { remoteId: "one" } });
+      registry.register(tool, executor);
+      const toolCall: ToolCall = {
+        type: "toolCall",
+        id: "call-1",
+        name: tool.name,
+        arguments: { message: "perform once" },
+      };
+      const context = { ...mockContext, turnId: "turn-1" };
+
+      const first = await registry.execute(toolCall, context);
+      const replay = await registry.execute({ ...toolCall, id: "call-2" }, context);
+
+      expect(first).toEqual({ success: true, data: { remoteId: "one" } });
+      expect(replay).toEqual(first);
+      expect(executor).toHaveBeenCalledTimes(1);
     });
 
     it("should timeout long-running data-bearing tools", async () => {
@@ -948,19 +959,18 @@ describe("ToolRegistry", () => {
   });
 
   describe("registerPluginTools()", () => {
-    it("defaults external action tools to admin-only approval", () => {
+    it("defaults external action tools to the Telegram allowlist", () => {
       const action = createMockTool("plugin_mutate", "action");
 
       registry.registerPluginTools("test-plugin", [
         { tool: action, executor: createMockExecutor() },
       ]);
 
-      expect(registry.getToolConfig(action.name)).toEqual({ level: "admin" });
+      expect(registry.getToolConfig(action.name)).toEqual({ level: "allowlist" });
       expect(registry.getForContext(false, null, "dm", false, 12345)).not.toContainEqual(action);
 
       registry.setAllowFrom([12345]);
-      expect(registry.getForContext(false, null, "dm", false, 12345)).not.toContainEqual(action);
-      expect(registry.getForContext(false, null, "dm", true, 99999)).toContainEqual(action);
+      expect(registry.getForContext(false, null, "dm", false, 12345)).toContainEqual(action);
     });
 
     it("keeps external data-bearing tools public by default", () => {
@@ -974,7 +984,7 @@ describe("ToolRegistry", () => {
       expect(registry.getForContext(false, null, "dm", false, 12345)).toContainEqual(readOnly);
     });
 
-    it("requires owner approval for every external action", async () => {
+    it("executes external actions directly for an authorized sender", async () => {
       const action = createMockTool("plugin_mutate", "action");
       const executor = createMockExecutor();
       const sendMessage = vi.fn(async () => ({ id: 1, date: 1, chatId: "test-chat" }));
@@ -995,15 +1005,12 @@ describe("ToolRegistry", () => {
         }
       );
 
-      expect(result).toMatchObject({
-        success: false,
-        data: { approvalRequired: true },
-      });
-      expect(executor).not.toHaveBeenCalled();
-      expect(sendMessage).toHaveBeenCalledOnce();
+      expect(result).toMatchObject({ success: true });
+      expect(executor).toHaveBeenCalledOnce();
+      expect(sendMessage).not.toHaveBeenCalled();
     });
 
-    it("allows a data-bearing external tool to opt into approval", async () => {
+    it("ignores legacy approval metadata without interrupting execution", async () => {
       const readOnly = createMockTool("plugin_private_lookup", "data-bearing");
       const executor = createMockExecutor();
       const sendMessage = vi.fn(async () => ({ id: 1, date: 1, chatId: "test-chat" }));
@@ -1025,8 +1032,9 @@ describe("ToolRegistry", () => {
         }
       );
 
-      expect(result).toMatchObject({ data: { approvalRequired: true } });
-      expect(executor).not.toHaveBeenCalled();
+      expect(result).toMatchObject({ success: true });
+      expect(executor).toHaveBeenCalledOnce();
+      expect(sendMessage).not.toHaveBeenCalled();
     });
 
     it("should register multiple plugin tools", () => {
@@ -1192,6 +1200,23 @@ describe("ToolRegistry", () => {
       expect(() => {
         registry.removePluginTools("non-existent");
       }).not.toThrow();
+    });
+
+    it("notifies the index when plugin tools are removed", () => {
+      const onToolsChanged = vi.fn();
+      registry.onToolsChanged(onToolsChanged);
+      registry.registerPluginTools("test-plugin", [
+        {
+          tool: createMockTool("plugin_tool"),
+          executor: createMockExecutor(),
+          scope: "always",
+        },
+      ]);
+      onToolsChanged.mockClear();
+
+      registry.removePluginTools("test-plugin");
+
+      expect(onToolsChanged).toHaveBeenCalledWith(["plugin_tool"], []);
     });
   });
 

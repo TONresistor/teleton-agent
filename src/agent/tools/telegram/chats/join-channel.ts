@@ -24,6 +24,13 @@ interface JoinChannelParams {
   channel: string;
 }
 
+const UNSUPPORTED_GUARD_BOT_ERROR =
+  "This channel requires an interactive guard bot, which Teleton does not support. The channel was not joined.";
+
+function unwrapJoinUpdates(result: Api.messages.TypeChatInviteJoinResult): Api.TypeUpdates | null {
+  return result instanceof Api.messages.ChatInviteJoinResultOk ? result.updates : null;
+}
+
 /**
  * Tool definition for joining a Telegram channel or group
  */
@@ -75,9 +82,17 @@ export const telegramJoinChannelExecutor: ToolExecutor<JoinChannelParams> = asyn
         };
       }
 
-      const updates = await gramJsClient.invoke(
+      const joinResult = await gramJsClient.invoke(
         new Api.messages.ImportChatInvite({ hash: inviteHash })
       );
+      const updates = unwrapJoinUpdates(joinResult);
+
+      if (!updates) {
+        return {
+          success: false,
+          error: UNSUPPORTED_GUARD_BOT_ERROR,
+        };
+      }
 
       // Extract chat info from updates
       const chats =
@@ -126,11 +141,18 @@ export const telegramJoinChannelExecutor: ToolExecutor<JoinChannelParams> = asyn
       }
     }
 
-    await gramJsClient.invoke(
+    const joinResult = await gramJsClient.invoke(
       new Api.channels.JoinChannel({
         channel: channelEntity,
       })
     );
+
+    if (!unwrapJoinUpdates(joinResult)) {
+      return {
+        success: false,
+        error: UNSUPPORTED_GUARD_BOT_ERROR,
+      };
+    }
 
     const channelTitle =
       channelEntity instanceof Api.Channel

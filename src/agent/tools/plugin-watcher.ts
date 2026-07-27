@@ -14,13 +14,14 @@ import { basename, relative, resolve, sep } from "path";
 import { existsSync } from "fs";
 import { pathToFileURL } from "url";
 import { WORKSPACE_PATHS } from "../../workspace/paths.js";
-import { adaptPlugin, ensurePluginDeps } from "./plugin-loader.js";
-import type { PluginModule, PluginContext, Tool, ToolExecutor, ToolScope } from "./types.js";
+import { adaptPlugin, assertTrustedPluginPath, ensurePluginDeps } from "./plugin-loader.js";
+import type { PluginModule, PluginContext } from "./types.js";
 import type { ToolRegistry } from "./registry.js";
 import type { Config } from "../../config/schema.js";
 import type { SDKDependencies } from "../../sdk/index.js";
 import { createLogger } from "../../utils/logger.js";
 import { getErrorMessage } from "../../utils/errors.js";
+import { HookRegistry } from "../../sdk/hooks/registry.js";
 
 const log = createLogger("PluginWatcher");
 
@@ -35,12 +36,15 @@ interface PluginWatcherDeps {
   modules: PluginModule[];
   pluginContext: PluginContext;
   loadedModuleNames: string[];
+  hookRegistry: HookRegistry;
 }
 
 export class PluginWatcher {
   private watcher: ReturnType<typeof chokidar.watch> | null = null;
   private reloadTimers = new Map<string, NodeJS.Timeout>();
   private reloading = false;
+  private activeReloads = new Set<Promise<boolean>>();
+  private stopping = false;
   private pendingReloads = new Set<string>();
   private deps: PluginWatcherDeps;
   private pluginsDir: string;
@@ -54,6 +58,7 @@ export class PluginWatcher {
    * Start watching the plugins directory for changes.
    */
   start(): void {
+    this.stopping = false;
     this.watcher = chokidar.watch(this.pluginsDir, {
       ignoreInitial: true,
       awaitWriteFinish: {
@@ -122,6 +127,7 @@ export class PluginWatcher {
    * Stop watching and clear pending reloads.
    */
   async stop(): Promise<void> {
+    this.stopping = true;
     for (const timer of this.reloadTimers.values()) {
       clearTimeout(timer);
     }
@@ -131,9 +137,12 @@ export class PluginWatcher {
       await this.watcher.close();
       this.watcher = null;
     }
+    await Promise.allSettled([...this.activeReloads]);
+    this.pendingReloads.clear();
   }
 
   private scheduleReload(pluginName: string): void {
+    if (this.stopping) return;
     const existing = this.reloadTimers.get(pluginName);
     if (existing) clearTimeout(existing);
 
@@ -141,9 +150,15 @@ export class PluginWatcher {
       pluginName,
       setTimeout(() => {
         this.reloadTimers.delete(pluginName);
-        this.reloadPlugin(pluginName).catch((error: unknown) => {
+        const reload = this.reloadPlugin(pluginName);
+        this.activeReloads.add(reload);
+        reload.catch((error: unknown) => {
           log.error(`Unexpected error reloading "${pluginName}": ${getErrorMessage(error)}`);
         });
+        const clearActive = () => {
+          this.activeReloads.delete(reload);
+        };
+        void reload.then(clearActive, clearActive);
       }, RELOAD_DEBOUNCE_MS)
     );
   }
@@ -164,6 +179,7 @@ export class PluginWatcher {
   }
 
   private async reloadPlugin(pluginName: string): Promise<boolean> {
+    if (this.stopping) return false;
     if (this.reloading) {
       log.warn(`Reload already in progress, queuing "${pluginName}"`);
       this.pendingReloads.add(pluginName);
@@ -172,25 +188,21 @@ export class PluginWatcher {
 
     this.reloading = true;
 
-    const { config, registry, sdkDeps, modules, pluginContext, loadedModuleNames } = this.deps;
+    const { config, registry, sdkDeps, modules, pluginContext, loadedModuleNames, hookRegistry } =
+      this.deps;
 
     // Find existing module
-    const oldIndex = modules.findIndex((m) => m.name === pluginName);
+    const oldIndex = modules.findIndex((m) => m.sourceId === pluginName || m.name === pluginName);
     const oldModule = oldIndex >= 0 ? modules[oldIndex] : null;
 
     log.info(`Reloading plugin "${pluginName}"${oldModule ? ` (v${oldModule.version})` : ""}...`);
 
-    // Snapshot old tools for rollback before any changes
-    let oldTools: Array<{ tool: Tool; executor: ToolExecutor; scope?: ToolScope }> | null = null;
-    if (oldModule) {
-      try {
-        oldTools = oldModule.tools(config);
-      } catch {
-        // If we can't snapshot old tools, rollback won't restore them
-      }
-    }
-
     let oldStopped = false;
+    let runtimeStaged = false;
+    let candidatePluginId = pluginName;
+    const oldHookPluginId = oldModule?.name ?? pluginName;
+    const oldToolPluginId = oldModule?.name ?? pluginName;
+    const oldHooks = hookRegistry.getRegistrations(oldHookPluginId);
 
     try {
       // 1. Resolve module path
@@ -198,6 +210,7 @@ export class PluginWatcher {
       if (!modulePath) {
         throw new Error(`Plugin file not found for "${pluginName}"`);
       }
+      assertTrustedPluginPath(modulePath, this.pluginsDir);
 
       // 1.5. Install npm deps if package.json exists (directory plugins only)
       if (basename(modulePath) === "index.js") {
@@ -219,8 +232,23 @@ export class PluginWatcher {
 
       // 4. Adapt and validate (old plugin still running)
       const entryName = basename(modulePath) === "index.js" ? pluginName : `${pluginName}.js`;
-      const adapted = adaptPlugin(freshMod, entryName, config, loadedModuleNames, sdkDeps);
+      const candidateHooks = new HookRegistry();
+      const adapted = adaptPlugin(
+        freshMod,
+        entryName,
+        config,
+        loadedModuleNames,
+        sdkDeps,
+        candidateHooks
+      );
       const newTools = adapted.tools(config);
+      candidatePluginId = adapted.name;
+      const conflictingModule = modules.find(
+        (module, index) => index !== oldIndex && module.name === adapted.name
+      );
+      if (conflictingModule) {
+        throw new Error(`Plugin manifest name "${adapted.name}" is already loaded`);
+      }
       if (newTools.length === 0) {
         throw new Error("Plugin produced zero valid tools");
       }
@@ -247,7 +275,17 @@ export class PluginWatcher {
       adapted.migrate?.(pluginContext.db);
 
       // 7. Replace tools in registry
-      registry.replacePluginTools(pluginName, newTools);
+      // Tools are owned by the manifest name, which may differ from the
+      // directory name used by the watcher.
+      if (oldToolPluginId !== adapted.name) {
+        registry.removePluginTools(oldToolPluginId);
+        registry.registerPluginTools(adapted.name, newTools);
+      } else {
+        registry.replacePluginTools(adapted.name, newTools);
+      }
+      hookRegistry.unregister(oldHookPluginId);
+      hookRegistry.replacePlugin(adapted.name, candidateHooks.getRegistrations(adapted.name));
+      runtimeStaged = true;
 
       // 8. Start new plugin
       await Promise.race([
@@ -259,6 +297,7 @@ export class PluginWatcher {
           )
         ),
       ]);
+      hookRegistry.replacePlugin(adapted.name, candidateHooks.getRegistrations(adapted.name));
 
       // 9. Update modules array
       if (oldIndex >= 0) {
@@ -276,12 +315,11 @@ export class PluginWatcher {
       // don't need rollback — old module is still running)
       if (oldModule && oldIndex >= 0 && oldStopped) {
         try {
-          // Restore old tools in registry
-          if (oldTools && oldTools.length > 0) {
-            registry.replacePluginTools(pluginName, oldTools);
-          }
+          registry.removePluginTools(candidatePluginId);
+          hookRegistry.unregister(candidatePluginId);
           // Reopen plugin DB (stop() closed it)
           oldModule.migrate?.(pluginContext.db);
+          registry.registerPluginTools(oldToolPluginId, oldModule.tools(config));
           await Promise.race([
             oldModule.start?.(pluginContext),
             new Promise<never>((_, reject) =>
@@ -291,19 +329,29 @@ export class PluginWatcher {
               )
             ),
           ]);
+          // Replaying tools/start may register hooks again. Restore the exact
+          // pre-reload set once the old runtime is active.
+          hookRegistry.replacePlugin(oldHookPluginId, oldHooks);
           log.warn(`Rolled back to previous version of "${pluginName}"`);
         } catch {
           log.error(`Rollback also failed for "${pluginName}" — plugin disabled`);
-          registry.removePluginTools(pluginName);
+          registry.removePluginTools(candidatePluginId);
+          registry.removePluginTools(oldToolPluginId);
+          hookRegistry.unregister(oldHookPluginId);
           modules.splice(oldIndex, 1);
         }
+      } else if (!oldModule && runtimeStaged) {
+        // A newly added plugin may fail after its tools/hooks were staged.
+        // Leave no partial runtime state behind.
+        registry.removePluginTools(candidatePluginId);
+        hookRegistry.unregister(candidatePluginId);
       }
 
       return false;
     } finally {
       this.reloading = false;
       // Process any queued reloads
-      if (this.pendingReloads.size > 0) {
+      if (!this.stopping && this.pendingReloads.size > 0) {
         const next = this.pendingReloads.values().next().value;
         if (next) {
           this.pendingReloads.delete(next);

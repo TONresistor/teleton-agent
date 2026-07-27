@@ -13,6 +13,12 @@ const GOCOON_MODELS: Record<string, Model<"openai-completions">> = {};
 
 const GROK_BUILD_MODEL_ID = "grok-build";
 
+function clearProviderModels(provider: SupportedProvider): void {
+  for (const key of modelCache.keys()) {
+    if (key.startsWith(`${provider}:`)) modelCache.delete(key);
+  }
+}
+
 function createGrokBuildModel(): Model<"openai-responses"> {
   return {
     id: GROK_BUILD_MODEL_ID,
@@ -31,7 +37,6 @@ function createGrokBuildModel(): Model<"openai-responses"> {
     contextWindow: 500_000,
     maxTokens: 128_000,
     compat: {
-      sendSessionIdHeader: false,
       supportsLongCacheRetention: false,
     },
   };
@@ -39,6 +44,8 @@ function createGrokBuildModel(): Model<"openai-responses"> {
 
 /** Register models discovered from a running gocoon-runner (native OpenAI-compatible API). */
 export async function registerGocoonModels(httpPort: number): Promise<string[]> {
+  for (const key of Object.keys(GOCOON_MODELS)) delete GOCOON_MODELS[key];
+  clearProviderModels("gocoon");
   try {
     const res = await fetchWithTimeout(`http://localhost:${httpPort}/v1/models`, {
       timeoutMs: 3000,
@@ -87,6 +94,8 @@ const LOCAL_MODELS: Record<string, Model<"openai-completions">> = {};
 
 /** Register models discovered from a local OpenAI-compatible server */
 export async function registerLocalModels(baseUrl: string): Promise<string[]> {
+  for (const key of Object.keys(LOCAL_MODELS)) delete LOCAL_MODELS[key];
+  clearProviderModels("local");
   try {
     const parsed = new URL(baseUrl);
     if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
@@ -151,38 +160,28 @@ export function getProviderModel(provider: SupportedProvider, modelId: string): 
   if (meta.piAiProvider === "grok-build") {
     const grokBuildModel = createGrokBuildModel();
     if (modelId !== grokBuildModel.id) {
-      log.warn(`Grok Build model "${modelId}" not found, using "${grokBuildModel.id}"`);
+      throw new Error(`Grok Build model "${modelId}" is not supported`);
     }
     modelCache.set(cacheKey, grokBuildModel);
     return grokBuildModel;
   }
 
   if (meta.piAiProvider === "gocoon") {
-    let model = GOCOON_MODELS[modelId];
-    if (!model) {
-      // Fall back to the provider default (a served model), not the first registered
-      // one, which may be an unusable model with no workers.
-      model = GOCOON_MODELS[meta.defaultModel] ?? Object.values(GOCOON_MODELS)[0];
-      if (model) log.warn(`gocoon model "${modelId}" not found, using "${model.id}"`);
-    }
+    const model = GOCOON_MODELS[modelId];
     if (model) {
       modelCache.set(cacheKey, model);
       return model;
     }
-    throw new Error("No gocoon models available. Is the gocoon runner running?");
+    throw new Error(`Model "${modelId}" is not served by the configured gocoon endpoint`);
   }
 
   if (meta.piAiProvider === "local") {
-    let model = LOCAL_MODELS[modelId];
-    if (!model) {
-      model = Object.values(LOCAL_MODELS)[0];
-      if (model) log.warn(`Local model "${modelId}" not found, using "${model.id}"`);
-    }
+    const model = LOCAL_MODELS[modelId];
     if (model) {
       modelCache.set(cacheKey, model);
       return model;
     }
-    throw new Error("No local models available. Is the LLM server running?");
+    throw new Error(`Model "${modelId}" is not served by the configured local endpoint`);
   }
 
   // Moonshot backward-compat: remap old model IDs to kimi-coding IDs
@@ -198,27 +197,8 @@ export function getProviderModel(provider: SupportedProvider, modelId: string): 
     }
     modelCache.set(cacheKey, model);
     return model;
-  } catch {
-    log.warn(`Model ${modelId} not found for ${provider}, falling back to ${meta.defaultModel}`);
-    const fallbackKey = `${provider}:${meta.defaultModel}`;
-    const fallbackCached = modelCache.get(fallbackKey);
-    if (fallbackCached) return fallbackCached;
-
-    try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- same as above: dynamic strings
-      const model = getModel(meta.piAiProvider as any, meta.defaultModel as any);
-      if (!model) {
-        throw new Error(
-          `Fallback model ${meta.defaultModel} also returned undefined for ${provider}`
-        );
-      }
-      modelCache.set(fallbackKey, model);
-      return model;
-    } catch {
-      throw new Error(
-        `Could not find model ${modelId} or fallback ${meta.defaultModel} for ${provider}`
-      );
-    }
+  } catch (error) {
+    throw new Error(`Could not resolve configured model ${provider}/${modelId}`, { cause: error });
   }
 }
 

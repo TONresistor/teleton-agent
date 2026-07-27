@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { ToolRegistry } from "../registry.js";
 import { registerAllTools } from "../register-all.js";
 
@@ -10,6 +10,8 @@ const ADMIN_ONLY_TOOLS = [
   "dedust_swap",
   "telegram_get_dialogs",
   "telegram_get_history",
+  "telegram_search_global",
+  "telegram_search_posts",
   "telegram_create_scheduled_task",
   "workspace_list",
   "workspace_read",
@@ -20,6 +22,7 @@ const ADMIN_ONLY_TOOLS = [
   "memory_read",
   "memory_search",
   "session_search",
+  "vision_analyze",
 ] as const;
 
 const OWNER_PRIVATE_READS = [
@@ -42,7 +45,10 @@ const OWNER_PRIVATE_READS = [
   "telegram_get_stars_balance",
   "telegram_get_stars_transactions",
   "telegram_get_user_info",
+  "telegram_search_global",
   "telegram_search_messages",
+  "telegram_search_posts",
+  "vision_analyze",
 ] as const;
 
 describe("built-in tool access policy", () => {
@@ -87,33 +93,15 @@ describe("built-in tool access policy", () => {
     }
   });
 
-  it("wires the approval gate into real financial tool registrations", async () => {
-    const registry = new ToolRegistry("user");
+  it("hides global Telegram search tools in bot mode", () => {
+    const registry = new ToolRegistry("bot");
     registerAllTools(registry);
-    const sendMessage = vi.fn(async () => ({ id: 1, date: 1, chatId: "dm" }));
 
-    const result = await registry.execute(
-      {
-        type: "toolCall",
-        id: "financial-call",
-        name: "ton_send",
-        arguments: { to: "EQrecipient", amount: 1 },
-      },
-      {
-        bridge: {
-          getMode: () => "user",
-          getOwnUserId: () => 999n,
-          sendMessage,
-        } as never,
-        db: {} as never,
-        chatId: "dm",
-        senderId: 42,
-        isGroup: false,
-        config: { telegram: { admin_ids: [42] } } as never,
-      }
+    const visible = new Set(
+      registry.getForContext(false, null, "dm", true, 42).map((tool) => tool.name)
     );
 
-    expect(result).toMatchObject({ success: false, data: { approvalRequired: true } });
-    expect(sendMessage).toHaveBeenCalledOnce();
+    expect(visible.has("telegram_search_global")).toBe(false);
+    expect(visible.has("telegram_search_posts")).toBe(false);
   });
 });

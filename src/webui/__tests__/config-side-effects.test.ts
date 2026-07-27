@@ -43,12 +43,16 @@ vi.mock("../../ton/wallet-service.js", () => ({
 import { createConfigRoutes } from "../routes/config.js";
 import type { WebUIServerDeps } from "../types.js";
 
-function createTestApp(mockConfig: Record<string, any>) {
+function createTestApp(
+  mockConfig: Record<string, any>,
+  runtime?: { reloadConfig: () => any; applyConfigKey: (key: string, value: unknown) => void }
+) {
   const deps = {
     configPath: "/tmp/test.yaml",
     agent: {
       getConfig: () => mockConfig,
     },
+    ...runtime,
   } as unknown as WebUIServerDeps;
 
   const app = new Hono();
@@ -117,5 +121,45 @@ describe("Config side-effects on PUT/DELETE", () => {
     expect(mockSetToncenterApiKey).not.toHaveBeenCalled();
     expect(mockInvalidateEndpointCache).not.toHaveBeenCalled();
     expect(mockInvalidateTonClientCache).not.toHaveBeenCalled();
+  });
+
+  it("DELETE reapplies the validated schema default instead of leaving undefined", async () => {
+    const applyConfigKey = vi.fn();
+    app = createTestApp(
+      { agent: { max_agentic_iterations: 7 } },
+      {
+        reloadConfig: () => ({ agent: { max_agentic_iterations: 5 } }),
+        applyConfigKey,
+      }
+    );
+    mockReadRawConfig.mockReturnValue({ agent: { max_agentic_iterations: 7 } });
+
+    const res = await app.request("/api/config/agent.max_agentic_iterations", {
+      method: "DELETE",
+    });
+
+    expect(res.status).toBe(200);
+    expect(applyConfigKey).toHaveBeenCalledWith("agent.max_agentic_iterations", 5);
+  });
+
+  it("does not mutate runtime state for restart-only keys", async () => {
+    const applyConfigKey = vi.fn();
+    app = createTestApp(
+      { embedding: { provider: "local" } },
+      {
+        reloadConfig: () => ({ embedding: { provider: "none" } }),
+        applyConfigKey,
+      }
+    );
+    mockReadRawConfig.mockReturnValue({ embedding: { provider: "local" } });
+
+    const res = await app.request("/api/config/embedding.provider", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ value: "none" }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(applyConfigKey).not.toHaveBeenCalled();
   });
 });

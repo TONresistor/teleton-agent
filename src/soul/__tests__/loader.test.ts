@@ -120,6 +120,25 @@ describe("buildSystemPrompt() restructured sections", () => {
     const prompt = buildSystemPrompt({});
     expect(prompt).toContain("__SILENT__");
   });
+
+  it("keeps owner profile and strategy in the global agent context", () => {
+    mockExistsSync.mockImplementation(
+      (path: string) => path === WORKSPACE_PATHS.USER || path === WORKSPACE_PATHS.STRATEGY
+    );
+    mockReadFileSync.mockImplementation((path: string) => {
+      if (path === WORKSPACE_PATHS.USER) return "private owner profile";
+      if (path === WORKSPACE_PATHS.STRATEGY) return "private strategy";
+      return "";
+    });
+
+    const prompt = buildSystemPrompt({
+      ownerName: "Private Owner",
+    });
+
+    expect(prompt).toContain("Private Owner");
+    expect(prompt).toContain("private owner profile");
+    expect(prompt).toContain("private strategy");
+  });
 });
 
 // ── DEFAULT_SOUL / loadSoul() ────────────────────────────────────────────────

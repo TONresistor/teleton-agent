@@ -176,6 +176,17 @@ describe("AgentLifecycle", () => {
     expect(events[1].error).toBe("Telegram auth expired");
   });
 
+  it("cleans up partial resources when a registered start fails", async () => {
+    const cleanup = vi.fn(async () => {});
+    lifecycle.registerCallbacks(async () => {
+      throw new Error("partial start failed");
+    }, cleanup);
+
+    await expect(lifecycle.start()).rejects.toThrow("partial start failed");
+    expect(cleanup).toHaveBeenCalledOnce();
+    expect(lifecycle.getState()).toBe("stopped");
+  });
+
   // 11. start() after failed start works and clears error
   it("start() after failed start works and clears error", async () => {
     await lifecycle

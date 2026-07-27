@@ -115,7 +115,22 @@ export function AgentSettingsPanel({
               onSave={(v) => saveConfig('agent.max_agentic_iterations', v)}
               onCancel={() => cancelLocal('agent.max_agentic_iterations')}
               min={1}
-              max={20}
+              max={50}
+              inline
+            />
+            <EditableField
+              label="Turn Time Budget"
+              description="Maximum turn duration in milliseconds"
+              configKey="agent.max_turn_duration_ms"
+              type="number"
+              value={getLocal('agent.max_turn_duration_ms')}
+              serverValue={getServer('agent.max_turn_duration_ms')}
+              onChange={(v) => setLocal('agent.max_turn_duration_ms', v)}
+              onSave={(v) => saveConfig('agent.max_turn_duration_ms', v)}
+              onCancel={() => cancelLocal('agent.max_turn_duration_ms')}
+              min={10000}
+              max={900000}
+              step={10000}
               inline
             />
           </div>

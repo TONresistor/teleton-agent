@@ -24,7 +24,9 @@ const OWNER_PRIVATE_DATA = new Set([
   "telegram_get_stars_balance",
   "telegram_get_stars_transactions",
   "telegram_get_user_info",
+  "telegram_search_global",
   "telegram_search_messages",
+  "telegram_search_posts",
   "ton_get_address",
   "ton_get_balance",
   "ton_my_transactions",
@@ -33,31 +35,6 @@ const OWNER_PRIVATE_DATA = new Set([
 ]);
 
 const OWNER_ONLY_ACTIONS = new Set(["telegram_create_scheduled_task"]);
-
-/**
- * Built-ins that spend funds, sign an on-chain state change, or transfer a
- * collectible. These must never rely on natural-language model instructions
- * as proof of owner consent.
- */
-const APPROVAL_REQUIRED = new Set([
-  "ton_send",
-  "jetton_send",
-  "stonfi_swap",
-  "dedust_swap",
-  "dns_bid",
-  "dns_start_auction",
-  "dns_link",
-  "dns_set_site",
-  "dns_unlink",
-  "telegram_buy_resale_gift",
-  "telegram_set_collectible_price",
-  "telegram_send_gift_offer",
-  "telegram_resolve_gift_offer",
-]);
-
-export function requiresBuiltinApproval(toolName: string): boolean {
-  return APPROVAL_REQUIRED.has(toolName);
-}
 
 /**
  * Built-in security defaults. Channel placement and authority are intentionally

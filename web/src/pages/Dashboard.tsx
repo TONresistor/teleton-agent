@@ -1,5 +1,5 @@
 import { useEffect, useState, type ReactNode } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router';
 import { useConfigState } from '../hooks/useConfigState';
 import { POLICY_OPTIONS } from '../components/TelegramSettingsPanel';
 import { AllowLists } from '../components/AllowLists';

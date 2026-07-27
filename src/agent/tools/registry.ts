@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import { validateToolCall } from "@earendil-works/pi-ai";
 import type { Tool as PiAiTool, ToolCall } from "@earendil-works/pi-ai";
 import type { TSchema } from "@sinclair/typebox";
@@ -27,9 +26,16 @@ import { enforceMinimumAccess, scopeToLevel, levelToScope } from "./scope.js";
 import type { ToolIndex } from "./tool-index.js";
 import { getErrorMessage } from "../../utils/errors.js";
 import { createLogger } from "../../utils/logger.js";
+import { TELEGRAM_SEND_TOOLS } from "../../constants/tools.js";
+import { completeActionExecution, reserveActionExecution } from "../../memory/action-executions.js";
+import {
+  buildToolNamespaceCatalog,
+  formatNamespaceCatalogForPrompt,
+  resolveToolNamespace,
+  type ToolNamespaceCatalogEntry,
+} from "./tool-namespaces.js";
 
 const log = createLogger("Registry");
-const APPROVAL_TTL_MS = 5 * 60 * 1000;
 
 /**
  * External plugins and MCP servers are not part of the reviewed built-in policy.
@@ -40,29 +46,10 @@ const APPROVAL_TTL_MS = 5 * 60 * 1000;
 function getExternalMinimumAccess(
   tool: Tool,
   scope?: ToolScope,
-  declaredMinimum?: ToolAccessLevel,
-  requiresApproval = false
+  declaredMinimum?: ToolAccessLevel
 ): ToolAccessLevel {
   const declared = declaredMinimum ?? scopeToLevel(scope);
-  const externalFloor =
-    tool.category === "data-bearing" ? declared : enforceMinimumAccess(declared, "allowlist");
-  return requiresApproval ? enforceMinimumAccess(externalFloor, "admin") : externalFloor;
-}
-
-/** External actions fail closed; plugin authors may only add approval to reads. */
-function requiresExternalApproval(tool: Tool, declared?: boolean): boolean {
-  return tool.category !== "data-bearing" || declared === true;
-}
-
-interface PendingApproval {
-  id: string;
-  toolName: string;
-  args: unknown;
-  context: ToolContext;
-  senderId: number;
-  chatId: string;
-  fingerprint: string;
-  createdAt: number;
+  return tool.category === "data-bearing" ? declared : enforceMinimumAccess(declared, "allowlist");
 }
 
 /** Reason a tool is denied for a context — mapped to a user message by execute(). */
@@ -73,6 +60,7 @@ type AccessDenial =
   | { kind: "allowlist" }
   | { kind: "dm-only" }
   | { kind: "group-only" }
+  | { kind: "guest" }
   | { kind: "module-disabled"; module: string }
   | { kind: "module-admin"; module: string };
 
@@ -86,10 +74,13 @@ export class ToolRegistry {
   private pluginToolNames: Map<string, string[]> = new Map();
   private toolIndex: ToolIndex | null = null;
   private embedderRef: EmbeddingProvider | null = null;
-  private onToolsChangedCallbacks: Array<(removed: string[], added: PiAiTool[]) => void> = [];
+  private onToolsChangedCallbacks: Array<
+    (removed: string[], added: PiAiTool[]) => void | Promise<void>
+  > = [];
   private mode: RuntimeMode;
   private allowFrom: Set<number> = new Set();
-  private pendingApprovals: Map<string, PendingApproval> = new Map();
+  private adminIds: Set<number> = new Set();
+  private adminIdsConfigured = false;
 
   constructor(mode: RuntimeMode = "user") {
     this.mode = mode;
@@ -108,12 +99,12 @@ export class ToolRegistry {
       scope?: ToolScope;
       minimumAccess?: ToolAccessLevel;
       allowFrom?: readonly number[];
-      requiresApproval?: boolean;
       mode: ToolMode;
       module: string;
       tags?: string[];
     }
   ): void {
+    const namespace = resolveToolNamespace(name, entry.module, entry.tool.description);
     this.tools.set(name, {
       tool: entry.tool,
       executor: entry.executor,
@@ -121,9 +112,9 @@ export class ToolRegistry {
         entry.scope && entry.scope !== "always" && entry.scope !== "open" ? entry.scope : undefined,
       minimumAccess: entry.minimumAccess ?? scopeToLevel(entry.scope),
       allowFrom: entry.allowFrom ? new Set(entry.allowFrom) : undefined,
-      requiresApproval: entry.requiresApproval ?? false,
       mode: entry.mode,
       module: entry.module,
+      namespace,
       tags: entry.tags && entry.tags.length > 0 ? entry.tags : undefined,
     });
   }
@@ -135,7 +126,7 @@ export class ToolRegistry {
     mode: ToolMode = "both",
     tags?: string[],
     minimumAccess?: ToolAccessLevel,
-    requiresApproval = false,
+    _requiresApproval = false,
     allowFrom?: readonly number[]
   ): void {
     if (this.tools.has(tool.name)) {
@@ -149,7 +140,6 @@ export class ToolRegistry {
       module: tool.name.split("_")[0],
       tags,
       minimumAccess,
-      requiresApproval,
       allowFrom,
     });
     this.toolArrayCache = null;
@@ -169,8 +159,31 @@ export class ToolRegistry {
     log.info(`Mode switched to ${mode}, ${count} tools available`);
   }
 
+  /** Reset the registry in place so long-lived API consumers keep a valid reference. */
+  reset(mode: RuntimeMode): void {
+    const removed = [...this.tools.keys()];
+    this.tools.clear();
+    this.pluginToolNames.clear();
+    this.toolConfigs.clear();
+    this.toolArrayCache = null;
+    this.toolIndex = null;
+    this.embedderRef = null;
+    this.permissions = null;
+    this.mode = mode;
+    this.allowFrom.clear();
+    this.adminIds.clear();
+    this.adminIdsConfigured = false;
+    this.onToolsChangedCallbacks.length = 0;
+    if (removed.length > 0) log.debug(`Reset tool registry (${removed.length} tools removed)`);
+  }
+
   setAllowFrom(ids: number[]): void {
     this.allowFrom = new Set(ids);
+  }
+
+  setAdminIds(ids: number[]): void {
+    this.adminIds = new Set(ids);
+    this.adminIdsConfigured = true;
   }
 
   getAvailableModules(): string[] {
@@ -213,11 +226,20 @@ export class ToolRegistry {
    */
   private checkAccess(
     name: string,
-    ctx: { isGroup: boolean; isAdmin: boolean; senderId?: number; chatId?: string }
+    ctx: {
+      isGroup: boolean;
+      isAdmin: boolean;
+      isGuest?: boolean;
+      senderId?: number;
+      chatId?: string;
+    }
   ): { ok: true } | { ok: false; reason: AccessDenial } {
     const toolMode = this.tools.get(name)?.mode;
     if (toolMode && toolMode !== "both" && toolMode !== this.mode) {
       return { ok: false, reason: { kind: "mode", mode: toolMode } };
+    }
+    if (ctx.isGuest && TELEGRAM_SEND_TOOLS.has(name)) {
+      return { ok: false, reason: { kind: "guest" } };
     }
 
     // Channel restriction (code-declared, DB cannot override): a "dm-only" tool
@@ -270,6 +292,8 @@ export class ToolRegistry {
         return `Tool "${name}" can only be used in a direct message`;
       case "group-only":
         return `Tool "${name}" can only be used in a group`;
+      case "guest":
+        return `Tool "${name}" is unavailable in guest mode`;
       case "module-disabled":
         return `Module "${reason.module}" is disabled in this group`;
       case "module-admin":
@@ -288,10 +312,13 @@ export class ToolRegistry {
     }
 
     // Defense-in-depth authorization (tools are also filtered from the LLM tool list)
-    const isAdmin = context.config?.telegram.admin_ids.includes(context.senderId) ?? false;
+    const isAdmin = this.adminIdsConfigured
+      ? this.adminIds.has(context.senderId)
+      : (context.config?.telegram.admin_ids.includes(context.senderId) ?? false);
     const access = this.checkAccess(toolCall.name, {
       isGroup: context.isGroup,
       isAdmin,
+      isGuest: context.isGuest,
       senderId: context.senderId,
       chatId: context.chatId,
     });
@@ -301,10 +328,6 @@ export class ToolRegistry {
 
     try {
       const validatedArgs = validateToolCall(this.getAll(), toolCall);
-
-      if (registered.requiresApproval) {
-        return await this.requestApproval(toolCall.name, validatedArgs, context);
-      }
 
       return await this.executeRegistered(toolCall.name, registered, validatedArgs, context);
     } catch (error) {
@@ -316,141 +339,41 @@ export class ToolRegistry {
     }
   }
 
-  /** Execute a single-use request after an authenticated admin command. */
-  async approvePendingAction(
-    approvalId: string,
-    senderId: number,
-    chatId: string
-  ): Promise<ToolResult> {
-    this.cleanupPendingApprovals();
-    const pending = this.pendingApprovals.get(approvalId);
-    if (!pending) {
-      return { success: false, error: "Unknown or expired approval request" };
-    }
-    if (pending.senderId !== senderId || pending.chatId !== chatId) {
-      return { success: false, error: "This approval request belongs to another admin or chat" };
-    }
-
-    // Consume before execution so concurrent/repeated commands cannot replay it.
-    this.pendingApprovals.delete(approvalId);
-
-    const registered = this.tools.get(pending.toolName);
-    if (!registered) {
-      return { success: false, error: `Tool "${pending.toolName}" is no longer available` };
-    }
-
-    const isAdmin = pending.context.config?.telegram.admin_ids.includes(senderId) ?? false;
-    const access = this.checkAccess(pending.toolName, {
-      isGroup: pending.context.isGroup,
-      isAdmin,
-      senderId,
-      chatId,
-    });
-    if (!access.ok) {
-      return { success: false, error: this.denialMessage(pending.toolName, access.reason) };
-    }
-
-    return this.executeRegistered(pending.toolName, registered, pending.args, pending.context);
-  }
-
-  async rejectPendingAction(
-    approvalId: string,
-    senderId: number,
-    chatId: string
-  ): Promise<ToolResult> {
-    this.cleanupPendingApprovals();
-    const pending = this.pendingApprovals.get(approvalId);
-    if (!pending) {
-      return { success: false, error: "Unknown or expired approval request" };
-    }
-    if (pending.senderId !== senderId || pending.chatId !== chatId) {
-      return { success: false, error: "This approval request belongs to another admin or chat" };
-    }
-    this.pendingApprovals.delete(approvalId);
-    return { success: true, data: { rejected: true, tool: pending.toolName } };
-  }
-
-  private async requestApproval(
-    toolName: string,
-    args: unknown,
-    context: ToolContext
-  ): Promise<ToolResult> {
-    const ownUserId = context.bridge.getOwnUserId?.();
-    if (ownUserId !== undefined && context.senderId === Number(ownUserId)) {
-      return {
-        success: false,
-        error:
-          "Financial actions cannot be approved from a self-originated or autonomous context. Start an interactive admin request instead.",
-      };
-    }
-
-    this.cleanupPendingApprovals();
-    const fingerprint = JSON.stringify([context.senderId, context.chatId, toolName, args]);
-    const existing = Array.from(this.pendingApprovals.values()).find(
-      (pending) => pending.fingerprint === fingerprint
-    );
-    if (existing) return this.approvalRequiredResult();
-
-    const id = randomUUID();
-    const pending: PendingApproval = {
-      id,
-      toolName,
-      args: structuredClone(args),
-      context,
-      senderId: context.senderId,
-      chatId: context.chatId,
-      fingerprint,
-      createdAt: Date.now(),
-    };
-    this.pendingApprovals.set(id, pending);
-
-    const serializedArgs = JSON.stringify(args, null, 2).slice(0, 3000);
-    try {
-      await context.bridge.sendMessage({
-        chatId: context.chatId,
-        text:
-          `⚠️ Explicit approval required\n\n` +
-          `Tool: ${toolName}\n` +
-          `Parameters:\n${serializedArgs}\n\n` +
-          `Approve once: /approve ${id}\n` +
-          `Reject: /reject ${id}\n` +
-          `Expires in 5 minutes.`,
-      });
-    } catch (error) {
-      this.pendingApprovals.delete(id);
-      throw error;
-    }
-
-    return this.approvalRequiredResult();
-  }
-
-  private approvalRequiredResult(): ToolResult {
-    return {
-      success: false,
-      error: "Explicit owner approval is required. A separate approval request was sent.",
-      data: { approvalRequired: true },
-    };
-  }
-
-  private cleanupPendingApprovals(): void {
-    const cutoff = Date.now() - APPROVAL_TTL_MS;
-    for (const [id, pending] of this.pendingApprovals) {
-      if (pending.createdAt < cutoff) this.pendingApprovals.delete(id);
-    }
-  }
-
   private async executeRegistered(
     toolName: string,
     registered: RegisteredTool,
     validatedArgs: unknown,
     context: ToolContext
   ): Promise<ToolResult> {
+    let actionArgsHash: string | null = null;
     try {
-      // An action has no cancellation channel. Racing it against a timer would
-      // report failure while the side effect continues, inviting a duplicate
-      // retry. Only explicitly read-only tools may use the registry timeout.
+      if (registered.tool.category !== "data-bearing" && context.turnId) {
+        const reservation = reserveActionExecution(
+          context.db,
+          context.turnId,
+          toolName,
+          validatedArgs
+        );
+        if (reservation.kind === "replay") return reservation.result;
+        if (reservation.kind === "unknown") {
+          return {
+            success: false,
+            error:
+              `Action "${toolName}" already started in this turn and its outcome is unknown. ` +
+              "Do not retry it automatically; inspect the remote state first.",
+          };
+        }
+        actionArgsHash = reservation.argsHash;
+      }
+
+      // Do not race external actions against a timeout: the side effect could
+      // continue after a reported failure and invite an unsafe duplicate retry.
       if (registered.tool.category !== "data-bearing") {
-        return await registered.executor(validatedArgs, context);
+        const result = await registered.executor(validatedArgs, context);
+        if (actionArgsHash && context.turnId) {
+          completeActionExecution(context.db, context.turnId, toolName, actionArgsHash, result);
+        }
+        return result;
       }
 
       let timeoutHandle: ReturnType<typeof setTimeout>;
@@ -470,10 +393,14 @@ export class ToolRegistry {
       return result;
     } catch (error) {
       log.error({ err: error }, `Error executing tool ${toolName}`);
-      return {
+      const result = {
         success: false,
         error: getErrorMessage(error),
       };
+      if (actionArgsHash && context.turnId) {
+        completeActionExecution(context.db, context.turnId, toolName, actionArgsHash, result);
+      }
+      return result;
     }
   }
 
@@ -652,18 +579,21 @@ export class ToolRegistry {
       requiresApproval?: boolean;
     }>
   ): number {
+    if (this.pluginToolNames.has(pluginName)) {
+      this.replacePluginTools(pluginName, tools);
+      return this.pluginToolNames.get(pluginName)?.length ?? 0;
+    }
+
     const names: string[] = [];
-    for (const { tool, executor, scope, mode, minimumAccess, requiresApproval } of tools) {
+    for (const { tool, executor, scope, mode, minimumAccess } of tools) {
       if (this.tools.has(tool.name)) continue;
-      const approvalRequired = requiresExternalApproval(tool, requiresApproval);
       this.insertTool(tool.name, {
         tool,
         executor,
         scope,
         mode: mode ?? "both",
         module: pluginName,
-        minimumAccess: getExternalMinimumAccess(tool, scope, minimumAccess, approvalRequired),
-        requiresApproval: approvalRequired,
+        minimumAccess: getExternalMinimumAccess(tool, scope, minimumAccess),
       });
       names.push(tool.name);
     }
@@ -700,9 +630,9 @@ export class ToolRegistry {
   ): void {
     // Collect old tool names before removal (allowed to re-register these)
     const previousNames = new Set(this.pluginToolNames.get(pluginName) ?? []);
-    this.removePluginTools(pluginName);
+    this.removePluginTools(pluginName, false);
     const names: string[] = [];
-    for (const { tool, executor, scope, mode, minimumAccess, requiresApproval } of newTools) {
+    for (const { tool, executor, scope, mode, minimumAccess } of newTools) {
       // Prevent overwriting core/other-plugin tools
       if (this.tools.has(tool.name) && !previousNames.has(tool.name)) {
         log.warn(
@@ -710,15 +640,13 @@ export class ToolRegistry {
         );
         continue;
       }
-      const approvalRequired = requiresExternalApproval(tool, requiresApproval);
       this.insertTool(tool.name, {
         tool,
         executor,
         scope,
         mode: mode ?? "both",
         module: pluginName,
-        minimumAccess: getExternalMinimumAccess(tool, scope, minimumAccess, approvalRequired),
-        requiresApproval: approvalRequired,
+        minimumAccess: getExternalMinimumAccess(tool, scope, minimumAccess),
       });
       names.push(tool.name);
     }
@@ -740,7 +668,7 @@ export class ToolRegistry {
   /**
    * Remove all tools belonging to a plugin.
    */
-  removePluginTools(pluginName: string): void {
+  removePluginTools(pluginName: string, notify = true): void {
     const tracked = this.pluginToolNames.get(pluginName);
     if (tracked) {
       for (const name of tracked) {
@@ -749,13 +677,14 @@ export class ToolRegistry {
         this.toolConfigs.delete(name);
       }
       this.pluginToolNames.delete(pluginName);
+      if (notify && tracked.length > 0) this.notifyToolsChanged(tracked, []);
     }
     this.toolArrayCache = null;
   }
 
   // ─── Tool RAG ──────────────────────────────────────────────────
 
-  setToolIndex(index: ToolIndex): void {
+  setToolIndex(index: ToolIndex | null): void {
     this.toolIndex = index;
   }
 
@@ -807,23 +736,66 @@ export class ToolRegistry {
     isAdmin?: boolean,
     senderId?: number
   ): PiAiTool[] {
-    return Array.from(this.tools.entries())
+    const tools = Array.from(this.tools.entries())
       .filter(([name]) => {
         const tags = this.tools.get(name)?.tags;
         if (!tags?.includes("core")) return false;
         return this.passesFilters(name, isGroup, chatId, isAdmin, senderId);
       })
       .map(([, rt]) => rt.tool);
+
+    const catalog = this.getNamespaceCatalog(isGroup, chatId, isAdmin, senderId);
+    const renderedCatalog = formatNamespaceCatalogForPrompt(catalog);
+    if (!renderedCatalog) return tools;
+
+    return tools.map((tool) =>
+      tool.name === "tool_search"
+        ? {
+            ...tool,
+            description:
+              `${tool.description}\n\nAvailable tool namespaces:\n${renderedCatalog}\n` +
+              "Search a namespace by name when you know the domain, or describe the capability you need.",
+          }
+        : tool
+    );
   }
 
-  onToolsChanged(callback: (removed: string[], added: PiAiTool[]) => void): void {
+  /**
+   * Build the live namespace catalog after applying the same access checks used
+   * for tool exposure and execution. The catalog is derived on demand so plugin
+   * hot reloads and DB-backed permission changes cannot leave stale routes.
+   */
+  getNamespaceCatalog(
+    isGroup: boolean,
+    chatId?: string,
+    isAdmin?: boolean,
+    senderId?: number
+  ): ToolNamespaceCatalogEntry[] {
+    const available = Array.from(this.tools.entries())
+      .filter(([name]) => this.passesFilters(name, isGroup, chatId, isAdmin, senderId))
+      .map(([, registered]) => registered);
+    return buildToolNamespaceCatalog(available);
+  }
+
+  onToolsChanged(
+    callback: (removed: string[], added: PiAiTool[]) => void | Promise<void>
+  ): () => void {
     this.onToolsChangedCallbacks.push(callback);
+    return () => {
+      const index = this.onToolsChangedCallbacks.indexOf(callback);
+      if (index >= 0) this.onToolsChangedCallbacks.splice(index, 1);
+    };
   }
 
   private notifyToolsChanged(removed: string[], added: PiAiTool[]): void {
     for (const cb of this.onToolsChangedCallbacks) {
       try {
-        cb(removed, added);
+        const result = cb(removed, added);
+        if (result) {
+          void result.catch((error: unknown) => {
+            log.error({ err: error }, "onToolsChanged callback error");
+          });
+        }
       } catch (error) {
         log.error({ err: error }, "onToolsChanged callback error");
       }
@@ -847,7 +819,7 @@ export class ToolRegistry {
     const scopeFiltered = this.getForContext(isGroup, null, chatId, isAdmin, senderId);
     const scopeSet = new Set(scopeFiltered.map((t) => t.name));
 
-    if (!this.toolIndex) {
+    if (!this.toolIndex?.isIndexed) {
       return this.applyLimit(scopeFiltered, toolLimit);
     }
 

@@ -39,7 +39,14 @@ export function isContextOverflowError(errorMessage?: string): boolean {
 
 export function isRateLimitError(errorMessage?: string): boolean {
   if (!errorMessage) return false;
-  return errorMessage.includes("429") || errorMessage.toLowerCase().includes("rate");
+  const lower = errorMessage.toLowerCase();
+  return (
+    /\b429\b/.test(errorMessage) ||
+    /\brate[\s_-]*(?:limit|limited|exceeded)\b/.test(lower) ||
+    lower.includes("usage limit") ||
+    lower.includes("insufficient_quota") ||
+    lower.includes("quota exceeded")
+  );
 }
 
 export function isServerError(errorMessage?: string): boolean {

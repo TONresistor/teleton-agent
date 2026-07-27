@@ -268,7 +268,7 @@ export class HybridSearch {
           FROM tg_messages_vec
           WHERE embedding MATCH ? AND k = ?
         ) mv
-        JOIN tg_messages m ON m.id = mv.id
+        JOIN tg_messages m ON (m.chat_id || char(31) || m.id) = mv.id
         ${whereClause}
       `;
 
@@ -318,7 +318,8 @@ export class HybridSearch {
       params.push(limit);
 
       const sql = `
-        SELECT m.id, m.text, m.chat_id as source, rank as score, m.timestamp
+        SELECT (m.chat_id || char(31) || m.id) AS id,
+               m.text, m.chat_id as source, rank as score, m.timestamp
         FROM tg_messages_fts mf
         JOIN tg_messages m ON m.rowid = mf.rowid
         WHERE ${conditions.join(" AND ")}

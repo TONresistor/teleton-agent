@@ -61,7 +61,7 @@ describe("current product surfaces", () => {
       journalTools.length +
       workspaceTools.length +
       webTools.length +
-      1; // tool_search is registered after the category arrays.
+      2; // tool_search and tool_result_read are registered after the category arrays.
 
     expect({
       base: baseToolCount,
@@ -76,9 +76,9 @@ describe("current product surfaces", () => {
       workspace: workspaceTools.length,
       web: webTools.length,
     }).toEqual({
-      base: 128,
-      telegram: 83,
-      telegramUserMode: 80,
+      base: 131,
+      telegram: 85,
+      telegramUserMode: 82,
       telegramBotMode: 17,
       ton: 15,
       dns: 8,

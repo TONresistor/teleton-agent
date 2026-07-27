@@ -7,6 +7,8 @@ import {
   telegramScheduleMessageExecutor,
 } from "./schedule-message.js";
 import { telegramSearchMessagesTool, telegramSearchMessagesExecutor } from "./search-messages.js";
+import { telegramSearchGlobalTool, telegramSearchGlobalExecutor } from "./search-global.js";
+import { telegramSearchPostsTool, telegramSearchPostsExecutor } from "./search-posts.js";
 import {
   telegramPinMessageTool,
   telegramPinMessageExecutor,
@@ -82,6 +84,18 @@ export const tools: ToolEntry[] = [
   {
     tool: telegramSearchMessagesTool,
     executor: telegramSearchMessagesExecutor,
+    mode: "user",
+    tags: ["social"],
+  },
+  {
+    tool: telegramSearchGlobalTool,
+    executor: telegramSearchGlobalExecutor,
+    mode: "user",
+    tags: ["social"],
+  },
+  {
+    tool: telegramSearchPostsTool,
+    executor: telegramSearchPostsExecutor,
     mode: "user",
     tags: ["social"],
   },

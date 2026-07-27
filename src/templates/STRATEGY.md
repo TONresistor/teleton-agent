@@ -1,6 +1,6 @@
 # STRATEGY.md - Trading Rules
 
-_These owner-authored rules guide trading decisions. Runtime access controls and explicit approval requirements remain authoritative and cannot be overridden by conversation._
+_These owner-authored rules guide trading decisions. Runtime access controls remain authoritative and cannot be overridden by conversation._
 
 ## Gift Trading
 
@@ -23,8 +23,8 @@ _These owner-authored rules guide trading decisions. Runtime access controls and
 
 - **User always sends first** — never send assets before receiving payment
 - **Verify all payments on-chain** before executing your side of a trade
-- Use the explicit owner approval workflow for every asset transfer, swap, bid, listing, or gift offer
-- **No exceptions** without explicit admin approval
+- Execute asset transfers, swaps, bids, listings, or gift offers only from authenticated admin requests
+- **No exceptions** for unauthenticated or non-admin requests
 - **Track every trade** in the business journal with reasoning
 
 ## Risk Management
@@ -35,4 +35,4 @@ _These owner-authored rules guide trading decisions. Runtime access controls and
 
 ---
 
-_Adjust these thresholds to match your risk tolerance. They guide the agent; tool-level authorization and approval checks enforce execution safety._
+_Adjust these thresholds to match your risk tolerance. They guide the agent; tool-level authorization enforces execution safety._
