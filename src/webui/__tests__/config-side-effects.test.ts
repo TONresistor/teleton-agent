@@ -162,4 +162,59 @@ describe("Config side-effects on PUT/DELETE", () => {
     expect(res.status).toBe(200);
     expect(applyConfigKey).not.toHaveBeenCalled();
   });
+
+  it("persists the provider default model atomically without hot-reloading it", async () => {
+    const applyConfigKey = vi.fn();
+    app = createTestApp(
+      { agent: { provider: "openrouter", model: "custom/provider-model" } },
+      {
+        reloadConfig: () => ({
+          agent: { provider: "anthropic", model: "claude-haiku-4-5-20251001" },
+        }),
+        applyConfigKey,
+      }
+    );
+    mockReadRawConfig.mockReturnValue({
+      agent: { provider: "openrouter", model: "custom/provider-model" },
+    });
+
+    const res = await app.request("/api/config/agent.provider", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ value: "anthropic" }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(mockWriteRawConfig).toHaveBeenCalledTimes(1);
+    expect(mockWriteRawConfig.mock.calls[0]?.[0]).toMatchObject({
+      agent: {
+        provider: "anthropic",
+        model: "claude-haiku-4-5-20251001",
+      },
+    });
+    expect(applyConfigKey).not.toHaveBeenCalled();
+  });
+
+  it("preserves a custom model when the configured provider does not change", async () => {
+    app = createTestApp({
+      agent: { provider: "anthropic", model: "custom/anthropic-model" },
+    });
+    mockReadRawConfig.mockReturnValue({
+      agent: { provider: "anthropic", model: "custom/anthropic-model" },
+    });
+
+    const res = await app.request("/api/config/agent.provider", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ value: "anthropic" }),
+    });
+
+    expect(res.status).toBe(200);
+    expect(mockWriteRawConfig.mock.calls[0]?.[0]).toMatchObject({
+      agent: {
+        provider: "anthropic",
+        model: "custom/anthropic-model",
+      },
+    });
+  });
 });

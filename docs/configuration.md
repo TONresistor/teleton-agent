@@ -97,7 +97,7 @@ When you change the `provider` and omit `model`, the platform auto-selects:
 | `groq` | `openai/gpt-oss-120b` | `openai/gpt-oss-20b` |
 | `openrouter` | `anthropic/claude-opus-5` | `google/gemini-3.5-flash-lite` |
 | `moonshot` | `kimi-for-coding` | `kimi-for-coding` |
-| `mistral` | `mistral-medium-3.5` | `mistral-small-2603` |
+| `mistral` | `mistral-medium-latest` | `mistral-small-2603` |
 | `cerebras` | `gpt-oss-120b` | `gemma-4-31b` |
 | `zai` | `glm-5.2` | `glm-5-turbo` |
 | `minimax` | `MiniMax-M3` | `MiniMax-M3` |

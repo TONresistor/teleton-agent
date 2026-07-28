@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { api, StatusData, MemoryStats, ToolRagStatus, ConfigKeyData } from '../lib/api';
+import { mergeModelOptions } from '../lib/model-options';
 import { errMsg } from '../lib/utils';
 
 export interface ProviderMeta {
@@ -88,20 +89,19 @@ export function useConfigState() {
     setLocalInputs((prev) => ({ ...prev, [key]: value }));
   };
 
-  // Load model options when provider changes
+  // Load model options without mutating the configured selection
   const currentProvider = getLocal('agent.provider');
+  const currentModel = getLocal('agent.model');
   useEffect(() => {
     if (!currentProvider) return;
     api.getModelsForProvider(currentProvider).then((res) => {
-      const models = res.data.map((m) => ({ value: m.value, name: m.name }));
+      const models = mergeModelOptions(
+        res.data.map((m) => ({ value: m.value, name: m.name })),
+        currentModel
+      );
       setModelOptions(models);
-      // Auto-select first model if current model isn't in the new list
-      const currentModel = localInputs['agent.model'] ?? '';
-      if (models.length > 0 && !models.some((m) => m.value === currentModel)) {
-        saveConfig('agent.model', models[0].value);
-      }
     }).catch(() => setModelOptions([]));
-  }, [currentProvider]);
+  }, [currentProvider, currentModel]);
 
   // Handle provider change — gate on API key
   const handleProviderChange = async (newProvider: string) => {

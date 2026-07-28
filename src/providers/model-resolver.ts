@@ -184,8 +184,9 @@ const LEGACY_MODEL_ALIASES: Partial<Record<SupportedProvider, Readonly<Record<st
     "kimi-k2-thinking": "kimi-for-coding",
   },
   mistral: {
-    "devstral-2512": "mistral-medium-3.5",
-    "devstral-small-2507": "mistral-medium-3.5",
+    "mistral-medium-3.5": "mistral-medium-latest",
+    "devstral-2512": "mistral-medium-latest",
+    "devstral-small-2507": "mistral-medium-latest",
   },
   cerebras: {
     "qwen-3-235b-a22b-instruct-2507": "gpt-oss-120b",

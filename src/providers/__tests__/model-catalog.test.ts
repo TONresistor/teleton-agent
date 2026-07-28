@@ -35,8 +35,9 @@ const LEGACY_MODEL_CASES: ReadonlyArray<
   ["moonshot", "kimi-k2.5", "kimi-for-coding"],
   ["moonshot", "k2p6", "kimi-for-coding"],
   ["moonshot", "kimi-k2-thinking", "kimi-for-coding"],
-  ["mistral", "devstral-2512", "mistral-medium-3.5"],
-  ["mistral", "devstral-small-2507", "mistral-medium-3.5"],
+  ["mistral", "mistral-medium-3.5", "mistral-medium-latest"],
+  ["mistral", "devstral-2512", "mistral-medium-latest"],
+  ["mistral", "devstral-small-2507", "mistral-medium-latest"],
   ["cerebras", "qwen-3-235b-a22b-instruct-2507", "gpt-oss-120b"],
   ["cerebras", "qwen-3-32b", "gpt-oss-120b"],
   ["cerebras", "llama3.1-8b", "gemma-4-31b"],
@@ -99,6 +100,15 @@ describe("provider model catalog", () => {
         expect(getProviderModel(provider.id, option.value).id).toBe(option.value);
       }
     }
+  });
+
+  it("uses Mistral's documented rolling alias instead of the unofficial dotted ID", () => {
+    const mistral = getSupportedProviders().find((provider) => provider.id === "mistral");
+    const modelIds = getModelsForProvider("mistral").map((model) => model.value);
+
+    expect(mistral?.defaultModel).toBe("mistral-medium-latest");
+    expect(modelIds).toContain("mistral-medium-latest");
+    expect(modelIds).not.toContain("mistral-medium-3.5");
   });
 
   it.each(LEGACY_MODEL_CASES)("maps %s/%s to %s", (provider, legacyId, replacementId) => {

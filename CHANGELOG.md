@@ -18,6 +18,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Updated `@earendil-works/pi-ai` to 0.82.1 and refreshed provider defaults.
 - Exposed GPT-5.6 Luna now that Codex advertises it in local and production caches.
 
+### Fixed
+
+- Prevented the WebUI from silently replacing custom or legacy models while loading provider options.
+- Switched Mistral Medium to its documented `mistral-medium-latest` API alias.
+
 ## [0.10.1] - 2026-07-27
 
 ### Added

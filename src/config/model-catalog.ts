@@ -371,8 +371,8 @@ const MODEL_OPTIONS: Record<string, CatalogModelOption[]> = {
   ],
   mistral: [
     {
-      value: "mistral-medium-3.5",
-      name: "Mistral Medium 3.5",
+      value: "mistral-medium-latest",
+      name: "Mistral Medium (Latest)",
       description: "Agentic coding and multimodal reasoning, 262K context",
     },
     {
@@ -389,11 +389,6 @@ const MODEL_OPTIONS: Record<string, CatalogModelOption[]> = {
       value: "mistral-small-latest",
       name: "Mistral Small",
       description: "Reasoning and vision, 256K context",
-    },
-    {
-      value: "mistral-medium-latest",
-      name: "Mistral Medium",
-      description: "Reasoning and vision, 262K context",
     },
     {
       value: "mistral-large-latest",

@@ -151,7 +151,7 @@ const PROVIDER_REGISTRY = {
     keyPrefix: null,
     keyHint: "...",
     consoleUrl: "https://console.mistral.ai/api-keys",
-    defaultModel: "mistral-medium-3.5",
+    defaultModel: "mistral-medium-latest",
     utilityModel: "mistral-small-2603",
     toolLimit: 128,
     piAiProvider: "mistral",
