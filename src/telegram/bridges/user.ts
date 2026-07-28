@@ -1,15 +1,24 @@
 import { TelegramUserClient, type TelegramClientConfig } from "../client.js";
-import { Api } from "telegram";
+import { statSync } from "node:fs";
+import { basename } from "node:path";
+import { Api, utils } from "telegram";
+import { CustomFile } from "telegram/client/uploads.js";
 import type { NewMessageEvent } from "telegram/events/NewMessage.js";
 import { createLogger } from "../../utils/logger.js";
 import { withFloodRetry } from "../flood-retry.js";
 import { randomLong } from "../../utils/gramjs-bigint.js";
+import { getGramJSErrorMessage } from "../../utils/errors.js";
+import { markdownToTelegramHtml } from "../formatting.js";
+import { classifyTelegramRichMessageMedia, resolveTelegramMessageText } from "../rich-message.js";
+import { readRichDocumentMetadata } from "../media-metadata.js";
 import { classifyMedia } from "../bridge-interface.js";
 import type {
   ITelegramBridge,
   TelegramMessage,
   InlineButton, // eslint-disable-line @typescript-eslint/no-unused-vars -- re-exported for backward compat
   SendMessageOptions,
+  SendRichMessageOptions,
+  RichMessageMediaUpload,
   SentMessage,
   EditMessageOptions,
   ReplyContext,
@@ -23,6 +32,99 @@ const log = createLogger("Telegram");
 
 /** Max time to wait for getSender() before giving up (deleted accounts, timeouts). */
 const SENDER_RESOLVE_TIMEOUT_MS = 5000;
+
+const RICH_FORMATTING_PATTERNS = [
+  /(?:^|\n)\s{0,3}#{1,6}\s+\S/, // heading
+  /(?:^|\n)\s{0,3}(?:>\s*|[-+*]\s+|\d+[.)]\s+)\S/, // quote or list
+  /(?:^|\n)\s{0,3}-\s+\[[ xX]\]\s+\S/, // task list
+  /(?:^|\n)\s{0,3}(?:-{3,}|\*{3,}|_{3,})\s*(?:\n|$)/, // horizontal rule
+  /(?:^|\n)\s*\|?(?:\s*:?-{3,}:?\s*\|){1,}\s*:?-{3,}:?\s*\|?\s*(?:\n|$)/, // table
+  /```[\s\S]*?```|~~~[\s\S]*?~~~/, // fenced code
+  /`[^`\n]+`/, // inline code
+  /!?\[[^\]\n]+\]\([^) \n]+(?:\s+"[^"]*")?\)/, // link or image
+  /<https?:\/\/[^>\s]+>/, // autolink
+  /\*\*\S(?:[\s\S]*?\S)?\*\*/, // bold
+  /(?<![\w_])__(?!_)(?=[^_\n]*\s)[^_\n]*?\S__(?![\w_])/, // underscore bold with spaces
+  /~~\S(?:[\s\S]*?\S)?~~|\|\|\S(?:[\s\S]*?\S)?\|\|/, // strike or spoiler
+  /(?:^|[^\w])\*\S(?:[^*\n]*?\S)?\*(?!\w)/, // italic with asterisks
+  /(?<![\w_])_(?!_)\S(?:[^_\n]*?\S)?_(?![\w_])/, // italic with underscores
+  /\\(?:\(|\[)[\s\S]+?\\(?:\)|\])|\$\$[\s\S]+?\$\$/, // display LaTeX
+  /(?<![$\\])\$(?![$\s])[^$\n]+?(?<![\s\\])\$(?![\w$])/, // inline LaTeX
+  /<\/?(?:a|b|blockquote|code|del|details|em|i|pre|s|strong|sub|summary|sup|tg-spoiler|u)(?:\s[^>]*)?>/i, // supported HTML
+];
+
+function hasRichFormatting(text: string): boolean {
+  return RICH_FORMATTING_PATTERNS.some((pattern) => pattern.test(text));
+}
+
+/**
+ * Rich Markdown can be rejected deterministically when the account does not
+ * have the feature yet or the server cannot parse the generated markup. Only
+ * those pre-send validation failures are safe to retry as a classic message.
+ * Network/timeouts remain ambiguous and must not fall back, or we could send
+ * the same message twice after Telegram accepted the first request.
+ */
+function canFallbackFromRichMessage(error: unknown): boolean {
+  const code = (error as { code?: unknown } | null | undefined)?.code;
+  if (code !== 400 && code !== 403 && code !== 406) {
+    return false;
+  }
+
+  const rpcError = getGramJSErrorMessage(error)?.toUpperCase();
+  if (!rpcError) return false;
+
+  return (
+    /^RICH_(?:MESSAGE|TEXT)(?:_[A-Z0-9]+)*$/.test(rpcError) ||
+    rpcError === "MESSAGE_EMPTY" ||
+    rpcError === "INPUT_CONSTRUCTOR_INVALID" ||
+    rpcError === "PREMIUM_ACCOUNT_REQUIRED"
+  );
+}
+
+function sentMessageFromUpdates(result: Api.TypeUpdates, chatId: string): SentMessage {
+  if (
+    result instanceof Api.UpdateShortSentMessage ||
+    result instanceof Api.UpdateShortMessage ||
+    result instanceof Api.UpdateShortChatMessage
+  ) {
+    return { id: result.id, date: result.date, chatId };
+  }
+
+  if (result instanceof Api.UpdateShort) {
+    const update = result.update;
+    if (
+      (update instanceof Api.UpdateNewMessage || update instanceof Api.UpdateNewChannelMessage) &&
+      update.message instanceof Api.Message
+    ) {
+      return { id: update.message.id, date: update.message.date, chatId };
+    }
+    if (update instanceof Api.UpdateMessageID) {
+      return { id: update.id, date: result.date, chatId };
+    }
+  }
+
+  if (result instanceof Api.Updates || result instanceof Api.UpdatesCombined) {
+    let mappedId: number | undefined;
+    for (const update of result.updates) {
+      if (
+        (update instanceof Api.UpdateNewMessage || update instanceof Api.UpdateNewChannelMessage) &&
+        update.message instanceof Api.Message
+      ) {
+        return { id: update.message.id, date: update.message.date, chatId };
+      }
+      if (update instanceof Api.UpdateMessageID) {
+        mappedId = update.id;
+      }
+    }
+    if (mappedId !== undefined) {
+      return { id: mappedId, date: result.date, chatId };
+    }
+  }
+
+  // The request succeeded, so never resend solely because Telegram returned an
+  // update shape without a message object.
+  return { id: 0, date: Math.floor(Date.now() / 1000), chatId };
+}
 
 export class GramJSUserBridge implements ITelegramBridge {
   private client: TelegramUserClient;
@@ -114,11 +216,50 @@ export class GramJSUserBridge implements ITelegramBridge {
     try {
       const peer = options._rawPeer || this.peerCache.get(options.chatId) || options.chatId;
 
-      let msg: Api.Message;
-
+      let buttons: Api.ReplyInlineMarkup | undefined;
       if (options.inlineKeyboard && options.inlineKeyboard.length > 0) {
-        const buttons = this.buildInlineMarkup(options.inlineKeyboard);
+        buttons = this.buildInlineMarkup(options.inlineKeyboard);
+      }
 
+      if (hasRichFormatting(options.text)) {
+        try {
+          const result = await withFloodRetry(
+            () =>
+              this.client.getClient().invoke(
+                new Api.messages.SendMessage({
+                  peer,
+                  message: "",
+                  randomId: randomLong(),
+                  replyTo:
+                    options.replyToId !== undefined
+                      ? new Api.InputReplyToMessage({ replyToMsgId: options.replyToId })
+                      : undefined,
+                  replyMarkup: buttons,
+                  noWebpage: true,
+                  richMessage: new Api.InputRichMessageMarkdown({
+                    markdown: options.text,
+                  }),
+                })
+              ),
+            undefined,
+            undefined,
+            options.chatId
+          );
+
+          return sentMessageFromUpdates(result, options.chatId);
+        } catch (error) {
+          if (!canFallbackFromRichMessage(error)) {
+            throw error;
+          }
+          log.warn(
+            { err: error, chatId: options.chatId },
+            "Rich Markdown unavailable or invalid; falling back to a classic message"
+          );
+        }
+      }
+
+      let msg: Api.Message;
+      if (buttons) {
         const gramJsClient = this.client.getClient();
         msg = await withFloodRetry(
           () =>
@@ -171,6 +312,140 @@ export class GramJSUserBridge implements ITelegramBridge {
     });
   }
 
+  private async uploadRichMessageMedia(
+    peer: Api.TypeEntityLike,
+    chatId: string,
+    media: RichMessageMediaUpload
+  ): Promise<Api.TypeInputRichFile> {
+    const gramJsClient = this.client.getClient();
+    const file = new CustomFile(basename(media.path), statSync(media.path).size, media.path);
+
+    if (media.type === "photo") {
+      const uploadedFile = await gramJsClient.uploadFile({
+        file,
+        workers: 4,
+      });
+      const uploadedMedia = await withFloodRetry(
+        () =>
+          gramJsClient.invoke(
+            new Api.messages.UploadMedia({
+              peer,
+              media: new Api.InputMediaUploadedPhoto({
+                file: uploadedFile,
+              }),
+            })
+          ),
+        undefined,
+        undefined,
+        chatId
+      );
+      const inputPhoto = utils.getInputPhoto(uploadedMedia);
+      if (!(inputPhoto instanceof Api.InputPhoto)) {
+        throw new Error(`Telegram did not return an uploaded photo for media "${media.id}"`);
+      }
+      return new Api.InputRichFilePhoto({
+        id: media.id,
+        photo: inputPhoto,
+      });
+    }
+
+    const generated = utils.getAttributes(file, {
+      supportsStreaming: media.type === "video",
+    });
+    const metadata = await readRichDocumentMetadata(media.path, media.type);
+    const attrs: Api.TypeDocumentAttribute[] = generated.attrs.filter(
+      (attribute) =>
+        !(attribute instanceof Api.DocumentAttributeVideo) &&
+        !(attribute instanceof Api.DocumentAttributeAudio)
+    );
+    if (media.type === "video") {
+      if (metadata.width === undefined || metadata.height === undefined) {
+        throw new Error(`Telegram video metadata is incomplete for media "${media.id}"`);
+      }
+      attrs.push(
+        new Api.DocumentAttributeVideo({
+          duration: metadata.duration,
+          w: metadata.width,
+          h: metadata.height,
+          supportsStreaming: true,
+        })
+      );
+    } else {
+      attrs.push(
+        new Api.DocumentAttributeAudio({
+          duration: Math.max(1, Math.round(metadata.duration)),
+        })
+      );
+    }
+
+    const uploadedFile = await gramJsClient.uploadFile({
+      file,
+      workers: 4,
+    });
+    const uploadedMedia = await withFloodRetry(
+      () =>
+        gramJsClient.invoke(
+          new Api.messages.UploadMedia({
+            peer,
+            media: new Api.InputMediaUploadedDocument({
+              file: uploadedFile,
+              mimeType: generated.mimeType,
+              attributes: attrs,
+            }),
+          })
+        ),
+      undefined,
+      undefined,
+      chatId
+    );
+    const inputDocument = utils.getInputDocument(uploadedMedia);
+    if (!(inputDocument instanceof Api.InputDocument)) {
+      throw new Error(`Telegram did not return an uploaded document for media "${media.id}"`);
+    }
+    return new Api.InputRichFileDocument({
+      id: media.id,
+      document: inputDocument,
+    });
+  }
+
+  async sendRichMessage(options: SendRichMessageOptions): Promise<SentMessage> {
+    try {
+      const peer = this.peerCache.get(options.chatId) || options.chatId;
+      const files: Api.TypeInputRichFile[] = [];
+      for (const media of options.media) {
+        files.push(await this.uploadRichMessageMedia(peer, options.chatId, media));
+      }
+
+      const result = await withFloodRetry(
+        () =>
+          this.client.getClient().invoke(
+            new Api.messages.SendMessage({
+              peer,
+              message: "",
+              randomId: randomLong(),
+              replyTo:
+                options.replyToId !== undefined
+                  ? new Api.InputReplyToMessage({ replyToMsgId: options.replyToId })
+                  : undefined,
+              noWebpage: true,
+              richMessage: new Api.InputRichMessageMarkdown({
+                markdown: options.text,
+                files,
+              }),
+            })
+          ),
+        undefined,
+        undefined,
+        options.chatId
+      );
+
+      return sentMessageFromUpdates(result, options.chatId);
+    } catch (error) {
+      log.error({ err: error, chatId: options.chatId }, "Error sending Rich Message with media");
+      throw error;
+    }
+  }
+
   async editMessage(options: EditMessageOptions): Promise<SentMessage> {
     try {
       const peer = this.peerCache.get(options.chatId) || options.chatId;
@@ -181,35 +456,80 @@ export class GramJSUserBridge implements ITelegramBridge {
       }
 
       const gramJsClient = this.client.getClient();
-      const result = await withFloodRetry(
+      if (hasRichFormatting(options.text)) {
+        try {
+          const result = await withFloodRetry(
+            () =>
+              gramJsClient.invoke(
+                new Api.messages.EditMessage({
+                  peer,
+                  id: options.messageId,
+                  replyMarkup: buttons,
+                  noWebpage: true,
+                  richMessage: new Api.InputRichMessageMarkdown({
+                    markdown: options.text,
+                  }),
+                })
+              ),
+            undefined,
+            undefined,
+            options.chatId
+          );
+
+          const updates =
+            result instanceof Api.UpdateShort
+              ? [result.update]
+              : result instanceof Api.Updates || result instanceof Api.UpdatesCombined
+                ? result.updates
+                : [];
+          const messageUpdate = updates.find(
+            (update) =>
+              update instanceof Api.UpdateEditMessage ||
+              update instanceof Api.UpdateEditChannelMessage
+          );
+          if (
+            messageUpdate &&
+            "message" in messageUpdate &&
+            messageUpdate.message instanceof Api.Message
+          ) {
+            return {
+              id: messageUpdate.message.id,
+              date: messageUpdate.message.date,
+              chatId: options.chatId,
+            };
+          }
+
+          return {
+            id: options.messageId,
+            date: Math.floor(Date.now() / 1000),
+            chatId: options.chatId,
+          };
+        } catch (error) {
+          if (!canFallbackFromRichMessage(error)) {
+            throw error;
+          }
+          log.warn(
+            { err: error, chatId: options.chatId, messageId: options.messageId },
+            "Rich Markdown unavailable or invalid; falling back to a classic edit"
+          );
+        }
+      }
+
+      const msg = await withFloodRetry(
         () =>
-          gramJsClient.invoke(
-            new Api.messages.EditMessage({
-              peer,
-              id: options.messageId,
-              message: options.text,
-              replyMarkup: buttons,
-            })
-          ),
+          gramJsClient.editMessage(peer, {
+            message: options.messageId,
+            text: markdownToTelegramHtml(options.text),
+            parseMode: "html",
+            linkPreview: false,
+            buttons,
+          }),
         undefined,
         undefined,
         options.chatId
       );
 
-      let msg: Api.Message | undefined;
-      if (result instanceof Api.Updates) {
-        const messageUpdate = result.updates.find(
-          (u) => u.className === "UpdateEditMessage" || u.className === "UpdateEditChannelMessage"
-        );
-        if (messageUpdate && "message" in messageUpdate) {
-          msg = messageUpdate.message as Api.Message;
-        }
-      }
-
-      if (msg) {
-        return { id: msg.id, date: msg.date, chatId: options.chatId };
-      }
-      return { id: options.messageId, date: Math.floor(Date.now() / 1000), chatId: options.chatId };
+      return { id: msg.id, date: msg.date, chatId: options.chatId };
     } catch (error) {
       log.error({ err: error }, "Error editing message");
       throw error;
@@ -473,9 +793,14 @@ export class GramJSUserBridge implements ITelegramBridge {
 
       const replyMsgSenderId = replyMsg.senderId ? BigInt(replyMsg.senderId.toString()) : undefined;
       const isAgent = this.ownUserId !== undefined && replyMsgSenderId === this.ownUserId;
+      const text = await resolveTelegramMessageText(
+        this.client.getClient(),
+        replyMsg,
+        replyMsg.peerId
+      );
 
       return {
-        text: replyMsg.message || undefined,
+        text: text || undefined,
         senderName,
         isAgent,
       };
@@ -559,10 +884,11 @@ export class GramJSUserBridge implements ITelegramBridge {
     const chatId = msg.chatId?.toString() ?? msg.peerId?.toString() ?? "unknown";
     const senderIdBig = msg.senderId ? BigInt(msg.senderId.toString()) : BigInt(0);
     const senderId = Number(senderIdBig);
+    let text = await resolveTelegramMessageText(this.client.getClient(), msg, msg.peerId);
 
     let mentionsMe = msg.mentioned ?? false;
-    if (!mentionsMe && this.ownUsername && msg.message) {
-      mentionsMe = msg.message.toLowerCase().includes(`@${this.ownUsername}`);
+    if (!mentionsMe && this.ownUsername && text) {
+      mentionsMe = text.toLowerCase().includes(`@${this.ownUsername}`);
     }
 
     const isChannel = msg.post ?? false;
@@ -572,7 +898,7 @@ export class GramJSUserBridge implements ITelegramBridge {
 
     const { senderUsername, senderFirstName, isBot } = await this.resolveSender(msg);
 
-    const { hasMedia, mediaType } = classifyMedia({
+    let { hasMedia, mediaType } = classifyMedia({
       photo: msg.photo,
       video: msg.video,
       audio: msg.audio,
@@ -580,10 +906,14 @@ export class GramJSUserBridge implements ITelegramBridge {
       sticker: msg.sticker,
       document: msg.document,
     });
+    const richMessageMediaType = classifyTelegramRichMessageMedia(msg);
+    if (!hasMedia && richMessageMediaType) {
+      hasMedia = true;
+      mediaType = richMessageMediaType;
+    }
 
     const replyToMsgId = msg.replyToMsgId;
 
-    let text = msg.message ?? "";
     if (!text && msg.media) {
       if (msg.media.className === "MessageMediaDice") {
         const dice = msg.media as Api.MessageMediaDice;

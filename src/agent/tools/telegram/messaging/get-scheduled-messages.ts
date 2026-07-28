@@ -5,6 +5,7 @@ import { getErrorMessage } from "../../../../utils/errors.js";
 import { toLong } from "../../../../utils/gramjs-bigint.js";
 import { createLogger } from "../../../../utils/logger.js";
 import { getClient } from "../../../../sdk/telegram-utils.js";
+import { resolveTelegramMessageText } from "../../../../telegram/rich-message.js";
 
 const log = createLogger("Tools");
 
@@ -41,12 +42,14 @@ export const telegramGetScheduledMessagesExecutor: ToolExecutor<
 
     const messages = ("messages" in result ? result.messages : []) as Api.Message[];
 
-    const scheduled = messages.map((msg) => ({
-      id: msg.id,
-      text: msg.message || null,
-      scheduledFor: msg.date ? new Date(msg.date * 1000).toISOString() : null,
-      hasMedia: !!msg.media,
-    }));
+    const scheduled = await Promise.all(
+      messages.map(async (msg) => ({
+        id: msg.id,
+        text: (await resolveTelegramMessageText(gramJsClient, msg, entity)) || null,
+        scheduledFor: msg.date ? new Date(msg.date * 1000).toISOString() : null,
+        hasMedia: !!msg.media,
+      }))
+    );
 
     log.info(`get_scheduled_messages: ${scheduled.length} scheduled in ${chatId}`);
 

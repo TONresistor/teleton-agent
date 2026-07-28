@@ -76,9 +76,9 @@ describe("current product surfaces", () => {
       workspace: workspaceTools.length,
       web: webTools.length,
     }).toEqual({
-      base: 131,
-      telegram: 85,
-      telegramUserMode: 82,
+      base: 132,
+      telegram: 86,
+      telegramUserMode: 83,
       telegramBotMode: 17,
       ton: 15,
       dns: 8,

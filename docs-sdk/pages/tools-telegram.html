@@ -29,7 +29,7 @@
         <aside class="sidebar" id="sidebar"><nav class="sidebar-nav">
             <div class="nav-section"><div class="nav-section-title">Start Here</div><ul class="nav-list"><div class="nav-list-inner"><li><a href="/index.html" class="nav-link">Introduction</a></li><li><a href="installation.html" class="nav-link">Installation</a></li><li><a href="quickstart.html" class="nav-link">Quick Start</a></li><li><a href="configuration.html" class="nav-link">Configuration</a></li></div></ul></div>
 <div class="nav-section"><div class="nav-section-title">Understand</div><ul class="nav-list"><div class="nav-list-inner"><li><a href="architecture.html" class="nav-link">Architecture</a></li><li><a href="agentic-loop.html" class="nav-link">Agentic Loop</a></li><li><a href="memory-system.html" class="nav-link">Memory System</a></li><li><a href="security.html" class="nav-link">Security</a></li></div></ul></div>
-<div class="nav-section"><div class="nav-section-title">Tools</div><ul class="nav-list"><div class="nav-list-inner"><li><a href="tools-telegram.html" class="nav-link active">Telegram (85)</a></li><li><a href="tools-ton.html" class="nav-link">TON Blockchain (15)</a></li><li><a href="tools-dex.html" class="nav-link">DEX Trading (10)</a></li><li><a href="tools-dns.html" class="nav-link">DNS &amp; Domains (8)</a></li><li><a href="tools-other.html" class="nav-link">Utilities</a></li></div></ul></div>
+<div class="nav-section"><div class="nav-section-title">Tools</div><ul class="nav-list"><div class="nav-list-inner"><li><a href="tools-telegram.html" class="nav-link active">Telegram (86)</a></li><li><a href="tools-ton.html" class="nav-link">TON Blockchain (15)</a></li><li><a href="tools-dex.html" class="nav-link">DEX Trading (10)</a></li><li><a href="tools-dns.html" class="nav-link">DNS &amp; Domains (8)</a></li><li><a href="tools-other.html" class="nav-link">Utilities</a></li></div></ul></div>
 <div class="nav-section"><div class="nav-section-title">Build Plugins</div><ul class="nav-list"><div class="nav-list-inner"><li><a href="plugin-sdk.html" class="nav-link">Plugin SDK</a></li></div></ul></div>
 <div class="nav-section"><div class="nav-section-title">SDK Reference</div><ul class="nav-list"><div class="nav-list-inner"><li><a href="sdk-overview.html" class="nav-link">Overview</a></li><li><a href="sdk-ton.html" class="nav-link">TON Blockchain</a></li><li><a href="sdk-dex.html" class="nav-link">DEX Trading</a></li><li><a href="sdk-dns.html" class="nav-link">DNS &amp; Domains</a></li><li><a href="sdk-telegram.html" class="nav-link">Telegram</a></li><li><a href="sdk-bot.html" class="nav-link">Bot SDK</a></li><li><a href="sdk-utilities.html" class="nav-link">Utilities</a></li><li><a href="sdk-errors.html" class="nav-link">Error Handling</a></li><li><a href="tutorial-payment-bot.html" class="nav-link">Tutorial: Payment Bot</a></li><li><a href="tutorial-dex-bot.html" class="nav-link">Tutorial: DEX Bot</a></li><li><a href="tutorial-inline-bot.html" class="nav-link">Tutorial: Inline Bot</a></li></div></ul></div>
 <div class="nav-section"><div class="nav-section-title">Deploy &amp; Manage</div><ul class="nav-list"><div class="nav-list-inner"><li><a href="deploy-docker.html" class="nav-link">Docker</a></li><li><a href="cli-reference.html" class="nav-link">CLI Reference</a></li></div></ul></div>
@@ -37,7 +37,7 @@
         <main class="main"><article class="content">
 
             <h1>Telegram Tools</h1>
-            <p class="lead">85 tools covering messaging, chats, contacts, groups, media, interactive features, folders, profile, stickers, Stars, and gifts. Tools marked <strong>user</strong> require userbot mode; <strong>bot</strong> requires bot mode.</p>
+            <p class="lead">86 tools covering messaging, chats, contacts, groups, media, interactive features, folders, profile, stickers, Stars, and gifts. Tools marked <strong>user</strong> require userbot mode; <strong>bot</strong> requires bot mode.</p>
 
             <section class="section" id="messaging">
                 <h2>Messaging (16)</h2>
@@ -471,7 +471,7 @@
             </section>
 
             <section class="section" id="media">
-                <h2>Media (7)</h2>
+                <h2>Media (8)</h2>
 
                 <h3 id="telegram_send_photo"><code>telegram_send_photo</code></h3>
                 <p>Send a photo from a local workspace file. Supports JPG, PNG, WEBP.</p>
@@ -481,6 +481,18 @@
                         <tr><td><code>chatId</code></td><td>string</td><td>Chat ID</td></tr>
                         <tr><td><code>photoPath</code></td><td>string</td><td>Local file path (must be in workspace downloads/ or uploads/)</td></tr>
                         <tr><td><code>caption</code></td><td>string?</td><td>Optional caption text</td></tr>
+                        <tr><td><code>replyToId</code></td><td>number?</td><td>Message ID to reply to</td></tr>
+                    </tbody>
+                </table></div>
+
+                <h3 id="telegram_send_rich_message"><code>telegram_send_rich_message</code> <small>user · admin-only</small></h3>
+                <p>Upload local photos, videos, or audio and embed them between text blocks in one native Telegram Rich Message.</p>
+                <div class="table-wrapper"><table>
+                    <thead><tr><th>Parameter</th><th>Type</th><th>Description</th></tr></thead>
+                    <tbody>
+                        <tr><td><code>chatId</code></td><td>string</td><td>Destination chat ID</td></tr>
+                        <tr><td><code>text</code></td><td>string</td><td>Rich Markdown with matching <code>tg://photo?id=</code>, <code>tg://video?id=</code>, or <code>tg://audio?id=</code> image references</td></tr>
+                        <tr><td><code>media</code></td><td>array</td><td>1–50 local workspace files with unique <code>id</code>, <code>type</code>, and <code>path</code></td></tr>
                         <tr><td><code>replyToId</code></td><td>number?</td><td>Message ID to reply to</td></tr>
                     </tbody>
                 </table></div>

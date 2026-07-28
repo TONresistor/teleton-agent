@@ -84,6 +84,7 @@
     "grammy": "^1.41.1",
     "hono": "^4.12.32",
     "hono-rate-limiter": "^0.5.3",
+    "mediainfo.js": "^0.3.7",
     "ora": "^9.3.0",
     "pino": "^10.3.1",
     "pino-pretty": "^13.1.3",

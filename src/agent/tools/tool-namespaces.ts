@@ -90,9 +90,9 @@ const BUILTIN_NAMESPACE_RULES: NamespaceRule[] = [
   {
     name: "telegram.media",
     description:
-      "Send, download, transcribe, or analyze Telegram photos, voice, GIFs, and stickers.",
+      "Send, embed, download, transcribe, or analyze Telegram photos, video, audio, voice, GIFs, and stickers.",
     matches: (name) =>
-      /telegram_(send_photo|send_voice|send_sticker|send_gif|download_media|transcribe_audio)/.test(
+      /telegram_(send_photo|send_voice|send_sticker|send_gif|send_rich_message|download_media|transcribe_audio)/.test(
         name
       ) || name === "vision_analyze",
   },

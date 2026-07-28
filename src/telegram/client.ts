@@ -7,6 +7,7 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync } from "fs";
 import { dirname } from "path";
 import { createInterface } from "readline";
 import { markdownToTelegramHtml } from "./formatting.js";
+import { renderTelegramMessageText } from "./rich-message.js";
 
 import { createLogger } from "../utils/logger.js";
 
@@ -242,7 +243,7 @@ export class TelegramUserClient {
         const chatId = event.message.chatId?.toString() ?? "unknown";
         const isGroup = chatId.startsWith("-");
         log.debug(
-          { chatId, isGroup, messageLength: event.message.message?.length ?? 0 },
+          { chatId, isGroup, messageLength: renderTelegramMessageText(event.message).length },
           "RAW EVENT"
         );
       }

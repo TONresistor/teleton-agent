@@ -4,7 +4,8 @@ import type { Api } from "telegram";
 import type { PluginLogger, SimpleMessage, MediaSendOptions } from "@teleton-agent/sdk";
 import { PluginSDKError } from "@teleton-agent/sdk";
 import { getErrorMessage } from "../utils/errors.js";
-import { getApi, toSimpleMessage } from "./telegram-utils.js";
+import { resolveTelegramMessageText } from "../telegram/rich-message.js";
+import { getApi, toSimpleMessageWithText } from "./telegram-utils.js";
 import { boundedLimit, requireNonEmpty, requirePositiveInteger } from "./validation.js";
 import { createTelegramRuntime } from "./telegram/runtime.js";
 
@@ -153,12 +154,16 @@ export function createTelegramMessagesSDK(
         );
 
         const resultData = result as Api.messages.Messages;
-        return (resultData.messages ?? [])
-          .filter(
-            (m): m is Api.Message =>
-              m.className !== "MessageEmpty" && m.className !== "MessageService"
-          )
-          .map(toSimpleMessage);
+        const messages = (resultData.messages ?? []).filter(
+          (m): m is Api.Message =>
+            m.className !== "MessageEmpty" && m.className !== "MessageService"
+        );
+        return Promise.all(
+          messages.map(async (message) => {
+            const text = await resolveTelegramMessageText(gramJsClient, message, entity);
+            return toSimpleMessageWithText(message, text);
+          })
+        );
       } catch (error) {
         if (error instanceof PluginSDKError) throw error;
         log.error("telegram.searchMessages() failed:", error);
@@ -223,7 +228,8 @@ export function createTelegramMessagesSDK(
         if ("messages" in result) {
           for (const msg of result.messages) {
             if (msg.className === "Message") {
-              messages.push(toSimpleMessage(msg));
+              const text = await resolveTelegramMessageText(gramJsClient, msg, peer);
+              messages.push(toSimpleMessageWithText(msg, text));
             }
           }
         }
@@ -474,7 +480,8 @@ export function createTelegramMessagesSDK(
         if ("messages" in result) {
           for (const msg of result.messages) {
             if (msg.className === "Message") {
-              messages.push(toSimpleMessage(msg));
+              const text = await resolveTelegramMessageText(gramJsClient, msg, peer);
+              messages.push(toSimpleMessageWithText(msg, text));
             }
           }
         }

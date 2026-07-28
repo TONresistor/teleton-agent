@@ -4,6 +4,7 @@ import type { Tool, ToolExecutor, ToolResult } from "../../types.js";
 import { getErrorMessage } from "../../../../utils/errors.js";
 import { createLogger } from "../../../../utils/logger.js";
 import { getClient } from "../../../../sdk/telegram-utils.js";
+import { resolveTelegramMessageText } from "../../../../telegram/rich-message.js";
 
 const log = createLogger("Tools");
 
@@ -66,17 +67,22 @@ export const telegramGetDialogsExecutor: ToolExecutor<GetDialogsParams> = async 
     });
 
     // Format dialogs
-    let formattedDialogs = dialogs.map((dialog: any) => ({
-      id: dialog.id?.toString() || null,
-      title: dialog.title || "Unknown",
-      type: dialog.isChannel ? "channel" : dialog.isGroup ? "group" : "dm",
-      unreadCount: dialog.unreadCount || 0,
-      unreadMentionsCount: dialog.unreadMentionsCount || 0,
-      isPinned: dialog.pinned || false,
-      isArchived: dialog.archived || false,
-      lastMessageDate: dialog.date || null,
-      lastMessage: dialog.message?.message?.substring(0, 100) || null,
-    }));
+    let formattedDialogs = await Promise.all(
+      dialogs.map(async (dialog: any) => ({
+        id: dialog.id?.toString() || null,
+        title: dialog.title || "Unknown",
+        type: dialog.isChannel ? "channel" : dialog.isGroup ? "group" : "dm",
+        unreadCount: dialog.unreadCount || 0,
+        unreadMentionsCount: dialog.unreadMentionsCount || 0,
+        isPinned: dialog.pinned || false,
+        isArchived: dialog.archived || false,
+        lastMessageDate: dialog.date || null,
+        lastMessage: dialog.message
+          ? (await resolveTelegramMessageText(gramJsClient, dialog.message)).substring(0, 100) ||
+            null
+          : null,
+      }))
+    );
 
     // Filter unread only if requested
     if (unreadOnly) {

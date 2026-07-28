@@ -14,6 +14,7 @@ vi.mock("../../utils/logger.js", () => ({
 // Mock offset-store — controlable per-test
 const mockReadOffset = vi.fn<(chatId?: string) => number | null>().mockReturnValue(null);
 const mockWriteOffset = vi.fn();
+const mockStoreMessage = vi.fn().mockResolvedValue(undefined);
 vi.mock("../offset-store.js", () => ({
   readOffset: (...args: unknown[]) => mockReadOffset(args[0] as string | undefined),
   writeOffset: (...args: unknown[]) => mockWriteOffset(...args),
@@ -22,7 +23,7 @@ vi.mock("../offset-store.js", () => ({
 // Mock feed stores — must be classes (used with `new`)
 vi.mock("../../memory/feed/index.js", () => ({
   MessageStore: class {
-    storeMessage = vi.fn().mockResolvedValue(undefined);
+    storeMessage = mockStoreMessage;
   },
   ChatStore: class {
     upsertChat = vi.fn();
@@ -646,6 +647,38 @@ describe("MessageHandler", () => {
         expect(bridge.sendMessage).not.toHaveBeenCalled();
       });
     }
+
+    it("does not append an acknowledgement after sending a rich message", async () => {
+      const richText = "Before\n\n![Chart](tg://photo?id=chart)\n\nAfter";
+      const agent = makeAgent();
+      agent.processMessage.mockResolvedValue({
+        content: "Done",
+        toolCalls: [
+          {
+            name: "telegram_send_rich_message",
+            input: {
+              chatId: "chat1",
+              text: richText,
+              media: [{ id: "chart", type: "photo", path: "/workspace/chart.png" }],
+            },
+            result: { success: true, data: { messageId: 777 } },
+          },
+        ],
+      });
+
+      const { handler, bridge } = createHandler({ dm_policy: "open" }, { agent });
+      await handler.handleMessage(makeMessage({ id: 701 }));
+
+      expect(bridge.sendMessage).not.toHaveBeenCalled();
+      expect(mockStoreMessage).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: "777",
+          text: richText,
+          hasMedia: true,
+          mediaType: "photo",
+        })
+      );
+    });
   });
 
   // ── Silent reply suppression (scenarios 30-31) ──────────────────────────

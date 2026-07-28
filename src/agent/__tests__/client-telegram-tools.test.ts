@@ -44,6 +44,15 @@ const readTool: Tool = {
   },
 };
 
+const richMediaTool: Tool = {
+  name: "telegram_send_rich_message",
+  description: "Send local media inside Rich Markdown.",
+  parameters: {
+    type: "object",
+    properties: {},
+  },
+};
+
 function assistantMessage() {
   return {
     role: "assistant" as const,
@@ -74,6 +83,16 @@ function expectPreparedTools(context: { tools?: Tool[] }) {
   expect(sendTool.description).toBe("Send a Telegram message.");
 }
 
+function expectPreparedRichMediaTool(context: { tools?: Tool[] }) {
+  const prepared = context.tools?.find((tool) => tool.name === richMediaTool.name);
+
+  expect(prepared?.description).toContain("Use it for the current reply");
+  expect(prepared?.description).toContain("local workspace media");
+  expect(prepared?.description).toContain("do not return a duplicate confirmation");
+  expect(prepared?.description).not.toContain("return normal assistant text instead");
+  expect(richMediaTool.description).toBe("Send local media inside Rich Markdown.");
+}
+
 describe("Telegram tool preparation", () => {
   beforeEach(() => {
     mocks.complete.mockReset();
@@ -85,10 +104,11 @@ describe("Telegram tool preparation", () => {
 
     await chatWithContext(config, {
       context: { messages: [] },
-      tools: [sendTool, readTool],
+      tools: [sendTool, richMediaTool, readTool],
     });
 
     expectPreparedTools(mocks.complete.mock.calls[0][1]);
+    expectPreparedRichMediaTool(mocks.complete.mock.calls[0][1]);
   });
 
   it("applies the same guard to streaming calls", async () => {
@@ -99,10 +119,11 @@ describe("Telegram tool preparation", () => {
 
     const streamed = streamWithContext(config, {
       context: { messages: [] },
-      tools: [sendTool, readTool],
+      tools: [sendTool, richMediaTool, readTool],
     });
     await streamed.result;
 
     expectPreparedTools(mocks.stream.mock.calls[0][1]);
+    expectPreparedRichMediaTool(mocks.stream.mock.calls[0][1]);
   });
 });

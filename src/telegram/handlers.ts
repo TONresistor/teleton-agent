@@ -9,7 +9,11 @@ import { readOffset, writeOffset } from "./offset-store.js";
 import { PendingHistory } from "../memory/pending-history.js";
 import type { ToolContext } from "../agent/tools/types.js";
 import { isSilentReply } from "../constants/tokens.js";
-import { deliveredTelegramMessageId, deliveredTelegramText } from "../agent/telegram-send-state.js";
+import {
+  deliveredTelegramMessageId,
+  deliveredTelegramRichMessage,
+  deliveredTelegramText,
+} from "../agent/telegram-send-state.js";
 import { transcribeAudio } from "../sdk/telegram-utils.js";
 import { TYPING_REFRESH_MS } from "../constants/timeouts.js";
 import { createLogger } from "../utils/logger.js";
@@ -585,8 +589,56 @@ export class MessageHandler {
             message.chatId,
             response.content
           );
+          const deliveredRichMessage = deliveredTelegramRichMessage(
+            response.toolCalls,
+            message.chatId
+          );
 
-          if (isSilentReply(response.content)) {
+          if (deliveredRichMessage) {
+            // A rich-message tool call is the response itself. Never append the
+            // model's final acknowledgement as a separate Telegram message.
+            const richText =
+              typeof deliveredRichMessage.input.text === "string"
+                ? deliveredRichMessage.input.text
+                : "";
+            const deliveredMessageId = deliveredTelegramMessageId(
+              response.toolCalls,
+              message.chatId,
+              richText
+            );
+            const rawMedia = deliveredRichMessage.input.media;
+            const firstMedia =
+              Array.isArray(rawMedia) &&
+              rawMedia[0] &&
+              typeof rawMedia[0] === "object" &&
+              "type" in rawMedia[0]
+                ? rawMedia[0]
+                : null;
+            const mediaType =
+              firstMedia &&
+              (firstMedia.type === "photo" ||
+                firstMedia.type === "video" ||
+                firstMedia.type === "audio")
+                ? firstMedia.type
+                : undefined;
+
+            await this.storeTelegramMessage(
+              {
+                id: deliveredMessageId ?? `tool:${message.id}:${randomUUID()}`,
+                chatId: message.chatId,
+                senderId: this.ownUserId ? parseInt(this.ownUserId, 10) : 0,
+                text: richText,
+                isGroup: message.isGroup,
+                isChannel: message.isChannel,
+                isBot: false,
+                mentionsMe: false,
+                timestamp: new Date(),
+                hasMedia: Array.isArray(rawMedia) && rawMedia.length > 0,
+                mediaType,
+              },
+              true
+            );
+          } else if (isSilentReply(response.content)) {
             log.debug("Silent reply suppressed");
           } else if (response.streamed) {
             log.debug("Response already streamed to chat");

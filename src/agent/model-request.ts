@@ -51,18 +51,26 @@ function getCacheRetention(provider: SupportedProvider): "none" | "long" {
 function prepareTools(tools: Tool[] | undefined): Tool[] | undefined {
   if (!tools) return tools;
 
-  return tools.map((tool) =>
-    TELEGRAM_SEND_TOOLS.has(tool.name)
-      ? {
-          ...tool,
-          description:
-            `${tool.description} This action sends immediately. ` +
-            "Do not use this tool to reply to the current inbound message or for progress updates; " +
-            "return normal assistant text instead, which Teleton delivers automatically. " +
-            "Use it for intentional separate Telegram messages.",
-        }
-      : tool
-  );
+  return tools.map((tool) => {
+    if (!TELEGRAM_SEND_TOOLS.has(tool.name)) return tool;
+    if (tool.name === "telegram_send_rich_message") {
+      return {
+        ...tool,
+        description:
+          `${tool.description} This action sends immediately. ` +
+          "Use it for the current reply only when local workspace media must be embedded inside one Rich Message. " +
+          "After it succeeds, do not return a duplicate confirmation.",
+      };
+    }
+    return {
+      ...tool,
+      description:
+        `${tool.description} This action sends immediately. ` +
+        "Do not use this tool to reply to the current inbound message or for progress updates; " +
+        "return normal assistant text instead, which Teleton delivers automatically. " +
+        "Use it for intentional separate Telegram messages.",
+    };
+  });
 }
 
 function getProviderPayloadOptions(provider: SupportedProvider): Record<string, unknown> {

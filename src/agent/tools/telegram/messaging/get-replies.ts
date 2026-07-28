@@ -5,6 +5,7 @@ import { getErrorMessage } from "../../../../utils/errors.js";
 import { toLong } from "../../../../utils/gramjs-bigint.js";
 import { createLogger } from "../../../../utils/logger.js";
 import { getClient } from "../../../../sdk/telegram-utils.js";
+import { resolveTelegramMessageText } from "../../../../telegram/rich-message.js";
 
 const log = createLogger("Tools");
 
@@ -110,7 +111,7 @@ export const telegramGetRepliesExecutor: ToolExecutor<GetRepliesParams> = async 
 
           messages.push({
             id: msg.id,
-            text: msg.message || "",
+            text: await resolveTelegramMessageText(client, msg, peer),
             senderId: senderId || "unknown",
             senderName: senderId ? userMap.get(senderId) : undefined,
             date: new Date(msg.date * 1000).toISOString(),
