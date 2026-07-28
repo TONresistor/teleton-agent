@@ -40,8 +40,15 @@ export function getEffectiveApiKey(provider: string, rawKey: string): string {
   return rawKey;
 }
 
-function providerSupportsTemperature(provider: SupportedProvider): boolean {
-  return provider !== "codex" && provider !== "grok-build";
+const GOOGLE_MODELS_WITHOUT_SAMPLING_PARAMS = new Set([
+  "gemini-3.6-flash",
+  "gemini-3.5-flash-lite",
+]);
+
+function modelSupportsTemperature(provider: SupportedProvider, modelId: string): boolean {
+  if (provider === "codex" || provider === "grok-build") return false;
+  if (provider === "google" && GOOGLE_MODELS_WITHOUT_SAMPLING_PARAMS.has(modelId)) return false;
+  return true;
 }
 
 function getCacheRetention(provider: SupportedProvider): "none" | "long" {
@@ -107,7 +114,7 @@ export function prepareModelRequest(
     options: {
       apiKey: getEffectiveApiKey(provider, config.api_key),
       maxTokens: request.maxTokens ?? config.max_tokens,
-      ...(providerSupportsTemperature(provider) && { temperature }),
+      ...(modelSupportsTemperature(provider, model.id) && { temperature }),
       sessionId: request.sessionId,
       cacheRetention: getCacheRetention(provider),
       signal: request.signal,

@@ -1,65 +1,40 @@
-import { afterEach, describe, expect, it } from "vitest";
+import { describe, expect, it } from "vitest";
 import { getModelsForProvider } from "../../config/model-catalog.js";
 import { getProviderMetadata } from "../../config/providers.js";
 import { AgentConfigSchema } from "../../config/schema.js";
 import { getProviderModel } from "../model-resolver.js";
 
-const ENABLED_GPT_56_CODEX_MODELS = ["gpt-5.6-sol", "gpt-5.6-terra"] as const;
-const LUNA_MODEL = "gpt-5.6-luna";
+const GPT_56_CODEX_MODELS = ["gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"] as const;
 
 describe("Codex GPT-5.6 models", () => {
-  afterEach(() => {
-    delete process.env.TELETON_ENABLE_CODEX_LUNA;
+  it.each(GPT_56_CODEX_MODELS)("resolves %s through the Codex Responses provider", (modelId) => {
+    const model = getProviderModel("codex", modelId);
+
+    expect(model.id).toBe(modelId);
+    expect(model.provider).toBe("openai-codex");
+    expect(model.api).toBe("openai-codex-responses");
+    expect(model.input).toContain("image");
+    expect(model.contextWindow).toBe(272_000);
+    expect(model.maxTokens).toBe(128_000);
   });
 
-  it.each(ENABLED_GPT_56_CODEX_MODELS)(
-    "resolves %s through the Codex Responses provider",
-    (modelId) => {
-      const model = getProviderModel("codex", modelId);
-
-      expect(model.id).toBe(modelId);
-      expect(model.provider).toBe("openai-codex");
-      expect(model.api).toBe("openai-codex-responses");
-      expect(model.input).toContain("image");
-      expect(model.contextWindow).toBe(372_000);
-      expect(model.maxTokens).toBe(128_000);
-    }
-  );
-
-  it("hides and rejects Luna while the live backend does not advertise it", () => {
+  it("offers every GPT-5.6 model advertised by the Codex backend", () => {
     const modelIds = getModelsForProvider("codex").map((model) => model.value);
 
-    expect(modelIds).toEqual(expect.arrayContaining(ENABLED_GPT_56_CODEX_MODELS));
-    expect(modelIds).not.toContain(LUNA_MODEL);
-    expect(() => getProviderModel("codex", LUNA_MODEL)).toThrow(
-      "gpt-5.6-luna is disabled because the Codex backend does not currently advertise it"
-    );
-    expect(AgentConfigSchema.safeParse({ provider: "codex", model: LUNA_MODEL }).success).toBe(
-      false
-    );
-    expect(
-      AgentConfigSchema.safeParse({
-        provider: "codex",
-        model: "gpt-5.6-terra",
-        utility_model: LUNA_MODEL,
-      }).success
-    ).toBe(false);
-  });
-
-  it("allows a controlled Luna revalidation behind an explicit feature flag", () => {
-    process.env.TELETON_ENABLE_CODEX_LUNA = "true";
-
-    expect(getModelsForProvider("codex").map((model) => model.value)).toContain(LUNA_MODEL);
-    expect(getProviderModel("codex", LUNA_MODEL).id).toBe(LUNA_MODEL);
-    expect(AgentConfigSchema.safeParse({ provider: "codex", model: LUNA_MODEL }).success).toBe(
+    expect(modelIds).toEqual(expect.arrayContaining(GPT_56_CODEX_MODELS));
+    expect(AgentConfigSchema.safeParse({ provider: "codex", model: "gpt-5.6-luna" }).success).toBe(
       true
     );
   });
 
-  it("keeps GPT-5.5 as the Codex default while GPT-5.6 is in preview", () => {
+  it("uses GPT-5.6 Terra as the balanced Codex default", () => {
     const defaultModel = getProviderMetadata("codex").defaultModel;
 
-    expect(defaultModel).toBe("gpt-5.5");
+    expect(defaultModel).toBe("gpt-5.6-terra");
     expect(getModelsForProvider("codex")[0]?.value).toBe(defaultModel);
+  });
+
+  it("keeps old GPT-5.3 Codex configs working through the supported replacement", () => {
+    expect(getProviderModel("codex", "gpt-5.3-codex").id).toBe("gpt-5.6-terra");
   });
 });

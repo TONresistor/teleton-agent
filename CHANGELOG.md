@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Current Anthropic, OpenAI, Google, xAI, Groq, OpenRouter, Kimi, Mistral,
+  Cerebras, Z.AI, MiniMax, and Hugging Face models to the shared catalog.
+- Provider-scoped compatibility aliases for deprecated or unsupported model IDs.
+
+### Changed
+
+- Updated `@earendil-works/pi-ai` to 0.82.1 and refreshed provider defaults.
+- Exposed GPT-5.6 Luna now that Codex advertises it in local and production caches.
+
 ## [0.10.1] - 2026-07-27
 
 ### Added

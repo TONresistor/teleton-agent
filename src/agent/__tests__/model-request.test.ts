@@ -28,4 +28,37 @@ describe("model request preparation", () => {
       cacheRetention: "long",
     });
   });
+
+  it.each(["gemini-3.6-flash", "gemini-3.5-flash-lite"])(
+    "omits deprecated sampling parameters for %s",
+    (model) => {
+      const config = AgentConfigSchema.parse({
+        provider: "google",
+        model,
+        api_key: "test-key",
+        temperature: 0.4,
+      });
+
+      const request = prepareModelRequest(config, {
+        context: { messages: [] },
+      });
+
+      expect(request.options).not.toHaveProperty("temperature");
+    }
+  );
+
+  it("keeps temperature for Gemini 3.5 Flash", () => {
+    const config = AgentConfigSchema.parse({
+      provider: "google",
+      model: "gemini-3.5-flash",
+      api_key: "test-key",
+      temperature: 0.4,
+    });
+
+    const request = prepareModelRequest(config, {
+      context: { messages: [] },
+    });
+
+    expect(request.options.temperature).toBe(0.4);
+  });
 });
