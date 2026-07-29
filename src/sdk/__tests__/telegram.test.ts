@@ -150,20 +150,20 @@ describe("createTelegramSDK — core", () => {
   // ─── sendDice ───────────────────────────────────────────────
   describe("sendDice()", () => {
     it("calls bridge.sendDice and returns result", async () => {
-      mockBridge.sendDice = vi.fn().mockResolvedValue({ id: 55 });
+      mockBridge.sendDice = vi.fn().mockResolvedValue({ id: 55, value: 6 });
 
       const result = await sdk.sendDice("12345", "dice");
 
       expect(mockBridge.sendDice).toHaveBeenCalledWith("12345", "dice");
-      expect(result).toEqual({ value: 0, messageId: 55 });
+      expect(result).toEqual({ value: 6, messageId: 55 });
     });
 
     it("passes emoticon to bridge", async () => {
-      mockBridge.sendDice = vi.fn().mockResolvedValue({ id: 88 });
+      mockBridge.sendDice = vi.fn().mockResolvedValue({ id: 88, value: 4 });
 
       const result = await sdk.sendDice("-10012345", "🎯");
       expect(mockBridge.sendDice).toHaveBeenCalledWith("-10012345", "🎯");
-      expect(result).toEqual({ value: 0, messageId: 88 });
+      expect(result).toEqual({ value: 4, messageId: 88 });
     });
 
     it("throws BRIDGE_NOT_CONNECTED when bridge unavailable", async () => {

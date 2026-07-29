@@ -20,6 +20,7 @@ import type {
   SendRichMessageOptions,
   RichMessageMediaUpload,
   SentMessage,
+  SentDiceMessage,
   EditMessageOptions,
   ReplyContext,
   BotInfo,
@@ -676,33 +677,23 @@ export class GramJSUserBridge implements ITelegramBridge {
     }
   }
 
-  async sendDice(chatId: string, emoji?: string): Promise<SentMessage> {
+  async sendDice(chatId: string, emoji?: string): Promise<SentDiceMessage> {
     try {
       const gramJsClient = this.client.getClient();
-      const result = await gramJsClient.invoke(
-        new Api.messages.SendMedia({
-          peer: chatId,
-          media: new Api.InputMediaDice({ emoticon: emoji ?? "🎲" }),
-          message: "",
-          randomId: randomLong(),
-        })
-      );
-
-      if (result instanceof Api.Updates || result instanceof Api.UpdatesCombined) {
-        for (const update of result.updates) {
-          if (
-            update instanceof Api.UpdateNewMessage ||
-            update instanceof Api.UpdateNewChannelMessage
-          ) {
-            const msg = update.message;
-            if (msg instanceof Api.Message) {
-              return { id: msg.id, date: msg.date, chatId };
-            }
-          }
-        }
+      const message = await gramJsClient.sendFile(chatId, {
+        file: new Api.InputMediaDice({ emoticon: emoji ?? "🎲" }),
+      });
+      const dice = message.dice;
+      if (!dice) {
+        throw new Error("Telegram returned a dice message without a result");
       }
 
-      return { id: 0, date: Math.floor(Date.now() / 1000), chatId };
+      return {
+        id: message.id,
+        date: message.date,
+        chatId,
+        value: dice.value,
+      };
     } catch (error) {
       log.error({ err: error }, "Error sending dice");
       throw error;
@@ -914,11 +905,10 @@ export class GramJSUserBridge implements ITelegramBridge {
 
     const replyToMsgId = msg.replyToMsgId;
 
-    if (!text && msg.media) {
-      if (msg.media.className === "MessageMediaDice") {
-        const dice = msg.media as Api.MessageMediaDice;
-        text = `[Dice: ${dice.emoticon} = ${dice.value}]`;
-      } else if (msg.media.className === "MessageMediaGame") {
+    if (!text && msg.dice) {
+      text = `[Dice: ${msg.dice.emoticon} = ${msg.dice.value}]`;
+    } else if (!text && msg.media) {
+      if (msg.media.className === "MessageMediaGame") {
         const game = msg.media as Api.MessageMediaGame;
         text = `[Game: ${game.game.title}]`;
       } else if (msg.media.className === "MessageMediaPoll") {

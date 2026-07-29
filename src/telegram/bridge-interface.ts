@@ -69,6 +69,10 @@ export interface SentMessage {
   chatId: string;
 }
 
+export interface SentDiceMessage extends SentMessage {
+  value: number;
+}
+
 export interface EditMessageOptions {
   chatId: string;
   messageId: number;
@@ -131,7 +135,7 @@ export interface ITelegramBridge {
   setTyping(chatId: string): Promise<void>;
   sendReaction(chatId: string, messageId: number, emoji: string): Promise<void>;
   pinMessage(chatId: string, messageId: number): Promise<boolean>;
-  sendDice(chatId: string, emoji?: string): Promise<SentMessage>;
+  sendDice(chatId: string, emoji?: string): Promise<SentDiceMessage>;
 
   // Chat info
   getChatInfo(chatId: string): Promise<ChatInfo>;

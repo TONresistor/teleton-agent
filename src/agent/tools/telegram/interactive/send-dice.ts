@@ -46,6 +46,7 @@ export const telegramSendDiceExecutor: ToolExecutor<SendDiceParams> = async (
         chat_id,
         emoticon,
         message_id: result.id,
+        value: result.value,
       },
     };
   } catch (error) {
