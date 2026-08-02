@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 vi.mock("../../utils/logger.js", () => ({
   createLogger: vi.fn(() => ({
@@ -11,215 +11,84 @@ vi.mock("../../utils/logger.js", () => ({
 
 import { CONFIGURABLE_KEYS } from "../configurable-keys.js";
 
-// ── New scalar keys ─────────────────────────────────────────────────────
+type ConfigurableKey = keyof typeof CONFIGURABLE_KEYS;
 
-describe("CONFIGURABLE_KEYS — new scalar entries", () => {
-  describe("agent.base_url", () => {
-    const meta = CONFIGURABLE_KEYS["agent.base_url"];
+const VALIDATION_CASES = [
+  ["agent.base_url", "https://localhost:11434", true],
+  ["agent.base_url", "", true],
+  ["agent.base_url", "not-a-url", false],
+  ["telegram.owner_id", "123456789", true],
+  ["telegram.owner_id", "-1", false],
+  ["telegram.owner_id", "abc", false],
+  ["telegram.max_message_length", "4096", true],
+  ["telegram.max_message_length", "0", false],
+  ["telegram.max_message_length", "99999", false],
+  ["telegram.rate_limit_messages_per_second", "1.5", true],
+  ["telegram.rate_limit_messages_per_second", "0", false],
+  ["telegram.rate_limit_groups_per_minute", "20", true],
+  ["telegram.rate_limit_groups_per_minute", "0", false],
+  ["embedding.model", "all-MiniLM-L6-v2", true],
+  ["embedding.model", "", true],
+  ["gocoon.port", "10000", true],
+  ["gocoon.port", "0", false],
+  ["telegram.admin_ids", "123456", true],
+  ["telegram.admin_ids", "abc", false],
+  ["telegram.admin_ids", "-5", false],
+  ["telegram.allow_from", "999", true],
+  ["telegram.allow_from", "xyz", false],
+  ["telegram.group_allow_from", "777", true],
+  ["telegram.group_allow_from", "bad", false],
+] as const satisfies ReadonlyArray<readonly [ConfigurableKey, string, boolean]>;
 
-    it("accepts valid URL", () => {
-      expect(meta.validate("https://localhost:11434")).toBeUndefined();
-    });
+const PARSE_CASES = [
+  ["telegram.owner_id", "123456789", 123456789],
+  ["telegram.admin_ids", "123456", 123456],
+  ["telegram.allow_from", "999", 999],
+  ["telegram.group_allow_from", "777", 777],
+] as const satisfies ReadonlyArray<readonly [ConfigurableKey, string, number]>;
 
-    it("accepts empty string (reset)", () => {
-      expect(meta.validate("")).toBeUndefined();
-    });
+const ARRAY_KEYS = [
+  "telegram.admin_ids",
+  "telegram.allow_from",
+  "telegram.group_allow_from",
+] as const satisfies ReadonlyArray<ConfigurableKey>;
 
-    it("rejects invalid URL", () => {
-      expect(meta.validate("not-a-url")).toBeDefined();
+const RESTART_KEYS = [
+  "telegram.rate_limit_messages_per_second",
+  "telegram.rate_limit_groups_per_minute",
+  "embedding.model",
+  "gocoon.port",
+] as const satisfies ReadonlyArray<ConfigurableKey>;
+
+describe("CONFIGURABLE_KEYS", () => {
+  it.each(VALIDATION_CASES)("%s validation for %j is %s", (key, input, isValid) => {
+    const result = CONFIGURABLE_KEYS[key].validate(input);
+    if (isValid) expect(result).toBeUndefined();
+    else expect(result).toBeDefined();
+  });
+
+  it.each(PARSE_CASES)("%s parses %j", (key, input, expected) => {
+    expect(CONFIGURABLE_KEYS[key].parse(input)).toBe(expected);
+  });
+
+  it.each(ARRAY_KEYS)("%s exposes numeric array metadata", (key) => {
+    expect(CONFIGURABLE_KEYS[key]).toMatchObject({
+      type: "array",
+      itemType: "number",
     });
   });
 
-  describe("telegram.owner_id", () => {
-    const meta = CONFIGURABLE_KEYS["telegram.owner_id"];
-
-    it("accepts positive integer", () => {
-      expect(meta.validate("123456789")).toBeUndefined();
-    });
-
-    it("rejects negative number", () => {
-      expect(meta.validate("-1")).toBeDefined();
-    });
-
-    it("rejects non-numeric", () => {
-      expect(meta.validate("abc")).toBeDefined();
-    });
-
-    it("parses to number", () => {
-      expect(meta.parse("123456789")).toBe(123456789);
-    });
+  it.each(RESTART_KEYS)("%s documents its restart requirement", (key) => {
+    expect(CONFIGURABLE_KEYS[key].description).toContain("requires restart");
   });
 
-  describe("telegram.max_message_length", () => {
-    const meta = CONFIGURABLE_KEYS["telegram.max_message_length"];
-
-    it("accepts within range 1-32768", () => {
-      expect(meta.validate("4096")).toBeUndefined();
-    });
-
-    it("rejects zero", () => {
-      expect(meta.validate("0")).toBeDefined();
-    });
-
-    it("rejects above max", () => {
-      expect(meta.validate("99999")).toBeDefined();
-    });
-  });
-
-  describe("telegram.rate_limit_messages_per_second", () => {
-    const meta = CONFIGURABLE_KEYS["telegram.rate_limit_messages_per_second"];
-
-    it("accepts 0.1-10 range", () => {
-      expect(meta.validate("1.5")).toBeUndefined();
-    });
-
-    it("rejects zero", () => {
-      expect(meta.validate("0")).toBeDefined();
-    });
-
-    it("description contains 'requires restart'", () => {
-      expect(meta.description).toContain("requires restart");
-    });
-  });
-
-  describe("telegram.rate_limit_groups_per_minute", () => {
-    const meta = CONFIGURABLE_KEYS["telegram.rate_limit_groups_per_minute"];
-
-    it("accepts 1-60 range", () => {
-      expect(meta.validate("20")).toBeUndefined();
-    });
-
-    it("rejects zero", () => {
-      expect(meta.validate("0")).toBeDefined();
-    });
-
-    it("description contains 'requires restart'", () => {
-      expect(meta.description).toContain("requires restart");
-    });
-  });
-
-  describe("embedding.model", () => {
-    const meta = CONFIGURABLE_KEYS["embedding.model"];
-
-    it("accepts any non-empty string", () => {
-      expect(meta.validate("all-MiniLM-L6-v2")).toBeUndefined();
-    });
-
-    it("accepts empty (reset to default)", () => {
-      expect(meta.validate("")).toBeUndefined();
-    });
-
-    it("description contains 'requires restart'", () => {
-      expect(meta.description).toContain("requires restart");
-    });
-  });
-
-  describe("gocoon.port", () => {
-    const meta = CONFIGURABLE_KEYS["gocoon.port"];
-
-    it("accepts 1-65535", () => {
-      expect(meta.validate("10000")).toBeUndefined();
-    });
-
-    it("rejects 0", () => {
-      expect(meta.validate("0")).toBeDefined();
-    });
-
-    it("description contains 'requires restart'", () => {
-      expect(meta.description).toContain("requires restart");
-    });
-  });
-});
-
-// ── Array keys ──────────────────────────────────────────────────────────
-
-describe("CONFIGURABLE_KEYS — array entries", () => {
-  describe("telegram.admin_ids", () => {
-    const meta = CONFIGURABLE_KEYS["telegram.admin_ids"];
-
-    it("has type 'array'", () => {
-      expect(meta.type).toBe("array");
-    });
-
-    it("has itemType 'number'", () => {
-      expect(meta.itemType).toBe("number");
-    });
-
-    it("validates positive integer per item", () => {
-      expect(meta.validate("123456")).toBeUndefined();
-    });
-
-    it("rejects non-numeric item", () => {
-      expect(meta.validate("abc")).toBeDefined();
-    });
-
-    it("rejects negative item", () => {
-      expect(meta.validate("-5")).toBeDefined();
-    });
-
-    it("parses string to number", () => {
-      expect(meta.parse("123456")).toBe(123456);
-    });
-  });
-
-  describe("telegram.allow_from", () => {
-    const meta = CONFIGURABLE_KEYS["telegram.allow_from"];
-
-    it("has type 'array' with itemType 'number'", () => {
-      expect(meta.type).toBe("array");
-      expect(meta.itemType).toBe("number");
-    });
-
-    it("validates positive integer per item", () => {
-      expect(meta.validate("999")).toBeUndefined();
-    });
-
-    it("rejects non-numeric item", () => {
-      expect(meta.validate("xyz")).toBeDefined();
-    });
-
-    it("parses string to number", () => {
-      expect(meta.parse("999")).toBe(999);
-    });
-  });
-
-  describe("telegram.group_allow_from", () => {
-    const meta = CONFIGURABLE_KEYS["telegram.group_allow_from"];
-
-    it("has type 'array' with itemType 'number'", () => {
-      expect(meta.type).toBe("array");
-      expect(meta.itemType).toBe("number");
-    });
-
-    it("validates positive integer per item", () => {
-      expect(meta.validate("777")).toBeUndefined();
-    });
-
-    it("rejects non-numeric item", () => {
-      expect(meta.validate("bad")).toBeDefined();
-    });
-
-    it("parses string to number", () => {
-      expect(meta.parse("777")).toBe(777);
-    });
-  });
-});
-
-// ── Existing keys not broken ────────────────────────────────────────────
-
-describe("existing keys unchanged", () => {
-  it("all original keys still present (at least 27)", () => {
+  it("keeps the existing configurable surface", () => {
     expect(Object.keys(CONFIGURABLE_KEYS).length).toBeGreaterThanOrEqual(27);
-  });
 
-  it("agent.api_key still validates >= 10 chars", () => {
-    const meta = CONFIGURABLE_KEYS["agent.api_key"];
-    expect(meta.validate("short")).toBeDefined();
-    expect(meta.validate("long-enough-key-here")).toBeUndefined();
-  });
+    const apiKey = CONFIGURABLE_KEYS["agent.api_key"];
+    expect(apiKey.validate("short")).toBeDefined();
+    expect(apiKey.validate("long-enough-key-here")).toBeUndefined();
 
-  it("agent.provider exposes all 16 options", () => {
-    const meta = CONFIGURABLE_KEYS["agent.provider"];
-    expect(meta.options).toHaveLength(16);
+    expect(CONFIGURABLE_KEYS["agent.provider"].options).toHaveLength(16);
   });
 });

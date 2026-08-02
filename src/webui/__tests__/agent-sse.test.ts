@@ -1,85 +1,61 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
 import { Hono } from "hono";
-import { streamSSE } from "hono/streaming";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { AgentLifecycle } from "../../agent/lifecycle.js";
+import { createLifecycleSSE } from "../lifecycle-sse.js";
 
-vi.mock("../../utils/logger.js", () => ({
-  createLogger: vi.fn(() => ({
-    info: vi.fn(),
-    warn: vi.fn(),
-    error: vi.fn(),
-    debug: vi.fn(),
-  })),
-}));
-
-import { AgentLifecycle, type StateChangeEvent } from "../../agent/lifecycle.js";
-
-/** Parse SSE text into structured events */
-function parseSSE(text: string): Array<{ event?: string; data?: string; id?: string }> {
-  const events: Array<{ event?: string; data?: string; id?: string }> = [];
-  const blocks = text.split("\n\n").filter(Boolean);
-  for (const block of blocks) {
-    const entry: { event?: string; data?: string; id?: string } = {};
-    for (const line of block.split("\n")) {
-      if (line.startsWith("event:")) entry.event = line.slice(6).trim();
-      else if (line.startsWith("data:")) entry.data = line.slice(5).trim();
-      else if (line.startsWith("id:")) entry.id = line.slice(3).trim();
-    }
-    if (entry.event || entry.data) events.push(entry);
-  }
-  return events;
+interface ParsedSSEEvent {
+  event?: string;
+  data: string;
+  id?: string;
+  retry?: number;
 }
 
-/** Build a mini Hono app with the SSE endpoint mirroring server.ts */
-function createSSEApp(lifecycle: AgentLifecycle) {
+function parseEvent(block: string): ParsedSSEEvent {
+  const event: ParsedSSEEvent = { data: "" };
+  const data: string[] = [];
+
+  for (const line of block.split("\n")) {
+    if (line.startsWith("event:")) event.event = line.slice(6).trim();
+    else if (line.startsWith("data:")) data.push(line.slice(5).trimStart());
+    else if (line.startsWith("id:")) event.id = line.slice(3).trim();
+    else if (line.startsWith("retry:")) event.retry = Number(line.slice(6).trim());
+  }
+
+  event.data = data.join("\n");
+  return event;
+}
+
+function createEventReader(response: Response) {
+  if (!response.body) throw new Error("SSE response has no body");
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  return {
+    async next(): Promise<ParsedSSEEvent> {
+      while (!buffer.includes("\n\n")) {
+        const { done, value } = await reader.read();
+        if (done) throw new Error("SSE stream ended before the next event");
+        buffer += decoder.decode(value, { stream: true }).replaceAll("\r\n", "\n");
+      }
+
+      const boundary = buffer.indexOf("\n\n");
+      const block = buffer.slice(0, boundary);
+      buffer = buffer.slice(boundary + 2);
+      return parseEvent(block);
+    },
+    cancel: () => reader.cancel(),
+  };
+}
+
+function createApp(lifecycle: AgentLifecycle) {
   const app = new Hono();
-
-  app.get("/api/agent/events", (c) => {
-    return streamSSE(c, async (stream) => {
-      let aborted = false;
-      stream.onAbort(() => {
-        aborted = true;
-      });
-
-      const now = Date.now();
-      await stream.writeSSE({
-        event: "status",
-        id: String(now),
-        data: JSON.stringify({
-          state: lifecycle.getState(),
-          error: lifecycle.getError() ?? null,
-          timestamp: now,
-        }),
-        retry: 3000,
-      });
-
-      const onStateChange = (event: StateChangeEvent) => {
-        if (aborted) return;
-        stream.writeSSE({
-          event: "status",
-          id: String(event.timestamp),
-          data: JSON.stringify({
-            state: event.state,
-            error: event.error ?? null,
-            timestamp: event.timestamp,
-          }),
-        });
-      };
-
-      lifecycle.on("stateChange", onStateChange);
-
-      // For testing: don't loop forever — just wait briefly for events to propagate
-      await stream.sleep(50);
-
-      lifecycle.off("stateChange", onStateChange);
-    });
-  });
-
+  app.get("/events", (c) => createLifecycleSSE(c, lifecycle));
   return app;
 }
 
-describe("Agent SSE Endpoint", () => {
+describe("createLifecycleSSE", () => {
   let lifecycle: AgentLifecycle;
-  let app: ReturnType<typeof createSSEApp>;
 
   beforeEach(() => {
     lifecycle = new AgentLifecycle();
@@ -87,140 +63,106 @@ describe("Agent SSE Endpoint", () => {
       async () => {},
       async () => {}
     );
-    app = createSSEApp(lifecycle);
   });
 
-  // 1. Initial connection pushes current state
-  it("initial connection pushes current state", async () => {
-    const res = await app.request("/api/agent/events");
-    expect(res.status).toBe(200);
-    expect(res.headers.get("content-type")).toContain("text/event-stream");
-
-    const text = await res.text();
-    const events = parseSSE(text);
-    expect(events.length).toBeGreaterThanOrEqual(1);
-    expect(events[0].event).toBe("status");
-    const data = JSON.parse(events[0].data!);
-    expect(data.state).toBe("stopped");
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
-  // 2. State change emits SSE event
-  it("state change emits SSE event", async () => {
-    // Start agent so state is "running" when SSE connects
+  it("streams the current lifecycle state immediately", async () => {
+    const response = await createApp(lifecycle).request("/events");
+    const events = createEventReader(response);
+
+    expect(response.status).toBe(200);
+    expect(response.headers.get("content-type")).toContain("text/event-stream");
+    expect(response.headers.get("cache-control")).toBe("no-cache");
+
+    const initial = await events.next();
+    expect(initial.event).toBe("status");
+    expect(initial.retry).toBe(3000);
+    expect(JSON.parse(initial.data)).toMatchObject({
+      state: "stopped",
+      error: null,
+    });
+
+    await events.cancel();
+  });
+
+  it("streams the complete start and stop transition sequence", async () => {
+    const response = await createApp(lifecycle).request("/events");
+    const events = createEventReader(response);
+    const states: string[] = [JSON.parse((await events.next()).data).state];
+    await vi.waitFor(() => expect(lifecycle.listenerCount("stateChange")).toBe(1));
+
+    const starting = lifecycle.start();
+    states.push(JSON.parse((await events.next()).data).state);
+    states.push(JSON.parse((await events.next()).data).state);
+    await starting;
+
+    const stopping = lifecycle.stop();
+    states.push(JSON.parse((await events.next()).data).state);
+    states.push(JSON.parse((await events.next()).data).state);
+    await stopping;
+
+    expect(states).toEqual(["stopped", "starting", "running", "stopping", "stopped"]);
+    await events.cancel();
+  });
+
+  it("emits a heartbeat after the production interval", async () => {
+    vi.useFakeTimers();
+    const response = await createApp(lifecycle).request("/events");
+    const events = createEventReader(response);
+    await events.next();
+
+    const pendingHeartbeat = events.next();
+    await vi.advanceTimersByTimeAsync(30_000);
+
+    expect(await pendingHeartbeat).toMatchObject({
+      event: "ping",
+      data: "",
+    });
+    await events.cancel();
+  });
+
+  it("removes its lifecycle listener immediately when the client disconnects", async () => {
+    const initialListeners = lifecycle.listenerCount("stateChange");
+    const response = await createApp(lifecycle).request("/events");
+    const events = createEventReader(response);
+    await events.next();
+
+    await vi.waitFor(() =>
+      expect(lifecycle.listenerCount("stateChange")).toBe(initialListeners + 1)
+    );
+    await events.cancel();
+    await vi.waitFor(() => expect(lifecycle.listenerCount("stateChange")).toBe(initialListeners));
+  });
+
+  it("isolates concurrent clients and cleans up both listeners", async () => {
+    const initialListeners = lifecycle.listenerCount("stateChange");
+    const first = createEventReader(await createApp(lifecycle).request("/events"));
+    const second = createEventReader(await createApp(lifecycle).request("/events"));
+
+    await Promise.all([first.next(), second.next()]);
+    await vi.waitFor(() =>
+      expect(lifecycle.listenerCount("stateChange")).toBe(initialListeners + 2)
+    );
+
+    await first.cancel();
+    await vi.waitFor(() =>
+      expect(lifecycle.listenerCount("stateChange")).toBe(initialListeners + 1)
+    );
+    await second.cancel();
+    await vi.waitFor(() => expect(lifecycle.listenerCount("stateChange")).toBe(initialListeners));
+  });
+
+  it("reports the live state again when a client reconnects", async () => {
+    const first = createEventReader(await createApp(lifecycle).request("/events"));
+    expect(JSON.parse((await first.next()).data).state).toBe("stopped");
+    await first.cancel();
+
     await lifecycle.start();
-
-    const sseApp = new Hono();
-    sseApp.get("/events", (c) => {
-      return streamSSE(c, async (stream) => {
-        let aborted = false;
-        stream.onAbort(() => {
-          aborted = true;
-        });
-
-        // Push current state
-        await stream.writeSSE({
-          event: "status",
-          data: JSON.stringify({ state: lifecycle.getState() }),
-        });
-
-        // Listen for state change then close
-        const onStateChange = (event: StateChangeEvent) => {
-          if (aborted) return;
-          stream.writeSSE({
-            event: "status",
-            data: JSON.stringify({ state: event.state }),
-          });
-        };
-
-        lifecycle.on("stateChange", onStateChange);
-
-        // Trigger a stop during the stream
-        lifecycle.stop().catch(() => {});
-
-        await stream.sleep(50);
-        lifecycle.off("stateChange", onStateChange);
-      });
-    });
-
-    const res = await sseApp.request("/events");
-    const text = await res.text();
-    const events = parseSSE(text);
-
-    // Should have initial "running" and then "stopping" and "stopped"
-    const states = events.map((e) => JSON.parse(e.data!).state);
-    expect(states).toContain("running");
-    expect(states).toContain("stopped");
-  });
-
-  // 3. Heartbeat sent after interval (we use short interval for test)
-  it("heartbeat (ping) is sent", async () => {
-    const sseApp = new Hono();
-    sseApp.get("/events", (c) => {
-      return streamSSE(c, async (stream) => {
-        // Send a ping immediately for test purposes
-        await stream.writeSSE({ event: "ping", data: "" });
-      });
-    });
-
-    const res = await sseApp.request("/events");
-    const text = await res.text();
-    const events = parseSSE(text);
-    const pings = events.filter((e) => e.event === "ping");
-    expect(pings.length).toBeGreaterThanOrEqual(1);
-  });
-
-  // 4. Client disconnect removes listener
-  it("client disconnect removes listener", async () => {
-    const initialListenerCount = lifecycle.listenerCount("stateChange");
-
-    // After SSE stream ends, listeners should be cleaned up
-    const res = await app.request("/api/agent/events");
-    await res.text(); // consume stream
-
-    // Listener should have been removed
-    expect(lifecycle.listenerCount("stateChange")).toBe(initialListenerCount);
-  });
-
-  // 5. Multiple concurrent SSE clients
-  it("multiple concurrent SSE clients receive events independently", async () => {
-    const res1 = app.request("/api/agent/events");
-    const res2 = app.request("/api/agent/events");
-
-    const [r1, r2] = await Promise.all([res1, res2]);
-    const text1 = await r1.text();
-    const text2 = await r2.text();
-
-    // Both should have received the initial status event
-    const events1 = parseSSE(text1);
-    const events2 = parseSSE(text2);
-    expect(events1.length).toBeGreaterThanOrEqual(1);
-    expect(events2.length).toBeGreaterThanOrEqual(1);
-    expect(events1[0].event).toBe("status");
-    expect(events2[0].event).toBe("status");
-  });
-
-  // 6. Error in stream handler doesn't crash server
-  it("error in stream handler does not crash server", async () => {
-    const errorApp = new Hono();
-    errorApp.get("/events", (c) => {
-      return streamSSE(c, async (stream) => {
-        await stream.writeSSE({ event: "status", data: '{"state":"stopped"}' });
-        // Simulate error — stream closes but server stays up
-        throw new Error("simulated stream error");
-      });
-    });
-
-    // Should not throw
-    const res = await errorApp.request("/events");
-    expect(res.status).toBe(200);
-    // Stream still returned something before the error
-    const text = await res.text();
-    expect(text).toContain("status");
-  });
-
-  // Extra: SSE content-type header
-  it("returns text/event-stream content type", async () => {
-    const res = await app.request("/api/agent/events");
-    expect(res.headers.get("content-type")).toContain("text/event-stream");
+    const second = createEventReader(await createApp(lifecycle).request("/events"));
+    expect(JSON.parse((await second.next()).data).state).toBe("running");
+    await second.cancel();
   });
 });

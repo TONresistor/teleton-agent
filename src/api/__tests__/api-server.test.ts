@@ -136,69 +136,7 @@ function createTestApp(opts: TestAppOptions = {}) {
     });
   });
 
-  // Agent lifecycle routes (inline, mirroring server.ts)
-  app.post("/v1/agent/start", async (c) => {
-    if (!lifecycle) {
-      return c.json(
-        createProblem(503, "Service Unavailable", "Agent lifecycle not available"),
-        503,
-        { "Content-Type": "application/problem+json" }
-      );
-    }
-    const state = lifecycle.getState();
-    if (state === "running") {
-      return c.json({ state: "running" }, 409);
-    }
-    if (state === "stopping") {
-      return c.json(
-        createProblem(409, "Conflict", "Agent is currently stopping, please wait"),
-        409,
-        { "Content-Type": "application/problem+json" }
-      );
-    }
-    lifecycle.start().catch(() => {});
-    return c.json({ state: "starting" });
-  });
-
-  app.post("/v1/agent/stop", async (c) => {
-    if (!lifecycle) {
-      return c.json(
-        createProblem(503, "Service Unavailable", "Agent lifecycle not available"),
-        503,
-        { "Content-Type": "application/problem+json" }
-      );
-    }
-    const state = lifecycle.getState();
-    if (state === "stopped") {
-      return c.json({ state: "stopped" }, 409);
-    }
-    if (state === "starting") {
-      return c.json(
-        createProblem(409, "Conflict", "Agent is currently starting, please wait"),
-        409,
-        { "Content-Type": "application/problem+json" }
-      );
-    }
-    lifecycle.stop().catch(() => {});
-    return c.json({ state: "stopping" });
-  });
-
-  app.get("/v1/agent/status", (c) => {
-    if (!lifecycle) {
-      return c.json(
-        createProblem(503, "Service Unavailable", "Agent lifecycle not available"),
-        503,
-        { "Content-Type": "application/problem+json" }
-      );
-    }
-    return c.json({
-      state: lifecycle.getState(),
-      uptime: lifecycle.getUptime(),
-      error: lifecycle.getError() ?? null,
-    });
-  });
-
-  // New API-only routes
+  // API-only routes
   app.route("/v1/agent", createAgentRoutes(lifecycle));
   app.route("/v1/system", createSystemRoutes());
   app.route("/v1/auth", createAuthRoutes());
@@ -552,86 +490,6 @@ describe("Management API", () => {
     });
   });
 
-  // ── Agent Lifecycle ──────────────────────────────────────────────
-
-  describe("Agent Lifecycle", () => {
-    let lifecycle: AgentLifecycle;
-    let app: ReturnType<typeof createTestApp>;
-
-    beforeEach(() => {
-      lifecycle = new AgentLifecycle();
-      lifecycle.registerCallbacks(
-        async () => {},
-        async () => {}
-      );
-      app = createTestApp({ lifecycle, skipAuth: true });
-    });
-
-    // Test 18
-    it("POST /v1/agent/start returns 200 starting when stopped", async () => {
-      const res = await app.request("/v1/agent/start", { method: "POST" });
-      expect(res.status).toBe(200);
-      const body = await res.json();
-      expect(body.state).toBe("starting");
-    });
-
-    // Test 19
-    it("POST /v1/agent/start returns 409 when already running", async () => {
-      await lifecycle.start();
-      expect(lifecycle.getState()).toBe("running");
-
-      const res = await app.request("/v1/agent/start", { method: "POST" });
-      expect(res.status).toBe(409);
-      const body = await res.json();
-      expect(body.state).toBe("running");
-    });
-
-    // Test 20
-    it("POST /v1/agent/stop returns 200 stopping when running", async () => {
-      await lifecycle.start();
-
-      const res = await app.request("/v1/agent/stop", { method: "POST" });
-      expect(res.status).toBe(200);
-      const body = await res.json();
-      expect(body.state).toBe("stopping");
-    });
-
-    // Test 21
-    it("POST /v1/agent/restart returns 200 restarting", async () => {
-      await lifecycle.start();
-
-      const res = await app.request("/v1/agent/restart", { method: "POST" });
-      expect(res.status).toBe(200);
-      const body = await res.json();
-      expect(body.state).toBe("restarting");
-    });
-
-    // Test 22
-    it("GET /v1/agent/status returns state, uptime, error", async () => {
-      // Stopped state
-      let res = await app.request("/v1/agent/status");
-      expect(res.status).toBe(200);
-      let body = await res.json();
-      expect(body.state).toBe("stopped");
-      expect(body.uptime).toBeNull();
-      expect(body.error).toBeNull();
-
-      // Running state
-      await lifecycle.start();
-      res = await app.request("/v1/agent/status");
-      body = await res.json();
-      expect(body.state).toBe("running");
-      expect(typeof body.uptime).toBe("number");
-      expect(body.uptime).toBeGreaterThanOrEqual(0);
-      expect(body.error).toBeNull();
-    });
-
-    it("POST /v1/agent/stop returns 409 when already stopped", async () => {
-      const res = await app.request("/v1/agent/stop", { method: "POST" });
-      expect(res.status).toBe(409);
-    });
-  });
-
   // ── New Endpoints ────────────────────────────────────────────────
 
   describe("New Endpoints", () => {
@@ -760,20 +618,6 @@ describe("Management API", () => {
   // ── Pre-Setup State / 503 Behavior ──────────────────────────────
 
   describe("Pre-Setup State / 503 Behavior", () => {
-    // Test 29
-    it("agent routes return 503 when lifecycle is null", async () => {
-      const app = createTestApp({ lifecycle: null, skipAuth: true });
-
-      const startRes = await app.request("/v1/agent/start", { method: "POST" });
-      expect(startRes.status).toBe(503);
-
-      const stopRes = await app.request("/v1/agent/stop", { method: "POST" });
-      expect(stopRes.status).toBe(503);
-
-      const statusRes = await app.request("/v1/agent/status");
-      expect(statusRes.status).toBe(503);
-    });
-
     it("memory routes return 503 when db is null", async () => {
       const app = createTestApp({ skipAuth: true, db: null });
 
@@ -1006,10 +850,6 @@ describe("Management API", () => {
       let auditCalled = false;
 
       testApp.use("*", requestId);
-      testApp.use("*", async (c, next) => {
-        c.set("keyPrefix", "tltn_test1");
-        await next();
-      });
       // Inline audit check
       testApp.use("*", async (c, next) => {
         const method = c.req.method;
@@ -1121,29 +961,6 @@ describe("Management API", () => {
       const app = createTestApp({ lifecycle, allowedIps: ["10.0.0.1"] });
       const res = await app.request("/readyz");
       expect(res.status).toBe(200);
-    });
-
-    it("restart returns 409 when agent is in transitional state", async () => {
-      const lifecycle = new AgentLifecycle();
-      let resolveStart!: () => void;
-      lifecycle.registerCallbacks(
-        async () => {},
-        async () => {}
-      );
-
-      const startPromise = lifecycle.start(
-        () =>
-          new Promise<void>((resolve) => {
-            resolveStart = resolve;
-          })
-      );
-
-      const app = createTestApp({ lifecycle, skipAuth: true });
-      const res = await app.request("/v1/agent/restart", { method: "POST" });
-      expect(res.status).toBe(409);
-
-      resolveStart();
-      await startPromise;
     });
 
     it("deps adapter throws 503 for null agent dep", () => {

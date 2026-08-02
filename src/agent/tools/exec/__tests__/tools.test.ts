@@ -17,6 +17,21 @@ import { runCommand } from "../runner.js";
 
 const mockRunCommand = vi.mocked(runCommand);
 
+function commandResult(
+  overrides: Partial<Awaited<ReturnType<typeof runCommand>>> = {}
+): Awaited<ReturnType<typeof runCommand>> {
+  return {
+    stdout: "",
+    stderr: "",
+    exitCode: 0,
+    signal: null,
+    duration: 10,
+    truncated: false,
+    timedOut: false,
+    ...overrides,
+  };
+}
+
 function createTestDb(): Database.Database {
   const db = new Database(":memory:");
   ensureSchema(db);
@@ -54,15 +69,7 @@ describe("exec_run", () => {
   });
 
   it("calls runner with correct command and returns result", async () => {
-    mockRunCommand.mockResolvedValue({
-      stdout: "hello\n",
-      stderr: "",
-      exitCode: 0,
-      signal: null,
-      duration: 50,
-      truncated: false,
-      timedOut: false,
-    });
+    mockRunCommand.mockResolvedValue(commandResult({ stdout: "hello\n", duration: 50 }));
 
     const executor = createExecRunExecutor(db, makeExecConfig());
     const result = await executor({ command: "echo hello" }, makeContext());
@@ -80,15 +87,7 @@ describe("exec_run", () => {
   });
 
   it("returns error when command fails", async () => {
-    mockRunCommand.mockResolvedValue({
-      stdout: "",
-      stderr: "not found\n",
-      exitCode: 127,
-      signal: null,
-      duration: 10,
-      truncated: false,
-      timedOut: false,
-    });
+    mockRunCommand.mockResolvedValue(commandResult({ stderr: "not found\n", exitCode: 127 }));
 
     const executor = createExecRunExecutor(db, makeExecConfig());
     const result = await executor({ command: "nonexistent" }, makeContext());
@@ -98,15 +97,7 @@ describe("exec_run", () => {
   });
 
   it("logs audit entry before and after execution", async () => {
-    mockRunCommand.mockResolvedValue({
-      stdout: "ok",
-      stderr: "",
-      exitCode: 0,
-      signal: null,
-      duration: 100,
-      truncated: false,
-      timedOut: false,
-    });
+    mockRunCommand.mockResolvedValue(commandResult({ stdout: "ok", duration: 100 }));
 
     const executor = createExecRunExecutor(db, makeExecConfig());
     await executor({ command: "ls" }, makeContext());
@@ -121,15 +112,7 @@ describe("exec_run", () => {
   });
 
   it("skips audit when log_commands is false", async () => {
-    mockRunCommand.mockResolvedValue({
-      stdout: "",
-      stderr: "",
-      exitCode: 0,
-      signal: null,
-      duration: 10,
-      truncated: false,
-      timedOut: false,
-    });
+    mockRunCommand.mockResolvedValue(commandResult());
 
     const executor = createExecRunExecutor(db, makeExecConfig({ audit: { log_commands: false } }));
     await executor({ command: "ls" }, makeContext());
@@ -147,84 +130,22 @@ describe("exec_install", () => {
     vi.clearAllMocks();
   });
 
-  it("constructs correct command for apt", async () => {
-    mockRunCommand.mockResolvedValue({
-      stdout: "installed",
-      stderr: "",
-      exitCode: 0,
-      signal: null,
-      duration: 5000,
-      truncated: false,
-      timedOut: false,
-    });
+  it.each([
+    ["apt", "nginx curl", "apt install -y nginx curl"],
+    ["pip", "flask", "pip install flask"],
+    ["npm", "pm2", "npm install -g pm2"],
+    ["docker", "nginx:latest", "docker pull nginx:latest"],
+  ] as const)("constructs the correct %s command", async (manager, packages, command) => {
+    mockRunCommand.mockResolvedValue(commandResult());
 
     const executor = createExecInstallExecutor(db, makeExecConfig());
-    await executor({ manager: "apt", packages: "nginx curl" }, makeContext());
+    await executor({ manager, packages }, makeContext());
 
-    expect(mockRunCommand).toHaveBeenCalledWith("apt install -y nginx curl", expect.any(Object));
-  });
-
-  it("constructs correct command for pip", async () => {
-    mockRunCommand.mockResolvedValue({
-      stdout: "",
-      stderr: "",
-      exitCode: 0,
-      signal: null,
-      duration: 1000,
-      truncated: false,
-      timedOut: false,
-    });
-
-    const executor = createExecInstallExecutor(db, makeExecConfig());
-    await executor({ manager: "pip", packages: "flask" }, makeContext());
-
-    expect(mockRunCommand).toHaveBeenCalledWith("pip install flask", expect.any(Object));
-  });
-
-  it("constructs correct command for npm", async () => {
-    mockRunCommand.mockResolvedValue({
-      stdout: "",
-      stderr: "",
-      exitCode: 0,
-      signal: null,
-      duration: 1000,
-      truncated: false,
-      timedOut: false,
-    });
-
-    const executor = createExecInstallExecutor(db, makeExecConfig());
-    await executor({ manager: "npm", packages: "pm2" }, makeContext());
-
-    expect(mockRunCommand).toHaveBeenCalledWith("npm install -g pm2", expect.any(Object));
-  });
-
-  it("constructs correct command for docker", async () => {
-    mockRunCommand.mockResolvedValue({
-      stdout: "",
-      stderr: "",
-      exitCode: 0,
-      signal: null,
-      duration: 3000,
-      truncated: false,
-      timedOut: false,
-    });
-
-    const executor = createExecInstallExecutor(db, makeExecConfig());
-    await executor({ manager: "docker", packages: "nginx:latest" }, makeContext());
-
-    expect(mockRunCommand).toHaveBeenCalledWith("docker pull nginx:latest", expect.any(Object));
+    expect(mockRunCommand).toHaveBeenCalledWith(command, expect.any(Object));
   });
 
   it("logs audit entry", async () => {
-    mockRunCommand.mockResolvedValue({
-      stdout: "",
-      stderr: "",
-      exitCode: 0,
-      signal: null,
-      duration: 1000,
-      truncated: false,
-      timedOut: false,
-    });
+    mockRunCommand.mockResolvedValue(commandResult({ duration: 1000 }));
 
     const executor = createExecInstallExecutor(db, makeExecConfig());
     await executor({ manager: "apt", packages: "nginx" }, makeContext());
@@ -245,15 +166,7 @@ describe("exec_service", () => {
   });
 
   it("constructs systemctl command", async () => {
-    mockRunCommand.mockResolvedValue({
-      stdout: "active",
-      stderr: "",
-      exitCode: 0,
-      signal: null,
-      duration: 100,
-      truncated: false,
-      timedOut: false,
-    });
+    mockRunCommand.mockResolvedValue(commandResult({ stdout: "active", duration: 100 }));
 
     const executor = createExecServiceExecutor(db, makeExecConfig());
     await executor({ action: "status", name: "nginx" }, makeContext());
@@ -262,15 +175,7 @@ describe("exec_service", () => {
   });
 
   it("logs audit entry", async () => {
-    mockRunCommand.mockResolvedValue({
-      stdout: "",
-      stderr: "",
-      exitCode: 0,
-      signal: null,
-      duration: 200,
-      truncated: false,
-      timedOut: false,
-    });
+    mockRunCommand.mockResolvedValue(commandResult({ duration: 200 }));
 
     const executor = createExecServiceExecutor(db, makeExecConfig());
     await executor({ action: "restart", name: "docker" }, makeContext());
@@ -290,15 +195,7 @@ describe("exec_status", () => {
   });
 
   it("returns structured status data", async () => {
-    mockRunCommand.mockResolvedValue({
-      stdout: "some output",
-      stderr: "",
-      exitCode: 0,
-      signal: null,
-      duration: 50,
-      truncated: false,
-      timedOut: false,
-    });
+    mockRunCommand.mockResolvedValue(commandResult({ stdout: "some output", duration: 50 }));
 
     const executor = createExecStatusExecutor(db, makeExecConfig());
     const result = await executor({} as any, makeContext());
@@ -317,34 +214,21 @@ describe("exec_status", () => {
     mockRunCommand.mockImplementation(async () => {
       callCount++;
       if (callCount === 2) {
-        return {
-          stdout: "",
+        return commandResult({
           stderr: "free: command not found",
           exitCode: 127,
-          signal: null,
-          duration: 10,
-          truncated: false,
-          timedOut: false,
-        };
+        });
       }
-      return {
-        stdout: "some data",
-        stderr: "",
-        exitCode: 0,
-        signal: null,
-        duration: 10,
-        truncated: false,
-        timedOut: false,
-      };
+      return commandResult({ stdout: "some data" });
     });
 
     const executor = createExecStatusExecutor(db, makeExecConfig());
     const result = await executor({} as any, makeContext());
 
     expect(result.success).toBe(true);
-    // memory should contain the failure message
-    expect(result.data.memory).toContain("failed");
-    // other keys should have data
-    expect(result.data.disk).toBe("some data");
+    expect(result.data).toMatchObject({
+      memory: expect.stringContaining("failed"),
+      disk: "some data",
+    });
   });
 });
