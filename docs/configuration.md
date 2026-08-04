@@ -90,7 +90,7 @@ When you change the `provider` and omit `model`, the platform auto-selects:
 |----------|--------------|----------------------|
 | `anthropic` | `claude-haiku-4-5-20251001` | `claude-haiku-4-5-20251001` |
 | `codex` | `gpt-5.6-terra` | `gpt-5.4-mini` |
-| `grok-build` | `grok-build` | `grok-build` |
+| `grok-build` | `grok-4.5` | `grok-4.5` |
 | `openai` | `gpt-5.6-terra` | `gpt-5.4-nano` |
 | `google` | `gemini-3.6-flash` | `gemini-3.5-flash-lite` |
 | `xai` | `grok-4.5` | `grok-4.3` |

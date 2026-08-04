@@ -11,24 +11,22 @@ const modelCache = new Map<string, Model<Api>>();
 
 const GOCOON_MODELS: Record<string, Model<"openai-completions">> = {};
 
-const GROK_BUILD_MODEL_ID = "grok-build";
-
 function clearProviderModels(provider: SupportedProvider): void {
   for (const key of modelCache.keys()) {
     if (key.startsWith(`${provider}:`)) modelCache.delete(key);
   }
 }
 
-function createGrokBuildModel(): Model<"openai-responses"> {
+function createGrokBuildModel(modelId: string): Model<"openai-responses"> {
   return {
-    id: GROK_BUILD_MODEL_ID,
-    name: "Grok Build",
+    id: modelId,
+    name: modelId === "grok-4.5" ? "Grok 4.5" : modelId,
     api: "openai-responses",
     provider: "xai",
     baseUrl: "https://cli-chat-proxy.grok.com/v1",
     headers: {
       "X-XAI-Token-Auth": "xai-grok-cli",
-      "x-grok-model-override": GROK_BUILD_MODEL_ID,
+      "x-grok-model-override": modelId,
       "x-grok-client-version": getGrokBuildCliVersion(),
     },
     reasoning: false,
@@ -152,6 +150,9 @@ const LEGACY_MODEL_ALIASES: Partial<Record<SupportedProvider, Readonly<Record<st
     "gpt-5.3-codex": "gpt-5.6-terra",
     "gpt-5.1-codex-mini": "gpt-5.4-mini",
   },
+  "grok-build": {
+    "grok-build": "grok-4.5",
+  },
   google: {
     "gemini-3.1-flash-lite-preview": "gemini-3.1-flash-lite",
     "gemini-2.5-pro": "gemini-3.1-pro-preview",
@@ -223,10 +224,11 @@ export function getProviderModel(provider: SupportedProvider, modelId: string): 
   const meta = getProviderMetadata(provider);
 
   if (meta.piAiProvider === "grok-build") {
-    const grokBuildModel = createGrokBuildModel();
-    if (modelId !== grokBuildModel.id) {
+    const supportedModelIds = ["grok-4.5"];
+    if (!supportedModelIds.includes(modelId)) {
       throw new Error(`Grok Build model "${modelId}" is not supported`);
     }
+    const grokBuildModel = createGrokBuildModel(modelId);
     modelCache.set(cacheKey, grokBuildModel);
     return grokBuildModel;
   }

@@ -148,9 +148,9 @@ const MODEL_OPTIONS: Record<string, CatalogModelOption[]> = {
   ],
   "grok-build": [
     {
-      value: "grok-build",
-      name: "Grok Build",
-      description: "Coding model via your Grok CLI subscription, 500K context",
+      value: "grok-4.5",
+      name: "Grok 4.5",
+      description: "Frontier coding and agentic work, vision, 500K context",
     },
   ],
   google: [
