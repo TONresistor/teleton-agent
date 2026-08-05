@@ -618,6 +618,7 @@ export class GramJSUserBridge implements ITelegramBridge {
         file: photo,
         caption,
         replyTo: replyToId,
+        forceDocument: false,
       });
       return { id: result.id, date: result.date, chatId };
     } catch (error) {

@@ -377,6 +377,7 @@ describe("createTelegramMessagesSDK", () => {
         file: expect.any(Buffer),
         caption: "nice pic",
         replyTo: 5,
+        forceDocument: false,
       });
       expect(result).toBe(10);
     });
@@ -390,6 +391,7 @@ describe("createTelegramMessagesSDK", () => {
         file: "/path/to/photo.jpg",
         caption: undefined,
         replyTo: undefined,
+        forceDocument: false,
       });
       expect(result).toBe(11);
     });

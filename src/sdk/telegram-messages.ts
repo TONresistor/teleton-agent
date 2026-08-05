@@ -262,6 +262,7 @@ export function createTelegramMessagesSDK(
           file: photo,
           caption: opts?.caption,
           replyTo: opts?.replyToId,
+          forceDocument: false,
         });
 
         return result.id;
