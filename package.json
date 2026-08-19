@@ -102,6 +102,7 @@
     "esbuild": "0.28.1",
     "fast-uri": "3.1.5",
     "ip-address": "10.3.1",
+    "nanoid": "3.3.18",
     "sharp": "0.35.3"
   },
   "devDependencies": {
