@@ -12,6 +12,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Current Anthropic, OpenAI, Google, xAI, Groq, OpenRouter, Kimi, Mistral,
   Cerebras, Z.AI, MiniMax, and Hugging Face models to the shared catalog.
 - Provider-scoped compatibility aliases for deprecated or unsupported model IDs.
+- Native Telegram Rich Messages for structured text, media, links, quotes, and
+  interactive content across user bridges, tools, and the SDK.
 
 ### Changed
 
@@ -20,11 +22,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Updated Grok Build to default to Grok 4.6 while retaining Grok 4.5 compatibility.
 - **Breaking:** pinned local development, CI, releases, and Docker to Node.js 22.22.2.
 - Added explicit Codex reasoning-effort configuration, defaulting to `medium`.
+- Split `AgentRuntime` and `TeletonApp` into focused turn preparation, loop execution,
+  response finalization, message pipeline, and lifecycle components.
 
 ### Fixed
 
 - Prevented the WebUI from silently replacing custom or legacy models while loading provider options.
 - Switched Mistral Medium to its documented `mistral-medium-latest` API alias.
+- Propagated actual Telegram dice results through bot and user bridges, tools, and the SDK.
+- Sent Telegram photos as media instead of degrading them to document attachments.
+- Consolidated WebUI lifecycle routes and cleaned up SSE listeners across restarts.
 
 ## [0.10.1] - 2026-07-27
 
