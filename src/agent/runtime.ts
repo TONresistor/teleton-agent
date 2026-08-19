@@ -1,4 +1,4 @@
-import { createHash, randomUUID } from "crypto";
+import { randomUUID } from "crypto";
 import type { Config } from "../config/schema.js";
 import {
   COMPACTION_MAX_MESSAGES,
@@ -9,13 +9,7 @@ import {
   CONTEXT_MAX_RELEVANT_CHUNKS,
 } from "../constants/limits.js";
 import { TELEGRAM_SEND_TOOLS } from "../constants/tools.js";
-import type { CompletedToolCall } from "./telegram-send-state.js";
-import {
-  loadContextFromTranscript,
-  getProviderModel,
-  getEffectiveApiKey,
-  type ChatResponse,
-} from "./client.js";
+import { loadContextFromTranscript, getProviderModel, getEffectiveApiKey } from "./client.js";
 import { getProviderMetadata, type SupportedProvider } from "../config/providers.js";
 import { buildSystemPrompt, captureMemorySnapshot, clearMemorySnapshot } from "../soul/loader.js";
 import { getDatabase } from "../memory/index.js";
@@ -32,11 +26,9 @@ import {
 import { transcriptExists, appendToTranscript } from "../session/transcript.js";
 import type { Context, UserMessage } from "@earendil-works/pi-ai";
 import { CompactionManager, DEFAULT_COMPACTION_CONFIG } from "../memory/compaction.js";
-import { maskOldToolResults } from "../memory/observation-masking.js";
 import { ContextBuilder } from "../memory/search/context.js";
 import type { EmbeddingProvider } from "../memory/embeddings/provider.js";
 import type { ToolRegistry } from "./tools/registry.js";
-import type { ToolContext } from "./tools/types.js";
 import { saveSessionMemory } from "../session/memory-hook.js";
 import { createLogger } from "../utils/logger.js";
 import type { createHookRunner } from "../sdk/hooks/runner.js";
@@ -46,22 +38,14 @@ import type {
   MessageReceiveEvent,
   PromptAfterEvent,
 } from "../sdk/hooks/types.js";
-import { isTrivialMessage, addUsage } from "./runtime-utils.js";
-import { isBotBridge } from "../telegram/bridge-guards.js";
-import { executeToolBatch, injectDiscoveredTools, recordToolResults } from "./loop/tool-batch.js";
-import { recoverLlmError, runModelIteration } from "./loop/llm-iteration.js";
-import { computeRagEmbedding, enforceProviderToolLimit, selectTools } from "./tool-selector.js";
-import { resolveProviderFallback } from "./provider-fallback.js";
+import { isTrivialMessage } from "./runtime-utils.js";
+import { computeRagEmbedding, selectTools } from "./tool-selector.js";
 import { AgentTurnTraceRecorder } from "./turn-trace.js";
 import { TurnCoordinator } from "./turn-coordinator.js";
-import type {
-  AgentResponse,
-  LoopResult,
-  ProcessMessageOptions,
-  TurnContext,
-  TurnContextResult,
-} from "./turn-types.js";
+import type { AgentResponse, ProcessMessageOptions, TurnContextResult } from "./turn-types.js";
 import { finalizeAgentResponse } from "./response-finalizer.js";
+import { resolveModelTarget } from "./model-target.js";
+import { executeAgentLoop } from "./loop/executor.js";
 
 export type { AgentResponse, ProcessMessageOptions } from "./turn-types.js";
 
@@ -69,23 +53,6 @@ export { isContextOverflowError, isTrivialMessage } from "./runtime-utils.js";
 export { getTokenUsage } from "./token-usage.js";
 
 const log = createLogger("Agent");
-
-function resolveModelTarget(
-  provider: SupportedProvider,
-  requestedModel: string
-): {
-  resolvedModel: string;
-  endpointFingerprint: string;
-} {
-  const model = getProviderModel(provider, requestedModel);
-  return {
-    resolvedModel: model.id,
-    endpointFingerprint: createHash("sha256")
-      .update(model.baseUrl ?? `${model.provider}:${model.api}`)
-      .digest("hex")
-      .slice(0, 16),
-  };
-}
 
 export class AgentRuntime {
   private config: Config;
@@ -202,7 +169,11 @@ export class AgentRuntime {
         selectedTools: built.turn.tools?.map((tool) => tool.name) ?? [],
       });
 
-      const loop = await this.runAgenticLoop(built.turn, opts, trace);
+      const loop = await executeAgentLoop(built.turn, opts, trace, {
+        config: this.config,
+        toolRegistry: this.toolRegistry,
+        hookRunner: this.hookRunner,
+      });
       if (!loop.finalResponse) {
         log.error("Agentic loop exited early without final response");
         trace.finish({
@@ -615,273 +586,6 @@ export class AgentRuntime {
         endpointFingerprint: target.endpointFingerprint,
         sessionKey,
       },
-    };
-  }
-
-  private async runAgenticLoop(
-    turn: TurnContext,
-    opts: ProcessMessageOptions,
-    trace: AgentTurnTraceRecorder
-  ): Promise<LoopResult> {
-    const { chatId, effectiveIsGroup, processStartTime, systemPrompt, userMsg, sessionKey } = turn;
-    const { toolContext } = opts;
-    let session = turn.session;
-    let context = turn.context;
-    let activeProvider = turn.provider;
-    let activeAgentConfig = this.config.agent;
-    let activeTools = turn.tools ? [...turn.tools] : undefined;
-    let fallbackIndex = 0;
-
-    const maxIterations = Math.max(1, this.config.agent.max_agentic_iterations || 5);
-    const maxDurationMs = Math.max(10_000, this.config.agent.max_turn_duration_ms);
-    const providerSignal = AbortSignal.timeout(
-      Math.max(1, maxDurationMs - (Date.now() - processStartTime))
-    );
-    let iteration = 0;
-    const retry = { overflowResets: 0, rateLimitRetries: 0, serverErrorRetries: 0 };
-    let finalResponse: ChatResponse | null = null;
-    let lastResponse: ChatResponse | null = null;
-    let stopReason = "completed";
-    let forcedContent: string | undefined;
-    const totalToolCalls: CompletedToolCall[] = [];
-    const accumulatedTexts: string[] = [];
-    const accumulatedUsage = { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, totalCost: 0 };
-    let wasStreamed = false;
-    let streamAccumulatedText = ""; // For "all" mode: concatenate text across iterations
-
-    while (iteration < maxIterations) {
-      if (Date.now() - processStartTime >= maxDurationMs) {
-        if (!lastResponse) {
-          throw new Error("Agent turn time budget exhausted before the first model response");
-        }
-        stopReason = "time_budget";
-        forcedContent =
-          "I stopped at a safe boundary because this turn reached its time budget. " +
-          "Send a follow-up to continue.";
-        finalResponse = lastResponse;
-        break;
-      }
-
-      iteration++;
-      log.debug(`Agentic iteration ${iteration}/${maxIterations}`);
-
-      // Track where current iteration starts so masking won't truncate its results
-      const iterationStartIndex = context.messages.length;
-
-      const maskedMessages = maskOldToolResults(context.messages, {
-        toolRegistry: this.toolRegistry ?? undefined,
-        currentIterationStartIndex: iterationStartIndex,
-      });
-      const maskedContext: Context = { ...context, messages: maskedMessages };
-
-      const iterationResult = await runModelIteration(
-        activeAgentConfig,
-        opts.streamToChat,
-        maskedContext,
-        systemPrompt,
-        session.sessionId,
-        activeTools,
-        streamAccumulatedText,
-        providerSignal,
-        Math.max(1, maxDurationMs - (Date.now() - processStartTime))
-      );
-      const response = iterationResult.response;
-      lastResponse = response;
-      const streamed = iterationResult.streamed;
-      streamAccumulatedText = iterationResult.streamAccumulatedText;
-
-      const assistantMsg = response.message;
-      // Accumulate usage across all iterations — including errored responses that
-      // get retried, so cost metrics capture tokens spent on failed attempts too.
-      const iterUsage = response.message.usage;
-      if (iterUsage) {
-        addUsage(accumulatedUsage, iterUsage);
-      }
-
-      if (assistantMsg.stopReason === "error") {
-        // Recover from LLM errors (overflow reset / rate-limit / server backoff) or throw
-        // on terminal cases. When it returns, this is a retry that must not consume budget.
-        try {
-          const recovered = await recoverLlmError(
-            activeAgentConfig,
-            this.hookRunner,
-            assistantMsg,
-            retry,
-            {
-              session,
-              context,
-              chatId,
-              sessionKey,
-              effectiveIsGroup,
-              provider: activeProvider,
-              processStartTime,
-              userMsg,
-            }
-          );
-          session = recovered.session;
-          context = recovered.context;
-          iteration--; // recovery retry, not a productive iteration — don't consume the budget
-          continue;
-        } catch (error) {
-          const actionAlreadyAttempted = totalToolCalls.some(
-            (call) =>
-              call.attempted !== false &&
-              this.toolRegistry?.getToolCategory(call.name) !== "data-bearing"
-          );
-          const previousProvider = activeProvider;
-          const previousModel = activeAgentConfig.model;
-          const fallback = resolveProviderFallback(
-            this.config.agent,
-            fallbackIndex,
-            assistantMsg.errorMessage || "",
-            actionAlreadyAttempted
-          );
-          if (!fallback) throw error;
-
-          fallbackIndex = fallback.nextIndex;
-          activeProvider = fallback.provider;
-          activeAgentConfig = fallback.config;
-          const fallbackTarget = resolveModelTarget(activeProvider, activeAgentConfig.model);
-          trace.updateTarget(
-            activeProvider,
-            fallbackTarget.resolvedModel,
-            fallbackTarget.endpointFingerprint
-          );
-          retry.overflowResets = 0;
-          retry.rateLimitRetries = 0;
-          retry.serverErrorRetries = 0;
-          const fallbackLimit = getProviderMetadata(activeProvider).toolLimit;
-          if (activeTools) {
-            activeTools = enforceProviderToolLimit(activeTools, fallbackLimit);
-          }
-          streamAccumulatedText = "";
-          if (opts.streamToChat && isBotBridge(opts.streamToChat.bridge)) {
-            await opts.streamToChat.bridge.clearDraft(opts.streamToChat.chatId);
-          }
-          log.warn(
-            `Provider fallback: ${previousProvider}/${previousModel} → ` +
-              `${activeProvider}/${activeAgentConfig.model}`
-          );
-          iteration--;
-          continue;
-        }
-      }
-
-      if (response.text) {
-        accumulatedTexts.push(response.text);
-      }
-
-      const toolCalls = response.message.content.filter((block) => block.type === "toolCall");
-
-      if (toolCalls.length === 0) {
-        log.info(`${iteration}/${maxIterations} → done`);
-        finalResponse = response;
-        wasStreamed = streamed;
-        stopReason = fallbackIndex > 0 ? "completed_with_fallback" : "completed";
-        break;
-      }
-
-      if (!this.toolRegistry || !toolContext) {
-        log.error("Cannot execute tools: registry or context missing");
-        break;
-      }
-
-      log.debug(`Executing ${toolCalls.length} tool call(s)`);
-
-      context.messages.push(response.message);
-
-      const iterationToolNames: string[] = [];
-
-      const fullContext: ToolContext = {
-        ...toolContext,
-        chatId,
-        isGroup: effectiveIsGroup,
-        isGuest: opts.isGuest,
-        turnId: turn.turnId,
-        sessionId: session.sessionId,
-      };
-
-      // Phases 1-2: build the tool plans (tool:before hooks) and execute them.
-      const { toolPlans, execResults } = await executeToolBatch(
-        this.toolRegistry,
-        this.hookRunner,
-        toolCalls,
-        fullContext,
-        chatId,
-        effectiveIsGroup
-      );
-
-      // Mid-loop tool injection: when tool_search returns discoveries, inject schemas
-      // before recording the result. The result is pruned to tools that are actually
-      // available, so the model is never told to call a schema rejected by the
-      // provider limit or current context.
-      if (activeTools) {
-        const injected = injectDiscoveredTools(
-          toolPlans,
-          execResults,
-          activeTools,
-          getProviderMetadata(activeProvider).toolLimit,
-          opts.isGuest ? TELEGRAM_SEND_TOOLS : undefined
-        );
-        if (injected > 0) {
-          log.info(
-            `ToolSearch: injected ${injected} tool(s) mid-loop (total: ${activeTools.length})`
-          );
-        }
-      }
-
-      // Phase 3: record results + observing hooks; push the returned messages in order.
-      const resultMessages = await recordToolResults(this.hookRunner, toolPlans, execResults, {
-        totalToolCalls,
-        iterationToolNames,
-        sessionId: session.sessionId,
-        chatId,
-        effectiveIsGroup,
-        db: fullContext.db,
-      });
-      for (const resultMsg of resultMessages) {
-        context.messages.push(resultMsg);
-      }
-
-      trace.progress(totalToolCalls, iteration, accumulatedUsage);
-
-      log.info(`${iteration}/${maxIterations} → ${iterationToolNames.join(", ")}`);
-
-      if (Date.now() - processStartTime >= maxDurationMs) {
-        stopReason = "time_budget";
-        forcedContent =
-          "I stopped at a safe boundary because this turn reached its time budget. " +
-          "Send a follow-up to continue.";
-        finalResponse = response;
-        break;
-      }
-      if (iteration === maxIterations) {
-        log.info(`Max iterations reached (${maxIterations})`);
-        finalResponse = response;
-        stopReason = "iteration_budget";
-        forcedContent =
-          "I stopped at a safe boundary because this turn reached its iteration budget. " +
-          "Send a follow-up to continue.";
-      }
-    }
-
-    if (finalResponse && !context.messages.includes(finalResponse.message)) {
-      context.messages.push(finalResponse.message);
-    }
-
-    return {
-      finalResponse,
-      session,
-      context,
-      totalToolCalls,
-      accumulatedTexts,
-      accumulatedUsage,
-      wasStreamed,
-      iterations: iteration,
-      stopReason,
-      activeProvider,
-      activeModel: lastResponse?.message.model ?? activeAgentConfig.model,
-      forcedContent,
     };
   }
 
