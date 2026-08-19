@@ -20,7 +20,7 @@ function clearProviderModels(provider: SupportedProvider): void {
 function createGrokBuildModel(modelId: string): Model<"openai-responses"> {
   return {
     id: modelId,
-    name: modelId === "grok-4.5" ? "Grok 4.5" : modelId,
+    name: modelId === "grok-4.6" ? "Grok 4.6" : modelId === "grok-4.5" ? "Grok 4.5" : modelId,
     api: "openai-responses",
     provider: "xai",
     baseUrl: "https://cli-chat-proxy.grok.com/v1",
@@ -151,7 +151,7 @@ const LEGACY_MODEL_ALIASES: Partial<Record<SupportedProvider, Readonly<Record<st
     "gpt-5.1-codex-mini": "gpt-5.4-mini",
   },
   "grok-build": {
-    "grok-build": "grok-4.5",
+    "grok-build": "grok-4.6",
   },
   google: {
     "gemini-3.1-flash-lite-preview": "gemini-3.1-flash-lite",
@@ -224,7 +224,7 @@ export function getProviderModel(provider: SupportedProvider, modelId: string): 
   const meta = getProviderMetadata(provider);
 
   if (meta.piAiProvider === "grok-build") {
-    const supportedModelIds = ["grok-4.5"];
+    const supportedModelIds = ["grok-4.6", "grok-4.5"];
     if (!supportedModelIds.includes(modelId)) {
       throw new Error(`Grok Build model "${modelId}" is not supported`);
     }

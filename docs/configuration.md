@@ -90,7 +90,7 @@ When you change the `provider` and omit `model`, the platform auto-selects:
 |----------|--------------|----------------------|
 | `anthropic` | `claude-haiku-4-5-20251001` | `claude-haiku-4-5-20251001` |
 | `codex` | `gpt-5.6-terra` | `gpt-5.4-mini` |
-| `grok-build` | `grok-4.5` | `grok-4.5` |
+| `grok-build` | `grok-4.6` | `grok-4.6` |
 | `openai` | `gpt-5.6-terra` | `gpt-5.4-nano` |
 | `google` | `gemini-3.6-flash` | `gemini-3.5-flash-lite` |
 | `xai` | `grok-4.5` | `grok-4.3` |
@@ -107,7 +107,9 @@ When you change the `provider` and omit `model`, the platform auto-selects:
 
 `grok-build` reads the browser/OIDC session created by `grok login` from
 `$GROK_HOME/auth.json` (default: `~/.grok/auth.json`) and connects directly to
-the Grok Build CLI proxy. The session token is not stored in Teleton's config.
+the Grok Build CLI proxy. `grok-4.6` is the default and `grok-4.5` remains
+available for existing configurations. The session token is not stored in
+Teleton's config.
 
 Codex exposes the full GPT-5.6 family. `gpt-5.6-terra` is the balanced default;
 `gpt-5.6-sol` favors capability and `gpt-5.6-luna` favors speed and cost.
