@@ -32,6 +32,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Install WebUI dependencies
+        run: npm --prefix web ci
+
       - name: Verify runtime contract
         run: npm run check:runtime
 
