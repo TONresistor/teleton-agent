@@ -10,6 +10,7 @@ export const GroupPolicy = z.enum(["open", "allowlist", "admin-only", "disabled"
 // instead of re-listing the literals.
 export const ExecMode = z.enum(["off", "yolo"]);
 export const ExecScope = z.enum(["admin-only", "allowlist", "all"]);
+export const ReasoningEffort = z.enum(["none", "minimal", "low", "medium", "high", "xhigh", "max"]);
 
 export const DEFAULT_TOOL_RAG_ALWAYS_INCLUDE = ["journal_*", "workspace_*", "web_*"] as const;
 
@@ -45,6 +46,7 @@ export const AgentConfigSchema = z
       .optional()
       .describe("Base URL for local LLM server (e.g. http://localhost:11434/v1)"),
     model: z.string().default("claude-haiku-4-5-20251001"),
+    reasoning_effort: ReasoningEffort.default("medium"),
     utility_model: z
       .string()
       .optional()

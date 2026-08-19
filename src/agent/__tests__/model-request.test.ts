@@ -61,4 +61,20 @@ describe("model request preparation", () => {
 
     expect(request.options.temperature).toBe(0.4);
   });
+
+  it("passes the configured reasoning effort to Codex", () => {
+    const config = AgentConfigSchema.parse({
+      provider: "codex",
+      model: "gpt-5.6-terra",
+      api_key: "test-key",
+      reasoning_effort: "medium",
+    });
+
+    const request = prepareModelRequest(config, {
+      context: { messages: [] },
+    });
+
+    expect(request.options.reasoningEffort).toBe("medium");
+    expect(request.options).not.toHaveProperty("temperature");
+  });
 });

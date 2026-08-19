@@ -48,6 +48,7 @@
                         <tr><td><code>agent.provider</code></td><td><code>enum</code></td><td><code>"anthropic"</code></td><td>LLM provider. One of: <code>anthropic</code>, <code>claude-code</code>, <code>openai</code>, <code>google</code>, <code>xai</code>, <code>groq</code>, <code>openrouter</code>, <code>moonshot</code>, <code>mistral</code>, <code>cerebras</code>, <code>zai</code>, <code>minimax</code>, <code>huggingface</code>, <code>cocoon</code>, <code>local</code>.</td></tr>
                         <tr><td><code>agent.api_key</code></td><td><code>string</code></td><td><code>""</code></td><td>API key for the chosen provider. Can be overridden with <code>TELETON_API_KEY</code> env var.</td></tr>
                         <tr><td><code>agent.model</code></td><td><code>string</code></td><td><code>"claude-haiku-4-5-20251001"</code></td><td>Primary model ID.</td></tr>
+                        <tr><td><code>agent.reasoning_effort</code></td><td><code>enum</code></td><td><code>"medium"</code></td><td>Codex reasoning effort: <code>none</code>, <code>minimal</code>, <code>low</code>, <code>medium</code>, <code>high</code>, <code>xhigh</code>, or <code>max</code>.</td></tr>
                         <tr><td><code>agent.utility_model</code></td><td><code>string</code></td><td><em>auto-detected</em></td><td>Cheap/fast model for summarization and compaction.</td></tr>
                         <tr><td><code>agent.base_url</code></td><td><code>string</code></td><td><em>optional</em></td><td>Base URL for local LLM server (e.g., <code>http://localhost:11434/v1</code>).</td></tr>
                         <tr><td><code>agent.max_tokens</code></td><td><code>number</code></td><td><code>4096</code></td><td>Maximum tokens in each LLM response.</td></tr>
@@ -94,6 +95,7 @@
   provider: "anthropic"
   api_key: "sk-ant-..."
   model: "claude-haiku-4-5-20251001"
+  reasoning_effort: "medium"
   utility_model: "claude-haiku-4-5-20251001"
   max_tokens: 4096
   temperature: 0.7

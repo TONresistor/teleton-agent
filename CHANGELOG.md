@@ -19,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Exposed GPT-5.6 Luna now that Codex advertises it in local and production caches.
 - Updated Grok Build to default to Grok 4.6 while retaining Grok 4.5 compatibility.
 - **Breaking:** pinned local development, CI, releases, and Docker to Node.js 22.22.2.
+- Added explicit Codex reasoning-effort configuration, defaulting to `medium`.
 
 ### Fixed
 

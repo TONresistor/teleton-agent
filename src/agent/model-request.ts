@@ -55,6 +55,13 @@ function getCacheRetention(provider: SupportedProvider): "none" | "long" {
   return provider === "grok-build" ? "none" : "long";
 }
 
+function getReasoningOptions(
+  provider: SupportedProvider,
+  reasoningEffort: AgentConfig["reasoning_effort"]
+): Record<string, unknown> {
+  return provider === "codex" ? { reasoningEffort } : {};
+}
+
 function prepareTools(tools: Tool[] | undefined): Tool[] | undefined {
   if (!tools) return tools;
 
@@ -119,6 +126,7 @@ export function prepareModelRequest(
       cacheRetention: getCacheRetention(provider),
       signal: request.signal,
       timeoutMs: request.timeoutMs,
+      ...getReasoningOptions(provider, config.reasoning_effort),
       ...getProviderPayloadOptions(provider),
     } as ProviderStreamOptions,
   };
