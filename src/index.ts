@@ -8,26 +8,18 @@ import { MessageHandler } from "./telegram/handlers.js";
 import { AdminHandler } from "./telegram/admin.js";
 import { getDatabase, closeDatabase, initializeMemory, type MemorySystem } from "./memory/index.js";
 import { setKnowledgeIndexer } from "./memory/agent/knowledge.js";
-import { getWalletAddress } from "./ton/wallet-service.js";
 import { setTonapiKey } from "./constants/api-endpoints.js";
 import { setToncenterApiKey } from "./ton/endpoint.js";
 import { TELETON_ROOT } from "./workspace/paths.js";
 import { join } from "path";
 import { ToolRegistry } from "./agent/tools/registry.js";
 import { registerAllTools } from "./agent/tools/register-all.js";
-import type { HookName, AgentStartEvent, AgentStopEvent } from "./sdk/hooks/types.js";
-import { createHookRunner } from "./sdk/hooks/runner.js";
-import { HookRegistry } from "./sdk/hooks/registry.js";
 import type { SDKDependencies } from "./sdk/index.js";
-import type { SupportedProvider } from "./config/providers.js";
 import { loadModules } from "./agent/tools/module-loader.js";
 import { ModulePermissions } from "./agent/tools/module-permissions.js";
 import { SHUTDOWN_TIMEOUT_MS } from "./constants/timeouts.js";
-import { flushAllTranscripts } from "./session/transcript.js";
 
-import type { PluginModule, PluginContext } from "./agent/tools/types.js";
-import { PluginWatcher } from "./agent/tools/plugin-watcher.js";
-import { loadMcpServers, closeMcpServers, type McpConnection } from "./agent/tools/mcp-loader.js";
+import type { PluginModule } from "./agent/tools/types.js";
 import { getErrorMessage } from "./utils/errors.js";
 import { UserHookEvaluator } from "./agent/hooks/user-hook-evaluator.js";
 import { createLogger, initLoggerFromConfig } from "./utils/logger.js";
@@ -37,15 +29,11 @@ import { PluginRateLimiter } from "./bot/rate-limiter.js";
 import type { WebUIServer } from "./webui/server.js";
 import type { ApiServer } from "./api/server.js";
 import { HeartbeatRunner } from "./heartbeat.js";
-import { StartupMaintenance } from "./startup-maintenance.js";
 import { ScheduledTaskHandler } from "./scheduled-tasks.js";
-import { PluginOrchestrator } from "./plugin-orchestrator.js";
-import { PACKAGE_VERSION } from "./utils/package-info.js";
 import { ProviderRuntime } from "./app/provider-runtime.js";
 import { createServerDeps } from "./app/server-deps.js";
-import { startPluginModules, stopPluginModules } from "./app/plugin-lifecycle.js";
-import { resolveOwnerInfo } from "./app/owner-info.js";
 import { MessagePipeline } from "./app/message-pipeline.js";
+import { AgentLifecycleController } from "./app/agent-lifecycle-controller.js";
 import { deleteNestedValue, setNestedValue } from "./config/configurable-keys.js";
 
 const log = createLogger("App");
@@ -56,28 +44,22 @@ export class TeletonApp {
   private bridge: ITelegramBridge;
   private messageHandler: MessageHandler;
   private adminHandler: AdminHandler;
-  private toolCount: number = 0;
   private toolRegistry: ToolRegistry;
   private modules: PluginModule[] = [];
   private memory: MemorySystem;
   private sdkDeps: SDKDependencies;
   private webuiServer: WebUIServer | null = null;
   private apiServer: ApiServer | null = null;
-  private pluginWatcher: PluginWatcher | null = null;
   private providerRuntime: ProviderRuntime;
-  private mcpConnections: McpConnection[] = [];
   private lifecycle = new AgentLifecycle();
-  private hookRunner?: ReturnType<typeof createHookRunner>;
   private userHookEvaluator: UserHookEvaluator | null = null;
-  private startTime: number = 0;
   private heartbeatRunner: HeartbeatRunner;
   private scheduledTaskHandler: ScheduledTaskHandler;
   private inlineRouter = new InlineRouter();
   private pluginRateLimiter = new PluginRateLimiter();
   private inlineMiddlewareBridge: ITelegramBridge | null = null;
-  private pluginHookRegistry = new HookRegistry();
-  private disposeToolIndexSubscription: (() => void) | null = null;
   private messagePipeline: MessagePipeline;
+  private agentLifecycleController = new AgentLifecycleController();
 
   private configPath: string;
 
@@ -88,7 +70,7 @@ export class TeletonApp {
       memory: this.memory,
       toolRegistry: this.toolRegistry,
       modules: this.modules,
-      mcpConnections: this.mcpConnections,
+      mcpConnections: this.agentLifecycleController.getMcpConnections(),
       config: this.config,
       configPath: this.configPath,
       lifecycle: this.lifecycle,
@@ -98,7 +80,7 @@ export class TeletonApp {
       stopGocoonRunner: () => this.stopGocoonRunner(),
       reloadConfig: () => loadConfig(this.configPath),
       applyConfigKey: (key, value) => this.applyHotConfigKey(key, value),
-      getHookRegistry: () => this.pluginHookRegistry,
+      getHookRegistry: () => this.agentLifecycleController.getHookRegistry(),
     });
   }
 
@@ -193,7 +175,6 @@ export class TeletonApp {
     const modulePermissions = new ModulePermissions(db);
     this.toolRegistry.setPermissions(modulePermissions);
 
-    this.toolCount = this.toolRegistry.count;
     this.messageHandler = new MessageHandler(
       this.bridge,
       this.config.telegram,
@@ -385,135 +366,20 @@ ${blue}  ┌──────────────────────�
     this.rebuildRuntimeGeneration();
     this.preparePluginBotRuntime();
     this.messagePipeline.update(this.getMessagePipelineDependencies());
-
-    const builtinNames = this.modules.map((m) => m.name);
-    const moduleNames = this.modules
-      .filter((m) => m.tools(this.config).length > 0)
-      .map((m) => m.name);
-
-    // Load plugins, MCP servers, and configure tool registry
-    const nextMcpConnections =
-      Object.keys(this.config.mcp.servers).length > 0 ? await loadMcpServers(this.config.mcp) : [];
-    this.mcpConnections.splice(0, this.mcpConnections.length, ...nextMcpConnections);
-    const orchestrator = new PluginOrchestrator(
-      this.toolRegistry,
-      this.config,
-      this.sdkDeps,
-      this.memory.embedder
-    );
-    const {
-      pluginNames,
-      pluginToolCount,
-      mcpServerNames: _mcpServerNames,
-      hookRegistry,
-      externalModules,
-      toolCount,
-      dispose,
-    } = await orchestrator.loadAll(builtinNames, moduleNames, this.mcpConnections);
-    this.disposeToolIndexSubscription = dispose;
-    this.pluginHookRegistry = hookRegistry;
-    for (const mod of externalModules) this.modules.push(mod);
-    if (pluginToolCount > 0 || toolCount !== this.toolCount) {
-      this.toolCount = toolCount;
-    }
-
-    // Startup maintenance (migrations, prune, indexing, warmup)
-    const maintenance = new StartupMaintenance(
-      getDatabase().getDb(),
-      this.config,
-      this.configPath,
-      {
-        embedder: this.memory.embedder,
-        knowledge: this.memory.knowledge,
-        messages: this.memory.messages,
-      }
-    );
-    const { indexResult, ftsResult } = await maintenance.run();
-
-    // Index tools for Tool RAG
-    const toolIndex = this.toolRegistry.getToolIndex();
-    if (toolIndex) {
-      const t0 = Date.now();
-      const indexedCount = await toolIndex.indexAll(this.toolRegistry.getAll());
-      log.info(`Tool RAG: ${indexedCount} tools indexed (${Date.now() - t0}ms)`);
-    }
-
-    // Initialize context builder for RAG search in agent
-    this.agent.initializeContextBuilder(this.memory.embedder, getDatabase().isVectorSearchReady());
-
-    // Register provider-specific models (gocoon / local LLM)
-    await this.providerRuntime.initialize();
-
-    // Connect to Telegram
-    await this.bridge.connect();
-    if (!this.bridge.isAvailable()) {
-      throw new Error("Failed to connect to Telegram");
-    }
-    await resolveOwnerInfo(this.config, this.bridge, this.configPath);
-    const ownUserId = this.bridge.getOwnUserId();
-    if (ownUserId) {
-      this.messageHandler.setOwnUserId(ownUserId.toString());
-    }
-
-    const username = await this.bridge.getUsername();
-    const walletAddress = getWalletAddress();
-
-    // Start module background jobs (after bridge connect)
-    const pluginContext = await this.startModules();
-
-    // Register every middleware and dynamic plugin hook before polling starts.
-    const firstStart = this.messagePipeline.install();
-    this.installHookRunner(hookRegistry);
-    this.messagePipeline.wirePluginEventHooks();
-
-    // Wire mode-specific handlers and start polling last.
-    this.messagePipeline.setAcceptingMessages(true);
-    this.messagePipeline.wireMode(firstStart);
-
-    // Start plugin hot-reload watcher (dev mode)
-    if (this.config.dev.hot_reload) {
-      this.pluginWatcher = new PluginWatcher({
-        config: this.config,
-        registry: this.toolRegistry,
-        sdkDeps: this.sdkDeps,
-        modules: this.modules,
-        pluginContext,
-        loadedModuleNames: builtinNames,
-        hookRegistry,
-      });
-      this.pluginWatcher.start();
-    }
-
-    // Display startup summary
-    const provider = (this.config.agent.provider || "anthropic") as SupportedProvider;
-    log.info(`SOUL.md loaded`);
-    log.info(`Knowledge: ${indexResult.indexed} files, ${ftsResult.knowledge} chunks indexed`);
-    log.info(`Telegram: @${username} connected`);
-    log.info(`TON Blockchain: connected`);
-    if (this.config.tonapi_key) {
-      log.info(`TonAPI key configured`);
-    }
-    log.info(`DEXs: STON.fi, DeDust connected`);
-    log.info(`Wallet: ${walletAddress || "not configured"}`);
-    log.info(`Model: ${provider}/${this.config.agent.model}`);
-    log.info(`Admins: ${this.config.telegram.admin_ids.join(", ")}`);
-    log.info(
-      `Policy: DM ${this.config.telegram.dm_policy}, Groups ${this.config.telegram.group_policy}, Debounce ${this.config.telegram.debounce_ms}ms\n`
-    );
-    log.info("Teleton Agent is running! Press Ctrl+C to stop.");
-
-    // Hook: agent:start
-    this.startTime = Date.now();
-    this.messagePipeline.resetMetrics();
-    await this.emitAgentStartHook(provider, pluginNames.length);
-
-    // Start heartbeat timer if enabled
-    if (this.config.heartbeat.enabled) {
-      const adminChatId = this.config.telegram.admin_ids[0];
-      if (adminChatId) {
-        this.heartbeatRunner.start(adminChatId, this.config.heartbeat.interval_ms);
-      }
-    }
+    await this.agentLifecycleController.start({
+      config: this.config,
+      configPath: this.configPath,
+      agent: this.agent,
+      bridge: this.bridge,
+      messageHandler: this.messageHandler,
+      messagePipeline: this.messagePipeline,
+      toolRegistry: this.toolRegistry,
+      modules: this.modules,
+      memory: this.memory,
+      sdkDeps: this.sdkDeps,
+      providerRuntime: this.providerRuntime,
+      heartbeatRunner: this.heartbeatRunner,
+    });
   }
 
   private createMemorySystem(): MemorySystem {
@@ -535,9 +401,6 @@ ${blue}  ┌──────────────────────�
 
   /** Build a complete runtime generation so restarts cannot retain stale tools or handlers. */
   private rebuildRuntimeGeneration(): void {
-    this.disposeToolIndexSubscription?.();
-    this.disposeToolIndexSubscription = null;
-
     const db = getDatabase().getDb();
     const registry = this.toolRegistry;
     registry.reset(this.config.telegram.mode);
@@ -549,7 +412,6 @@ ${blue}  ┌──────────────────────�
 
     const nextModules = loadModules(registry, this.config, db);
     this.modules.splice(0, this.modules.length, ...nextModules);
-    this.toolCount = registry.count;
 
     this.agent.updateConfig(this.config);
     this.agent.setToolRegistry(registry);
@@ -600,58 +462,6 @@ ${blue}  ┌──────────────────────�
     this.sdkDeps.rateLimiter = null;
   }
 
-  /** Create and install the plugin hook runner; log which hooks are active. */
-  private installHookRunner(hookRegistry: HookRegistry): void {
-    const hookRunner = createHookRunner(hookRegistry, { logger: log });
-    this.agent.setHookRunner(hookRunner);
-    this.hookRunner = hookRunner;
-    const activeHooks: HookName[] = [
-      "tool:before",
-      "tool:after",
-      "tool:error",
-      "prompt:before",
-      "prompt:after",
-      "session:start",
-      "session:end",
-      "message:receive",
-      "response:before",
-      "response:after",
-      "response:error",
-      "agent:start",
-      "agent:stop",
-    ];
-    const active = activeHooks.filter((n) => hookRegistry.hasHooks(n));
-    log.info(`🪝 Hook runner created (${active.join(", ")})`);
-  }
-
-  /** Emit the agent:start observing hook (no-op when no hook runner). */
-  private async emitAgentStartHook(
-    provider: SupportedProvider,
-    pluginCount: number
-  ): Promise<void> {
-    if (!this.hookRunner) return;
-    const agentStartEvent: AgentStartEvent = {
-      version: PACKAGE_VERSION,
-      provider,
-      model: this.config.agent.model,
-      pluginCount,
-      toolCount: this.toolCount,
-      timestamp: Date.now(),
-    };
-    await this.hookRunner.runObservingHook("agent:start", agentStartEvent);
-  }
-
-  /** Start module background jobs with timeout. */
-  private async startModules(): Promise<PluginContext> {
-    const pluginContext: PluginContext = {
-      bridge: this.bridge,
-      db: getDatabase().getDb(),
-      config: this.config,
-    };
-    await startPluginModules(this.modules, pluginContext);
-    return pluginContext;
-  }
-
   /** Stop the application and all managed resources. */
   async stop(): Promise<void> {
     log.info("Stopping Teleton AI...");
@@ -690,79 +500,7 @@ ${blue}  ┌──────────────────────�
    * Called by lifecycle.stop() — do NOT call directly.
    */
   private async stopAgent(): Promise<void> {
-    // Quiesce ingress first. Already queued messages are still flushed below.
-    this.messagePipeline.setAcceptingMessages(false);
-
-    // Stop heartbeat timer
-    await this.heartbeatRunner.stopAndDrain();
-
-    // Stop plugin watcher first
-    if (this.pluginWatcher) {
-      try {
-        await this.pluginWatcher.stop();
-      } catch (error: unknown) {
-        log.error({ err: error }, "Plugin watcher stop failed");
-      }
-      this.pluginWatcher = null;
-    }
-
-    // Flush and drain while providers, MCP connections, and plugins remain
-    // available to the in-flight turns that may still be using them.
-    await this.messagePipeline.flushAndDrain();
-
-    try {
-      await this.agent.drainTurns();
-    } catch (error: unknown) {
-      log.error({ err: error }, "Agent turn drain failed");
-    }
-
-    try {
-      await flushAllTranscripts();
-    } catch (error: unknown) {
-      log.error({ err: error }, "Transcript flush failed");
-    }
-
-    // Hook: agent:stop — after turns drain, before resources disconnect.
-    if (this.hookRunner) {
-      try {
-        const agentStopEvent: AgentStopEvent = {
-          reason: "manual",
-          uptimeMs: this.startTime > 0 ? Date.now() - this.startTime : 0,
-          messagesProcessed: this.messagePipeline.getMessagesProcessed(),
-          timestamp: Date.now(),
-        };
-        await this.hookRunner.runObservingHook("agent:stop", agentStopEvent);
-      } catch (error: unknown) {
-        log.error({ err: error }, "agent:stop hook failed");
-      }
-    }
-
-    // Stop supervised provider resources and MCP only after all turns drain.
-    this.providerRuntime.stopGocoon();
-    if (this.mcpConnections.length > 0) {
-      try {
-        await closeMcpServers(this.mcpConnections);
-      } catch (error: unknown) {
-        log.error({ err: error }, "MCP close failed");
-      }
-      this.mcpConnections.splice(0, this.mcpConnections.length);
-    }
-
-    await stopPluginModules(this.modules);
-
-    this.disposeToolIndexSubscription?.();
-    this.disposeToolIndexSubscription = null;
-    this.pluginHookRegistry.clear();
-    this.hookRunner = undefined;
-    this.agent.setHookRunner(undefined);
-
-    this.messagePipeline.resetCallbackRegistration();
-    // MessagePipeline keeps the common bridge listener registered across stop/start cycles.
-    try {
-      await this.bridge.disconnect();
-    } catch (error: unknown) {
-      log.error({ err: error }, "Bridge disconnect failed");
-    }
+    await this.agentLifecycleController.stop();
   }
 }
 
