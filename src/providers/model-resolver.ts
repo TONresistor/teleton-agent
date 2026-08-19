@@ -11,6 +11,32 @@ const modelCache = new Map<string, Model<Api>>();
 
 const GOCOON_MODELS: Record<string, Model<"openai-completions">> = {};
 
+function createAlpieModel(modelId: string): Model<"openai-completions"> {
+  if (modelId !== "alpie-32b") throw new Error(`Alpie model "${modelId}" is not supported`);
+
+  return {
+    id: modelId,
+    name: "Alpie 32B",
+    api: "openai-completions",
+    provider: "alpie",
+    baseUrl: "https://api.169pi.com/v1",
+    headers: { "User-Agent": "Teleton-Agent" },
+    reasoning: true,
+    input: ["text"],
+    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+    contextWindow: 65_000,
+    maxTokens: 16_384,
+    compat: {
+      supportsStore: false,
+      supportsDeveloperRole: false,
+      supportsLongCacheRetention: false,
+      supportsReasoningEffort: false,
+      supportsStrictMode: false,
+      maxTokensField: "max_tokens",
+    },
+  };
+}
+
 function clearProviderModels(provider: SupportedProvider): void {
   for (const key of modelCache.keys()) {
     if (key.startsWith(`${provider}:`)) modelCache.delete(key);
@@ -249,6 +275,12 @@ export function getProviderModel(provider: SupportedProvider, modelId: string): 
       return model;
     }
     throw new Error(`Model "${modelId}" is not served by the configured local endpoint`);
+  }
+
+  if (meta.piAiProvider === "alpie") {
+    const model = createAlpieModel(modelId);
+    modelCache.set(cacheKey, model);
+    return model;
   }
 
   try {

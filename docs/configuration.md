@@ -37,7 +37,7 @@ LLM provider and agentic loop configuration.
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
-| `agent.provider` | `enum` | `"anthropic"` | LLM provider. One of: `anthropic`, `codex`, `grok-build`, `openai`, `google`, `xai`, `groq`, `openrouter`, `moonshot`, `mistral`, `cerebras`, `zai`, `minimax`, `huggingface`, `gocoon`, `local`. |
+| `agent.provider` | `enum` | `"anthropic"` | LLM provider. One of: `anthropic`, `codex`, `grok-build`, `openai`, `google`, `xai`, `groq`, `openrouter`, `moonshot`, `mistral`, `cerebras`, `zai`, `minimax`, `huggingface`, `alpie`, `gocoon`, `local`. |
 | `agent.api_key` | `string` | `""` | API key for the chosen provider. Can be overridden with `TELETON_API_KEY` env var. |
 | `agent.model` | `string` | `"claude-haiku-4-5-20251001"` | Primary model ID. Auto-detected from provider if not set (only for non-Anthropic providers). |
 | `agent.reasoning_effort` | `enum` | `"medium"` | Codex reasoning effort: `none`, `minimal`, `low`, `medium`, `high`, `xhigh`, or `max`. |
@@ -104,8 +104,13 @@ When you change the `provider` and omit `model`, the platform auto-selects:
 | `zai` | `glm-5.2` | `glm-5-turbo` |
 | `minimax` | `MiniMax-M3` | `MiniMax-M3` |
 | `huggingface` | `deepseek-ai/DeepSeek-V4-Pro` | `Qwen/Qwen3-Next-80B-A3B-Instruct` |
+| `alpie` | `alpie-32b` | `alpie-32b` |
 | `gocoon` | `Qwen/Qwen3-32B` | `Qwen/Qwen3-32B` |
 | `local` | `auto` | `auto` |
+
+Alpie currently runs as a chat/reasoning provider. Its API accepts OpenAI-compatible
+chat completions, but does not currently return OpenAI `tool_calls`; Teleton therefore
+does not expose tools when `agent.provider` is `alpie`.
 
 `grok-build` reads the browser/OIDC session created by `grok login` from
 `$GROK_HOME/auth.json` (default: `~/.grok/auth.json`) and connects directly to
@@ -595,6 +600,7 @@ Each provider has a dedicated environment variable. Only the key for the configu
 | `ZAI_API_KEY` | ZAI | -- |
 | `MINIMAX_API_KEY` | MiniMax | -- |
 | `HF_TOKEN` | HuggingFace | `hf_...` |
+| `PI_API_KEY` | Alpie (169Pi) | `pi-...` |
 
 > The `TELETON_API_KEY` override takes precedence over all provider-specific env vars.
 

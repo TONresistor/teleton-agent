@@ -117,7 +117,9 @@ export class PluginOrchestrator {
     log.info(
       `🔌 ${toolCount} tools loaded (${allNames.join(", ")})${pluginToolCount > 0 ? ` — ${pluginToolCount} from plugins` : ""}`
     );
-    if (providerMeta.toolLimit !== null && toolCount > providerMeta.toolLimit) {
+    if (providerMeta.toolLimit === 0) {
+      log.info(`${providerMeta.displayName} configured for chat without tools`);
+    } else if (providerMeta.toolLimit !== null && toolCount > providerMeta.toolLimit) {
       log.warn(
         `⚠️ Tool count (${toolCount}) exceeds ${providerMeta.displayName} limit (${providerMeta.toolLimit})`
       );

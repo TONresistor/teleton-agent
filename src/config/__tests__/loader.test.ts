@@ -205,6 +205,7 @@ describe("Config Loader", () => {
   beforeEach(() => {
     // Save original env vars
     originalEnv.TELETON_API_KEY = process.env.TELETON_API_KEY;
+    originalEnv.PI_API_KEY = process.env.PI_API_KEY;
     originalEnv.TELETON_TG_API_ID = process.env.TELETON_TG_API_ID;
     originalEnv.TELETON_TG_API_HASH = process.env.TELETON_TG_API_HASH;
     originalEnv.TELETON_TG_PHONE = process.env.TELETON_TG_PHONE;
@@ -214,6 +215,7 @@ describe("Config Loader", () => {
 
     // Clear env vars before each test
     delete process.env.TELETON_API_KEY;
+    delete process.env.PI_API_KEY;
     delete process.env.TELETON_TG_API_ID;
     delete process.env.TELETON_TG_API_HASH;
     delete process.env.TELETON_TG_PHONE;
@@ -417,6 +419,22 @@ telegram:
 
       const config = loadConfig(TEST_CONFIG_PATH);
       expect(config.agent.api_key).toBe("sk-ant-override-key");
+    });
+
+    it("should load the Alpie API key from PI_API_KEY", () => {
+      writeTestConfig(`
+agent:
+  provider: alpie
+  model: alpie-32b
+telegram:
+  api_id: 12345
+  api_hash: abcdef
+  phone: "+1234567890"
+`);
+      process.env.PI_API_KEY = "pi-env-key";
+
+      const config = loadConfig(TEST_CONFIG_PATH);
+      expect(config.agent.api_key).toBe("pi-env-key");
     });
 
     it("should override telegram api_id with TELETON_TG_API_ID", () => {
@@ -642,7 +660,16 @@ telegram:
     });
 
     it("should validate provider enum values", () => {
-      const providers = ["anthropic", "openai", "google", "xai", "groq", "openrouter", "moonshot"];
+      const providers = [
+        "anthropic",
+        "openai",
+        "google",
+        "xai",
+        "groq",
+        "openrouter",
+        "moonshot",
+        "alpie",
+      ];
 
       providers.forEach((provider) => {
         const providerConfig = `

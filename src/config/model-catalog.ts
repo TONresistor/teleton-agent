@@ -501,6 +501,13 @@ const MODEL_OPTIONS: Record<string, CatalogModelOption[]> = {
       description: "Reasoning, 204K context",
     },
   ],
+  alpie: [
+    {
+      value: "alpie-32b",
+      name: "Alpie 32B",
+      description: "Reasoning chat model, 65K context",
+    },
+  ],
   gocoon: [
     {
       value: "Qwen/Qwen3-32B",

@@ -12,6 +12,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Current Anthropic, OpenAI, Google, xAI, Groq, OpenRouter, Kimi, Mistral,
   Cerebras, Z.AI, MiniMax, and Hugging Face models to the shared catalog.
 - Provider-scoped compatibility aliases for deprecated or unsupported model IDs.
+- Alpie (169Pi) chat/reasoning provider support through the OpenAI-compatible
+  `alpie-32b` API.
 - Native Telegram Rich Messages for structured text, media, links, quotes, and
   interactive content across user bridges, tools, and the SDK.
 

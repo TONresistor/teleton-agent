@@ -60,7 +60,7 @@
 
 | Capability              | Description                                                              |
 | ----------------------- | ------------------------------------------------------------------------ |
-| **Multi-Provider LLM**  | 16 providers, hot-swap from dashboard or CLI                             |
+| **Multi-Provider LLM**  | 17 providers, hot-swap from dashboard or CLI                             |
 | **RAG + Hybrid Search** | Vector (sqlite-vec) + keyword (FTS5) fused search                        |
 | **Auto-Compaction**     | AI summarizes old context, saves to `memory/*.md`                        |
 | **Observation Masking** | Compresses old tool results, saves ~90% context                          |
@@ -171,7 +171,7 @@ The `teleton setup` wizard generates a fully configured `~/.teleton/config.yaml`
 
 ```yaml
 agent:
-  provider: "anthropic"              # anthropic | codex | grok-build | openai | google | xai | groq | openrouter | moonshot | mistral | cerebras | zai | minimax | huggingface | gocoon | local
+  provider: "anthropic"              # anthropic | codex | grok-build | openai | google | xai | groq | openrouter | moonshot | mistral | cerebras | zai | minimax | huggingface | alpie | gocoon | local
   api_key: "sk-ant-api03-..."
   model: "claude-haiku-4-5-20251001"
   utility_model: "claude-haiku-4-5-20251001"  # for summarization, compaction, vision
@@ -213,7 +213,7 @@ ton_proxy:                   # Optional: .ton domain proxy
 
 ### Supported Models
 
-70+ models across 16 providers. Defined in `src/config/model-catalog.ts`, shared across CLI, WebUI, and Dashboard.
+70+ models across 17 providers. Defined in `src/config/model-catalog.ts`, shared across CLI, WebUI, and Dashboard.
 
 <table>
 <tr>
@@ -475,7 +475,7 @@ The SDK provides namespaced access to core services:
 
 | Layer | Technology |
 |-------|------------|
-| LLM | Multi-provider via [pi-ai](https://github.com/mariozechner/pi-ai) (16 providers: Anthropic, Codex, Grok Build, OpenAI, Google, xAI, Groq, OpenRouter, Moonshot, Mistral, Cerebras, ZAI, MiniMax, Hugging Face, Gocoon, Local) |
+| LLM | Multi-provider via [pi-ai](https://github.com/mariozechner/pi-ai) (17 providers: Anthropic, Codex, Grok Build, OpenAI, Google, xAI, Groq, OpenRouter, Moonshot, Mistral, Cerebras, ZAI, MiniMax, Hugging Face, Alpie, Gocoon, Local) |
 | Telegram Userbot | [GramJS](https://gram.js.org/) Layer 223 fork (MTProto) |
 | Inline Bot | [Grammy](https://grammy.dev/) (Bot API, plugin inline cards and callbacks) |
 | Blockchain | [TON SDK](https://github.com/ton-org/ton) (W5R1 wallet) |
@@ -553,7 +553,7 @@ src/
 │   └── loader.ts           # 10 sections: soul + security + strategy + memory + context + ...
 ├── config/                 # Configuration
 │   ├── schema.ts           # Zod schemas + validation
-│   ├── providers.ts        # Multi-provider LLM registry (16 providers)
+│   ├── providers.ts        # Multi-provider LLM registry (17 providers)
 │   └── model-catalog.ts    # Shared model catalog (70+ models across all providers)
 ├── webui/                  # Optional web dashboard
 │   ├── server.ts           # Hono server, auth middleware, static serving

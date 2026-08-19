@@ -342,14 +342,24 @@ async function stepProvider(
       value: p.id,
       name: p.displayName,
       description:
-        p.toolLimit !== null ? `${p.defaultModel} (max ${p.toolLimit} tools)` : `${p.defaultModel}`,
+        p.toolLimit === 0
+          ? `${p.defaultModel} (chat only)`
+          : p.toolLimit !== null
+            ? `${p.defaultModel} (max ${p.toolLimit} tools)`
+            : `${p.defaultModel}`,
     })),
   });
 
   const providerMeta = getProviderMetadata(selectedProvider);
 
   // Tool limit warning
-  if (providerMeta.toolLimit !== null) {
+  if (providerMeta.toolLimit === 0) {
+    noteBox(
+      `${providerMeta.displayName} currently supports chat and reasoning only.\n` +
+        "Telegram, TON, web, and plugin tools are disabled for this provider.",
+      "Chat Only"
+    );
+  } else if (providerMeta.toolLimit !== null) {
     noteBox(
       `${providerMeta.displayName} supports max ${providerMeta.toolLimit} tools.\n` +
         "Teleton currently has ~116 tools. If more tools are added,\n" +

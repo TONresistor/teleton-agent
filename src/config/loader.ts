@@ -98,6 +98,8 @@ export function loadConfig(configPath: string = DEFAULT_CONFIG_PATH): Config {
 
   if (env.TELETON_API_KEY) {
     config.agent.api_key = env.TELETON_API_KEY;
+  } else if (provider === "alpie" && env.PI_API_KEY) {
+    config.agent.api_key = env.PI_API_KEY;
   }
   if (env.TELETON_TG_API_ID != null) {
     config.telegram.api_id = env.TELETON_TG_API_ID;

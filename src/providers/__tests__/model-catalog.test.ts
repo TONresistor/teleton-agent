@@ -4,6 +4,7 @@ import { getSupportedProviders, type SupportedProvider } from "../../config/prov
 import { getProviderModel } from "../model-resolver.js";
 
 const PROVIDERS_WITHOUT_PI_REGISTRY_MODELS = new Set<SupportedProvider>([
+  "alpie",
   "gocoon",
   "grok-build",
   "local",
