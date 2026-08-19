@@ -1,6 +1,5 @@
 import { createHash, randomUUID } from "crypto";
 import type { Config } from "../config/schema.js";
-import type { ITelegramBridge } from "../telegram/bridge-interface.js";
 import {
   COMPACTION_MAX_MESSAGES,
   COMPACTION_KEEP_RECENT,
@@ -35,7 +34,7 @@ import {
   resetSessionWithPolicy,
 } from "../session/store.js";
 import { transcriptExists, appendToTranscript } from "../session/transcript.js";
-import type { Context, Tool as PiAiTool, UserMessage } from "@earendil-works/pi-ai";
+import type { Context, UserMessage } from "@earendil-works/pi-ai";
 import { CompactionManager, DEFAULT_COMPACTION_CONFIG } from "../memory/compaction.js";
 import { maskOldToolResults } from "../memory/observation-masking.js";
 import { ContextBuilder } from "../memory/search/context.js";
@@ -54,7 +53,6 @@ import type {
   PromptAfterEvent,
 } from "../sdk/hooks/types.js";
 import { isTrivialMessage, addUsage } from "./runtime-utils.js";
-import type { UsageAccumulator } from "./runtime-utils.js";
 import { isBotBridge } from "../telegram/bridge-guards.js";
 import { accumulateTokenUsage } from "./token-usage.js";
 import { executeToolBatch, injectDiscoveredTools, recordToolResults } from "./loop/tool-batch.js";
@@ -63,6 +61,15 @@ import { computeRagEmbedding, enforceProviderToolLimit, selectTools } from "./to
 import { resolveProviderFallback } from "./provider-fallback.js";
 import { AgentTurnTraceRecorder } from "./turn-trace.js";
 import { TurnCoordinator } from "./turn-coordinator.js";
+import type {
+  AgentResponse,
+  LoopResult,
+  ProcessMessageOptions,
+  TurnContext,
+  TurnContextResult,
+} from "./turn-types.js";
+
+export type { AgentResponse, ProcessMessageOptions } from "./turn-types.js";
 
 export { isContextOverflowError, isTrivialMessage } from "./runtime-utils.js";
 export { getTokenUsage } from "./token-usage.js";
@@ -84,71 +91,6 @@ function resolveModelTarget(
       .digest("hex")
       .slice(0, 16),
   };
-}
-
-export interface ProcessMessageOptions {
-  chatId: string;
-  userMessage: string;
-  userName?: string;
-  timestamp?: number;
-  isGroup?: boolean;
-  pendingContext?: string | null;
-  toolContext?: Omit<ToolContext, "chatId" | "isGroup">;
-  senderUsername?: string;
-  senderRank?: string;
-  hasMedia?: boolean;
-  mediaType?: string;
-  messageId?: number;
-  replyContext?: { senderName?: string; text: string; isAgent?: boolean };
-  isHeartbeat?: boolean;
-  isGuest?: boolean;
-  streamToChat?: { chatId: string; bridge: ITelegramBridge; mode: "all" | "replace" | "off" };
-  /** Stable inbound-event identifier used for idempotent action execution. */
-  turnId?: string;
-  /** Optional conversation-state key when delivery chat and session identity differ. */
-  sessionKey?: string;
-}
-
-export interface AgentResponse {
-  content: string;
-  toolCalls?: CompletedToolCall[];
-  streamed?: boolean;
-}
-
-interface TurnContext {
-  turnId: string;
-  chatId: string;
-  effectiveIsGroup: boolean;
-  processStartTime: number;
-  session: ReturnType<typeof getOrCreateSession>;
-  context: Context;
-  systemPrompt: string;
-  tools: PiAiTool[] | undefined;
-  userMsg: UserMessage;
-  provider: SupportedProvider;
-  requestedModel: string;
-  resolvedModel: string;
-  endpointFingerprint: string;
-  sessionKey: string;
-}
-
-type TurnContextResult =
-  | { kind: "ready"; turn: TurnContext }
-  | { kind: "early"; response: AgentResponse };
-
-interface LoopResult {
-  finalResponse: ChatResponse | null;
-  session: ReturnType<typeof getOrCreateSession>;
-  context: Context;
-  totalToolCalls: CompletedToolCall[];
-  accumulatedTexts: string[];
-  accumulatedUsage: UsageAccumulator;
-  wasStreamed: boolean;
-  iterations: number;
-  stopReason: string;
-  activeProvider: SupportedProvider;
-  activeModel: string;
-  forcedContent?: string;
 }
 
 export class AgentRuntime {
