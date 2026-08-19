@@ -80,6 +80,73 @@ describe("MessageStore", () => {
     ).toEqual({ text: "durable first", embedding_status: "failed" });
   });
 
+  it("removes a stale vector when a message is updated without text", async () => {
+    const embedder = {
+      id: "healthy",
+      model: "healthy",
+      dimensions: 3,
+      embedQuery: vi.fn().mockResolvedValue([0.1, 0.2, 0.3]),
+      embedBatch: vi.fn().mockResolvedValue([[0.1, 0.2, 0.3]]),
+    } satisfies EmbeddingProvider;
+
+    const store = new MessageStore(db, embedder, true);
+    await store.storeMessage({
+      id: "media",
+      chatId: "chat-a",
+      senderId: null,
+      text: "caption",
+      isFromAgent: false,
+      hasMedia: true,
+      mediaType: "photo",
+      timestamp: 3,
+    });
+    expect(db.prepare("SELECT COUNT(*) AS count FROM tg_messages_vec").get()).toEqual({ count: 1 });
+
+    await store.storeMessage({
+      id: "media",
+      chatId: "chat-a",
+      senderId: null,
+      text: "",
+      isFromAgent: false,
+      hasMedia: true,
+      mediaType: "sticker",
+      timestamp: 4,
+    });
+
+    expect(embedder.embedQuery).toHaveBeenCalledTimes(1);
+    expect(
+      db.prepare("SELECT embedding, embedding_status FROM tg_messages WHERE id = 'media'").get()
+    ).toEqual({ embedding: null, embedding_status: "disabled" });
+    expect(db.prepare("SELECT COUNT(*) AS count FROM tg_messages_vec").get()).toEqual({ count: 0 });
+  });
+
+  it("rejects embeddings with the wrong dimensions before persistence", async () => {
+    const embedder = {
+      id: "malformed",
+      model: "malformed",
+      dimensions: 3,
+      embedQuery: vi.fn().mockResolvedValue([0.1]),
+      embedBatch: vi.fn().mockResolvedValue([[0.1]]),
+    } satisfies EmbeddingProvider;
+
+    await new MessageStore(db, embedder, true).storeMessage({
+      id: "bad-vector",
+      chatId: "chat-a",
+      senderId: null,
+      text: "do not persist malformed vectors",
+      isFromAgent: false,
+      hasMedia: false,
+      timestamp: 4,
+    });
+
+    expect(
+      db
+        .prepare("SELECT embedding, embedding_status FROM tg_messages WHERE id = 'bad-vector'")
+        .get()
+    ).toEqual({ embedding: null, embedding_status: "failed" });
+    expect(db.prepare("SELECT COUNT(*) AS count FROM tg_messages_vec").get()).toEqual({ count: 0 });
+  });
+
   it("persists the raw message when vector storage is unavailable", async () => {
     db.exec("DROP TABLE tg_messages_vec");
     const embedder = {
@@ -110,6 +177,34 @@ describe("MessageStore", () => {
     expect(embedder.embedQuery).not.toHaveBeenCalled();
   });
 
+  it("keeps text pending while vector storage is temporarily unavailable", async () => {
+    const embedder = {
+      id: "healthy",
+      model: "healthy",
+      dimensions: 3,
+      embedQuery: vi.fn().mockResolvedValue([0.1, 0.2, 0.3]),
+      embedBatch: vi.fn().mockResolvedValue([[0.1, 0.2, 0.3]]),
+    } satisfies EmbeddingProvider;
+
+    await new MessageStore(db, embedder, false).storeMessage({
+      id: "outage",
+      chatId: "chat-a",
+      senderId: null,
+      text: "index after recovery",
+      isFromAgent: false,
+      hasMedia: false,
+      timestamp: 6,
+    });
+
+    expect(embedder.embedQuery).not.toHaveBeenCalled();
+    expect(
+      db.prepare("SELECT embedding_status FROM tg_messages WHERE id = 'outage'").get()
+    ).toEqual({ embedding_status: "pending" });
+    expect(
+      db.prepare("SELECT value FROM meta WHERE key = 'tg_messages_vector_rebuild_required'").get()
+    ).toEqual({ value: "1" });
+  });
+
   it("backfills failed message embeddings on a later healthy startup", async () => {
     const broken = {
       id: "broken",
@@ -137,12 +232,119 @@ describe("MessageStore", () => {
     } satisfies EmbeddingProvider;
     const result = await new MessageStore(db, healthy, true).backfillPendingEmbeddings();
 
-    expect(result).toEqual({ indexed: 1, failed: 0 });
+    expect(result).toEqual({ indexed: 1, failed: 0, skipped: 0 });
     expect(
       db
         .prepare("SELECT embedding_status FROM tg_messages WHERE chat_id = ? AND id = ?")
         .get("chat-a", "8")
     ).toEqual({ embedding_status: "ready" });
     expect(db.prepare("SELECT id FROM tg_messages_vec").get()).toEqual({ id: "chat-a\u001f8" });
+  });
+
+  it("continues pending embedding backfill in bounded background batches", async () => {
+    db.prepare("INSERT INTO tg_chats (id, type) VALUES ('chat-a', 'group')").run();
+    const insert = db.prepare(
+      `INSERT INTO tg_messages (id, chat_id, text, embedding_status, timestamp)
+       VALUES (?, 'chat-a', ?, 'pending', ?)`
+    );
+    insert.run("1", "first", 1);
+    insert.run("2", "second", 2);
+    insert.run("3", "third", 3);
+    const embedder = {
+      id: "healthy",
+      model: "healthy",
+      dimensions: 3,
+      embedQuery: vi.fn().mockResolvedValue([0.1, 0.2, 0.3]),
+      embedBatch: vi.fn().mockResolvedValue([[0.1, 0.2, 0.3]]),
+    } satisfies EmbeddingProvider;
+
+    await new MessageStore(db, embedder, true).startPendingEmbeddingBackfill(2, 0);
+
+    expect(db.prepare("SELECT COUNT(*) AS count FROM tg_messages_vec").get()).toEqual({ count: 3 });
+    expect(
+      db
+        .prepare("SELECT COUNT(*) AS count FROM tg_messages WHERE embedding_status = 'pending'")
+        .get()
+    ).toEqual({ count: 0 });
+  });
+
+  it("discards a backfill result when the message changes during embedding", async () => {
+    db.prepare("INSERT INTO tg_chats (id, type) VALUES ('chat-a', 'group')").run();
+    db.prepare(
+      `INSERT INTO tg_messages (id, chat_id, text, embedding_status, timestamp)
+       VALUES ('race', 'chat-a', 'old text', 'pending', 1)`
+    ).run();
+    let resolveEmbedding!: (embedding: number[]) => void;
+    const deferredEmbedding = new Promise<number[]>((resolve) => {
+      resolveEmbedding = resolve;
+    });
+    const embedder = {
+      id: "healthy",
+      model: "healthy",
+      dimensions: 3,
+      embedQuery: vi.fn().mockReturnValue(deferredEmbedding),
+      embedBatch: vi.fn(),
+    } satisfies EmbeddingProvider;
+    const store = new MessageStore(db, embedder, true);
+
+    const backfill = store.backfillPendingEmbeddings();
+    expect(embedder.embedQuery).toHaveBeenCalledWith("old text");
+    await store.storeMessage({
+      id: "race",
+      chatId: "chat-a",
+      senderId: null,
+      text: "",
+      isFromAgent: false,
+      hasMedia: true,
+      mediaType: "photo",
+      timestamp: 2,
+    });
+    resolveEmbedding([0.1, 0.2, 0.3]);
+
+    await expect(backfill).resolves.toEqual({ indexed: 0, failed: 0, skipped: 1 });
+    expect(
+      db
+        .prepare("SELECT text, embedding, embedding_status FROM tg_messages WHERE id = 'race'")
+        .get()
+    ).toEqual({ text: "", embedding: null, embedding_status: "disabled" });
+    expect(db.prepare("SELECT COUNT(*) AS count FROM tg_messages_vec").get()).toEqual({ count: 0 });
+  });
+
+  it("does not mark an updated message failed when a stale backfill rejects", async () => {
+    db.prepare("INSERT INTO tg_chats (id, type) VALUES ('chat-a', 'group')").run();
+    db.prepare(
+      `INSERT INTO tg_messages (id, chat_id, text, embedding_status, timestamp)
+       VALUES ('race-error', 'chat-a', 'old text', 'pending', 1)`
+    ).run();
+    let rejectEmbedding!: (error: Error) => void;
+    const deferredEmbedding = new Promise<number[]>((_, reject) => {
+      rejectEmbedding = reject;
+    });
+    const embedder = {
+      id: "healthy",
+      model: "healthy",
+      dimensions: 3,
+      embedQuery: vi.fn().mockReturnValue(deferredEmbedding),
+      embedBatch: vi.fn(),
+    } satisfies EmbeddingProvider;
+    const store = new MessageStore(db, embedder, true);
+
+    const backfill = store.backfillPendingEmbeddings();
+    await store.storeMessage({
+      id: "race-error",
+      chatId: "chat-a",
+      senderId: null,
+      text: "",
+      isFromAgent: false,
+      hasMedia: true,
+      mediaType: "photo",
+      timestamp: 2,
+    });
+    rejectEmbedding(new Error("stale embedding failed"));
+
+    await expect(backfill).resolves.toEqual({ indexed: 0, failed: 0, skipped: 1 });
+    expect(
+      db.prepare("SELECT text, embedding_status FROM tg_messages WHERE id = 'race-error'").get()
+    ).toEqual({ text: "", embedding_status: "disabled" });
   });
 });

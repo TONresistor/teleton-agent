@@ -1,6 +1,6 @@
 import type Database from "better-sqlite3";
 import type { EmbeddingProvider } from "./provider.js";
-import { hashText, serializeEmbedding, deserializeEmbedding } from "./utils.js";
+import { hashText, isValidEmbedding, serializeEmbedding, deserializeEmbedding } from "./utils.js";
 import { createLogger } from "../../utils/logger.js";
 import {
   EMBEDDING_CACHE_MAX_ENTRIES,
@@ -25,6 +25,7 @@ export class CachedEmbeddingProvider implements EmbeddingProvider {
   private readonly stmtCacheGet: Database.Statement;
   private readonly stmtCachePut: Database.Statement;
   private readonly stmtCacheTouch: Database.Statement;
+  private readonly stmtCacheDelete: Database.Statement;
 
   constructor(
     private inner: EmbeddingProvider,
@@ -34,7 +35,7 @@ export class CachedEmbeddingProvider implements EmbeddingProvider {
     this.model = inner.model;
     this.dimensions = inner.dimensions;
     this.stmtCacheGet = db.prepare(
-      `SELECT embedding FROM embedding_cache WHERE hash = ? AND model = ? AND provider = ?`
+      `SELECT embedding, dims FROM embedding_cache WHERE hash = ? AND model = ? AND provider = ?`
     );
     this.stmtCachePut = db.prepare(
       `INSERT OR REPLACE INTO embedding_cache (hash, embedding, model, provider, dims, created_at, accessed_at)
@@ -43,12 +44,28 @@ export class CachedEmbeddingProvider implements EmbeddingProvider {
     this.stmtCacheTouch = db.prepare(
       `UPDATE embedding_cache SET accessed_at = unixepoch() WHERE hash = ? AND model = ? AND provider = ?`
     );
+    this.stmtCacheDelete = db.prepare(
+      `DELETE FROM embedding_cache WHERE hash = ? AND model = ? AND provider = ?`
+    );
   }
 
-  private cacheGet(hash: string): { embedding: Buffer | string } | undefined {
+  private cacheGet(hash: string): { embedding: Buffer | string; dims: number } | undefined {
     return this.stmtCacheGet.get(hash, this.model, this.id) as
-      | { embedding: Buffer | string }
+      | { embedding: Buffer | string; dims: number }
       | undefined;
+  }
+
+  private getValidCachedEmbedding(hash: string): number[] | undefined {
+    const row = this.cacheGet(hash);
+    if (!row) return undefined;
+
+    const embedding = deserializeEmbedding(row.embedding);
+    if (row.dims === this.dimensions && isValidEmbedding(embedding, this.dimensions)) {
+      return embedding;
+    }
+
+    this.stmtCacheDelete.run(hash, this.model, this.id);
+    return undefined;
   }
 
   private cachePut(hash: string, blob: Buffer): void {
@@ -66,17 +83,19 @@ export class CachedEmbeddingProvider implements EmbeddingProvider {
   async embedQuery(text: string): Promise<number[]> {
     const hash = hashText(text);
 
-    const row = this.cacheGet(hash);
-    if (row) {
+    const cached = this.getValidCachedEmbedding(hash);
+    if (cached) {
       this.hits++;
       this.cacheTouch(hash);
       this.tick();
-      return deserializeEmbedding(row.embedding);
+      return cached;
     }
 
     this.misses++;
     const embedding = await this.inner.embedQuery(text);
-    this.cachePut(hash, serializeEmbedding(embedding));
+    if (isValidEmbedding(embedding, this.dimensions)) {
+      this.cachePut(hash, serializeEmbedding(embedding));
+    }
     this.tick();
     return embedding;
   }
@@ -91,12 +110,12 @@ export class CachedEmbeddingProvider implements EmbeddingProvider {
 
     // Check cache for each text
     for (let i = 0; i < texts.length; i++) {
-      const row = this.cacheGet(hashes[i]);
+      const cached = this.getValidCachedEmbedding(hashes[i]);
 
-      if (row) {
+      if (cached) {
         this.hits++;
         this.cacheTouch(hashes[i]);
-        results[i] = deserializeEmbedding(row.embedding);
+        results[i] = cached;
       } else {
         this.misses++;
         missIndices.push(i);
@@ -112,7 +131,7 @@ export class CachedEmbeddingProvider implements EmbeddingProvider {
         const embedding = newEmbeddings[j] ?? [];
         results[idx] = embedding;
 
-        if (embedding.length > 0) {
+        if (isValidEmbedding(embedding, this.dimensions)) {
           this.cachePut(hashes[idx], serializeEmbedding(embedding));
         }
       }

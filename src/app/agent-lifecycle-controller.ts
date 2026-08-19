@@ -149,6 +149,8 @@ export class AgentLifecycleController {
     if (deps.config.heartbeat.enabled && adminChatId) {
       deps.heartbeatRunner.start(adminChatId, deps.config.heartbeat.interval_ms);
     }
+
+    void deps.memory.messages.startPendingEmbeddingBackfill();
   }
 
   async stop(): Promise<void> {
@@ -157,6 +159,7 @@ export class AgentLifecycleController {
 
     deps.messagePipeline.setAcceptingMessages(false);
     await deps.heartbeatRunner.stopAndDrain();
+    await deps.memory.messages.stopAndDrainPendingEmbeddingBackfill();
     await this.stopPluginWatcher();
     await deps.messagePipeline.flushAndDrain();
 
