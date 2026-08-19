@@ -1,13 +1,11 @@
 import { loadConfig, getDefaultConfigPath, type Config } from "./config/index.js";
 import { loadSoul } from "./soul/index.js";
 import { AgentRuntime } from "./agent/runtime.js";
-import type { TelegramMessage } from "./telegram/bridge.js";
 import type { ITelegramBridge } from "./telegram/bridge-interface.js";
-import { isBotBridge, isUserBridge } from "./telegram/bridge-guards.js";
+import { isBotBridge } from "./telegram/bridge-guards.js";
 import { createBridge } from "./telegram/factory.js";
 import { MessageHandler } from "./telegram/handlers.js";
 import { AdminHandler } from "./telegram/admin.js";
-import { MessageDebouncer } from "./telegram/debounce.js";
 import { getDatabase, closeDatabase, initializeMemory, type MemorySystem } from "./memory/index.js";
 import { setKnowledgeIndexer } from "./memory/agent/knowledge.js";
 import { getWalletAddress } from "./ton/wallet-service.js";
@@ -44,15 +42,10 @@ import { ScheduledTaskHandler } from "./scheduled-tasks.js";
 import { PluginOrchestrator } from "./plugin-orchestrator.js";
 import { PACKAGE_VERSION } from "./utils/package-info.js";
 import { ProviderRuntime } from "./app/provider-runtime.js";
-import {
-  countPluginEventHooks,
-  createUserPluginCallbackHandler,
-  dispatchPluginCallback,
-  dispatchPluginMessage,
-} from "./app/plugin-events.js";
 import { createServerDeps } from "./app/server-deps.js";
 import { startPluginModules, stopPluginModules } from "./app/plugin-lifecycle.js";
 import { resolveOwnerInfo } from "./app/owner-info.js";
+import { MessagePipeline } from "./app/message-pipeline.js";
 import { deleteNestedValue, setNestedValue } from "./config/configurable-keys.js";
 
 const log = createLogger("App");
@@ -63,7 +56,6 @@ export class TeletonApp {
   private bridge: ITelegramBridge;
   private messageHandler: MessageHandler;
   private adminHandler: AdminHandler;
-  private debouncer: MessageDebouncer | null = null;
   private toolCount: number = 0;
   private toolRegistry: ToolRegistry;
   private modules: PluginModule[] = [];
@@ -74,13 +66,10 @@ export class TeletonApp {
   private pluginWatcher: PluginWatcher | null = null;
   private providerRuntime: ProviderRuntime;
   private mcpConnections: McpConnection[] = [];
-  private callbackHandlerRegistered = false;
-  private messageHandlersRegistered = false;
   private lifecycle = new AgentLifecycle();
   private hookRunner?: ReturnType<typeof createHookRunner>;
   private userHookEvaluator: UserHookEvaluator | null = null;
   private startTime: number = 0;
-  private messagesProcessed: number = 0;
   private heartbeatRunner: HeartbeatRunner;
   private scheduledTaskHandler: ScheduledTaskHandler;
   private inlineRouter = new InlineRouter();
@@ -88,7 +77,7 @@ export class TeletonApp {
   private inlineMiddlewareBridge: ITelegramBridge | null = null;
   private pluginHookRegistry = new HookRegistry();
   private disposeToolIndexSubscription: (() => void) | null = null;
-  private acceptingMessages = false;
+  private messagePipeline: MessagePipeline;
 
   private configPath: string;
 
@@ -105,7 +94,7 @@ export class TeletonApp {
       lifecycle: this.lifecycle,
       sdkDeps: this.sdkDeps,
       userHookEvaluator: this.userHookEvaluator,
-      rewireHooks: () => this.wirePluginEventHooks(),
+      rewireHooks: () => this.messagePipeline.wirePluginEventHooks(),
       stopGocoonRunner: () => this.stopGocoonRunner(),
       reloadConfig: () => loadConfig(this.configPath),
       applyConfigKey: (key, value) => this.applyHotConfigKey(key, value),
@@ -127,7 +116,7 @@ export class TeletonApp {
     this.scheduledTaskHandler.updateConfig(this.config);
     this.heartbeatRunner.updateConfig(this.config);
     if (key === "telegram.debounce_ms") {
-      this.debouncer?.updateDebounceMs(this.config.telegram.debounce_ms);
+      this.messagePipeline.updateDebounceMs(this.config.telegram.debounce_ms);
     }
     initLoggerFromConfig(this.config.logging);
 
@@ -223,6 +212,20 @@ export class TeletonApp {
       modulePermissions,
       this.toolRegistry
     );
+    this.messagePipeline = new MessagePipeline(this.getMessagePipelineDependencies());
+  }
+
+  private getMessagePipelineDependencies() {
+    return {
+      config: this.config,
+      bridge: this.bridge,
+      agent: this.agent,
+      messageHandler: this.messageHandler,
+      adminHandler: this.adminHandler,
+      scheduledTaskHandler: this.scheduledTaskHandler,
+      modules: this.modules,
+      inlineRouter: this.inlineRouter,
+    };
   }
 
   /**
@@ -368,8 +371,6 @@ ${blue}  ┌──────────────────────�
       log.info(`Mode changed to "${this.config.telegram.mode}", recreating Telegram bridge`);
       this.bridge = createBridge(this.config);
       this.sdkDeps.bridge = this.bridge;
-      this.messageHandlersRegistered = false;
-      this.callbackHandlerRegistered = false;
       this.inlineMiddlewareBridge = null;
     }
 
@@ -383,6 +384,7 @@ ${blue}  ┌──────────────────────�
 
     this.rebuildRuntimeGeneration();
     this.preparePluginBotRuntime();
+    this.messagePipeline.update(this.getMessagePipelineDependencies());
 
     const builtinNames = this.modules.map((m) => m.name);
     const moduleNames = this.modules
@@ -460,18 +462,13 @@ ${blue}  ┌──────────────────────�
     const pluginContext = await this.startModules();
 
     // Register every middleware and dynamic plugin hook before polling starts.
-    const firstStart = !this.messageHandlersRegistered;
-    this.installMessagePipeline();
+    const firstStart = this.messagePipeline.install();
     this.installHookRunner(hookRegistry);
-    this.wirePluginEventHooks();
+    this.messagePipeline.wirePluginEventHooks();
 
     // Wire mode-specific handlers and start polling last.
-    this.acceptingMessages = true;
-    if (isBotBridge(this.bridge)) {
-      this.wireBotMode(firstStart);
-    } else {
-      this.wireUserMode(firstStart);
-    }
+    this.messagePipeline.setAcceptingMessages(true);
+    this.messagePipeline.wireMode(firstStart);
 
     // Start plugin hot-reload watcher (dev mode)
     if (this.config.dev.hot_reload) {
@@ -507,7 +504,7 @@ ${blue}  ┌──────────────────────�
 
     // Hook: agent:start
     this.startTime = Date.now();
-    this.messagesProcessed = 0;
+    this.messagePipeline.resetMetrics();
     await this.emitAgentStartHook(provider, pluginNames.length);
 
     // Start heartbeat timer if enabled
@@ -644,112 +641,7 @@ ${blue}  ┌──────────────────────�
     await this.hookRunner.runObservingHook("agent:start", agentStartEvent);
   }
 
-  /**
-   * Initialize the message debouncer and register the (one-time) new-message
-   * listener that feeds it. Idempotent across agent restarts via the WebUI.
-   */
-  private installMessagePipeline(): void {
-    this.debouncer = new MessageDebouncer(
-      { debounceMs: this.config.telegram.debounce_ms },
-      (msg) => {
-        if (!msg.isGroup) return false;
-        if (msg.text.startsWith("/")) {
-          const adminCmd = this.adminHandler.parseCommand(msg.text);
-          if (adminCmd && this.adminHandler.isAdmin(msg.senderId)) return false;
-        }
-        return true;
-      },
-      async (messages) => {
-        for (const message of messages) {
-          await this.handleSingleMessage(message);
-        }
-      },
-      (error, messages) => {
-        log.error({ err: error }, `Error processing batch of ${messages.length} messages`);
-      }
-    );
-
-    // Register common message handler ONCE (survive agent restart via WebUI)
-    if (!this.messageHandlersRegistered) {
-      this.bridge.onNewMessage(async (message) => {
-        if (!this.acceptingMessages) return;
-        try {
-          // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- debouncer always initialized before handlers register
-          await this.debouncer!.enqueue(message);
-        } catch (error) {
-          log.error({ err: error }, "Error enqueueing message");
-        }
-      });
-      this.messageHandlersRegistered = true;
-    }
-  }
-
-  // ─── Mode-specific wiring ──────────────────────────────────────────────
-
-  /**
-   * Wire bot-mode SDK deps, callback handler, and Grammy polling.
-   */
-  private wireBotMode(firstStart: boolean): void {
-    log.info("Bot mode: using main Grammy bridge");
-
-    if (isBotBridge(this.bridge)) {
-      this.bridge.setCallbackHandler((msg) => {
-        if (!this.acceptingMessages) return;
-        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- debouncer initialized before wireBotMode
-        void this.debouncer!.enqueue(msg);
-      });
-      if (firstStart) {
-        this.bridge.onGuestMessage(async (msg) => {
-          if (!this.acceptingMessages) return "";
-          if (!this.config.telegram.guest_mode) return "";
-          if (this.adminHandler.isPaused()) return "";
-          const response = await this.agent.processMessage({
-            chatId: `telegram:guest:${msg.chatId}`,
-            userMessage: msg.text,
-            userName: msg.senderFirstName,
-            senderUsername: msg.senderUsername,
-            isGroup: true,
-            isGuest: true,
-            timestamp: msg.timestamp.getTime(),
-            messageId: msg.id,
-            toolContext: {
-              bridge: this.bridge,
-              db: getDatabase().getDb(),
-              senderId: msg.senderId,
-              config: this.config,
-            },
-          });
-          return response.content;
-        });
-      }
-      // The middleware tree survives a WebUI stop/start, but long-polling does
-      // not. Restart polling on every successful agent start.
-      this.bridge.startPolling();
-      void this.bridge.syncCommands();
-    }
-  }
-
-  /**
-   * Wire user-mode handlers. Registers the service message handler on first
-   * start. (User mode has no Grammy bot, so the plugin bot SDK stays inactive.)
-   */
-  private wireUserMode(firstStart: boolean): void {
-    if (firstStart && isUserBridge(this.bridge)) {
-      this.bridge.onServiceMessage(async (message) => {
-        if (!this.acceptingMessages) return;
-        try {
-          // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- debouncer always initialized before handlers register
-          await this.debouncer!.enqueue(message);
-        } catch (error) {
-          log.error({ err: error }, "Error enqueueing service message");
-        }
-      });
-    }
-  }
-
-  /**
-   * Start module background jobs with timeout.
-   */
+  /** Start module background jobs with timeout. */
   private async startModules(): Promise<PluginContext> {
     const pluginContext: PluginContext = {
       bridge: this.bridge,
@@ -760,134 +652,7 @@ ${blue}  ┌──────────────────────�
     return pluginContext;
   }
 
-  /**
-   * Handle a single message (extracted for debouncer callback)
-   */
-  private async handleSingleMessage(message: TelegramMessage): Promise<void> {
-    this.messagesProcessed++;
-    try {
-      // Check if this is a scheduled task (from self)
-      const ownUserId = this.bridge.getOwnUserId();
-      if (
-        ownUserId &&
-        message.senderId === Number(ownUserId) &&
-        message.text.startsWith("[TASK:")
-      ) {
-        await this.scheduledTaskHandler.execute(message);
-        return;
-      }
-
-      // Check if this is an admin command
-      const adminCmd = this.adminHandler.parseCommand(message.text);
-      if (adminCmd && this.adminHandler.isAdmin(message.senderId)) {
-        // /boot passes through to the agent with bootstrap instructions
-        if (adminCmd.command === "boot") {
-          const bootstrapContent = this.adminHandler.getBootstrapContent();
-          if (bootstrapContent) {
-            message.text = bootstrapContent;
-            // Fall through to handleMessage below
-          } else {
-            await this.bridge.sendMessage({
-              chatId: message.chatId,
-              text: "❌ Bootstrap template not found.",
-              replyToId: message.id,
-            });
-            return;
-          }
-        } else if (adminCmd.command === "task") {
-          // /task passes through to the agent with task creation context
-          const taskDescription = adminCmd.args.join(" ");
-          if (!taskDescription) {
-            await this.bridge.sendMessage({
-              chatId: message.chatId,
-              text: "❌ Usage: /task <description>",
-              replyToId: message.id,
-            });
-            return;
-          }
-          message.text =
-            `[ADMIN TASK]\n` +
-            `Create a scheduled task using the telegram_create_scheduled_task tool.\n\n` +
-            `Guidelines:\n` +
-            `- If the description mentions a specific time or delay, use it as scheduleDate\n` +
-            `- Otherwise, schedule 1 minute from now for immediate execution\n` +
-            `- For simple operations (check a price, send a message), use a tool_call payload\n` +
-            `- For complex multi-step tasks, use an agent_task payload with detailed instructions\n` +
-            `- Always include a reason explaining why this task is being created\n\n` +
-            `Task: "${taskDescription}"`;
-          // Fall through to handleMessage below
-        } else {
-          const response = await this.adminHandler.handleCommand(
-            adminCmd,
-            message.chatId,
-            message.senderId,
-            message.isGroup
-          );
-
-          await this.bridge.sendMessage({
-            chatId: message.chatId,
-            text: response,
-            replyToId: message.id,
-          });
-
-          return;
-        }
-      }
-
-      // Skip if paused (admin commands still work above)
-      if (this.adminHandler.isPaused()) return;
-
-      // Handle as regular message
-      await this.messageHandler.handleMessage(message);
-    } catch (error) {
-      log.error({ err: error }, "Error handling message");
-    }
-  }
-
-  /**
-   * Collect plugin onMessage/onCallbackQuery hooks and register them.
-   * Uses dynamic dispatch over this.modules so newly installed/uninstalled
-   * plugins are picked up without re-registering handlers.
-   */
-  private wirePluginEventHooks(): void {
-    this.messageHandler.setPluginMessageHooks([
-      (event) => dispatchPluginMessage(this.modules, event),
-    ]);
-
-    const hookCount = countPluginEventHooks(this.modules, "onMessage");
-    if (hookCount > 0) {
-      log.info(`${hookCount} plugin onMessage hook(s) registered`);
-    }
-
-    if (!this.callbackHandlerRegistered && isUserBridge(this.bridge)) {
-      const userBridge = this.bridge;
-      userBridge
-        .getClient()
-        .addCallbackQueryHandler(
-          createUserPluginCallbackHandler(userBridge, (event) =>
-            dispatchPluginCallback(this.modules, event)
-          )
-        );
-      this.callbackHandlerRegistered = true;
-
-      const cbCount = countPluginEventHooks(this.modules, "onCallbackQuery");
-      if (cbCount > 0) {
-        log.info(`${cbCount} plugin onCallbackQuery hook(s) registered`);
-      }
-    } else if (!this.callbackHandlerRegistered && isBotBridge(this.bridge)) {
-      this.inlineRouter.setCallbackObserver((event) => dispatchPluginCallback(this.modules, event));
-      this.callbackHandlerRegistered = true;
-
-      const cbCount = countPluginEventHooks(this.modules, "onCallbackQuery");
-      if (cbCount > 0) {
-        log.info(`${cbCount} plugin onCallbackQuery hook(s) registered`);
-      }
-    }
-  }
-
-  /**
-   * Stop the agent
-   */
+  /** Stop the application and all managed resources. */
   async stop(): Promise<void> {
     log.info("Stopping Teleton AI...");
 
@@ -926,7 +691,7 @@ ${blue}  ┌──────────────────────�
    */
   private async stopAgent(): Promise<void> {
     // Quiesce ingress first. Already queued messages are still flushed below.
-    this.acceptingMessages = false;
+    this.messagePipeline.setAcceptingMessages(false);
 
     // Stop heartbeat timer
     await this.heartbeatRunner.stopAndDrain();
@@ -943,20 +708,7 @@ ${blue}  ┌──────────────────────�
 
     // Flush and drain while providers, MCP connections, and plugins remain
     // available to the in-flight turns that may still be using them.
-    if (this.debouncer) {
-      try {
-        await this.debouncer.flushAll();
-      } catch (error: unknown) {
-        log.error({ err: error }, "Debouncer flush failed");
-      }
-    }
-
-    // Drain in-flight message processing before disconnecting
-    try {
-      await this.messageHandler.drain();
-    } catch (error: unknown) {
-      log.error({ err: error }, "Message queue drain failed");
-    }
+    await this.messagePipeline.flushAndDrain();
 
     try {
       await this.agent.drainTurns();
@@ -976,7 +728,7 @@ ${blue}  ┌──────────────────────�
         const agentStopEvent: AgentStopEvent = {
           reason: "manual",
           uptimeMs: this.startTime > 0 ? Date.now() - this.startTime : 0,
-          messagesProcessed: this.messagesProcessed,
+          messagesProcessed: this.messagePipeline.getMessagesProcessed(),
           timestamp: Date.now(),
         };
         await this.hookRunner.runObservingHook("agent:stop", agentStopEvent);
@@ -1004,9 +756,8 @@ ${blue}  ┌──────────────────────�
     this.hookRunner = undefined;
     this.agent.setHookRunner(undefined);
 
-    this.callbackHandlerRegistered = false;
-    // messageHandlersRegistered stays true — Grammy Bot instance retains its middleware tree
-    // across stop/start cycles; re-registering would throw "registering listeners from within listeners"
+    this.messagePipeline.resetCallbackRegistration();
+    // MessagePipeline keeps the common bridge listener registered across stop/start cycles.
     try {
       await this.bridge.disconnect();
     } catch (error: unknown) {
