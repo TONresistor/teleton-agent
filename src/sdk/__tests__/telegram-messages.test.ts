@@ -43,6 +43,13 @@ vi.mock("big-integer", () => ({
 import { createMocks } from "./__fixtures__/mocks.js";
 const { mockGramJsClient, mockBridge, mockLog } = createMocks();
 
+function mockUpdate(className: string, messageId?: number): Api.TypeUpdate {
+  return {
+    className,
+    ...(messageId === undefined ? {} : { message: { id: messageId } }),
+  } as unknown as Api.TypeUpdate;
+}
+
 describe("createTelegramMessagesSDK", () => {
   let sdk: ReturnType<typeof createTelegramMessagesSDK>;
 
@@ -133,7 +140,11 @@ describe("createTelegramMessagesSDK", () => {
     it("extracts forwarded message ID from UpdateNewMessage", async () => {
       mockGramJsClient.invoke.mockResolvedValue(
         new Api.Updates({
-          updates: [{ className: "UpdateNewMessage", message: { id: 77 } }],
+          updates: [mockUpdate("UpdateNewMessage", 77)],
+          users: [],
+          chats: [],
+          date: 0,
+          seq: 0,
         })
       );
 
@@ -144,7 +155,12 @@ describe("createTelegramMessagesSDK", () => {
     it("extracts from UpdateNewChannelMessage", async () => {
       mockGramJsClient.invoke.mockResolvedValue(
         new Api.UpdatesCombined({
-          updates: [{ className: "UpdateNewChannelMessage", message: { id: 88 } }],
+          updates: [mockUpdate("UpdateNewChannelMessage", 88)],
+          users: [],
+          chats: [],
+          date: 0,
+          seqStart: 0,
+          seq: 0,
         })
       );
 
@@ -155,7 +171,11 @@ describe("createTelegramMessagesSDK", () => {
     it("returns null when no matching update found", async () => {
       mockGramJsClient.invoke.mockResolvedValue(
         new Api.Updates({
-          updates: [{ className: "UpdateReadHistoryOutbox" }],
+          updates: [mockUpdate("UpdateReadHistoryOutbox")],
+          users: [],
+          chats: [],
+          date: 0,
+          seq: 0,
         })
       );
 
@@ -164,7 +184,9 @@ describe("createTelegramMessagesSDK", () => {
     });
 
     it("returns null when updates is empty", async () => {
-      mockGramJsClient.invoke.mockResolvedValue(new Api.Updates({ updates: [] }));
+      mockGramJsClient.invoke.mockResolvedValue(
+        new Api.Updates({ updates: [], users: [], chats: [], date: 0, seq: 0 })
+      );
 
       const result = await sdk.forwardMessage("from", "to", 10);
       expect(result).toBeNull();

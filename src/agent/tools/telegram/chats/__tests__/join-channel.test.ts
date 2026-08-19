@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { Api } from "telegram";
 import type { ToolContext } from "../../../types.js";
+import { toLong } from "../../../../../utils/gramjs-bigint.js";
 import { telegramJoinChannelExecutor } from "../join-channel.js";
 
 const invoke = vi.fn();
@@ -20,8 +21,8 @@ const context = {
 
 function channel(): Api.Channel {
   return new Api.Channel({
-    id: 123n,
-    accessHash: 456n,
+    id: toLong(123),
+    accessHash: toLong(456),
     title: "Test Channel",
     username: "test_channel",
     broadcast: true,
@@ -44,8 +45,8 @@ function joinOk(chats: Api.TypeChat[] = []): Api.messages.ChatInviteJoinResultOk
 
 function guardBotResult(): Api.messages.ChatInviteJoinResultWebView {
   return new Api.messages.ChatInviteJoinResultWebView({
-    botId: 777n,
-    queryId: 888n,
+    botId: toLong(777),
+    queryId: toLong(888),
     users: [],
   });
 }

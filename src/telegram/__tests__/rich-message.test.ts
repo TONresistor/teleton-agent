@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 import { Api } from "telegram";
+import { toLong } from "../../utils/gramjs-bigint.js";
 import {
   classifyTelegramRichMessageMedia,
   renderTelegramMessageText,
@@ -9,7 +10,7 @@ import {
 function message(text: string, richMessage?: Api.TypeRichMessage, id = 1): Api.Message {
   return new Api.Message({
     id,
-    peerId: new Api.PeerUser({ userId: 1n }),
+    peerId: new Api.PeerUser({ userId: toLong(1) }),
     date: 0,
     message: text,
     richMessage,
@@ -48,7 +49,7 @@ describe("Rich Message text extraction", () => {
               new Api.TextUrl({
                 text: plain("report"),
                 url: "https://example.com/report",
-                webpageId: 0n,
+                webpageId: toLong(0),
               }),
               plain("."),
             ],
@@ -150,6 +151,7 @@ $$`);
     const invoke = vi.fn().mockResolvedValue(
       new Api.messages.Messages({
         messages: [complete],
+        topics: [],
         chats: [],
         users: [],
       })
@@ -182,7 +184,7 @@ $$`);
     const rich = new Api.RichMessage({
       blocks: [
         new Api.PageBlockPhoto({
-          photoId: 1n,
+          photoId: toLong(1),
           caption: emptyCaption(),
         }),
       ],
@@ -215,6 +217,7 @@ $$`);
       );
       return new Api.messages.Messages({
         messages: [complete],
+        topics: [],
         chats: [],
         users: [],
       });

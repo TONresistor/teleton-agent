@@ -42,7 +42,8 @@ describe("large tool result artifacts", () => {
       db,
     });
 
-    const text = messages[0].role === "toolResult" ? messages[0].content[0].text : "";
+    const firstContent = messages[0].role === "toolResult" ? messages[0].content[0] : undefined;
+    const text = firstContent?.type === "text" ? firstContent.text : "";
     const payload = JSON.parse(text) as { data: { _artifact: { id: string } } };
     expect(payload.data._artifact.id).toHaveLength(36);
     const stored = db

@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { Api } from "telegram";
+import { toLong } from "../../../../../utils/gramjs-bigint.js";
 import {
   createNextSearchCursor,
   createSearchRequestHash,
@@ -12,10 +13,10 @@ import {
   sortSearchHits,
 } from "../search-utils.js";
 
-function channel(id = 123n, username = "public_channel"): Api.Channel {
+function channel(id = 123, username = "public_channel"): Api.Channel {
   return new Api.Channel({
-    id,
-    accessHash: id + 1n,
+    id: toLong(id),
+    accessHash: toLong(id + 1),
     title: "Public Channel",
     username,
     broadcast: true,
@@ -24,10 +25,10 @@ function channel(id = 123n, username = "public_channel"): Api.Channel {
   });
 }
 
-function user(id = 42n): Api.User {
+function user(id = 42): Api.User {
   return new Api.User({
-    id,
-    accessHash: id + 1n,
+    id: toLong(id),
+    accessHash: toLong(id + 1),
     firstName: "Alice",
     lastName: "Example",
     username: "alice",
@@ -42,8 +43,8 @@ function message(options: {
 }): Api.Message {
   return new Api.Message({
     id: options.id,
-    peerId: new Api.PeerChannel({ channelId: 123n }),
-    fromId: new Api.PeerUser({ userId: 42n }),
+    peerId: new Api.PeerChannel({ channelId: toLong(123) }),
+    fromId: new Api.PeerUser({ userId: toLong(42) }),
     date: options.date,
     message: `message-${options.id}`,
     post: true,
@@ -51,9 +52,9 @@ function message(options: {
     forwards: options.forwards,
     postAuthor: "Editor",
     media: new Api.MessageMediaPhoto({
-      photo: new Api.PhotoEmpty({ id: BigInt(options.id) }),
+      photo: new Api.PhotoEmpty({ id: toLong(options.id) }),
     }),
-    replies: new Api.MessageReplies({ replies: 4 }),
+    replies: new Api.MessageReplies({ replies: 4, repliesPts: 0 }),
     reactions: new Api.MessageReactions({
       results: [
         new Api.ReactionCount({
@@ -132,7 +133,7 @@ describe("Telegram search helpers", () => {
   it("filters service messages from display but retains them in raw pagination", () => {
     const service = new Api.MessageService({
       id: 11,
-      peerId: new Api.PeerChannel({ channelId: 123n }),
+      peerId: new Api.PeerChannel({ channelId: toLong(123) }),
       date: 1001,
       action: new Api.MessageActionEmpty(),
     });
@@ -213,7 +214,7 @@ describe("Telegram search helpers", () => {
         totalDaily: 10,
         remains: 0,
         waitTill: 1_767_225_600,
-        starsAmount: 25n,
+        starsAmount: toLong(25),
       })
     );
 

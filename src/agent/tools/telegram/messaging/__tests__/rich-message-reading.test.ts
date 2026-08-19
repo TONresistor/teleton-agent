@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { Api } from "telegram";
 import type { ToolContext } from "../../../types.js";
+import { toLong } from "../../../../../utils/gramjs-bigint.js";
 import { telegramGetHistoryExecutor } from "../../chats/get-history.js";
 import { telegramSearchMessagesExecutor } from "../search-messages.js";
 
@@ -24,7 +25,7 @@ const context = {
 function richMessage(): Api.Message {
   return new Api.Message({
     id: 13008,
-    peerId: new Api.PeerChannel({ channelId: 3525458001n }),
+    peerId: new Api.PeerChannel({ channelId: toLong(3_525_458_001) }),
     date: 1_753_660_800,
     message: "",
     richMessage: new Api.RichMessage({
@@ -63,13 +64,14 @@ describe("Rich Message tool output", () => {
 
   it("returns Rich Message content from telegram_search_messages", async () => {
     const entity = new Api.InputPeerChannel({
-      channelId: 3525458001n,
-      accessHash: 1n,
+      channelId: toLong(3_525_458_001),
+      accessHash: toLong(1),
     });
     getEntity.mockResolvedValue(entity);
     invoke.mockResolvedValue(
       new Api.messages.Messages({
         messages: [richMessage()],
+        topics: [],
         chats: [],
         users: [],
       })

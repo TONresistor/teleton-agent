@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { Api } from "telegram";
 import type { ToolContext } from "../../../types.js";
+import { toLong } from "../../../../../utils/gramjs-bigint.js";
 import { telegramSearchGlobalExecutor, telegramSearchGlobalTool } from "../search-global.js";
 
 const invoke = vi.fn();
@@ -19,8 +20,8 @@ const context = {
 
 function channel(): Api.Channel {
   return new Api.Channel({
-    id: 123n,
-    accessHash: 456n,
+    id: toLong(123),
+    accessHash: toLong(456),
     title: "Channel",
     username: "channel",
     broadcast: true,
@@ -32,8 +33,8 @@ function channel(): Api.Channel {
 function message(id: number, date: number, views = 0): Api.Message {
   return new Api.Message({
     id,
-    peerId: new Api.PeerChannel({ channelId: 123n }),
-    fromId: new Api.PeerChannel({ channelId: 123n }),
+    peerId: new Api.PeerChannel({ channelId: toLong(123) }),
+    fromId: new Api.PeerChannel({ channelId: toLong(123) }),
     date,
     message: `result-${id}`,
     post: true,

@@ -21,7 +21,7 @@ describe("Codex GPT-5.6 models", () => {
   it("offers every GPT-5.6 model advertised by the Codex backend", () => {
     const modelIds = getModelsForProvider("codex").map((model) => model.value);
 
-    expect(modelIds).toEqual(expect.arrayContaining(GPT_56_CODEX_MODELS));
+    expect(modelIds).toEqual(expect.arrayContaining([...GPT_56_CODEX_MODELS]));
     expect(AgentConfigSchema.safeParse({ provider: "codex", model: "gpt-5.6-luna" }).success).toBe(
       true
     );

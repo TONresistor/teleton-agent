@@ -1,5 +1,13 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { ToolContext } from "../../../types.js";
+import type { RichMessageMediaUpload } from "../../../../../telegram/bridge-interface.js";
+
+interface InvalidRichMessageCase {
+  name: string;
+  text: string;
+  media: RichMessageMediaUpload[];
+  error: string;
+}
 
 const mocks = vi.hoisted(() => ({
   sendRichMessage: vi.fn(),
@@ -99,7 +107,7 @@ describe("telegram_send_rich_message", () => {
     });
   });
 
-  it.each([
+  it.each<InvalidRichMessageCase>([
     {
       name: "duplicate IDs",
       text: "![One](tg://photo?id=hero)",

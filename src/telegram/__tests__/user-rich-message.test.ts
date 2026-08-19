@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Api } from "telegram";
+import { toLong } from "../../utils/gramjs-bigint.js";
 
 const mocks = vi.hoisted(() => ({
   invoke: vi.fn(),
@@ -46,7 +47,6 @@ function createBridge(): GramJSUserBridge {
     apiId: 1,
     apiHash: "test",
     phone: "+10000000000",
-    sessionName: "test",
     sessionPath: "/tmp",
   });
 }
@@ -65,7 +65,7 @@ beforeEach(() => {
   mocks.editMessage.mockResolvedValue({ id: 44, date: 1_750_000_002 });
   mocks.uploadFile.mockResolvedValue(
     new Api.InputFile({
-      id: 1n,
+      id: toLong(1),
       parts: 1,
       name: "chart.png",
       md5Checksum: "",
@@ -105,8 +105,8 @@ describe("GramJSUserBridge rich messages", () => {
     const photoPath = join(directory, "chart.png");
     writeFileSync(photoPath, Buffer.from("test-image"));
     const uploadedPhoto = new Api.Photo({
-      id: 10n,
-      accessHash: 20n,
+      id: toLong(10),
+      accessHash: toLong(20),
       fileReference: Buffer.from([1, 2, 3]),
       date: 1_750_000_000,
       sizes: [],
@@ -149,8 +149,8 @@ describe("GramJSUserBridge rich messages", () => {
       expect(sendRequest.richMessage.files[0]).toMatchObject({
         id: "chart",
         photo: {
-          id: 10n,
-          accessHash: 20n,
+          id: toLong(10),
+          accessHash: toLong(20),
           fileReference: Buffer.from([1, 2, 3]),
         },
       });
@@ -170,12 +170,12 @@ describe("GramJSUserBridge rich messages", () => {
       const mediaPath = join(directory, filename);
       writeFileSync(mediaPath, Buffer.from("test-media"));
       const uploadedDocument = new Api.Document({
-        id: 30n,
-        accessHash: 40n,
+        id: toLong(30),
+        accessHash: toLong(40),
         fileReference: Buffer.from([4, 5, 6]),
         date: 1_750_000_000,
         mimeType: expectedMimeType,
-        size: 10n,
+        size: toLong(10),
         dcId: 2,
         attributes: [],
       });
@@ -226,8 +226,8 @@ describe("GramJSUserBridge rich messages", () => {
         expect(sendRequest.richMessage.files[0]).toMatchObject({
           id: "media",
           document: {
-            id: 30n,
-            accessHash: 40n,
+            id: toLong(30),
+            accessHash: toLong(40),
             fileReference: Buffer.from([4, 5, 6]),
           },
         });
@@ -337,7 +337,7 @@ describe("GramJSUserBridge rich messages", () => {
         update: new Api.UpdateEditMessage({
           message: new Api.Message({
             id: 44,
-            peerId: new Api.PeerUser({ userId: 123n }),
+            peerId: new Api.PeerUser({ userId: toLong(123) }),
             date: 1_750_000_003,
             message: "",
           }),

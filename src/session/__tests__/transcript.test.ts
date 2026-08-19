@@ -57,9 +57,20 @@ describe("transcript persistence", () => {
   });
 
   it("drops an incomplete assistant tool-call batch after a crash", () => {
-    const incomplete = {
+    const incomplete: Message = {
       role: "assistant" as const,
       content: [{ type: "toolCall" as const, id: "call-1", name: "test", arguments: {} }],
+      api: "openai-responses",
+      provider: "openai",
+      model: "test-model",
+      usage: {
+        input: 0,
+        output: 0,
+        cacheRead: 0,
+        cacheWrite: 0,
+        totalTokens: 0,
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+      },
       stopReason: "toolUse" as const,
       timestamp: Date.now(),
     };
