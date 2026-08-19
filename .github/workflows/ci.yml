@@ -62,20 +62,17 @@ jobs:
       - name: Security audit
         run: npm run audit:ci && npm run audit:web
 
-  # Build + test on each supported Node version.
+  # Build + test on the pinned production Node version.
   test:
     runs-on: ubuntu-latest
     timeout-minutes: 25
-    strategy:
-      matrix:
-        node-version: ["22.22.2", "24.15.0"]
     steps:
       - uses: actions/checkout@v7
 
-      - name: Use Node.js ${{ matrix.node-version }}
+      - name: Use pinned Node.js
         uses: actions/setup-node@v7
         with:
-          node-version: ${{ matrix.node-version }}
+          node-version-file: .nvmrc
           cache: npm
           cache-dependency-path: |
             package-lock.json

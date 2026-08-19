@@ -42,7 +42,7 @@ This starts the agent in watch mode with automatic restarts on file changes.
 
 ### Prerequisites
 
-- **Node.js 22.22.2+ LTS** ([download](https://nodejs.org/)); Node 24 requires 24.15.0+
+- **Node.js 22.22.2** ([download](https://nodejs.org/))
 - **npm 9+** (ships with Node.js)
 - An LLM API key from any [supported provider](README.md#supported-providers) (Anthropic, OpenAI, Google, xAI, Groq, OpenRouter, Mistral, and more)
 - Telegram API credentials from [my.telegram.org/apps](https://my.telegram.org/apps)

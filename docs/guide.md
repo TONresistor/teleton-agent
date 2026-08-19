@@ -8,7 +8,7 @@ Teleton is an autonomous AI agent that runs as a real Telegram user account. Not
 
 What You Need
 
-- Node.js 22.22.2+ LTS (Node 24 requires 24.15.0+; nodejs.org)
+- Node.js 22.22.2 (nodejs.org)
 - Telegram API credentials from my.telegram.org/apps (API ID + API Hash)
 - Your Telegram user ID (send /start to @userinfobot)
 - An LLM API key (Anthropic, OpenAI, Google, xAI, Groq, Mistral, or any other)
