@@ -476,7 +476,7 @@ The SDK provides namespaced access to core services:
 | Layer | Technology |
 |-------|------------|
 | LLM | Multi-provider via [pi-ai](https://github.com/mariozechner/pi-ai) (16 providers: Anthropic, Codex, Grok Build, OpenAI, Google, xAI, Groq, OpenRouter, Moonshot, Mistral, Cerebras, ZAI, MiniMax, Hugging Face, Gocoon, Local) |
-| Telegram Userbot | [GramJS](https://gram.js.org/) Layer 223 fork (MTProto) |
+| Telegram Userbot | [GramJS](https://gram.js.org/) Layer 229 fork (MTProto) |
 | Inline Bot | [Grammy](https://grammy.dev/) (Bot API, plugin inline cards and callbacks) |
 | Blockchain | [TON SDK](https://github.com/ton-org/ton) (W5R1 wallet) |
 | DeFi | STON.fi SDK, DeDust SDK |

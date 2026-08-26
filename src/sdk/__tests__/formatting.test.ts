@@ -22,8 +22,11 @@ describe("SDK formatting helpers", () => {
 
     expect(markup).toBeInstanceOf(Api.ReplyInlineMarkup);
     expect(markup.rows).toHaveLength(1);
-    expect(markup.rows[0].buttons[0]).toBeInstanceOf(Api.KeyboardButtonCallback);
-    expect(markup.rows[0].buttons[1]).toBeInstanceOf(Api.KeyboardButtonCopy);
+    expect(markup.rows[0]).toBeInstanceOf(Api.KeyboardInlineButtonRow);
+    expect(markup.rows[0].buttons[0]).toBeInstanceOf(Api.KeyboardInlineButton);
+    expect(markup.rows[0].buttons[0].type).toBeInstanceOf(Api.InlineButtonTypeCallback);
+    expect(markup.rows[0].buttons[1]).toBeInstanceOf(Api.KeyboardInlineButton);
+    expect(markup.rows[0].buttons[1].type).toBeInstanceOf(Api.InlineButtonTypeCopy);
   });
 
   it("builds the Grammy fallback with callback and copy rows", () => {

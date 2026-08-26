@@ -98,7 +98,13 @@ export const telegramReplyKeyboardExecutor: ToolExecutor<ReplyKeyboardParams> = 
       rows: buttons.map(
         (row) =>
           new Api.KeyboardButtonRow({
-            buttons: row.map((label) => new Api.KeyboardButton({ text: label })),
+            buttons: row.map(
+              (label) =>
+                new Api.KeyboardButton({
+                  text: label,
+                  type: new Api.ButtonTypeDefault(),
+                })
+            ),
           })
       ),
       resize,

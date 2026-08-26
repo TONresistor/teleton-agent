@@ -300,12 +300,14 @@ export class GramJSUserBridge implements ITelegramBridge {
     return new Api.ReplyInlineMarkup({
       rows: inlineKeyboard.map(
         (row) =>
-          new Api.KeyboardButtonRow({
+          new Api.KeyboardInlineButtonRow({
             buttons: row.map(
               (btn) =>
-                new Api.KeyboardButtonCallback({
+                new Api.KeyboardInlineButton({
                   text: btn.text,
-                  data: Buffer.from(btn.callback_data),
+                  type: new Api.InlineButtonTypeCallback({
+                    data: Buffer.from(btn.callback_data),
+                  }),
                 })
             ),
           })

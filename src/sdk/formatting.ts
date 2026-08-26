@@ -22,13 +22,13 @@ export interface StyledButtonDef {
   text: string;
   callbackData: string;
   style?: ButtonStyle;
-  /** If set, renders as KeyboardButtonCopy (click-to-clipboard) via MTProto */
+  /** If set, renders as an inline copy button (click-to-clipboard) via MTProto */
   copyText?: string;
 }
 
 /**
  * Convert styled button definitions to GramJS TL markup (with colors + copy buttons)
- * Uses native Layer 223 constructors (KeyboardButtonStyle, KeyboardButtonCopy)
+ * Uses native Layer 229 typed inline button constructors.
  */
 export function toTLMarkup(buttons: StyledButtonDef[][]): Api.ReplyInlineMarkup {
   return new Api.ReplyInlineMarkup({
@@ -36,13 +36,13 @@ export function toTLMarkup(buttons: StyledButtonDef[][]): Api.ReplyInlineMarkup 
       .filter((row) => row.length > 0)
       .map(
         (row) =>
-          new Api.KeyboardButtonRow({
+          new Api.KeyboardInlineButtonRow({
             buttons: row.map((btn) => {
               // Copy button: native click-to-clipboard (no callback needed)
               if (btn.copyText) {
-                return new Api.KeyboardButtonCopy({
+                return new Api.KeyboardInlineButton({
                   text: btn.text,
-                  copyText: btn.copyText,
+                  type: new Api.InlineButtonTypeCopy({ copyText: btn.copyText }),
                 });
               }
 
@@ -54,9 +54,11 @@ export function toTLMarkup(buttons: StyledButtonDef[][]): Api.ReplyInlineMarkup 
                     bgPrimary: btn.style === "primary",
                   })
                 : undefined;
-              return new Api.KeyboardButtonCallback({
+              return new Api.KeyboardInlineButton({
                 text: btn.text,
-                data: Buffer.from(btn.callbackData),
+                type: new Api.InlineButtonTypeCallback({
+                  data: Buffer.from(btn.callbackData),
+                }),
                 style,
               });
             }),
