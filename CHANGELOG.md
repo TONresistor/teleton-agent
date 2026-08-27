@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-08-27
+
 ### Added
 
 - Current Anthropic, OpenAI, Google, xAI, Groq, OpenRouter, Kimi, Mistral,
@@ -14,6 +16,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Provider-scoped compatibility aliases for deprecated or unsupported model IDs.
 - Native Telegram Rich Messages for structured text, media, links, quotes, and
   interactive content across user bridges, tools, and the SDK.
+- Updated the GramJS fork to 2.33.0 / Telegram MTProto Layer 229 and migrated
+  keyboard and inline buttons to the new typed row model.
 
 ### Changed
 
@@ -38,8 +42,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Global Telegram account search with filters, page-local sorting, and cursor pagination, plus public channel post/hashtag search with quota preflight and no automatic Stars spending.
-- Updated the GramJS fork to 2.33.0 / Telegram MTProto Layer 229 and migrated
-  keyboard and inline buttons to the new typed row model.
+- Telegram MTProto Layer 228 compatibility, including the new invite-result union.
 - Persistent privacy-bounded agent-turn traces, paged artifacts for large tool results, safe provider/model fallbacks, and a per-turn time budget.
 - Turn-scoped idempotency records for external actions.
 
@@ -578,7 +581,8 @@ Git history rewritten to fix commit attribution (email update from `tonresistor@
 - Professional distribution (npm, Docker, CI/CD)
 - Pre-commit hooks and linting infrastructure
 
-[Unreleased]: https://github.com/TONresistor/teleton-agent/compare/v0.10.1...HEAD
+[Unreleased]: https://github.com/TONresistor/teleton-agent/compare/v0.11.0...HEAD
+[0.11.0]: https://github.com/TONresistor/teleton-agent/compare/v0.10.1...v0.11.0
 [0.10.1]: https://github.com/TONresistor/teleton-agent/compare/v0.10.0...v0.10.1
 [0.10.0]: https://github.com/TONresistor/teleton-agent/compare/v0.9.0...v0.10.0
 [0.9.0]: https://github.com/TONresistor/teleton-agent/compare/v0.8.6...v0.9.0
