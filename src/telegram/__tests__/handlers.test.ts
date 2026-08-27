@@ -655,13 +655,24 @@ describe("MessageHandler", () => {
         content: "Done",
         toolCalls: [
           {
-            name: "telegram_send_rich_message",
+            name: "telegram_send_message",
             input: {
               chatId: "chat1",
-              text: richText,
-              media: [{ id: "chart", type: "photo", path: "/workspace/chart.png" }],
+              rich: {
+                attachments: [{ id: "chart", type: "photo", path: "/workspace/chart.png" }],
+              },
             },
-            result: { success: true, data: { messageId: 777 } },
+            result: {
+              success: true,
+              data: {
+                messageId: 777,
+                chatId: "chat1",
+                deliveryKind: "rich",
+                renderedText: richText,
+                hasMedia: true,
+                mediaType: "photo",
+              },
+            },
           },
         ],
       });

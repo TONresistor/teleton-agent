@@ -48,9 +48,38 @@ function renderUnhandledRichNode(node: never): string {
   return `[Unsupported rich content: ${className}]`;
 }
 
-function renderButtonLabel(text: Api.TypeRichText): string {
+function renderButtonStyle(style?: Api.TypeRichButtonStyle): string | undefined {
+  if (!(style instanceof Api.RichButtonStyle)) return undefined;
+  if (style.bgPrimary) return "primary";
+  if (style.bgDanger) return "danger";
+  if (style.bgSuccess) return "success";
+  if (style.link) return "link";
+  return undefined;
+}
+
+function renderButtonAction(type?: Api.TypeInlineButtonType): string | undefined {
+  if (type instanceof Api.InlineButtonTypeUrl) return `url=${type.url}`;
+  if (type instanceof Api.InlineButtonTypeUrlAuth) return `login-url=${type.url}`;
+  if (type instanceof Api.InlineButtonTypeWebView) return `web-view=${type.url}`;
+  if (type instanceof Api.InlineButtonTypeCopy) return `copy=${JSON.stringify(type.copyText)}`;
+  if (type instanceof Api.InlineButtonTypeUserProfile) return `user=${type.userId.toString()}`;
+  if (type instanceof Api.InlineButtonTypeSwitchInline) return "switch-inline";
+  if (type instanceof Api.InlineButtonTypeCallback) return "callback";
+  if (type instanceof Api.InlineButtonTypeGame) return "game";
+  if (type instanceof Api.InlineButtonTypeBuy) return "buy";
+  if (type instanceof Api.InlineButtonTypeDisabled) return "disabled";
+  return undefined;
+}
+
+function renderButtonLabel(
+  text: Api.TypeRichText,
+  type?: Api.TypeInlineButtonType,
+  style?: Api.TypeRichButtonStyle
+): string {
   const label = renderRichText(text);
-  return label ? `[Button: ${label}]` : "[Button]";
+  const details = [renderButtonAction(type), renderButtonStyle(style)].filter(Boolean);
+  const suffix = details.length > 0 ? ` | ${details.join(" | ")}` : "";
+  return label ? `[Button: ${label}${suffix}]` : `[Button${suffix}]`;
 }
 
 function renderRichText(text: Api.TypeRichText): string {
@@ -94,7 +123,7 @@ function renderRichText(text: Api.TypeRichText): string {
     return renderRichText(text.text);
   }
   if (text instanceof Api.TextDiff) return renderRichText(text.text);
-  if (text instanceof Api.TextButton) return renderButtonLabel(text.text);
+  if (text instanceof Api.TextButton) return renderButtonLabel(text.text, text.type, text.style);
   return renderUnhandledRichNode(text);
 }
 
@@ -263,7 +292,16 @@ ${renderBlocks(block.blocks)}
     return ["[Map]", renderCaption(block.caption)].filter(Boolean).join("\n\n");
   }
   if (block instanceof Api.PageBlockButtonRow) {
-    return block.buttons.map((button) => renderButtonLabel(button.text)).join(" ");
+    const alignment = block.alignLeft
+      ? "left"
+      : block.alignCenter
+        ? "center"
+        : block.alignRight
+          ? "right"
+          : "default";
+    return `[Button row: ${alignment}] ${block.buttons
+      .map((button) => renderButtonLabel(button.text, button.type, button.style))
+      .join(" ")}`;
   }
   if (block instanceof Api.PageBlockDocument) {
     return ["[Document]", renderCaption(block.caption)].filter(Boolean).join("\n\n");
@@ -293,6 +331,7 @@ function classifyRichMessageBlock(block: Api.TypePageBlock): RichMessageMediaTyp
   if (block instanceof Api.PageBlockPhoto) return "photo";
   if (block instanceof Api.PageBlockVideo) return "video";
   if (block instanceof Api.PageBlockAudio) return "audio";
+  if (block instanceof Api.PageBlockDocument) return "document";
   if (block instanceof Api.PageBlockCover) return classifyRichMessageBlock(block.cover);
   if (block instanceof Api.PageBlockCollage || block instanceof Api.PageBlockSlideshow) {
     for (const item of block.items) {

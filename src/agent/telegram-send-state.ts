@@ -10,7 +10,14 @@ export interface CompletedToolCall {
 
 function targetChatId(call: CompletedToolCall): string | null {
   const raw = call.name === "telegram_forward_message" ? call.input.toChatId : call.input.chatId;
-  return typeof raw === "string" || typeof raw === "number" ? String(raw) : null;
+  if (typeof raw === "string" || typeof raw === "number") return String(raw);
+  if (call.result?.data && typeof call.result.data === "object") {
+    const resultChatId = (call.result.data as Record<string, unknown>).chatId;
+    if (typeof resultChatId === "string" || typeof resultChatId === "number") {
+      return String(resultChatId);
+    }
+  }
+  return null;
 }
 
 export function sentSuccessfullyToChat(call: CompletedToolCall, chatId: string): boolean {
@@ -39,16 +46,31 @@ export function deliveredTelegramText(
   );
 }
 
-/** Return the successful rich-message send made to this chat, when present. */
-export function deliveredTelegramRichMessage(
+/** Return the successful structured send made to this chat, when present. */
+export function deliveredTelegramStructuredMessage(
   calls: CompletedToolCall[] | undefined,
   chatId: string
 ): CompletedToolCall | null {
   return (
     calls?.find(
-      (call) => call.name === "telegram_send_rich_message" && sentSuccessfullyToChat(call, chatId)
+      (call) =>
+        call.name === "telegram_send_message" &&
+        sentSuccessfullyToChat(call, chatId) &&
+        call.result?.data !== null &&
+        typeof call.result?.data === "object" &&
+        (call.result.data as Record<string, unknown>).deliveryKind === "rich"
     ) ?? null
   );
+}
+
+export function deliveredTelegramMessageIdFromCall(call: CompletedToolCall): string | null {
+  if (!call.result?.data || typeof call.result.data !== "object") return null;
+  const data = call.result.data as Record<string, unknown>;
+  const rawId = data.messageId ?? data.message_id;
+  if ((typeof rawId !== "string" && typeof rawId !== "number") || String(rawId) === "0") {
+    return null;
+  }
+  return String(rawId);
 }
 
 /** Return the Telegram ID produced by the matching send tool, when available. */
@@ -64,12 +86,5 @@ export function deliveredTelegramMessageId(
       typeof candidate.input.text === "string" &&
       candidate.input.text.trim() === normalizedText
   );
-  if (!call || !call.result?.data || typeof call.result.data !== "object") return null;
-
-  const data = call.result.data as Record<string, unknown>;
-  const rawId = data.messageId ?? data.message_id;
-  if ((typeof rawId !== "string" && typeof rawId !== "number") || String(rawId) === "0") {
-    return null;
-  }
-  return String(rawId);
+  return call ? deliveredTelegramMessageIdFromCall(call) : null;
 }

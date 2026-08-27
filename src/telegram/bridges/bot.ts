@@ -112,6 +112,9 @@ export class GrammyBotBridge implements ITelegramBridge {
   }
 
   async sendMessage(options: SendMessageOptions): Promise<SentMessage> {
+    if (options.rich) {
+      throw new Error("Native structured Rich Messages require Telegram user mode");
+    }
     if (!options.text || options.text.trim().length === 0) {
       log.debug("sendMessage skipped: empty text");
       return { id: 0, date: Math.floor(Date.now() / 1000), chatId: options.chatId };
@@ -185,6 +188,9 @@ export class GrammyBotBridge implements ITelegramBridge {
   }
 
   async editMessage(options: EditMessageOptions): Promise<SentMessage> {
+    if (options.rich) {
+      throw new Error("Native structured Rich Messages require Telegram user mode");
+    }
     const replyMarkup = options.inlineKeyboard?.length
       ? this.toGrammyKeyboard(options.inlineKeyboard)
       : undefined;

@@ -198,7 +198,6 @@ $$`);
   });
 
   it("keeps Layer 229 buttons and documents visible", () => {
-    const disabled = new Api.InlineButtonTypeDisabled();
     const rich = new Api.RichMessage({
       blocks: [
         new Api.PageBlockParagraph({
@@ -207,20 +206,22 @@ $$`);
               plain("Choose "),
               new Api.TextButton({
                 text: plain("Approve"),
-                type: disabled,
+                type: new Api.InlineButtonTypeCopy({ copyText: "approval-code" }),
               }),
             ],
           }),
         }),
         new Api.PageBlockButtonRow({
+          alignCenter: true,
           buttons: [
             new Api.PageButton({
               text: plain("Confirm"),
-              type: disabled,
+              type: new Api.InlineButtonTypeUrl({ url: "https://example.com/confirm" }),
+              style: new Api.RichButtonStyle({ bgSuccess: true }),
             }),
             new Api.PageButton({
               text: plain("Cancel"),
-              type: disabled,
+              type: new Api.InlineButtonTypeCopy({ copyText: "cancel" }),
             }),
           ],
         }),
@@ -236,13 +237,15 @@ $$`);
       documents: [],
     });
 
-    expect(renderTelegramMessageText(message("", rich))).toBe(`Choose [Button: Approve]
+    expect(renderTelegramMessageText(message("", rich)))
+      .toBe(`Choose [Button: Approve | copy="approval-code"]
 
-[Button: Confirm] [Button: Cancel]
+[Button row: center] [Button: Confirm | url=https://example.com/confirm | success] [Button: Cancel | copy="cancel"]
 
 [Document]
 
 Specs`);
+    expect(classifyTelegramRichMessageMedia(message("", rich))).toBe("document");
   });
 
   it("bounds concurrent hydration requests", async () => {

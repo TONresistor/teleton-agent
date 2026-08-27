@@ -9,6 +9,8 @@ import { withFloodRetry } from "../flood-retry.js";
 import { randomLong } from "../../utils/gramjs-bigint.js";
 import { getGramJSErrorMessage } from "../../utils/errors.js";
 import { markdownToTelegramHtml } from "../formatting.js";
+import { TELEGRAM_MAX_MESSAGE_LENGTH } from "../../constants/limits.js";
+import { compileRichMessageMarkdown } from "../outgoing-rich-message.js";
 import {
   classifyRichMessageMedia,
   resolveTelegramMessageContent,
@@ -21,8 +23,8 @@ import type {
   TelegramMessage,
   InlineButton, // eslint-disable-line @typescript-eslint/no-unused-vars -- re-exported for backward compat
   SendMessageOptions,
-  SendRichMessageOptions,
   RichMessageMediaUpload,
+  RichMessageContent,
   SentMessage,
   SentDiceMessage,
   EditMessageOptions,
@@ -226,7 +228,20 @@ export class GramJSUserBridge implements ITelegramBridge {
         buttons = this.buildInlineMarkup(options.inlineKeyboard);
       }
 
-      if (hasRichFormatting(options.text)) {
+      if (options.rich) {
+        return await this.sendStructuredMessage(
+          peer,
+          options.chatId,
+          options.text,
+          options.rich,
+          options.replyToId
+        );
+      }
+
+      if (
+        hasRichFormatting(options.text) ||
+        Buffer.byteLength(options.text, "utf8") > TELEGRAM_MAX_MESSAGE_LENGTH
+      ) {
         try {
           const result = await withFloodRetry(
             () =>
@@ -359,13 +374,13 @@ export class GramJSUserBridge implements ITelegramBridge {
     const generated = utils.getAttributes(file, {
       supportsStreaming: media.type === "video",
     });
-    const metadata = await readRichDocumentMetadata(media.path, media.type);
     const attrs: Api.TypeDocumentAttribute[] = generated.attrs.filter(
       (attribute) =>
         !(attribute instanceof Api.DocumentAttributeVideo) &&
         !(attribute instanceof Api.DocumentAttributeAudio)
     );
     if (media.type === "video") {
+      const metadata = await readRichDocumentMetadata(media.path, media.type);
       if (metadata.width === undefined || metadata.height === undefined) {
         throw new Error(`Telegram video metadata is incomplete for media "${media.id}"`);
       }
@@ -377,7 +392,8 @@ export class GramJSUserBridge implements ITelegramBridge {
           supportsStreaming: true,
         })
       );
-    } else {
+    } else if (media.type === "audio") {
+      const metadata = await readRichDocumentMetadata(media.path, media.type);
       attrs.push(
         new Api.DocumentAttributeAudio({
           duration: Math.max(1, Math.round(metadata.duration)),
@@ -415,13 +431,34 @@ export class GramJSUserBridge implements ITelegramBridge {
     });
   }
 
-  async sendRichMessage(options: SendRichMessageOptions): Promise<SentMessage> {
+  private async buildInputRichMessage(
+    peer: Api.TypeEntityLike,
+    chatId: string,
+    text: string,
+    rich: RichMessageContent
+  ): Promise<Api.InputRichMessageMarkdown> {
+    const compiled = compileRichMessageMarkdown(text, rich);
+    const files: Api.TypeInputRichFile[] = [];
+    for (const media of compiled.attachments) {
+      files.push(await this.uploadRichMessageMedia(peer, chatId, media));
+    }
+    return new Api.InputRichMessageMarkdown({
+      markdown: compiled.markdown,
+      files: files.length > 0 ? files : undefined,
+      rtl: compiled.rtl,
+      noautolink: compiled.disableAutoLinks,
+    });
+  }
+
+  private async sendStructuredMessage(
+    peer: Api.TypeEntityLike,
+    chatId: string,
+    text: string,
+    rich: RichMessageContent,
+    replyToId?: number
+  ): Promise<SentMessage> {
     try {
-      const peer = this.peerCache.get(options.chatId) || options.chatId;
-      const files: Api.TypeInputRichFile[] = [];
-      for (const media of options.media) {
-        files.push(await this.uploadRichMessageMedia(peer, options.chatId, media));
-      }
+      const richMessage = await this.buildInputRichMessage(peer, chatId, text, rich);
 
       const result = await withFloodRetry(
         () =>
@@ -431,24 +468,21 @@ export class GramJSUserBridge implements ITelegramBridge {
               message: "",
               randomId: randomLong(),
               replyTo:
-                options.replyToId !== undefined
-                  ? new Api.InputReplyToMessage({ replyToMsgId: options.replyToId })
+                replyToId !== undefined
+                  ? new Api.InputReplyToMessage({ replyToMsgId: replyToId })
                   : undefined,
               noWebpage: true,
-              richMessage: new Api.InputRichMessageMarkdown({
-                markdown: options.text,
-                files,
-              }),
+              richMessage,
             })
           ),
         undefined,
         undefined,
-        options.chatId
+        chatId
       );
 
-      return sentMessageFromUpdates(result, options.chatId);
+      return sentMessageFromUpdates(result, chatId);
     } catch (error) {
-      log.error({ err: error, chatId: options.chatId }, "Error sending Rich Message with media");
+      log.error({ err: error, chatId }, "Error sending structured Rich Message");
       throw error;
     }
   }
@@ -463,7 +497,35 @@ export class GramJSUserBridge implements ITelegramBridge {
       }
 
       const gramJsClient = this.client.getClient();
-      if (hasRichFormatting(options.text)) {
+      if (options.rich) {
+        const richMessage = await this.buildInputRichMessage(
+          peer,
+          options.chatId,
+          options.text,
+          options.rich
+        );
+        const result = await withFloodRetry(
+          () =>
+            gramJsClient.invoke(
+              new Api.messages.EditMessage({
+                peer,
+                id: options.messageId,
+                replyMarkup: buttons,
+                noWebpage: true,
+                richMessage,
+              })
+            ),
+          undefined,
+          undefined,
+          options.chatId
+        );
+        return this.sentEditedMessage(result, options);
+      }
+
+      if (
+        hasRichFormatting(options.text) ||
+        Buffer.byteLength(options.text, "utf8") > TELEGRAM_MAX_MESSAGE_LENGTH
+      ) {
         try {
           const result = await withFloodRetry(
             () =>
@@ -483,34 +545,7 @@ export class GramJSUserBridge implements ITelegramBridge {
             options.chatId
           );
 
-          const updates =
-            result instanceof Api.UpdateShort
-              ? [result.update]
-              : result instanceof Api.Updates || result instanceof Api.UpdatesCombined
-                ? result.updates
-                : [];
-          const messageUpdate = updates.find(
-            (update) =>
-              update instanceof Api.UpdateEditMessage ||
-              update instanceof Api.UpdateEditChannelMessage
-          );
-          if (
-            messageUpdate &&
-            "message" in messageUpdate &&
-            messageUpdate.message instanceof Api.Message
-          ) {
-            return {
-              id: messageUpdate.message.id,
-              date: messageUpdate.message.date,
-              chatId: options.chatId,
-            };
-          }
-
-          return {
-            id: options.messageId,
-            date: Math.floor(Date.now() / 1000),
-            chatId: options.chatId,
-          };
+          return this.sentEditedMessage(result, options);
         } catch (error) {
           if (!canFallbackFromRichMessage(error)) {
             throw error;
@@ -541,6 +576,36 @@ export class GramJSUserBridge implements ITelegramBridge {
       log.error({ err: error }, "Error editing message");
       throw error;
     }
+  }
+
+  private sentEditedMessage(result: Api.TypeUpdates, options: EditMessageOptions): SentMessage {
+    const updates =
+      result instanceof Api.UpdateShort
+        ? [result.update]
+        : result instanceof Api.Updates || result instanceof Api.UpdatesCombined
+          ? result.updates
+          : [];
+    const messageUpdate = updates.find(
+      (update) =>
+        update instanceof Api.UpdateEditMessage || update instanceof Api.UpdateEditChannelMessage
+    );
+    if (
+      messageUpdate &&
+      "message" in messageUpdate &&
+      messageUpdate.message instanceof Api.Message
+    ) {
+      return {
+        id: messageUpdate.message.id,
+        date: messageUpdate.message.date,
+        chatId: options.chatId,
+      };
+    }
+
+    return {
+      id: options.messageId,
+      date: Math.floor(Date.now() / 1000),
+      chatId: options.chatId,
+    };
   }
 
   async deleteMessage(chatId: string, messageId: number): Promise<boolean> {

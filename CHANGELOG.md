@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Unified user-mode Rich Message text, media, documents, and URL/copy buttons under `telegram_send_message`, with the same structure available for edits.
+
 ## [0.11.0] - 2026-08-27
 
 ### Added

@@ -8,10 +8,6 @@ import {
   telegramTranscribeAudioTool,
   telegramTranscribeAudioExecutor,
 } from "./transcribe-audio.js";
-import {
-  telegramSendRichMessageTool,
-  telegramSendRichMessageExecutor,
-} from "./send-rich-message.js";
 import type { ToolEntry } from "../../types.js";
 
 export const tools: ToolEntry[] = [
@@ -19,13 +15,6 @@ export const tools: ToolEntry[] = [
     tool: telegramSendPhotoTool,
     executor: telegramSendPhotoExecutor,
     mode: "both",
-    tags: ["media"],
-  },
-  {
-    tool: telegramSendRichMessageTool,
-    executor: telegramSendRichMessageExecutor,
-    minimumAccess: "admin",
-    mode: "user",
     tags: ["media"],
   },
   {

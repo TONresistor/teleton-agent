@@ -46,21 +46,64 @@ export interface SendMessageOptions {
   text: string;
   replyToId?: number;
   inlineKeyboard?: InlineButton[][];
+  rich?: RichMessageContent;
 }
 
-export type RichMessageMediaType = "photo" | "video" | "audio";
+export type RichMessageMediaType = "photo" | "video" | "audio" | "document";
 
 export interface RichMessageMediaUpload {
   id: string;
   type: RichMessageMediaType;
   path: string;
+  caption?: string;
 }
 
-export interface SendRichMessageOptions {
-  chatId: string;
-  text: string;
-  media: RichMessageMediaUpload[];
-  replyToId?: number;
+export type RichMessageButtonStyle = "primary" | "success" | "danger";
+export type RichMessageButtonAlignment = "left" | "center" | "right";
+
+export type RichMessageButtonAction = { type: "url"; url: string } | { type: "copy"; text: string };
+
+export interface RichMessageButton {
+  label: string;
+  action: RichMessageButtonAction;
+  style?: RichMessageButtonStyle;
+}
+
+export interface RichMessageButtonRow {
+  align?: RichMessageButtonAlignment;
+  buttons: RichMessageButton[];
+}
+
+export type RichMessageBlock =
+  | { type: "paragraph"; markdown: string }
+  | { type: "heading"; text: string; level?: number }
+  | { type: "quote"; text: string; caption?: string; collapsed?: boolean }
+  | { type: "code"; code: string; language?: string }
+  | { type: "divider" }
+  | {
+      type: "list";
+      ordered?: boolean;
+      items: Array<{ text: string; checked?: boolean }>;
+    }
+  | {
+      type: "table";
+      rows: string[][];
+      caption?: string;
+      headerRow?: boolean;
+      bordered?: boolean;
+      striped?: boolean;
+      compact?: boolean;
+    }
+  | { type: "details"; summary: string; markdown: string; open?: boolean }
+  | { type: "attachment"; id: string }
+  | ({ type: "buttonRow" } & RichMessageButtonRow);
+
+export interface RichMessageContent {
+  attachments?: RichMessageMediaUpload[];
+  buttonRows?: RichMessageButtonRow[];
+  blocks?: RichMessageBlock[];
+  rtl?: boolean;
+  disableAutoLinks?: boolean;
 }
 
 export interface SentMessage {
@@ -78,6 +121,7 @@ export interface EditMessageOptions {
   messageId: number;
   text: string;
   inlineKeyboard?: InlineButton[][];
+  rich?: RichMessageContent;
 }
 
 export interface ReplyContext {
@@ -117,8 +161,6 @@ export interface ITelegramBridge {
   // Messages
   getMessages(chatId: string, limit: number): Promise<TelegramMessage[]>;
   sendMessage(options: SendMessageOptions): Promise<SentMessage>;
-  /** Upload local media and embed it as blocks inside one native Rich Message. User mode only. */
-  sendRichMessage?(options: SendRichMessageOptions): Promise<SentMessage>;
   editMessage(options: EditMessageOptions): Promise<SentMessage>;
   deleteMessage(chatId: string, messageId: number): Promise<boolean>;
   forwardMessage(fromChatId: string, toChatId: string, messageId: number): Promise<SentMessage>;
