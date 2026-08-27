@@ -8,6 +8,11 @@ type MessageWithRichContent = Api.Message & {
 type RichMessageClient = Pick<TelegramClient, "invoke">;
 type RichMessageMediaType = "photo" | "document" | "video" | "audio";
 
+export interface ResolvedTelegramMessageContent {
+  text: string;
+  richMessage?: Api.TypeRichMessage;
+}
+
 const MAX_CONCURRENT_RICH_MESSAGE_HYDRATIONS = 4;
 let activeRichMessageHydrations = 0;
 const richMessageHydrationWaiters: Array<() => void> = [];
@@ -278,12 +283,9 @@ function classifyRichMessageBlock(block: Api.TypePageBlock): RichMessageMediaTyp
   return undefined;
 }
 
-export function classifyTelegramRichMessageMedia(
-  message: Api.Message
+export function classifyRichMessageMedia(
+  richMessage: Api.TypeRichMessage
 ): RichMessageMediaType | undefined {
-  const richMessage = getTelegramRichMessage(message);
-  if (!richMessage) return undefined;
-
   for (const block of richMessage.blocks) {
     const mediaType = classifyRichMessageBlock(block);
     if (mediaType) return mediaType;
@@ -291,6 +293,13 @@ export function classifyTelegramRichMessageMedia(
   if (richMessage.photos.length > 0) return "photo";
   if (richMessage.documents.length > 0) return "document";
   return undefined;
+}
+
+export function classifyTelegramRichMessageMedia(
+  message: Api.Message
+): RichMessageMediaType | undefined {
+  const richMessage = getTelegramRichMessage(message);
+  return richMessage ? classifyRichMessageMedia(richMessage) : undefined;
 }
 
 export function renderTelegramMessageText(message: Api.Message): string {
@@ -302,13 +311,16 @@ export function renderTelegramMessageText(message: Api.Message): string {
   return message.message ?? "";
 }
 
-export async function resolveTelegramMessageText(
+export async function resolveTelegramMessageContent(
   client: RichMessageClient,
   message: Api.Message,
   peer?: Api.TypeEntityLike
-): Promise<string> {
+): Promise<ResolvedTelegramMessageContent> {
   const richMessage = getTelegramRichMessage(message);
-  const fallback = renderTelegramMessageText(message);
+  const fallback = {
+    text: renderTelegramMessageText(message),
+    richMessage,
+  };
   if (!richMessage?.part) return fallback;
 
   const targetPeer = peer ?? message.peerId;
@@ -330,11 +342,23 @@ export async function resolveTelegramMessageText(
     );
     if (complete) {
       const resolved = renderTelegramMessageText(complete);
-      if (resolved) return resolved;
+      return {
+        text: resolved || fallback.text,
+        richMessage: getTelegramRichMessage(complete) ?? richMessage,
+      };
     }
   } catch {
     // The embedded partial payload is still useful when hydration is unavailable.
   }
 
   return fallback;
+}
+
+export async function resolveTelegramMessageText(
+  client: RichMessageClient,
+  message: Api.Message,
+  peer?: Api.TypeEntityLike
+): Promise<string> {
+  const content = await resolveTelegramMessageContent(client, message, peer);
+  return content.text;
 }

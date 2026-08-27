@@ -41,6 +41,7 @@ vi.mock("../media-metadata.js", () => ({
 }));
 
 import { GramJSUserBridge } from "../bridges/user.js";
+import type { TelegramMessage } from "../bridge-interface.js";
 
 function createBridge(): GramJSUserBridge {
   return new GramJSUserBridge({
@@ -49,6 +50,25 @@ function createBridge(): GramJSUserBridge {
     phone: "+10000000000",
     sessionPath: "/tmp",
   });
+}
+
+function plain(text: string): Api.TextPlain {
+  return new Api.TextPlain({ text });
+}
+
+function emptyCaption(): Api.PageCaption {
+  return new Api.PageCaption({
+    text: new Api.TextEmpty(),
+    credit: new Api.TextEmpty(),
+  });
+}
+
+function parseMessage(bridge: GramJSUserBridge, message: Api.Message): Promise<TelegramMessage> {
+  return (
+    bridge as unknown as {
+      parseMessage(message: Api.Message): Promise<TelegramMessage>;
+    }
+  ).parseMessage(message);
 }
 
 beforeEach(() => {
@@ -77,6 +97,84 @@ beforeEach(() => {
 });
 
 describe("GramJSUserBridge rich messages", () => {
+  it("uses hydrated rich content for both text and media classification", async () => {
+    const partial = new Api.Message({
+      id: 42,
+      peerId: new Api.PeerUser({ userId: toLong(1) }),
+      date: 1_750_000_000,
+      message: "",
+      richMessage: new Api.RichMessage({
+        part: true,
+        blocks: [new Api.PageBlockParagraph({ text: plain("Loading") })],
+        photos: [],
+        documents: [],
+      }),
+    } as any);
+    const complete = new Api.Message({
+      id: 42,
+      peerId: partial.peerId,
+      date: partial.date,
+      message: "",
+      richMessage: new Api.RichMessage({
+        blocks: [
+          new Api.PageBlockPhoto({
+            photoId: toLong(10),
+            caption: emptyCaption(),
+          }),
+        ],
+        photos: [],
+        documents: [],
+      }),
+    } as any);
+    mocks.invoke.mockResolvedValue(
+      new Api.messages.Messages({
+        messages: [complete],
+        topics: [],
+        chats: [],
+        users: [],
+      })
+    );
+
+    const parsed = await parseMessage(createBridge(), partial);
+
+    expect(parsed).toMatchObject({
+      text: "[Photo]",
+      hasMedia: true,
+      mediaType: "photo",
+    });
+    expect(mocks.invoke).toHaveBeenCalledOnce();
+  });
+
+  it("keeps partial rich text and media classification when hydration fails", async () => {
+    const partial = new Api.Message({
+      id: 43,
+      peerId: new Api.PeerUser({ userId: toLong(1) }),
+      date: 1_750_000_000,
+      message: "",
+      richMessage: new Api.RichMessage({
+        part: true,
+        blocks: [
+          new Api.PageBlockPhoto({
+            photoId: toLong(11),
+            caption: emptyCaption(),
+          }),
+        ],
+        photos: [],
+        documents: [],
+      }),
+    } as any);
+    mocks.invoke.mockRejectedValue(new Error("RPC failed"));
+
+    const parsed = await parseMessage(createBridge(), partial);
+
+    expect(parsed).toMatchObject({
+      text: "[Photo]",
+      hasMedia: true,
+      mediaType: "photo",
+    });
+    expect(mocks.invoke).toHaveBeenCalledOnce();
+  });
+
   it("sends structured user-mode replies as native Rich Markdown", async () => {
     const bridge = createBridge();
 

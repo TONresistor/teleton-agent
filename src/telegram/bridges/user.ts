@@ -9,7 +9,11 @@ import { withFloodRetry } from "../flood-retry.js";
 import { randomLong } from "../../utils/gramjs-bigint.js";
 import { getGramJSErrorMessage } from "../../utils/errors.js";
 import { markdownToTelegramHtml } from "../formatting.js";
-import { classifyTelegramRichMessageMedia, resolveTelegramMessageText } from "../rich-message.js";
+import {
+  classifyRichMessageMedia,
+  resolveTelegramMessageContent,
+  resolveTelegramMessageText,
+} from "../rich-message.js";
 import { readRichDocumentMetadata } from "../media-metadata.js";
 import { classifyMedia } from "../bridge-interface.js";
 import type {
@@ -878,7 +882,12 @@ export class GramJSUserBridge implements ITelegramBridge {
     const chatId = msg.chatId?.toString() ?? msg.peerId?.toString() ?? "unknown";
     const senderIdBig = msg.senderId ? BigInt(msg.senderId.toString()) : BigInt(0);
     const senderId = Number(senderIdBig);
-    let text = await resolveTelegramMessageText(this.client.getClient(), msg, msg.peerId);
+    const resolvedContent = await resolveTelegramMessageContent(
+      this.client.getClient(),
+      msg,
+      msg.peerId
+    );
+    let { text } = resolvedContent;
 
     let mentionsMe = msg.mentioned ?? false;
     if (!mentionsMe && this.ownUsername && text) {
@@ -900,7 +909,9 @@ export class GramJSUserBridge implements ITelegramBridge {
       sticker: msg.sticker,
       document: msg.document,
     });
-    const richMessageMediaType = classifyTelegramRichMessageMedia(msg);
+    const richMessageMediaType = resolvedContent.richMessage
+      ? classifyRichMessageMedia(resolvedContent.richMessage)
+      : undefined;
     if (!hasMedia && richMessageMediaType) {
       hasMedia = true;
       mediaType = richMessageMediaType;
