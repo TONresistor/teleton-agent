@@ -16,6 +16,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Provider-scoped compatibility aliases for deprecated or unsupported model IDs.
 - Native Telegram Rich Messages for structured text, media, links, quotes, and
   interactive content across user bridges, tools, and the SDK.
+- Updated the GramJS fork to 2.33.0 / Telegram MTProto Layer 229 and migrated
+  keyboard and inline buttons to the new typed row model.
 
 ### Changed
 
@@ -40,8 +42,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Global Telegram account search with filters, page-local sorting, and cursor pagination, plus public channel post/hashtag search with quota preflight and no automatic Stars spending.
-- Updated the GramJS fork to 2.33.0 / Telegram MTProto Layer 229 and migrated
-  keyboard and inline buttons to the new typed row model.
+- Telegram MTProto Layer 228 compatibility, including the new invite-result union.
 - Persistent privacy-bounded agent-turn traces, paged artifacts for large tool results, safe provider/model fallbacks, and a per-turn time budget.
 - Turn-scoped idempotency records for external actions.
 
