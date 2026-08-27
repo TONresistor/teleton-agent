@@ -6,8 +6,9 @@ import { createLogger } from "../../utils/logger.js";
 const log = createLogger("Memory");
 
 const MESSAGE_KEY_SEPARATOR = "\u001f";
-const BACKFILL_BATCH_SIZE = 100;
+const BACKFILL_BATCH_SIZE = 16;
 const BACKFILL_DELAY_MS = 250;
+const BACKFILL_START_DELAY_MS = 100;
 
 export function telegramMessageKey(chatId: string, messageId: string): string {
   return `${chatId}${MESSAGE_KEY_SEPARATOR}${messageId}`;
@@ -34,6 +35,7 @@ export function pruneOldMessages(db: Database.Database, maxAgeDays = 90): number
 export class MessageStore {
   private pendingBackfill: Promise<void> | null = null;
   private pendingBackfillAbort: AbortController | null = null;
+  private pendingBackfillStart: ReturnType<typeof setTimeout> | null = null;
 
   constructor(
     private db: Database.Database,
@@ -116,20 +118,22 @@ export class MessageStore {
       return;
     }
 
+    // The canonical row is already durable. Vector cleanup and indexing are
+    // deliberately asynchronous so Telegram handling never waits for ONNX or
+    // remote embedding work.
     try {
-      // The canonical message row is committed before touching the optional
-      // vector table. A vec extension/table failure must never lose history.
       this.db
         .prepare("DELETE FROM tg_messages_vec WHERE id = ?")
         .run(telegramMessageKey(message.chatId, message.id));
-      if (!shouldHaveEmbedding || textToEmbed === null) return;
-      await this.persistEmbedding(message.chatId, message.id, textToEmbed);
     } catch (error) {
-      if (textToEmbed !== null) this.markEmbeddingFailed(message.chatId, message.id, textToEmbed);
       log.warn(
         { err: error, chatId: message.chatId, messageId: message.id },
-        "Message persisted but vector indexing failed"
+        "Message persisted but stale vector cleanup failed"
       );
+    }
+
+    if (shouldHaveEmbedding && textToEmbed !== null) {
+      this.schedulePendingEmbeddingBackfill();
     }
   }
 
@@ -150,20 +154,46 @@ export class MessageStore {
       )
       .all(limit) as Array<{ chat_id: string; id: string; text: string }>;
 
+    if (rows.length === 0) return { indexed: 0, failed: 0, skipped: 0 };
+
     let indexed = 0;
     let failed = 0;
     let skipped = 0;
-    for (const row of rows) {
+    for (let offset = 0; offset < rows.length; offset += BACKFILL_BATCH_SIZE) {
+      const batchRows = rows.slice(offset, offset + BACKFILL_BATCH_SIZE);
+      let embeddings: number[][];
       try {
-        if (await this.persistEmbedding(row.chat_id, row.id, row.text)) indexed++;
-        else skipped++;
+        embeddings = await this.embedder.embedBatch(batchRows.map((row) => row.text));
+        if (embeddings.length !== batchRows.length) {
+          throw new Error(
+            `Embedding batch size mismatch: expected ${batchRows.length}, received ${embeddings.length}`
+          );
+        }
       } catch (error) {
-        if (this.markEmbeddingFailed(row.chat_id, row.id, row.text)) failed++;
-        else skipped++;
-        log.warn(
-          { err: error, chatId: row.chat_id, messageId: row.id },
-          "Message embedding backfill failed"
-        );
+        let batchFailed = 0;
+        for (const row of batchRows) {
+          if (this.markEmbeddingFailed(row.chat_id, row.id, row.text)) batchFailed++;
+        }
+        failed += batchFailed;
+        skipped += batchRows.length - batchFailed;
+        log.warn({ err: error, messages: batchRows.length }, "Message embedding batch failed");
+        continue;
+      }
+
+      for (const [index, row] of batchRows.entries()) {
+        try {
+          const embedding = embeddings[index];
+          assertValidEmbedding(embedding, this.embedder.dimensions);
+          if (this.persistPreparedEmbedding(row, embedding)) indexed++;
+          else skipped++;
+        } catch (error) {
+          if (this.markEmbeddingFailed(row.chat_id, row.id, row.text)) failed++;
+          else skipped++;
+          log.warn(
+            { err: error, chatId: row.chat_id, messageId: row.id },
+            "Message embedding backfill failed"
+          );
+        }
       }
     }
     return { indexed, failed, skipped };
@@ -173,25 +203,47 @@ export class MessageStore {
     batchSize = BACKFILL_BATCH_SIZE,
     delayMs = BACKFILL_DELAY_MS
   ): Promise<void> {
+    if (this.pendingBackfillStart) {
+      clearTimeout(this.pendingBackfillStart);
+      this.pendingBackfillStart = null;
+    }
     if (this.pendingBackfill) return this.pendingBackfill;
 
     const controller = new AbortController();
     this.pendingBackfillAbort = controller;
     const promise = this.runPendingEmbeddingBackfill(batchSize, delayMs, controller.signal);
     this.pendingBackfill = promise;
-    void promise.then(() => {
-      if (this.pendingBackfill === promise) {
-        this.pendingBackfill = null;
-        this.pendingBackfillAbort = null;
-      }
-    });
+    void promise
+      .then(() => {
+        if (this.pendingBackfill === promise) {
+          this.pendingBackfill = null;
+          this.pendingBackfillAbort = null;
+          if (!controller.signal.aborted && this.hasPendingEmbeddings()) {
+            void this.startPendingEmbeddingBackfill(batchSize, delayMs);
+          }
+        }
+      })
+      .catch((error) => log.warn({ err: error }, "Message embedding queue cleanup failed"));
     return promise;
   }
 
   async stopAndDrainPendingEmbeddingBackfill(): Promise<void> {
+    if (this.pendingBackfillStart) {
+      clearTimeout(this.pendingBackfillStart);
+      this.pendingBackfillStart = null;
+    }
     const promise = this.pendingBackfill;
     this.pendingBackfillAbort?.abort();
     if (promise) await promise;
+  }
+
+  private schedulePendingEmbeddingBackfill(): void {
+    if (this.pendingBackfill || this.pendingBackfillStart) return;
+    this.pendingBackfillStart = setTimeout(() => {
+      this.pendingBackfillStart = null;
+      void this.startPendingEmbeddingBackfill();
+    }, BACKFILL_START_DELAY_MS);
+    this.pendingBackfillStart.unref();
   }
 
   private async runPendingEmbeddingBackfill(
@@ -208,6 +260,7 @@ export class MessageStore {
         indexed += batch.indexed;
         failed += batch.failed;
         if (batch.indexed + batch.failed + batch.skipped === 0) break;
+        if (batch.indexed < batchSize) break;
         await this.waitForBackfillDelay(delayMs, signal);
       }
     } catch (error) {
@@ -235,15 +288,25 @@ export class MessageStore {
     });
   }
 
-  private async persistEmbedding(
-    chatId: string,
-    messageId: string,
-    text: string
-  ): Promise<boolean> {
-    const embedding = await this.embedder.embedQuery(text);
-    assertValidEmbedding(embedding, this.embedder.dimensions);
+  private hasPendingEmbeddings(): boolean {
+    return Boolean(
+      this.db
+        .prepare(
+          `SELECT 1 FROM tg_messages
+           WHERE embedding_status = 'pending'
+             AND text IS NOT NULL AND length(trim(text)) > 0
+           LIMIT 1`
+        )
+        .get()
+    );
+  }
+
+  private persistPreparedEmbedding(
+    row: { chat_id: string; id: string; text: string },
+    embedding: number[]
+  ): boolean {
     const embeddingBuffer = serializeEmbedding(embedding);
-    const storageKey = telegramMessageKey(chatId, messageId);
+    const storageKey = telegramMessageKey(row.chat_id, row.id);
 
     return this.db.transaction(() => {
       const updated = this.db
@@ -253,14 +316,18 @@ export class MessageStore {
            WHERE chat_id = ? AND id = ? AND text = ?
              AND embedding_status IN ('pending', 'failed')`
         )
-        .run(embeddingBuffer, chatId, messageId, text).changes;
+        .run(embeddingBuffer, row.chat_id, row.id, row.text).changes;
 
       if (updated === 0) return false;
 
       this.db.prepare("DELETE FROM tg_messages_vec WHERE id = ?").run(storageKey);
       this.db
-        .prepare("INSERT INTO tg_messages_vec (id, embedding) VALUES (?, ?)")
-        .run(storageKey, embeddingBuffer);
+        .prepare(
+          `INSERT INTO tg_messages_vec (id, chat_id, message_id, timestamp, embedding)
+           SELECT ?, chat_id, id, timestamp, ? FROM tg_messages
+           WHERE chat_id = ? AND id = ?`
+        )
+        .run(storageKey, embeddingBuffer, row.chat_id, row.id);
       return true;
     })();
   }

@@ -39,7 +39,8 @@ export const memorySearchExecutor: ToolExecutor<MemorySearchParams> = async (
     const { query } = params;
     const limit = Math.min(params.limit ?? 5, 20);
 
-    const embedder = getKnowledgeIndexer()?.getEmbedder() ?? null;
+    const knowledge = getKnowledgeIndexer();
+    const embedder = knowledge?.getEmbedder() ?? null;
 
     let queryEmbedding: number[] = [];
     if (embedder) {
@@ -50,9 +51,9 @@ export const memorySearchExecutor: ToolExecutor<MemorySearchParams> = async (
       }
     }
 
-    const vectorEnabled = queryEmbedding.length > 0;
-    const search = new HybridSearch(context.db, vectorEnabled);
-    const results = await search.searchKnowledge(query, queryEmbedding, { limit });
+    const results = knowledge
+      ? await knowledge.search(query, queryEmbedding, limit)
+      : await new HybridSearch(context.db, false).searchKnowledge(query, [], { limit });
 
     if (results.length === 0) {
       return {

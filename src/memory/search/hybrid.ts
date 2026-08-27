@@ -68,7 +68,8 @@ export function parseTemporalIntent(query: string): { afterTimestamp?: number } 
 export class HybridSearch {
   constructor(
     private db: Database.Database,
-    private vectorEnabled: boolean
+    private vectorEnabled: boolean,
+    private trackKnowledgeAccess = true
   ) {}
 
   async searchKnowledge(
@@ -99,7 +100,7 @@ export class HybridSearch {
     );
 
     // Fire-and-forget: track access on returned chunks (deferred to avoid blocking response)
-    if (results.length > 0) {
+    if (this.trackKnowledgeAccess && results.length > 0) {
       const ids = results.map((r) => r.id);
       setImmediate(() => {
         try {
@@ -123,6 +124,8 @@ export class HybridSearch {
     queryEmbedding: number[],
     options: {
       chatId?: string;
+      excludeChatId?: string;
+      excludeMessageId?: string;
       limit?: number;
       vectorWeight?: number;
       keywordWeight?: number;
@@ -138,6 +141,8 @@ export class HybridSearch {
           queryEmbedding,
           Math.ceil(limit * 3),
           options.chatId,
+          options.excludeChatId,
+          options.excludeMessageId,
           options.afterTimestamp
         )
       : [];
@@ -146,6 +151,8 @@ export class HybridSearch {
       query,
       Math.ceil(limit * 3),
       options.chatId,
+      options.excludeChatId,
+      options.excludeMessageId,
       options.afterTimestamp
     );
 
@@ -241,35 +248,42 @@ export class HybridSearch {
     embedding: number[],
     limit: number,
     chatId?: string,
+    excludeChatId?: string,
+    excludeMessageId?: string,
     afterTimestamp?: number
   ): HybridSearchResult[] {
     if (!this.vectorEnabled || embedding.length === 0) return [];
 
     try {
       const embeddingBuffer = serializeEmbedding(embedding);
-      const conditions: string[] = [];
+      const conditions: string[] = ["embedding MATCH ?", "k = ?"];
       const params: unknown[] = [embeddingBuffer, limit];
 
       if (chatId) {
-        conditions.push("m.chat_id = ?");
+        conditions.push("chat_id = ?");
         params.push(chatId);
       }
-      if (afterTimestamp) {
-        conditions.push("m.timestamp >= ?");
-        params.push(afterTimestamp);
+      if (excludeChatId) {
+        conditions.push("chat_id != ?");
+        params.push(excludeChatId);
       }
-
-      const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(" AND ")}` : "";
+      if (excludeMessageId) {
+        conditions.push("message_id != ?");
+        params.push(excludeMessageId);
+      }
+      if (afterTimestamp) {
+        conditions.push("timestamp >= ?");
+        params.push(BigInt(afterTimestamp));
+      }
 
       const sql = `
         SELECT mv.id, m.text, m.chat_id as source, mv.distance, m.timestamp
         FROM (
           SELECT id, distance
           FROM tg_messages_vec
-          WHERE embedding MATCH ? AND k = ?
+          WHERE ${conditions.join(" AND ")}
         ) mv
         JOIN tg_messages m ON (m.chat_id || char(31) || m.id) = mv.id
-        ${whereClause}
       `;
 
       const rows = this.db.prepare(sql).all(...params) as Array<{
@@ -298,6 +312,8 @@ export class HybridSearch {
     query: string,
     limit: number,
     chatId?: string,
+    excludeChatId?: string,
+    excludeMessageId?: string,
     afterTimestamp?: number
   ): HybridSearchResult[] {
     const safeQuery = escapeFts5Query(query);
@@ -310,6 +326,14 @@ export class HybridSearch {
       if (chatId) {
         conditions.push("m.chat_id = ?");
         params.push(chatId);
+      }
+      if (excludeChatId) {
+        conditions.push("m.chat_id != ?");
+        params.push(excludeChatId);
+      }
+      if (excludeMessageId) {
+        conditions.push("m.id != ?");
+        params.push(excludeMessageId);
       }
       if (afterTimestamp) {
         conditions.push("m.timestamp >= ?");

@@ -182,7 +182,8 @@ export class TeletonApp {
       db,
       this.memory.embedder,
       getDatabase().isVectorSearchReady(),
-      this.config
+      this.config,
+      this.memory.messages
     );
 
     this.adminHandler = new AdminHandler(
@@ -260,6 +261,7 @@ export class TeletonApp {
   /** Stop agent subsystems and close database. For bootstrap mode. */
   async stopAgentSubsystems(): Promise<void> {
     await this.lifecycle.stop();
+    await this.memory.dispose();
     try {
       closeDatabase();
     } catch (error: unknown) {
@@ -356,6 +358,7 @@ ${blue}  ┌──────────────────────�
     }
 
     if (embeddingChanged) {
+      await this.memory.dispose();
       Object.assign(this.memory, this.createMemorySystem());
       if (this.config.embedding.provider !== "none") {
         getDatabase().invalidateTelegramMessageEmbeddings();
@@ -415,7 +418,7 @@ ${blue}  ┌──────────────────────�
 
     this.agent.updateConfig(this.config);
     this.agent.setToolRegistry(registry);
-    this.agent.initializeContextBuilder(this.memory.embedder, getDatabase().isVectorSearchReady());
+    this.agent.initializeContextBuilder(this.memory.embedder, this.memory.context);
 
     this.messageHandler = new MessageHandler(
       this.bridge,
@@ -424,7 +427,8 @@ ${blue}  ┌──────────────────────�
       db,
       this.memory.embedder,
       getDatabase().isVectorSearchReady(),
-      this.config
+      this.config,
+      this.memory.messages
     );
     this.adminHandler = new AdminHandler(
       this.bridge,
@@ -488,6 +492,7 @@ ${blue}  ┌──────────────────────�
     }
 
     // Close database last (shared with WebUI)
+    await this.memory.dispose();
     try {
       closeDatabase();
     } catch (error: unknown) {

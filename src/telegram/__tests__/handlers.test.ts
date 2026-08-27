@@ -52,6 +52,7 @@ import { ChatQueue, MessageHandler, type MessageContext } from "../handlers.js";
 import type { TelegramMessage } from "../bridge.js";
 import type { TelegramConfig } from "../../config/schema.js";
 import { TELEGRAM_SEND_TOOLS } from "../../constants/tools.js";
+import type { MessageStore } from "../../memory/feed/messages.js";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -134,6 +135,25 @@ describe("MessageHandler", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockReadOffset.mockReturnValue(null);
+  });
+
+  it("uses the shared message store when one is provided", async () => {
+    const sharedStore = { storeMessage: vi.fn().mockResolvedValue(undefined) };
+    const handler = new MessageHandler(
+      makeBridge(),
+      makeConfig({ dm_policy: "disabled" }),
+      makeAgent(),
+      makeDb(),
+      makeEmbedder(),
+      false,
+      undefined,
+      sharedStore as unknown as MessageStore
+    );
+
+    await handler.handleMessage(makeMessage());
+
+    expect(sharedStore.storeMessage).toHaveBeenCalledOnce();
+    expect(mockStoreMessage).not.toHaveBeenCalled();
   });
 
   describe("analyzeMessage()", () => {

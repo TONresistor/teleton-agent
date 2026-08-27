@@ -208,7 +208,8 @@ export class MessageHandler {
     db: Database.Database,
     embedder: EmbeddingProvider,
     vectorEnabled: boolean,
-    fullConfig?: Config
+    fullConfig?: Config,
+    messageStore?: MessageStore
   ) {
     this.bridge = bridge;
     this.config = config;
@@ -220,7 +221,7 @@ export class MessageHandler {
       config.rate_limit_groups_per_minute
     );
 
-    this.messageStore = new MessageStore(db, embedder, vectorEnabled);
+    this.messageStore = messageStore ?? new MessageStore(db, embedder, vectorEnabled);
     this.chatStore = new ChatStore(db);
     this.userStore = new UserStore(db);
     this.pendingHistory = new PendingHistory();

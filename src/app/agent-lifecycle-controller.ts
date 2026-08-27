@@ -75,7 +75,8 @@ export class AgentLifecycleController {
       deps.toolRegistry,
       deps.config,
       deps.sdkDeps,
-      deps.memory.embedder
+      deps.memory.embedder,
+      deps.memory.vectorSearch
     );
     const { pluginNames, hookRegistry, externalModules, toolCount, dispose } =
       await orchestrator.loadAll(builtinNames, moduleNames, this.mcpConnections);
@@ -102,7 +103,7 @@ export class AgentLifecycleController {
       log.info(`Tool RAG: ${indexedCount} tools indexed (${Date.now() - startedAt}ms)`);
     }
 
-    deps.agent.initializeContextBuilder(deps.memory.embedder, getDatabase().isVectorSearchReady());
+    deps.agent.initializeContextBuilder(deps.memory.embedder, deps.memory.context);
     await deps.providerRuntime.initialize();
 
     await deps.bridge.connect();
@@ -159,9 +160,9 @@ export class AgentLifecycleController {
 
     deps.messagePipeline.setAcceptingMessages(false);
     await deps.heartbeatRunner.stopAndDrain();
-    await deps.memory.messages.stopAndDrainPendingEmbeddingBackfill();
     await this.stopPluginWatcher();
     await deps.messagePipeline.flushAndDrain();
+    await deps.memory.messages.stopAndDrainPendingEmbeddingBackfill();
 
     try {
       await deps.agent.drainTurns();

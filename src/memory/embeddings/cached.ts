@@ -81,7 +81,7 @@ export class CachedEmbeddingProvider implements EmbeddingProvider {
   }
 
   async embedQuery(text: string): Promise<number[]> {
-    const hash = hashText(text);
+    const hash = hashText(`query\u0000${text}`);
 
     const cached = this.getValidCachedEmbedding(hash);
     if (cached) {
@@ -103,7 +103,7 @@ export class CachedEmbeddingProvider implements EmbeddingProvider {
   async embedBatch(texts: string[]): Promise<number[][]> {
     if (texts.length === 0) return [];
 
-    const hashes = texts.map(hashText);
+    const hashes = texts.map((text) => hashText(`document\u0000${text}`));
     const results: (number[] | null)[] = new Array(texts.length).fill(null);
     const missIndices: number[] = [];
     const missTexts: string[] = [];

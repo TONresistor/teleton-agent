@@ -4,6 +4,11 @@ import { join } from "path";
 import { KNOWLEDGE_CHUNK_SIZE } from "../../constants/limits.js";
 import type { EmbeddingProvider } from "../embeddings/provider.js";
 import { hashText, serializeEmbedding } from "../embeddings/index.js";
+import { HybridSearch, type HybridSearchResult } from "../search/hybrid.js";
+import type { VectorSearchWorkerClient } from "../workers/vector-search-client.js";
+import { createLogger } from "../../utils/logger.js";
+
+const log = createLogger("Memory");
 
 export interface KnowledgeChunk {
   id: string;
@@ -30,11 +35,36 @@ export class KnowledgeIndexer {
     private db: Database.Database,
     private workspaceDir: string,
     private embedder: EmbeddingProvider,
-    private vectorEnabled: boolean
+    private vectorEnabled: boolean,
+    private vectorSearchWorker?: VectorSearchWorkerClient
   ) {}
 
   getEmbedder(): EmbeddingProvider {
     return this.embedder;
+  }
+
+  async search(
+    query: string,
+    queryEmbedding: number[],
+    limit: number
+  ): Promise<HybridSearchResult[]> {
+    if (this.vectorSearchWorker && queryEmbedding.length > 0) {
+      try {
+        const results = await this.vectorSearchWorker.searchKnowledge({
+          type: "searchKnowledge",
+          query,
+          queryEmbedding,
+          limit,
+        });
+        this.trackAccess(results);
+        return results;
+      } catch (error) {
+        log.warn({ err: error }, "Knowledge vector worker failed; falling back to FTS");
+      }
+    }
+
+    const search = new HybridSearch(this.db, this.vectorSearchWorker ? false : this.vectorEnabled);
+    return search.searchKnowledge(query, queryEmbedding, { limit });
   }
 
   async indexAll(options?: { force?: boolean }): Promise<{ indexed: number; skipped: number }> {
@@ -276,6 +306,24 @@ export class KnowledgeIndexer {
     if (relPath === "MEMORY.md") return "procedural";
     if (/^memory\/(\d{4}-\d{2}-\d{2}|consolidated-)/.test(relPath)) return "episodic";
     return "semantic";
+  }
+
+  private trackAccess(results: HybridSearchResult[]): void {
+    if (results.length === 0) return;
+    const ids = results.map((result) => result.id);
+    setImmediate(() => {
+      try {
+        const placeholders = ids.map(() => "?").join(", ");
+        this.db
+          .prepare(
+            `UPDATE knowledge SET access_count = access_count + 1, last_accessed_at = unixepoch()
+             WHERE id IN (${placeholders})`
+          )
+          .run(...ids);
+      } catch {
+        // Access metadata is best-effort and must not affect search results.
+      }
+    });
   }
 
   /**

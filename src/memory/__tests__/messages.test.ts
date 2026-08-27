@@ -11,7 +11,13 @@ describe("MessageStore", () => {
     db = new Database(":memory:");
     db.pragma("foreign_keys = ON");
     ensureSchema(db);
-    db.exec("CREATE TABLE tg_messages_vec (id TEXT PRIMARY KEY, embedding BLOB NOT NULL)");
+    db.exec(`CREATE TABLE tg_messages_vec (
+      id TEXT PRIMARY KEY,
+      chat_id TEXT,
+      message_id TEXT,
+      timestamp INTEGER,
+      embedding BLOB NOT NULL
+    )`);
   });
 
   afterEach(() => db.close());
@@ -72,6 +78,7 @@ describe("MessageStore", () => {
         timestamp: 3,
       })
     ).resolves.toBeUndefined();
+    await store.startPendingEmbeddingBackfill(16, 0);
 
     expect(
       db
@@ -80,13 +87,54 @@ describe("MessageStore", () => {
     ).toEqual({ text: "durable first", embedding_status: "failed" });
   });
 
+  it("returns after the durable write without waiting for embedding generation", async () => {
+    let resolveEmbeddings!: (embeddings: number[][]) => void;
+    const deferred = new Promise<number[][]>((resolve) => {
+      resolveEmbeddings = resolve;
+    });
+    const embedder = {
+      id: "slow",
+      model: "slow",
+      dimensions: 3,
+      embedQuery: vi.fn(),
+      embedBatch: vi.fn().mockReturnValue(deferred),
+    } satisfies EmbeddingProvider;
+    const store = new MessageStore(db, embedder, true);
+
+    await store.storeMessage({
+      id: "slow-message",
+      chatId: "chat-a",
+      senderId: null,
+      text: "persist before embedding",
+      isFromAgent: false,
+      hasMedia: false,
+      timestamp: 3,
+    });
+
+    expect(
+      db.prepare("SELECT embedding_status FROM tg_messages WHERE id = 'slow-message'").get()
+    ).toEqual({ embedding_status: "pending" });
+    expect(embedder.embedBatch).not.toHaveBeenCalled();
+
+    const backfill = store.startPendingEmbeddingBackfill(16, 0);
+    expect(embedder.embedBatch).toHaveBeenCalledWith(["persist before embedding"]);
+
+    resolveEmbeddings([[0.1, 0.2, 0.3]]);
+    await backfill;
+    expect(
+      db.prepare("SELECT embedding_status FROM tg_messages WHERE id = 'slow-message'").get()
+    ).toEqual({ embedding_status: "ready" });
+  });
+
   it("removes a stale vector when a message is updated without text", async () => {
     const embedder = {
       id: "healthy",
       model: "healthy",
       dimensions: 3,
       embedQuery: vi.fn().mockResolvedValue([0.1, 0.2, 0.3]),
-      embedBatch: vi.fn().mockResolvedValue([[0.1, 0.2, 0.3]]),
+      embedBatch: vi
+        .fn()
+        .mockImplementation((texts: string[]) => Promise.resolve(texts.map(() => [0.1, 0.2, 0.3]))),
     } satisfies EmbeddingProvider;
 
     const store = new MessageStore(db, embedder, true);
@@ -100,6 +148,7 @@ describe("MessageStore", () => {
       mediaType: "photo",
       timestamp: 3,
     });
+    await store.startPendingEmbeddingBackfill(16, 0);
     expect(db.prepare("SELECT COUNT(*) AS count FROM tg_messages_vec").get()).toEqual({ count: 1 });
 
     await store.storeMessage({
@@ -113,7 +162,7 @@ describe("MessageStore", () => {
       timestamp: 4,
     });
 
-    expect(embedder.embedQuery).toHaveBeenCalledTimes(1);
+    expect(embedder.embedBatch).toHaveBeenCalledTimes(1);
     expect(
       db.prepare("SELECT embedding, embedding_status FROM tg_messages WHERE id = 'media'").get()
     ).toEqual({ embedding: null, embedding_status: "disabled" });
@@ -129,7 +178,8 @@ describe("MessageStore", () => {
       embedBatch: vi.fn().mockResolvedValue([[0.1]]),
     } satisfies EmbeddingProvider;
 
-    await new MessageStore(db, embedder, true).storeMessage({
+    const store = new MessageStore(db, embedder, true);
+    await store.storeMessage({
       id: "bad-vector",
       chatId: "chat-a",
       senderId: null,
@@ -138,6 +188,7 @@ describe("MessageStore", () => {
       hasMedia: false,
       timestamp: 4,
     });
+    await store.startPendingEmbeddingBackfill(16, 0);
 
     expect(
       db
@@ -157,8 +208,9 @@ describe("MessageStore", () => {
       embedBatch: vi.fn().mockResolvedValue([[0.1, 0.2, 0.3]]),
     } satisfies EmbeddingProvider;
 
+    const store = new MessageStore(db, embedder, true);
     await expect(
-      new MessageStore(db, embedder, true).storeMessage({
+      store.storeMessage({
         id: "9",
         chatId: "chat-a",
         senderId: null,
@@ -168,13 +220,14 @@ describe("MessageStore", () => {
         timestamp: 5,
       })
     ).resolves.toBeUndefined();
+    await store.startPendingEmbeddingBackfill(16, 0);
 
     expect(
       db
         .prepare("SELECT text, embedding_status FROM tg_messages WHERE chat_id = ? AND id = ?")
         .get("chat-a", "9")
     ).toEqual({ text: "survive vector failure", embedding_status: "failed" });
-    expect(embedder.embedQuery).not.toHaveBeenCalled();
+    expect(embedder.embedBatch).toHaveBeenCalledTimes(1);
   });
 
   it("keeps text pending while vector storage is temporarily unavailable", async () => {
@@ -213,7 +266,8 @@ describe("MessageStore", () => {
       embedQuery: vi.fn().mockRejectedValue(new Error("embedding unavailable")),
       embedBatch: vi.fn().mockRejectedValue(new Error("embedding unavailable")),
     } satisfies EmbeddingProvider;
-    await new MessageStore(db, broken, true).storeMessage({
+    const brokenStore = new MessageStore(db, broken, true);
+    await brokenStore.storeMessage({
       id: "8",
       chatId: "chat-a",
       senderId: null,
@@ -222,13 +276,16 @@ describe("MessageStore", () => {
       hasMedia: false,
       timestamp: 4,
     });
+    await brokenStore.startPendingEmbeddingBackfill(16, 0);
 
     const healthy = {
       id: "healthy",
       model: "healthy",
       dimensions: 3,
       embedQuery: vi.fn().mockResolvedValue([0.1, 0.2, 0.3]),
-      embedBatch: vi.fn().mockResolvedValue([[0.1, 0.2, 0.3]]),
+      embedBatch: vi
+        .fn()
+        .mockImplementation((texts: string[]) => Promise.resolve(texts.map(() => [0.1, 0.2, 0.3]))),
     } satisfies EmbeddingProvider;
     const result = await new MessageStore(db, healthy, true).backfillPendingEmbeddings();
 
@@ -239,6 +296,32 @@ describe("MessageStore", () => {
         .get("chat-a", "8")
     ).toEqual({ embedding_status: "ready" });
     expect(db.prepare("SELECT id FROM tg_messages_vec").get()).toEqual({ id: "chat-a\u001f8" });
+  });
+
+  it("recovers the full startup window in bounded batches", async () => {
+    db.prepare("INSERT INTO tg_chats (id, type) VALUES ('chat-a', 'group')").run();
+    const insert = db.prepare(
+      `INSERT INTO tg_messages (id, chat_id, text, embedding_status, timestamp)
+       VALUES (?, 'chat-a', ?, 'failed', ?)`
+    );
+    for (let index = 0; index < 20; index++) {
+      insert.run(String(index), `failed-${index}`, index);
+    }
+    const embedder = {
+      id: "healthy",
+      model: "healthy",
+      dimensions: 3,
+      embedQuery: vi.fn(),
+      embedBatch: vi
+        .fn()
+        .mockImplementation((texts: string[]) => Promise.resolve(texts.map(() => [0.1, 0.2, 0.3]))),
+    } satisfies EmbeddingProvider;
+
+    const result = await new MessageStore(db, embedder, true).backfillPendingEmbeddings();
+
+    expect(result).toEqual({ indexed: 20, failed: 0, skipped: 0 });
+    expect(embedder.embedBatch).toHaveBeenCalledTimes(2);
+    expect(embedder.embedBatch.mock.calls.map(([texts]) => texts.length)).toEqual([16, 4]);
   });
 
   it("continues pending embedding backfill in bounded background batches", async () => {
@@ -255,7 +338,9 @@ describe("MessageStore", () => {
       model: "healthy",
       dimensions: 3,
       embedQuery: vi.fn().mockResolvedValue([0.1, 0.2, 0.3]),
-      embedBatch: vi.fn().mockResolvedValue([[0.1, 0.2, 0.3]]),
+      embedBatch: vi
+        .fn()
+        .mockImplementation((texts: string[]) => Promise.resolve(texts.map(() => [0.1, 0.2, 0.3]))),
     } satisfies EmbeddingProvider;
 
     await new MessageStore(db, embedder, true).startPendingEmbeddingBackfill(2, 0);
@@ -274,21 +359,21 @@ describe("MessageStore", () => {
       `INSERT INTO tg_messages (id, chat_id, text, embedding_status, timestamp)
        VALUES ('race', 'chat-a', 'old text', 'pending', 1)`
     ).run();
-    let resolveEmbedding!: (embedding: number[]) => void;
-    const deferredEmbedding = new Promise<number[]>((resolve) => {
+    let resolveEmbedding!: (embedding: number[][]) => void;
+    const deferredEmbedding = new Promise<number[][]>((resolve) => {
       resolveEmbedding = resolve;
     });
     const embedder = {
       id: "healthy",
       model: "healthy",
       dimensions: 3,
-      embedQuery: vi.fn().mockReturnValue(deferredEmbedding),
-      embedBatch: vi.fn(),
+      embedQuery: vi.fn(),
+      embedBatch: vi.fn().mockReturnValue(deferredEmbedding),
     } satisfies EmbeddingProvider;
     const store = new MessageStore(db, embedder, true);
 
     const backfill = store.backfillPendingEmbeddings();
-    expect(embedder.embedQuery).toHaveBeenCalledWith("old text");
+    expect(embedder.embedBatch).toHaveBeenCalledWith(["old text"]);
     await store.storeMessage({
       id: "race",
       chatId: "chat-a",
@@ -299,7 +384,7 @@ describe("MessageStore", () => {
       mediaType: "photo",
       timestamp: 2,
     });
-    resolveEmbedding([0.1, 0.2, 0.3]);
+    resolveEmbedding([[0.1, 0.2, 0.3]]);
 
     await expect(backfill).resolves.toEqual({ indexed: 0, failed: 0, skipped: 1 });
     expect(
@@ -317,15 +402,15 @@ describe("MessageStore", () => {
        VALUES ('race-error', 'chat-a', 'old text', 'pending', 1)`
     ).run();
     let rejectEmbedding!: (error: Error) => void;
-    const deferredEmbedding = new Promise<number[]>((_, reject) => {
+    const deferredEmbedding = new Promise<number[][]>((_, reject) => {
       rejectEmbedding = reject;
     });
     const embedder = {
       id: "healthy",
       model: "healthy",
       dimensions: 3,
-      embedQuery: vi.fn().mockReturnValue(deferredEmbedding),
-      embedBatch: vi.fn(),
+      embedQuery: vi.fn(),
+      embedBatch: vi.fn().mockReturnValue(deferredEmbedding),
     } satisfies EmbeddingProvider;
     const store = new MessageStore(db, embedder, true);
 

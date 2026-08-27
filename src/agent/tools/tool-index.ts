@@ -14,6 +14,7 @@ import {
   type NamespaceSearchResult,
   type ToolNamespaceCatalogEntry,
 } from "./tool-namespaces.js";
+import type { VectorSearchWorkerClient } from "../../memory/workers/vector-search-client.js";
 
 const log = createLogger("ToolRAG");
 
@@ -54,7 +55,8 @@ export class ToolIndex {
     private db: Database.Database,
     private embedder: EmbeddingProvider,
     private vectorEnabled: boolean,
-    private config: ToolIndexConfig
+    private config: ToolIndexConfig,
+    private vectorSearchWorker?: VectorSearchWorkerClient
   ) {}
 
   get isIndexed(): boolean {
@@ -252,7 +254,9 @@ export class ToolIndex {
   ): Promise<ToolSearchResult[]> {
     const topK = limit ?? this.config.topK;
 
-    const vectorResults = this.vectorEnabled ? this.vectorSearch(queryEmbedding, topK * 3) : [];
+    const vectorResults = this.vectorEnabled
+      ? await this.vectorSearch(queryEmbedding, topK * 3)
+      : [];
 
     const keywordResults = this.keywordSearch(query, topK * 3);
 
@@ -370,10 +374,24 @@ export class ToolIndex {
     return false;
   }
 
-  private vectorSearch(embedding: number[], limit: number): ToolSearchResult[] {
+  private async vectorSearch(embedding: number[], limit: number): Promise<ToolSearchResult[]> {
     if (!this.vectorEnabled || embedding.length === 0) return [];
 
     try {
+      if (this.vectorSearchWorker) {
+        const rows = await this.vectorSearchWorker.searchTools({
+          type: "searchTools",
+          queryEmbedding: embedding,
+          limit,
+        });
+        return rows.map((row) => ({
+          name: row.name,
+          description: row.description,
+          score: 1 - row.distance,
+          vectorScore: 1 - row.distance,
+        }));
+      }
+
       const embeddingBuffer = serializeEmbedding(embedding);
 
       const rows = this.db

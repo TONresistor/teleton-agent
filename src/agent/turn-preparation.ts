@@ -250,7 +250,8 @@ export async function prepareTurn(
             searchAllChats: true,
             maxRecentMessages: CONTEXT_MAX_RECENT_MESSAGES,
             maxRelevantChunks: CONTEXT_MAX_RELEVANT_CHUNKS,
-            queryEmbedding,
+            queryEmbedding: queryEmbedding ?? [],
+            currentMessageId: messageId === undefined ? undefined : String(messageId),
           })
           .catch((error) => {
             log.warn({ err: error }, "Context building failed");

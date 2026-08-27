@@ -128,7 +128,7 @@ export class MemoryDatabase {
 
     const rows = this.db
       .prepare(
-        `SELECT chat_id, id, embedding FROM tg_messages
+        `SELECT chat_id, id, timestamp, embedding FROM tg_messages
          WHERE embedding_status = 'ready'
            AND typeof(embedding) = 'blob'
            AND length(embedding) = ?`
@@ -136,14 +136,24 @@ export class MemoryDatabase {
       .all(dimensions * Float32Array.BYTES_PER_ELEMENT) as Array<{
       chat_id: string;
       id: string;
+      timestamp: number;
       embedding: Buffer;
     }>;
-    const insert = this.db.prepare("INSERT INTO tg_messages_vec (id, embedding) VALUES (?, ?)");
+    const insert = this.db.prepare(
+      `INSERT INTO tg_messages_vec (id, chat_id, message_id, timestamp, embedding)
+       VALUES (?, ?, ?, ?, ?)`
+    );
 
     this.db.transaction(() => {
       this.db.exec("DELETE FROM tg_messages_vec");
       for (const row of rows) {
-        insert.run(telegramMessageKey(row.chat_id, row.id), row.embedding);
+        insert.run(
+          telegramMessageKey(row.chat_id, row.id),
+          row.chat_id,
+          row.id,
+          BigInt(row.timestamp),
+          row.embedding
+        );
       }
       this.db.prepare("DELETE FROM meta WHERE key = 'tg_messages_vector_rebuild_required'").run();
     })();
