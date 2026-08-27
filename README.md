@@ -6,7 +6,7 @@
 
 <p align="center">
   <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
-  <a href="https://nodejs.org/"><img src="https://img.shields.io/badge/node-22.22.2-brightgreen" alt="Node.js 22.22.2"></a>
+  <a href="https://nodejs.org/"><img src="https://img.shields.io/badge/node-22.22.2%2B%20%7C%2024.15.0%2B%20%7C%2026%2B-brightgreen" alt="Node.js 22.22.2+, 24.15.0+, or 26+"></a>
   <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-5.7-blue" alt="TypeScript"></a>
   <a href="https://teletonagent.dev"><img src="https://img.shields.io/badge/Website-teletonagent.dev-ff6600" alt="Website"></a>
   <a href="https://docs.teletonagent.dev"><img src="https://img.shields.io/badge/docs-Teleton%20Agents-blue" alt="Documentation"></a>
@@ -83,7 +83,7 @@
 
 ## Prerequisites
 
-- **Node.js 22.22.2** - [Download](https://nodejs.org/)
+- **Node.js `^22.22.2`, `^24.15.0`, or `>=26.0.0`** - [Download](https://nodejs.org/)
 - **LLM API Key** - One of: [Anthropic](https://console.anthropic.com/) (recommended), [OpenAI](https://platform.openai.com/), [Google](https://aistudio.google.com/), [xAI](https://console.x.ai/), [Groq](https://console.groq.com/), [OpenRouter](https://openrouter.ai/), [Moonshot](https://platform.moonshot.ai/), [Mistral](https://console.mistral.ai/), [Cerebras](https://cloud.cerebras.ai/), [ZAI](https://open.bigmodel.cn/), [MiniMax](https://platform.minimaxi.com/), [Hugging Face](https://huggingface.co/settings/tokens) — or keyless: Codex and Grok Build (CLI auto-detect), Gocoon (TON), Local (Ollama/vLLM)
 - **Telegram Account** - Dedicated account recommended for security
 - **Telegram API Credentials** - From [my.telegram.org/apps](https://my.telegram.org/apps)
@@ -486,7 +486,7 @@ The SDK provides namespaced access to core services:
 | Embeddings | [@huggingface/transformers](https://www.npmjs.com/package/@huggingface/transformers) (local ONNX) or Voyage AI |
 | MCP Client | [@modelcontextprotocol/sdk](https://modelcontextprotocol.io/) (stdio + SSE + Streamable HTTP) |
 | WebUI | [Hono](https://hono.dev/) (API) + React + Vite (frontend) |
-| Language | TypeScript 5.7, Node.js 22.22.2 |
+| Language | TypeScript 5.7, Node.js `^22.22.2`, `^24.15.0`, or `>=26.0.0` |
 
 ### Project Structure
 

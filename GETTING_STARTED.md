@@ -8,7 +8,7 @@ Complete guide to installing, configuring, and running your Teleton AI agent.
 
 | Requirement | Details |
 |-------------|---------|
-| **Node.js 22.22.2** | [Download](https://nodejs.org/) - check with `node --version` |
+| **Node.js `^22.22.2`, `^24.15.0`, or `>=26.0.0`** | [Download](https://nodejs.org/) and check with `node --version` |
 | **LLM API Key** | [Anthropic](https://console.anthropic.com/) (recommended), [OpenAI](https://platform.openai.com/), [Google](https://aistudio.google.com/), [xAI](https://console.x.ai/), [Groq](https://console.groq.com/), [OpenRouter](https://openrouter.ai/), or any of 16 supported providers |
 | **Telegram Account** | Dedicated account recommended (agent has full control) |
 | **Telegram API Credentials** | `api_id` + `api_hash` from [my.telegram.org/apps](https://my.telegram.org/apps) |

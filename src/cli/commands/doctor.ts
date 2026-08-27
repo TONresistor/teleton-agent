@@ -9,7 +9,7 @@ import {
   type SupportedProvider,
 } from "../../config/providers.js";
 import { getErrorMessage } from "../../utils/errors.js";
-import { SUPPORTED_NODE_VERSION, isNodeVersionSupported } from "../../constants/runtime.js";
+import { SUPPORTED_NODE_RANGE, isNodeVersionSupported } from "../../constants/runtime.js";
 import { GREEN, YELLOW, RED } from "../prompts.js";
 import { getCodexApiKey, isCodexTokenValid } from "../../providers/codex-credentials.js";
 import {
@@ -439,7 +439,7 @@ async function checkNodeVersion(): Promise<CheckResult> {
     return {
       name: "Node.js",
       status: "error",
-      message: `${version} (requires ${SUPPORTED_NODE_VERSION})`,
+      message: `${version} (requires ${SUPPORTED_NODE_RANGE})`,
     };
   }
 

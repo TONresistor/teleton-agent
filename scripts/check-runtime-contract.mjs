@@ -4,21 +4,28 @@ import { fileURLToPath } from "node:url";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const read = (path) => readFileSync(join(root, path), "utf8");
-const version = read(".nvmrc").trim();
+const minimum = read(".nvmrc").trim();
+const supportedRange = `^${minimum} || ^24.15.0 || >=26.0.0`;
 const failures = [];
 
 function check(condition, message) {
   if (!condition) failures.push(message);
 }
 
-check(/^\d+\.\d+\.\d+$/.test(version), `.nvmrc must contain an exact version, got "${version}"`);
+check(
+  /^\d+\.\d+\.\d+$/.test(minimum),
+  `.nvmrc must contain an exact version, got "${minimum}"`
+);
 
 const packageJson = JSON.parse(read("package.json"));
 const packageLock = JSON.parse(read("package-lock.json"));
-check(packageJson.engines?.node === version, `package.json engines.node must be ${version}`);
 check(
-  packageLock.packages?.[""]?.engines?.node === version,
-  `package-lock.json root engines.node must be ${version}`
+  packageJson.engines?.node === supportedRange,
+  `package.json engines.node must be ${supportedRange}`
+);
+check(
+  packageLock.packages?.[""]?.engines?.node === supportedRange,
+  `package-lock.json root engines.node must be ${supportedRange}`
 );
 check(
   read(".npmrc").split(/\r?\n/).includes("engine-strict=true"),
@@ -26,7 +33,7 @@ check(
 );
 
 const dockerfile = read("Dockerfile");
-const dockerImage = `node:${version}-slim`;
+const dockerImage = `node:${minimum}-slim`;
 check(
   [...dockerfile.matchAll(/^FROM\s+(node:[^\s]+).*$/gm)].every(
     ([, image]) => image === dockerImage
@@ -40,20 +47,30 @@ check(
 
 const runtimeConstants = read("src/constants/runtime.ts");
 check(
-  runtimeConstants.includes(`SUPPORTED_NODE_VERSION = "${version}"`),
-  "runtime version must match .nvmrc"
+  runtimeConstants.includes(`MINIMUM_NODE_VERSION = "${minimum}"`),
+  "runtime minimum must match .nvmrc"
 );
 check(
-  read("tsup.config.ts").includes(`target: "node${version.split(".")[0]}"`),
-  "backend build target must match the pinned Node major"
+  runtimeConstants.includes(`SUPPORTED_NODE_RANGE = "${supportedRange}"`),
+  "runtime supported range must match package.json"
+);
+check(
+  read("tsup.config.ts").includes(`target: "node${minimum.split(".")[0]}"`),
+  "backend build target must match the minimum Node major"
 );
 
 const ci = read(".github/workflows/ci.yml");
+check(ci.includes("node-version-file: .nvmrc"), "CI checks must use .nvmrc");
 check(
-  (ci.match(/node-version-file: \.nvmrc/g) ?? []).length === 2,
-  "every CI Node setup must use .nvmrc"
+  ci.includes(`node-version: ["${minimum}", "24.15.0", "26.0.0"]`),
+  "CI test matrix must cover each supported Node release line"
 );
-check(!ci.includes("matrix.node-version"), "CI must not use a Node version matrix");
+
+const installer = read("install.sh");
+check(
+  installer.includes(`SUPPORTED_NODE_RANGE="${supportedRange}"`),
+  "installer supported range must match package.json"
+);
 
 const release = read(".github/workflows/release.yml");
 check(
@@ -65,5 +82,5 @@ if (failures.length > 0) {
   for (const failure of failures) console.error(`runtime contract: ${failure}`);
   process.exitCode = 1;
 } else {
-  console.log(`Runtime contract verified (${version})`);
+  console.log(`Runtime contract verified (${supportedRange})`);
 }
