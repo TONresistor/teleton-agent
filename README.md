@@ -6,7 +6,7 @@
 
 <p align="center">
   <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
-  <a href="https://nodejs.org/"><img src="https://img.shields.io/badge/node-22.22.2%2B%20%7C%2024.15.0%2B%20%7C%2026%2B-brightgreen" alt="Node.js 22.22.2+, 24.15.0+, or 26+"></a>
+  <a href="https://nodejs.org/"><img src="https://img.shields.io/badge/node-%5E22.22.2%20%7C%20%5E24.15.0%20%7C%20%3E%3D26.0.0-brightgreen" alt="Node.js ^22.22.2, ^24.15.0, or >=26.0.0"></a>
   <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-5.7-blue" alt="TypeScript"></a>
   <a href="https://teletonagent.dev"><img src="https://img.shields.io/badge/Website-teletonagent.dev-ff6600" alt="Website"></a>
   <a href="https://docs.teletonagent.dev"><img src="https://img.shields.io/badge/docs-Teleton%20Agents-blue" alt="Documentation"></a>
