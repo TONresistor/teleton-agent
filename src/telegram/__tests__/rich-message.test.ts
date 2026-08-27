@@ -197,6 +197,54 @@ $$`);
     expect(classifyTelegramRichMessageMedia(mediaMessage)).toBe("photo");
   });
 
+  it("keeps Layer 229 buttons and documents visible", () => {
+    const disabled = new Api.InlineButtonTypeDisabled();
+    const rich = new Api.RichMessage({
+      blocks: [
+        new Api.PageBlockParagraph({
+          text: new Api.TextConcat({
+            texts: [
+              plain("Choose "),
+              new Api.TextButton({
+                text: plain("Approve"),
+                type: disabled,
+              }),
+            ],
+          }),
+        }),
+        new Api.PageBlockButtonRow({
+          buttons: [
+            new Api.PageButton({
+              text: plain("Confirm"),
+              type: disabled,
+            }),
+            new Api.PageButton({
+              text: plain("Cancel"),
+              type: disabled,
+            }),
+          ],
+        }),
+        new Api.PageBlockDocument({
+          documentId: toLong(10),
+          caption: new Api.PageCaption({
+            text: plain("Specs"),
+            credit: new Api.TextEmpty(),
+          }),
+        }),
+      ],
+      photos: [],
+      documents: [],
+    });
+
+    expect(renderTelegramMessageText(message("", rich))).toBe(`Choose [Button: Approve]
+
+[Button: Confirm] [Button: Cancel]
+
+[Document]
+
+Specs`);
+  });
+
   it("bounds concurrent hydration requests", async () => {
     let active = 0;
     let maximumActive = 0;

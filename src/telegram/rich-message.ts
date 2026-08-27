@@ -43,6 +43,16 @@ async function withRichMessageHydrationSlot<T>(operation: () => Promise<T>): Pro
   }
 }
 
+function renderUnhandledRichNode(node: never): string {
+  const className = (node as { className?: string }).className ?? "Unknown";
+  return `[Unsupported rich content: ${className}]`;
+}
+
+function renderButtonLabel(text: Api.TypeRichText): string {
+  const label = renderRichText(text);
+  return label ? `[Button: ${label}]` : "[Button]";
+}
+
 function renderRichText(text: Api.TypeRichText): string {
   if (text instanceof Api.TextEmpty) return "";
   if (text instanceof Api.TextPlain) return text.text;
@@ -84,7 +94,8 @@ function renderRichText(text: Api.TypeRichText): string {
     return renderRichText(text.text);
   }
   if (text instanceof Api.TextDiff) return renderRichText(text.text);
-  return "";
+  if (text instanceof Api.TextButton) return renderButtonLabel(text.text);
+  return renderUnhandledRichNode(text);
 }
 
 function renderCaption(caption: Api.TypePageCaption): string {
@@ -248,7 +259,16 @@ ${renderBlocks(block.blocks)}
   if (block instanceof Api.PageBlockThinking) {
     return quote(`Thinking: ${renderRichText(block.text)}`);
   }
-  return "";
+  if (block instanceof Api.InputPageBlockMap) {
+    return ["[Map]", renderCaption(block.caption)].filter(Boolean).join("\n\n");
+  }
+  if (block instanceof Api.PageBlockButtonRow) {
+    return block.buttons.map((button) => renderButtonLabel(button.text)).join(" ");
+  }
+  if (block instanceof Api.PageBlockDocument) {
+    return ["[Document]", renderCaption(block.caption)].filter(Boolean).join("\n\n");
+  }
+  return renderUnhandledRichNode(block);
 }
 
 function renderBlocks(blocks: Api.TypePageBlock[]): string {
