@@ -6,7 +6,7 @@
 
 <p align="center">
   <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
-  <a href="https://nodejs.org/"><img src="https://img.shields.io/badge/node-22.22.2%2B-brightgreen" alt="Node.js 22.22.2+"></a>
+  <a href="https://nodejs.org/"><img src="https://img.shields.io/badge/node-%5E22.22.2%20%7C%20%5E24.15.0%20%7C%20%3E%3D26.0.0-brightgreen" alt="Node.js ^22.22.2, ^24.15.0, or >=26.0.0"></a>
   <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-5.7-blue" alt="TypeScript"></a>
   <a href="https://teletonagent.dev"><img src="https://img.shields.io/badge/Website-teletonagent.dev-ff6600" alt="Website"></a>
   <a href="https://docs.teletonagent.dev"><img src="https://img.shields.io/badge/docs-Teleton%20Agents-blue" alt="Documentation"></a>
@@ -15,7 +15,7 @@
 
 ---
 
-<p align="center">Teleton is an autonomous AI agent platform that operates as a real Telegram user account or a Telegram Bot. It thinks through an agentic loop with tool calling, remembers conversations across sessions with hybrid RAG, and natively integrates the TON blockchain: send crypto, swap on DEXs, bid on domains, verify payments - all from a chat message. It can schedule tasks to run autonomously at any time. It ships with 131 always-registered tools plus 5 optional system tools, supports 16 LLM providers, and exposes a Plugin SDK so you can build your own tools on top of the platform.</p>
+<p align="center">Teleton is an autonomous AI agent platform that operates as a real Telegram user account or a Telegram Bot. It thinks through an agentic loop with tool calling, remembers conversations across sessions with hybrid RAG, and natively integrates the TON blockchain: send crypto, swap on DEXs, bid on domains, verify payments - all from a chat message. It can schedule tasks to run autonomously at any time. It ships with 132 always-registered tools plus 5 optional system tools, supports 16 LLM providers, and exposes a Plugin SDK so you can build your own tools on top of the platform.</p>
 
 ### Key Highlights
 
@@ -83,7 +83,7 @@
 
 ## Prerequisites
 
-- **Node.js 22.22.2+ LTS** - [Download](https://nodejs.org/) (Node 24 requires 24.15.0+)
+- **Node.js `^22.22.2`, `^24.15.0`, or `>=26.0.0`** - [Download](https://nodejs.org/)
 - **LLM API Key** - One of: [Anthropic](https://console.anthropic.com/) (recommended), [OpenAI](https://platform.openai.com/), [Google](https://aistudio.google.com/), [xAI](https://console.x.ai/), [Groq](https://console.groq.com/), [OpenRouter](https://openrouter.ai/), [Moonshot](https://platform.moonshot.ai/), [Mistral](https://console.mistral.ai/), [Cerebras](https://cloud.cerebras.ai/), [ZAI](https://open.bigmodel.cn/), [MiniMax](https://platform.minimaxi.com/), [Hugging Face](https://huggingface.co/settings/tokens) — or keyless: Codex and Grok Build (CLI auto-detect), Gocoon (TON), Local (Ollama/vLLM)
 - **Telegram Account** - Dedicated account recommended for security
 - **Telegram API Credentials** - From [my.telegram.org/apps](https://my.telegram.org/apps)
@@ -476,7 +476,7 @@ The SDK provides namespaced access to core services:
 | Layer | Technology |
 |-------|------------|
 | LLM | Multi-provider via [pi-ai](https://github.com/mariozechner/pi-ai) (16 providers: Anthropic, Codex, Grok Build, OpenAI, Google, xAI, Groq, OpenRouter, Moonshot, Mistral, Cerebras, ZAI, MiniMax, Hugging Face, Gocoon, Local) |
-| Telegram Userbot | [GramJS](https://gram.js.org/) Layer 223 fork (MTProto) |
+| Telegram Userbot | [GramJS](https://gram.js.org/) Layer 229 fork (MTProto) |
 | Inline Bot | [Grammy](https://grammy.dev/) (Bot API, plugin inline cards and callbacks) |
 | Blockchain | [TON SDK](https://github.com/ton-org/ton) (W5R1 wallet) |
 | DeFi | STON.fi SDK, DeDust SDK |
@@ -486,7 +486,7 @@ The SDK provides namespaced access to core services:
 | Embeddings | [@huggingface/transformers](https://www.npmjs.com/package/@huggingface/transformers) (local ONNX) or Voyage AI |
 | MCP Client | [@modelcontextprotocol/sdk](https://modelcontextprotocol.io/) (stdio + SSE + Streamable HTTP) |
 | WebUI | [Hono](https://hono.dev/) (API) + React + Vite (frontend) |
-| Language | TypeScript 5.7, Node.js 22.22.2+ LTS |
+| Language | TypeScript 5.7, Node.js `^22.22.2`, `^24.15.0`, or `>=26.0.0` |
 
 ### Project Structure
 
@@ -496,13 +496,13 @@ src/
 ├── agent/                  # Core agent runtime
 │   ├── runtime.ts          # Budgeted agentic loop, tool calling, masking, compaction
 │   ├── client.ts           # Multi-provider LLM client
-│   └── tools/              # 131 base tools plus 5 optional system tools
+│   └── tools/              # 132 base tools plus 5 optional system tools
 │       ├── register-all.ts # Central tool registration (9 categories)
 │       ├── registry.ts     # Tool registry, scope filtering, provider limits
 │       ├── module-loader.ts    # Built-in module loading (TON Proxy + exec)
 │       ├── plugin-loader.ts    # External plugin discovery, validation, hot-reload
 │       ├── mcp-loader.ts       # MCP client (stdio/SSE), tool discovery, lifecycle
-│       ├── telegram/       # Telegram operations (83 tools)
+│       ├── telegram/       # Telegram operations (86 tools)
 │       ├── ton/            # TON blockchain + jettons + DEX router (15 tools)
 │       ├── stonfi/         # STON.fi DEX (5 tools)
 │       ├── dedust/         # DeDust DEX (5 tools)

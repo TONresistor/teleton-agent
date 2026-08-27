@@ -103,8 +103,7 @@ export async function resolveChannel(
   return entity as Api.Channel;
 }
 
-/** Convert a GramJS message to a SimpleMessage */
-export function toSimpleMessage(msg: Api.Message): SimpleMessage {
+export function toSimpleMessageWithText(msg: Api.Message, text: string): SimpleMessage {
   const fromId = msg.fromId;
   let senderId = 0;
   if (fromId) {
@@ -114,7 +113,7 @@ export function toSimpleMessage(msg: Api.Message): SimpleMessage {
   }
   return {
     id: msg.id,
-    text: msg.message ?? "",
+    text,
     senderId,
     timestamp: new Date(msg.date * 1000),
   };

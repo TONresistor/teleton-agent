@@ -40,29 +40,51 @@ export function getEffectiveApiKey(provider: string, rawKey: string): string {
   return rawKey;
 }
 
-function providerSupportsTemperature(provider: SupportedProvider): boolean {
-  return provider !== "codex" && provider !== "grok-build";
+const GOOGLE_MODELS_WITHOUT_SAMPLING_PARAMS = new Set([
+  "gemini-3.6-flash",
+  "gemini-3.5-flash-lite",
+]);
+
+function modelSupportsTemperature(provider: SupportedProvider, modelId: string): boolean {
+  if (provider === "codex" || provider === "grok-build") return false;
+  if (provider === "google" && GOOGLE_MODELS_WITHOUT_SAMPLING_PARAMS.has(modelId)) return false;
+  return true;
 }
 
 function getCacheRetention(provider: SupportedProvider): "none" | "long" {
   return provider === "grok-build" ? "none" : "long";
 }
 
+function getReasoningOptions(
+  provider: SupportedProvider,
+  reasoningEffort: AgentConfig["reasoning_effort"]
+): Record<string, unknown> {
+  return provider === "codex" ? { reasoningEffort } : {};
+}
+
 function prepareTools(tools: Tool[] | undefined): Tool[] | undefined {
   if (!tools) return tools;
 
-  return tools.map((tool) =>
-    TELEGRAM_SEND_TOOLS.has(tool.name)
-      ? {
-          ...tool,
-          description:
-            `${tool.description} This action sends immediately. ` +
-            "Do not use this tool to reply to the current inbound message or for progress updates; " +
-            "return normal assistant text instead, which Teleton delivers automatically. " +
-            "Use it for intentional separate Telegram messages.",
-        }
-      : tool
-  );
+  return tools.map((tool) => {
+    if (!TELEGRAM_SEND_TOOLS.has(tool.name)) return tool;
+    if (tool.name === "telegram_send_rich_message") {
+      return {
+        ...tool,
+        description:
+          `${tool.description} This action sends immediately. ` +
+          "Use it for the current reply only when local workspace media must be embedded inside one Rich Message. " +
+          "After it succeeds, do not return a duplicate confirmation.",
+      };
+    }
+    return {
+      ...tool,
+      description:
+        `${tool.description} This action sends immediately. ` +
+        "Do not use this tool to reply to the current inbound message or for progress updates; " +
+        "return normal assistant text instead, which Teleton delivers automatically. " +
+        "Use it for intentional separate Telegram messages.",
+    };
+  });
 }
 
 function getProviderPayloadOptions(provider: SupportedProvider): Record<string, unknown> {
@@ -99,11 +121,12 @@ export function prepareModelRequest(
     options: {
       apiKey: getEffectiveApiKey(provider, config.api_key),
       maxTokens: request.maxTokens ?? config.max_tokens,
-      ...(providerSupportsTemperature(provider) && { temperature }),
+      ...(modelSupportsTemperature(provider, model.id) && { temperature }),
       sessionId: request.sessionId,
       cacheRetention: getCacheRetention(provider),
       signal: request.signal,
       timeoutMs: request.timeoutMs,
+      ...getReasoningOptions(provider, config.reasoning_effort),
       ...getProviderPayloadOptions(provider),
     } as ProviderStreamOptions,
   };

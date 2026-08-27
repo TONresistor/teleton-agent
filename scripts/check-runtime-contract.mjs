@@ -12,50 +12,70 @@ function check(condition, message) {
   if (!condition) failures.push(message);
 }
 
-check(/^\d+\.\d+\.\d+$/.test(minimum), `.nvmrc must contain an exact version, got "${minimum}"`);
+check(
+  /^\d+\.\d+\.\d+$/.test(minimum),
+  `.nvmrc must contain an exact version, got "${minimum}"`
+);
 
 const packageJson = JSON.parse(read("package.json"));
 const packageLock = JSON.parse(read("package-lock.json"));
-check(packageJson.engines?.node === supportedRange, `package.json engines.node must be ${supportedRange}`);
+check(
+  packageJson.engines?.node === supportedRange,
+  `package.json engines.node must be ${supportedRange}`
+);
 check(
   packageLock.packages?.[""]?.engines?.node === supportedRange,
-  `package-lock.json root engines.node must be ${supportedRange}`,
+  `package-lock.json root engines.node must be ${supportedRange}`
 );
-check(read(".npmrc").split(/\r?\n/).includes("engine-strict=true"), ".npmrc must enable engine-strict");
+check(
+  read(".npmrc").split(/\r?\n/).includes("engine-strict=true"),
+  ".npmrc must enable engine-strict"
+);
 
 const dockerfile = read("Dockerfile");
 const dockerImage = `node:${minimum}-slim`;
 check(
-  [...dockerfile.matchAll(/^FROM\s+(node:[^\s]+).*$/gm)].every(([, image]) => image === dockerImage),
-  `every Docker stage must use ${dockerImage}`,
+  [...dockerfile.matchAll(/^FROM\s+(node:[^\s]+).*$/gm)].every(
+    ([, image]) => image === dockerImage
+  ),
+  `every Docker stage must use ${dockerImage}`
 );
-check((dockerfile.match(/^FROM\s+/gm) ?? []).length === 2, "Dockerfile must keep exactly two stages");
+check(
+  (dockerfile.match(/^FROM\s+/gm) ?? []).length === 2,
+  "Dockerfile must keep exactly two stages"
+);
 
 const runtimeConstants = read("src/constants/runtime.ts");
 check(
   runtimeConstants.includes(`MINIMUM_NODE_VERSION = "${minimum}"`),
-  "runtime minimum must match .nvmrc",
+  "runtime minimum must match .nvmrc"
 );
 check(
   runtimeConstants.includes(`SUPPORTED_NODE_RANGE = "${supportedRange}"`),
-  "runtime supported range must match package.json",
+  "runtime supported range must match package.json"
 );
 check(
   read("tsup.config.ts").includes(`target: "node${minimum.split(".")[0]}"`),
-  "backend build target must match the minimum Node major",
+  "backend build target must match the minimum Node major"
 );
 
 const ci = read(".github/workflows/ci.yml");
 check(ci.includes("node-version-file: .nvmrc"), "CI checks must use .nvmrc");
 check(
-  ci.includes(`node-version: ["${minimum}", "24.15.0"]`),
-  "CI test matrix must cover both supported LTS minimums",
+  ci.includes(`node-version: ["${minimum}", "24.15.0", "26.0.0"]`),
+  "CI test matrix must cover each supported Node release line"
+);
+
+const installer = read("install.sh");
+check(
+  installer.includes(`SUPPORTED_NODE_RANGE="${supportedRange}"`),
+  "installer supported range must match package.json"
 );
 
 const release = read(".github/workflows/release.yml");
 check(
   (release.match(/node-version-file: \.nvmrc/g) ?? []).length === 3,
-  "every release setup-node step must use .nvmrc",
+  "every release setup-node step must use .nvmrc"
 );
 
 if (failures.length > 0) {

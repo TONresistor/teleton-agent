@@ -8,7 +8,7 @@ Complete guide to installing, configuring, and running your Teleton AI agent.
 
 | Requirement | Details |
 |-------------|---------|
-| **Node.js 22.22.2+ LTS** | [Download](https://nodejs.org/) - Node 24 requires 24.15.0+; check with `node --version` |
+| **Node.js `^22.22.2`, `^24.15.0`, or `>=26.0.0`** | [Download](https://nodejs.org/) and check with `node --version` |
 | **LLM API Key** | [Anthropic](https://console.anthropic.com/) (recommended), [OpenAI](https://platform.openai.com/), [Google](https://aistudio.google.com/), [xAI](https://console.x.ai/), [Groq](https://console.groq.com/), [OpenRouter](https://openrouter.ai/), or any of 16 supported providers |
 | **Telegram Account** | Dedicated account recommended (agent has full control) |
 | **Telegram API Credentials** | `api_id` + `api_hash` from [my.telegram.org/apps](https://my.telegram.org/apps) |
@@ -98,7 +98,7 @@ You should see:
 ✅ Knowledge indexed
 ✅ Telegram: @your_agent connected
 ✅ TON Blockchain: connected
-✅ Agent is ready! (131 base tools)
+✅ Agent is ready! (132 base tools)
 ```
 
 **Verify:** Send `/ping` to your agent on Telegram.
@@ -169,11 +169,11 @@ Admin commands are only available to users listed in `admin_ids`. All commands w
 
 ## Tool Categories
 
-Teleton has **131 always-registered tools**, plus 5 optional system tools:
+Teleton has **132 always-registered tools**, plus 5 optional system tools:
 
 | Category | Count | Highlights |
 |----------|-------|------------|
-| **Telegram** | 83 | Messaging, media, chats, groups, polls, stickers, gifts, stars, stories, contacts, folders, profile, memory, tasks |
+| **Telegram** | 86 | Messaging, media, chats, groups, polls, stickers, gifts, stars, stories, contacts, folders, profile, memory, tasks |
 | **TON & Jettons** | 15 | W5R1 wallet, send/receive TON & jettons, balances, prices, holders, history, charts, NFTs, DEX quotes |
 | **STON.fi DEX** | 5 | Swap, quote, search, trending tokens, liquidity pools |
 | **DeDust DEX** | 5 | Swap, quote, pools, prices, token info |

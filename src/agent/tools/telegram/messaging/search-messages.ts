@@ -4,6 +4,7 @@ import { Api } from "telegram";
 import { getErrorMessage } from "../../../../utils/errors.js";
 import { createLogger } from "../../../../utils/logger.js";
 import { getClient } from "../../../../sdk/telegram-utils.js";
+import { resolveTelegramMessageText } from "../../../../telegram/rich-message.js";
 
 const log = createLogger("Tools");
 
@@ -78,16 +79,17 @@ export const telegramSearchMessagesExecutor: ToolExecutor<SearchMessagesParams> 
 
     // Parse results — all TypeMessages variants have .messages
     const resultData = result as Api.messages.Messages;
-    const messages = resultData.messages.map((msg) => {
-      const m = msg as Api.Message;
-      return {
-        id: m.id,
-        text: m.message || "",
-        senderId: (m.fromId as Api.PeerUser)?.userId?.toString() || null,
-        date: m.date,
-        timestamp: new Date(m.date * 1000).toISOString(),
-      };
-    });
+    const messages = await Promise.all(
+      resultData.messages
+        .filter((msg): msg is Api.Message => msg instanceof Api.Message)
+        .map(async (msg) => ({
+          id: msg.id,
+          text: await resolveTelegramMessageText(gramJsClient, msg, entity),
+          senderId: (msg.fromId as Api.PeerUser)?.userId?.toString() || null,
+          date: msg.date,
+          timestamp: new Date(msg.date * 1000).toISOString(),
+        }))
+    );
 
     return {
       success: true,

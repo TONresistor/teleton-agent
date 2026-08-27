@@ -48,10 +48,29 @@ export interface SendMessageOptions {
   inlineKeyboard?: InlineButton[][];
 }
 
+export type RichMessageMediaType = "photo" | "video" | "audio";
+
+export interface RichMessageMediaUpload {
+  id: string;
+  type: RichMessageMediaType;
+  path: string;
+}
+
+export interface SendRichMessageOptions {
+  chatId: string;
+  text: string;
+  media: RichMessageMediaUpload[];
+  replyToId?: number;
+}
+
 export interface SentMessage {
   id: number;
   date: number;
   chatId: string;
+}
+
+export interface SentDiceMessage extends SentMessage {
+  value: number;
 }
 
 export interface EditMessageOptions {
@@ -98,6 +117,8 @@ export interface ITelegramBridge {
   // Messages
   getMessages(chatId: string, limit: number): Promise<TelegramMessage[]>;
   sendMessage(options: SendMessageOptions): Promise<SentMessage>;
+  /** Upload local media and embed it as blocks inside one native Rich Message. User mode only. */
+  sendRichMessage?(options: SendRichMessageOptions): Promise<SentMessage>;
   editMessage(options: EditMessageOptions): Promise<SentMessage>;
   deleteMessage(chatId: string, messageId: number): Promise<boolean>;
   forwardMessage(fromChatId: string, toChatId: string, messageId: number): Promise<SentMessage>;
@@ -114,7 +135,7 @@ export interface ITelegramBridge {
   setTyping(chatId: string): Promise<void>;
   sendReaction(chatId: string, messageId: number, emoji: string): Promise<void>;
   pinMessage(chatId: string, messageId: number): Promise<boolean>;
-  sendDice(chatId: string, emoji?: string): Promise<SentMessage>;
+  sendDice(chatId: string, emoji?: string): Promise<SentDiceMessage>;
 
   // Chat info
   getChatInfo(chatId: string): Promise<ChatInfo>;

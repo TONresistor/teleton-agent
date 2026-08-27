@@ -11,24 +11,22 @@ const modelCache = new Map<string, Model<Api>>();
 
 const GOCOON_MODELS: Record<string, Model<"openai-completions">> = {};
 
-const GROK_BUILD_MODEL_ID = "grok-build";
-
 function clearProviderModels(provider: SupportedProvider): void {
   for (const key of modelCache.keys()) {
     if (key.startsWith(`${provider}:`)) modelCache.delete(key);
   }
 }
 
-function createGrokBuildModel(): Model<"openai-responses"> {
+function createGrokBuildModel(modelId: string): Model<"openai-responses"> {
   return {
-    id: GROK_BUILD_MODEL_ID,
-    name: "Grok Build",
+    id: modelId,
+    name: modelId === "grok-4.6" ? "Grok 4.6" : modelId === "grok-4.5" ? "Grok 4.5" : modelId,
     api: "openai-responses",
     provider: "xai",
     baseUrl: "https://cli-chat-proxy.grok.com/v1",
     headers: {
       "X-XAI-Token-Auth": "xai-grok-cli",
-      "x-grok-model-override": GROK_BUILD_MODEL_ID,
+      "x-grok-model-override": modelId,
       "x-grok-client-version": getGrokBuildCliVersion(),
     },
     reasoning: false,
@@ -142,13 +140,81 @@ export async function registerLocalModels(baseUrl: string): Promise<string[]> {
   }
 }
 
-/** Moonshot backward-compat: old model IDs → kimi-coding IDs */
-const MOONSHOT_MODEL_ALIASES: Record<string, string> = {
-  "kimi-k2.5": "kimi-for-coding",
-  k2p6: "kimi-for-coding",
+/**
+ * Provider-scoped compatibility aliases for model IDs removed from the curated
+ * catalog or retired upstream. Existing config files remain untouched; the
+ * runtime resolves them to the supported replacement and logs the migration.
+ */
+const LEGACY_MODEL_ALIASES: Partial<Record<SupportedProvider, Readonly<Record<string, string>>>> = {
+  codex: {
+    "gpt-5.3-codex": "gpt-5.6-terra",
+    "gpt-5.1-codex-mini": "gpt-5.4-mini",
+  },
+  "grok-build": {
+    "grok-build": "grok-4.6",
+  },
+  google: {
+    "gemini-3.1-flash-lite-preview": "gemini-3.1-flash-lite",
+    "gemini-2.5-pro": "gemini-3.1-pro-preview",
+    "gemini-2.5-flash": "gemini-3.6-flash",
+    "gemini-2.5-flash-lite": "gemini-3.5-flash-lite",
+    "gemini-2.0-flash": "gemini-3.6-flash",
+    "gemini-2.0-flash-lite": "gemini-3.1-flash-lite",
+  },
+  xai: {
+    "grok-4.20-0309-reasoning": "grok-4.5",
+    "grok-4.20-0309-non-reasoning": "grok-4.3",
+    "grok-4-1-fast-reasoning": "grok-4.3",
+    "grok-4-1-fast-non-reasoning": "grok-4.3",
+    "grok-3": "grok-4.3",
+    "grok-3-mini-fast": "grok-4.3",
+  },
+  groq: {
+    "meta-llama/llama-4-maverick-17b-128e-instruct": "openai/gpt-oss-120b",
+    "meta-llama/llama-4-scout-17b-16e-instruct": "openai/gpt-oss-120b",
+    "qwen/qwen3-32b": "openai/gpt-oss-120b",
+    "llama-3.3-70b-versatile": "openai/gpt-oss-120b",
+    "llama-3.1-8b-instant": "openai/gpt-oss-20b",
+  },
+  openrouter: {
+    "nvidia/nemotron-nano-9b-v2": "nvidia/nemotron-nano-9b-v2:free",
+  },
+  moonshot: {
+    "kimi-k2.5": "kimi-for-coding",
+    k2p6: "kimi-for-coding",
+    "kimi-k2-thinking": "kimi-for-coding",
+  },
+  mistral: {
+    "mistral-medium-3.5": "mistral-medium-latest",
+    "devstral-2512": "mistral-medium-latest",
+    "devstral-small-2507": "mistral-medium-latest",
+  },
+  cerebras: {
+    "qwen-3-235b-a22b-instruct-2507": "gpt-oss-120b",
+    "qwen-3-32b": "gpt-oss-120b",
+    "llama3.1-8b": "gemma-4-31b",
+  },
 };
 
+const warnedModelAliases = new Set<string>();
+
+function resolveLegacyModelAlias(provider: SupportedProvider, modelId: string): string {
+  const replacement = LEGACY_MODEL_ALIASES[provider]?.[modelId];
+  if (!replacement) return modelId;
+
+  const warningKey = `${provider}:${modelId}`;
+  if (!warnedModelAliases.has(warningKey)) {
+    warnedModelAliases.add(warningKey);
+    log.warn(
+      `Configured model ${provider}/${modelId} is deprecated or unsupported; using ${replacement}`
+    );
+  }
+
+  return replacement;
+}
+
 export function getProviderModel(provider: SupportedProvider, modelId: string): Model<Api> {
+  modelId = resolveLegacyModelAlias(provider, modelId);
   assertModelAvailable(provider, modelId);
 
   const cacheKey = `${provider}:${modelId}`;
@@ -158,10 +224,11 @@ export function getProviderModel(provider: SupportedProvider, modelId: string): 
   const meta = getProviderMetadata(provider);
 
   if (meta.piAiProvider === "grok-build") {
-    const grokBuildModel = createGrokBuildModel();
-    if (modelId !== grokBuildModel.id) {
+    const supportedModelIds = ["grok-4.6", "grok-4.5"];
+    if (!supportedModelIds.includes(modelId)) {
       throw new Error(`Grok Build model "${modelId}" is not supported`);
     }
+    const grokBuildModel = createGrokBuildModel(modelId);
     modelCache.set(cacheKey, grokBuildModel);
     return grokBuildModel;
   }
@@ -182,11 +249,6 @@ export function getProviderModel(provider: SupportedProvider, modelId: string): 
       return model;
     }
     throw new Error(`Model "${modelId}" is not served by the configured local endpoint`);
-  }
-
-  // Moonshot backward-compat: remap old model IDs to kimi-coding IDs
-  if (provider === "moonshot" && MOONSHOT_MODEL_ALIASES[modelId]) {
-    modelId = MOONSHOT_MODEL_ALIASES[modelId];
   }
 
   try {

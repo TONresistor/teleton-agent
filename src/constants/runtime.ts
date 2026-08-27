@@ -4,7 +4,10 @@ export const SUPPORTED_NODE_RANGE = "^22.22.2 || ^24.15.0 || >=26.0.0";
 type Version = readonly [major: number, minor: number, patch: number];
 
 function parseVersion(value: string): Version | null {
-  const match = /^v?(\d+)\.(\d+)\.(\d+)(?:[-+].*)?$/.exec(value.trim());
+  const match =
+    /^v?(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$/.exec(
+      value.trim()
+    );
   if (!match) return null;
   return [Number(match[1]), Number(match[2]), Number(match[3])];
 }

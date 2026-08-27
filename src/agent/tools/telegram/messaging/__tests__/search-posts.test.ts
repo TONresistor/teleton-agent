@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { Api } from "telegram";
 import type { ToolContext } from "../../../types.js";
+import { toLong } from "../../../../../utils/gramjs-bigint.js";
 import { telegramSearchPostsExecutor, telegramSearchPostsTool } from "../search-posts.js";
 
 const invoke = vi.fn();
@@ -19,8 +20,8 @@ const context = {
 
 function channel(): Api.Channel {
   return new Api.Channel({
-    id: 123n,
-    accessHash: 456n,
+    id: toLong(123),
+    accessHash: toLong(456),
     title: "Public Channel",
     username: "public_channel",
     broadcast: true,
@@ -32,8 +33,8 @@ function channel(): Api.Channel {
 function post(id: number, date = 1000): Api.Message {
   return new Api.Message({
     id,
-    peerId: new Api.PeerChannel({ channelId: 123n }),
-    fromId: new Api.PeerChannel({ channelId: 123n }),
+    peerId: new Api.PeerChannel({ channelId: toLong(123) }),
+    fromId: new Api.PeerChannel({ channelId: toLong(123) }),
     date,
     message: `post-${id}`,
     post: true,
@@ -48,7 +49,7 @@ function quota(remains: number, queryIsFree = false): Api.SearchPostsFlood {
     totalDaily: 10,
     remains,
     waitTill: 1_767_225_600,
-    starsAmount: 25n,
+    starsAmount: toLong(25),
   });
 }
 
@@ -84,11 +85,11 @@ describe("telegram_search_posts", () => {
   });
 
   it.each([
-    [{}, "missing both"],
-    [{ query: "text", hashtag: "tag" }, "both provided"],
-    [{ query: "   " }, "blank query"],
-    [{ hashtag: "#" }, "blank hashtag"],
-  ])("rejects $1 before Telegram when %s", async (params) => {
+    { params: {}, reason: "missing both" },
+    { params: { query: "text", hashtag: "tag" }, reason: "both provided" },
+    { params: { query: "   " }, reason: "blank query" },
+    { params: { hashtag: "#" }, reason: "blank hashtag" },
+  ])("rejects invalid input before Telegram: $reason", async ({ params }) => {
     const result = await telegramSearchPostsExecutor(params, context);
 
     expect(result).toEqual({

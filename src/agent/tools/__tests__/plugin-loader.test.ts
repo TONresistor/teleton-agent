@@ -3,6 +3,7 @@ import { adaptPlugin } from "../plugin-loader.js";
 import { sanitizeConfigForPlugins } from "../plugin-validator.js";
 import { SDK_VERSION } from "@teleton-agent/sdk";
 import type { Config } from "../../../config/schema.js";
+import type Database from "better-sqlite3";
 
 const moduleDbMocks = vi.hoisted(() => ({
   pluginDb: {
@@ -12,6 +13,8 @@ const moduleDbMocks = vi.hoisted(() => ({
     prepare: vi.fn(() => ({ all: () => [] })),
   },
 }));
+
+const mainDb = moduleDbMocks.pluginDb as unknown as Database.Database;
 
 // ─── Mocks ──────────────────────────────────────────────────────
 
@@ -296,7 +299,7 @@ describe("adaptPlugin — SDK version + dependency check", () => {
       ],
     });
     const module = adaptPlugin(raw, "approval-plugin", makeConfig(), [], minimalSdkDeps);
-    module.migrate?.();
+    module.migrate?.(mainDb);
 
     expect(module.tools(makeConfig())[0].requiresApproval).toBe(true);
   });
@@ -381,7 +384,7 @@ describe("sanitizeConfigForPlugins — config isolation", () => {
     // The tools() method wraps executors to sanitize context.config —
     // The executor receives only the restricted SDK context. Plugin modules are
     // trusted application code and are validated at the installation boundary.
-    const tools = module.tools();
+    const tools = module.tools(config);
     expect(tools.length).toBe(1);
     expect(tools[0].tool.name).toBe("test_tool");
   });
@@ -409,7 +412,7 @@ describe("adaptPlugin — database isolation", () => {
     });
 
     const module = adaptPlugin(raw, "db-probe", makeConfig(), [], minimalSdkDeps);
-    module.migrate?.();
+    module.migrate?.(mainDb);
     const [tool] = module.tools(makeConfig());
     await tool.executor({}, { db: agentDb, bridge: minimalSdkDeps.bridge } as never);
 
@@ -443,7 +446,7 @@ describe("adaptPlugin — database isolation", () => {
     });
 
     const module = adaptPlugin(raw, "db-probe", makeConfig(), [], minimalSdkDeps);
-    module.migrate?.();
+    module.migrate?.(mainDb);
     const [tool] = module.tools(makeConfig());
     await tool.executor({}, { db: agentDb } as never);
     await module.start?.({
@@ -472,7 +475,7 @@ describe("adaptPlugin — database isolation", () => {
       [],
       minimalSdkDeps
     );
-    expect(() => migrateFailure.migrate?.()).toThrow("migration failed");
+    expect(() => migrateFailure.migrate?.(mainDb)).toThrow("migration failed");
 
     const startFailure = adaptPlugin(
       makeRawPlugin({
@@ -485,7 +488,7 @@ describe("adaptPlugin — database isolation", () => {
       [],
       minimalSdkDeps
     );
-    startFailure.migrate?.();
+    startFailure.migrate?.(mainDb);
     await expect(startFailure.start?.({} as never)).rejects.toThrow("start failed");
 
     const stopFailure = adaptPlugin(
@@ -499,7 +502,7 @@ describe("adaptPlugin — database isolation", () => {
       [],
       minimalSdkDeps
     );
-    stopFailure.migrate?.();
+    stopFailure.migrate?.(mainDb);
     await stopFailure.start?.({} as never);
     await expect(stopFailure.stop?.()).rejects.toThrow("stop failed");
   });

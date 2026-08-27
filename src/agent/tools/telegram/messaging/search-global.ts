@@ -7,11 +7,11 @@ import {
   createNextSearchCursor,
   createSearchRequestHash,
   decodeSearchCursor,
-  extractSearchPage,
   getMessagesFilter,
   mapSearchTelegramError,
   normalizeSearchText,
   parseSearchDate,
+  resolveSearchPage,
   sortSearchHits,
   type TelegramSearchMessageType,
   type TelegramSearchPeerType,
@@ -182,7 +182,7 @@ export const telegramSearchGlobalExecutor: ToolExecutor<SearchGlobalParams> = as
       })
     );
 
-    const page = extractSearchPage(response);
+    const page = await resolveSearchPage(client, response);
     const messages = sortSearchHits(page.hits, sort);
     const pagination = createNextSearchCursor({
       kind: "global",

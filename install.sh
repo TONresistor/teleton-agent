@@ -9,7 +9,7 @@ set -euo pipefail
 REPO="tonresistor/teleton-agent"
 DOCKER_IMAGE="ghcr.io/${REPO}:latest"
 NPM_PACKAGE="teleton"
-MIN_NODE_VERSION=20
+SUPPORTED_NODE_RANGE="^22.22.2 || ^24.15.0 || >=26.0.0"
 
 # Colors
 RED='\033[0;31m'
@@ -39,17 +39,36 @@ detect_os() {
 has() { command -v "$1" &>/dev/null; }
 
 # ── Check Node.js version ──
+node_version_supported() {
+  local version="${1#v}"
+  if [[ "$version" =~ ^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)([+][0-9A-Za-z-]+(\.[0-9A-Za-z-]+)*)?$ ]]; then
+    local major="${BASH_REMATCH[1]}"
+    local minor="${BASH_REMATCH[2]}"
+    local patch="${BASH_REMATCH[3]}"
+  else
+    return 1
+  fi
+
+  if (( major == 22 )); then
+    (( minor > 22 || (minor == 22 && patch >= 2) ))
+  elif (( major == 24 )); then
+    (( minor > 15 || (minor == 15 && patch >= 0) ))
+  else
+    (( major >= 26 ))
+  fi
+}
+
 check_node() {
   if ! has node; then
     return 1
   fi
   local version
-  version=$(node -v | sed 's/v//' | cut -d. -f1)
-  if [ "$version" -ge "$MIN_NODE_VERSION" ]; then
-    ok "Node.js v$(node -v | sed 's/v//') found"
+  version=$(node -p "process.versions.node" 2>/dev/null) || return 1
+  if node_version_supported "$version"; then
+    ok "Node.js v${version} found"
     return 0
   else
-    warn "Node.js v$(node -v | sed 's/v//') found (need >= ${MIN_NODE_VERSION})"
+    warn "Node.js v${version} found (requires ${SUPPORTED_NODE_RANGE})"
     return 1
   fi
 }
@@ -183,10 +202,10 @@ main() {
     install_docker
 
   else
-    error "Neither Node.js >= ${MIN_NODE_VERSION} nor Docker found.
+    error "Neither a supported Node.js (${SUPPORTED_NODE_RANGE}) nor Docker was found.
 
 Install one of:
-  - Node.js: https://nodejs.org (v${MIN_NODE_VERSION}+)
+  - Node.js: https://nodejs.org (${SUPPORTED_NODE_RANGE})
   - Docker:  https://docs.docker.com/get-docker/"
   fi
 

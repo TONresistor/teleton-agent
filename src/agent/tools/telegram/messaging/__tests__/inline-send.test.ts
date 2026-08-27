@@ -90,7 +90,7 @@ describe("bot_inline_send", () => {
       baseContext
     );
     expect(result.success).toBe(true);
-    expect(result.data.resultId).toBe("result_2");
+    expect(result).toMatchObject({ data: { resultId: "result_2" } });
   });
 
   it("returns error for out-of-range result index", async () => {

@@ -6,6 +6,7 @@ export type {
   InlineButton,
   SendMessageOptions,
   SentMessage,
+  SentDiceMessage,
   EditMessageOptions,
   ReplyContext,
   BotInfo,

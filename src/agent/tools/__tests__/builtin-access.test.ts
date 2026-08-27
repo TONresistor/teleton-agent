@@ -12,6 +12,7 @@ const ADMIN_ONLY_TOOLS = [
   "telegram_get_history",
   "telegram_search_global",
   "telegram_search_posts",
+  "telegram_send_rich_message",
   "telegram_create_scheduled_task",
   "workspace_list",
   "workspace_read",

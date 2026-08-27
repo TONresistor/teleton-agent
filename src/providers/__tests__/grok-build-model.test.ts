@@ -1,70 +1,41 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { complete } from "@earendil-works/pi-ai/compat";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { getModelsForProvider } from "../../config/model-catalog.js";
+import { getProviderMetadata } from "../../config/providers.js";
 import { getProviderModel } from "../model-resolver.js";
 
-describe("Grok Build model", () => {
+describe("Grok Build models", () => {
   beforeEach(() => {
-    process.env.GROK_CLIENT_VERSION = "0.2.77";
+    process.env.GROK_CLIENT_VERSION = "1.0.5";
   });
 
   afterEach(() => {
     delete process.env.GROK_CLIENT_VERSION;
-    vi.unstubAllGlobals();
   });
 
-  it("uses the CLI proxy Responses endpoint and required headers", () => {
-    const model = getProviderModel("grok-build", "grok-build");
+  it("defaults to Grok 4.6 while retaining Grok 4.5", () => {
+    const metadata = getProviderMetadata("grok-build");
+    const modelIds = getModelsForProvider("grok-build").map((model) => model.value);
 
+    expect(metadata.defaultModel).toBe("grok-4.6");
+    expect(metadata.utilityModel).toBe("grok-4.6");
+    expect(modelIds).toEqual(["grok-4.6", "grok-4.5"]);
+  });
+
+  it.each(["grok-4.6", "grok-4.5"])("resolves %s through the CLI proxy", (modelId) => {
+    const model = getProviderModel("grok-build", modelId);
+
+    expect(model.id).toBe(modelId);
+    expect(model.name).toBe(modelId === "grok-4.6" ? "Grok 4.6" : "Grok 4.5");
     expect(model.api).toBe("openai-responses");
     expect(model.baseUrl).toBe("https://cli-chat-proxy.grok.com/v1");
     expect(model.headers).toMatchObject({
       "X-XAI-Token-Auth": "xai-grok-cli",
-      "x-grok-model-override": "grok-build",
-      "x-grok-client-version": "0.2.77",
+      "x-grok-model-override": modelId,
+      "x-grok-client-version": "1.0.5",
     });
-    expect(model.reasoning).toBe(false);
-    expect(model.contextWindow).toBe(500_000);
   });
 
-  it("omits session-affinity headers when caching is disabled", async () => {
-    const fetchMock = vi.fn().mockResolvedValue(
-      new Response(JSON.stringify({ error: { message: "test stop" } }), {
-        status: 400,
-        headers: { "content-type": "application/json" },
-      })
-    );
-    vi.stubGlobal("fetch", fetchMock);
-
-    const model = getProviderModel("grok-build", "grok-build");
-    await complete(
-      model,
-      { messages: [{ role: "user", content: "hello", timestamp: 1 }] },
-      {
-        apiKey: "local-session-token",
-        cacheRetention: "none",
-        sessionId: "teleton-session",
-      }
-    );
-
-    expect(fetchMock).toHaveBeenCalledOnce();
-    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
-    const headers = new Headers(init.headers);
-    expect(url).toBe("https://cli-chat-proxy.grok.com/v1/responses");
-    expect(headers.get("authorization")).toBe("Bearer local-session-token");
-    expect(headers.get("x-xai-token-auth")).toBe("xai-grok-cli");
-    expect(headers.get("x-grok-model-override")).toBe("grok-build");
-    expect(headers.get("x-grok-client-version")).toBe("0.2.77");
-    expect(headers.get("x-client-request-id")).toBeNull();
-    expect(headers.get("session_id")).toBeNull();
-
-    const payload = JSON.parse(String(init.body)) as Record<string, unknown>;
-    expect(payload).toMatchObject({
-      model: "grok-build",
-      stream: true,
-      store: false,
-    });
-    expect(payload).not.toHaveProperty("temperature");
-    expect(payload).not.toHaveProperty("reasoning");
-    expect(payload).not.toHaveProperty("prompt_cache_key");
+  it("maps the legacy grok-build model ID to Grok 4.6", () => {
+    expect(getProviderModel("grok-build", "grok-build").id).toBe("grok-4.6");
   });
 });

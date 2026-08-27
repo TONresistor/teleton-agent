@@ -62,7 +62,7 @@ export function createTelegramSDK(
       requireBridge();
       try {
         const sent = await bridge.sendDice(chatId, emoticon);
-        return { value: 0, messageId: sent.id };
+        return { value: sent.value, messageId: sent.id };
       } catch (error) {
         if (error instanceof PluginSDKError) throw error;
         throw new PluginSDKError(

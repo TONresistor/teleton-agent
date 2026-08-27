@@ -8,6 +8,7 @@ const log = createLogger("Memory");
 import {
   ensureSchema,
   ensureVectorTables,
+  normalizeInvalidTelegramMessageEmbeddings,
   getSchemaVersion,
   runMigrations,
   CURRENT_SCHEMA_VERSION,
@@ -84,6 +85,10 @@ export class MemoryDatabase {
       this.db.prepare("SELECT vec_version() as vec_version").get();
       const dims = this.config.vectorDimensions ?? 512;
       this._dimensionsChanged = ensureVectorTables(this.db, dims);
+      const normalized = normalizeInvalidTelegramMessageEmbeddings(this.db, dims);
+      if (normalized > 0) {
+        log.warn({ messages: normalized }, "Reset invalid Telegram message embeddings");
+      }
       if (this._dimensionsChanged) {
         // Stored vectors have the old width and cannot be copied into the new
         // vec table. Keep the raw messages and schedule fresh embeddings.
@@ -91,7 +96,12 @@ export class MemoryDatabase {
           this.db
             .prepare(
               `UPDATE tg_messages
-               SET embedding = NULL, embedding_status = 'pending', indexed_at = unixepoch()
+               SET embedding = NULL,
+                   embedding_status = CASE
+                     WHEN length(trim(text)) = 0 THEN 'disabled'
+                     ELSE 'pending'
+                   END,
+                   indexed_at = unixepoch()
                WHERE text IS NOT NULL`
             )
             .run();
@@ -100,7 +110,7 @@ export class MemoryDatabase {
             .run();
         })();
       } else {
-        this.rebuildTelegramMessageVectorsIfRequired();
+        this.rebuildTelegramMessageVectorsIfRequired(dims);
       }
       this.vectorReady = true;
     } catch (error) {
@@ -110,7 +120,7 @@ export class MemoryDatabase {
     }
   }
 
-  private rebuildTelegramMessageVectorsIfRequired(): void {
+  private rebuildTelegramMessageVectorsIfRequired(dimensions: number): void {
     const marker = this.db
       .prepare("SELECT value FROM meta WHERE key = 'tg_messages_vector_rebuild_required'")
       .get() as { value: string } | undefined;
@@ -119,9 +129,15 @@ export class MemoryDatabase {
     const rows = this.db
       .prepare(
         `SELECT chat_id, id, embedding FROM tg_messages
-         WHERE embedding IS NOT NULL AND embedding_status = 'ready'`
+         WHERE embedding_status = 'ready'
+           AND typeof(embedding) = 'blob'
+           AND length(embedding) = ?`
       )
-      .all() as Array<{ chat_id: string; id: string; embedding: Buffer }>;
+      .all(dimensions * Float32Array.BYTES_PER_ELEMENT) as Array<{
+      chat_id: string;
+      id: string;
+      embedding: Buffer;
+    }>;
     const insert = this.db.prepare("INSERT INTO tg_messages_vec (id, embedding) VALUES (?, ?)");
 
     this.db.transaction(() => {
@@ -173,7 +189,12 @@ export class MemoryDatabase {
       this.db
         .prepare(
           `UPDATE tg_messages
-           SET embedding = NULL, embedding_status = 'pending', indexed_at = unixepoch()
+           SET embedding = NULL,
+               embedding_status = CASE
+                 WHEN length(trim(text)) = 0 THEN 'disabled'
+                 ELSE 'pending'
+               END,
+               indexed_at = unixepoch()
            WHERE text IS NOT NULL`
         )
         .run();

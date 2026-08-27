@@ -20,7 +20,7 @@ function createMockProcess(): ChildProcess & EventEmitter {
   proc.stderr = new Readable({ read() {} }) as any;
   proc.stdout!.setEncoding = vi.fn().mockReturnThis();
   proc.stderr!.setEncoding = vi.fn().mockReturnThis();
-  proc.pid = 12345;
+  Object.defineProperty(proc, "pid", { value: 12345 });
   proc.kill = vi.fn();
   return proc;
 }

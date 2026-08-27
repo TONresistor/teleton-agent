@@ -24,7 +24,7 @@ This guide covers every method of deploying Teleton Agent, from a quick global i
 
 Before deploying, make sure you have:
 
-1. **Node.js 22.22.2+ LTS** (Node 24 requires 24.15.0+; enforced by `package.json`)
+1. **Node.js `^22.22.2`, `^24.15.0`, or `>=26.0.0`** (enforced by `package.json`)
 2. **npm** (ships with Node.js)
 3. **Telegram API credentials** -- obtain `api_id` and `api_hash` from [my.telegram.org/apps](https://my.telegram.org/apps)
 4. **LLM API key** -- from your chosen provider (Anthropic, OpenAI, Google, xAI, Groq, OpenRouter, Moonshot, Mistral, Cerebras, ZAI, MiniMax, Hugging Face, or Gocoon)

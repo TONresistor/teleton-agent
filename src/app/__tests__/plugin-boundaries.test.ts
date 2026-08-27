@@ -43,7 +43,15 @@ describe("application plugin boundaries", () => {
         module("broken", { onMessage: vi.fn().mockRejectedValue(new Error("boom")) }),
         module("healthy", { onMessage: healthy }),
       ],
-      { chatId: "1", senderId: 2, text: "hello", isGroup: false }
+      {
+        chatId: "1",
+        senderId: 2,
+        text: "hello",
+        isGroup: false,
+        hasMedia: false,
+        messageId: 3,
+        timestamp: new Date(0),
+      }
     );
     expect(healthy).toHaveBeenCalledOnce();
   });

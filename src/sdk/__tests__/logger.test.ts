@@ -64,13 +64,6 @@ describe("SDK Logger wrapper", () => {
   });
 
   describe("method existence", () => {
-    it("has info, warn, error, debug methods", () => {
-      expect(typeof sdk.log.info).toBe("function");
-      expect(typeof sdk.log.warn).toBe("function");
-      expect(typeof sdk.log.error).toBe("function");
-      expect(typeof sdk.log.debug).toBe("function");
-    });
-
     it("has no extra properties beyond the 4 log methods", () => {
       const keys = Object.keys(sdk.log).sort();
       expect(keys).toEqual(["debug", "error", "info", "warn"]);

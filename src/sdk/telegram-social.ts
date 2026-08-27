@@ -20,7 +20,8 @@ import type {
 } from "@teleton-agent/sdk";
 import { PluginSDKError } from "@teleton-agent/sdk";
 import { randomLong, toLong } from "../utils/gramjs-bigint.js";
-import { getApi, toSimpleMessage } from "./telegram-utils.js";
+import { resolveTelegramMessageText } from "../telegram/rich-message.js";
+import { getApi, toSimpleMessageWithText } from "./telegram-utils.js";
 import {
   boundedLimit,
   requireNonEmpty,
@@ -570,17 +571,25 @@ export function createTelegramSocialSDK(
         const client = getClient();
         const dialogs = await client.getDialogs({ limit: bounded });
 
-        return dialogs.map((dialog: any) => ({
-          id: dialog.id?.toString() || null,
-          title: dialog.title || "Unknown",
-          type: (dialog.isChannel ? "channel" : dialog.isGroup ? "group" : "dm") as Dialog["type"],
-          unreadCount: dialog.unreadCount || 0,
-          unreadMentionsCount: dialog.unreadMentionsCount || 0,
-          isPinned: dialog.pinned || false,
-          isArchived: dialog.archived || false,
-          lastMessageDate: dialog.date || null,
-          lastMessage: dialog.message?.message?.substring(0, 100) || null,
-        }));
+        return Promise.all(
+          dialogs.map(async (dialog: any) => ({
+            id: dialog.id?.toString() || null,
+            title: dialog.title || "Unknown",
+            type: (dialog.isChannel
+              ? "channel"
+              : dialog.isGroup
+                ? "group"
+                : "dm") as Dialog["type"],
+            unreadCount: dialog.unreadCount || 0,
+            unreadMentionsCount: dialog.unreadMentionsCount || 0,
+            isPinned: dialog.pinned || false,
+            isArchived: dialog.archived || false,
+            lastMessageDate: dialog.date || null,
+            lastMessage: dialog.message
+              ? (await resolveTelegramMessageText(client, dialog.message)).substring(0, 100) || null
+              : null,
+          }))
+        );
       } catch (error) {
         if (error instanceof PluginSDKError) throw error;
         log.error("telegram.getDialogs() failed:", error);
@@ -598,7 +607,12 @@ export function createTelegramSocialSDK(
           limit: bounded,
         });
 
-        return messages.map(toSimpleMessage);
+        return Promise.all(
+          messages.map(async (message) => {
+            const text = await resolveTelegramMessageText(client, message, chatId);
+            return toSimpleMessageWithText(message, text);
+          })
+        );
       } catch (error) {
         if (error instanceof PluginSDKError) throw error;
         log.error("telegram.getHistory() failed:", error);

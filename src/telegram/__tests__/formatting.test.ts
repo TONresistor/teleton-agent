@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { markdownToTelegramHtml } from "../formatting";
+import { markdownToTelegramHtml } from "../formatting.js";
 
 describe("markdownToTelegramHtml", () => {
   // Core fix: underscores in addresses/identifiers must NOT trigger formatting

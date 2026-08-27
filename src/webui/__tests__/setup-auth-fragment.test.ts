@@ -133,10 +133,11 @@ vi.mock("../../utils/logger.js", () => ({
 
 import { TelegramAuthManager } from "../setup-auth.js";
 import { Api } from "telegram";
+import { toLong } from "../../utils/gramjs-bigint.js";
 
 // ── Helpers ──────────────────────────────────────────────────────────────
 
-function makeSentCode(type: unknown, phoneCodeHash = "hash-abc") {
+function makeSentCode(type: Api.auth.TypeSentCodeType, phoneCodeHash = "hash-abc") {
   const result = new Api.auth.SentCode({ phoneCodeHash, type });
   return result;
 }
@@ -229,7 +230,7 @@ describe("TelegramAuthManager — Fragment support", () => {
 
       // Verify code — SignIn returns Authorization
       const mockUser = new Api.User({
-        id: BigInt(123),
+        id: toLong(123),
         firstName: "Fragment",
         username: "fraguser",
       });

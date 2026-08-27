@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { deliveredTelegramMessageId, type CompletedToolCall } from "../telegram-send-state.js";
+import {
+  deliveredTelegramMessageId,
+  deliveredTelegramRichMessage,
+  type CompletedToolCall,
+} from "../telegram-send-state.js";
 
 describe("deliveredTelegramMessageId", () => {
   it("extracts the ID from the matching successful Telegram send", () => {
@@ -29,5 +33,34 @@ describe("deliveredTelegramMessageId", () => {
     ];
 
     expect(deliveredTelegramMessageId(calls, "42", "hello")).toBeNull();
+  });
+});
+
+describe("deliveredTelegramRichMessage", () => {
+  it("returns the successful rich-message send to the current chat", () => {
+    const richCall: CompletedToolCall = {
+      name: "telegram_send_rich_message",
+      input: { chatId: "42", text: "hello", media: [] },
+      result: { success: true, data: { messageId: 99 } },
+    };
+
+    expect(deliveredTelegramRichMessage([richCall], "42")).toBe(richCall);
+  });
+
+  it("ignores failed sends and sends to another chat", () => {
+    const calls: CompletedToolCall[] = [
+      {
+        name: "telegram_send_rich_message",
+        input: { chatId: "other", text: "hello", media: [] },
+        result: { success: true },
+      },
+      {
+        name: "telegram_send_rich_message",
+        input: { chatId: "42", text: "hello", media: [] },
+        result: { success: false },
+      },
+    ];
+
+    expect(deliveredTelegramRichMessage(calls, "42")).toBeNull();
   });
 });

@@ -39,6 +39,18 @@ export function deliveredTelegramText(
   );
 }
 
+/** Return the successful rich-message send made to this chat, when present. */
+export function deliveredTelegramRichMessage(
+  calls: CompletedToolCall[] | undefined,
+  chatId: string
+): CompletedToolCall | null {
+  return (
+    calls?.find(
+      (call) => call.name === "telegram_send_rich_message" && sentSuccessfullyToChat(call, chatId)
+    ) ?? null
+  );
+}
+
 /** Return the Telegram ID produced by the matching send tool, when available. */
 export function deliveredTelegramMessageId(
   calls: CompletedToolCall[] | undefined,

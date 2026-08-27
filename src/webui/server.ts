@@ -13,7 +13,7 @@ const log = createLogger("WebUI");
 import { generateToken, safeCompare, COOKIE_NAME, COOKIE_MAX_AGE } from "./middleware/auth.js";
 import { logInterceptor } from "./log-interceptor.js";
 import { SHARED_ROUTE_FACTORIES } from "./routes/shared.js";
-import { createAgentRoutes } from "../api/routes/agent.js";
+import { createWebUIAgentRoutes } from "./routes/agent.js";
 import { createConversationRoutes } from "./routes/conversations.js";
 import { createWalletRoutes } from "./routes/wallet.js";
 import { readRawConfig, writeRawConfig } from "../config/configurable-keys.js";
@@ -162,12 +162,7 @@ export class WebUIServer {
     this.app.route("/api/wallet", createWalletRoutes(this.deps));
 
     // Agent lifecycle routes (start/stop/status/restart) with WebUI error envelope
-    this.app.route(
-      "/api/agent",
-      createAgentRoutes(this.deps.lifecycle, {
-        errorResponse: (c, status, _title, detail) => c.json({ error: detail }, status as 503),
-      })
-    );
+    this.app.route("/api/agent", createWebUIAgentRoutes(this.deps.lifecycle));
 
     this.app.get("/api/agent/mode", (c) => {
       const raw = readRawConfig(this.deps.configPath);

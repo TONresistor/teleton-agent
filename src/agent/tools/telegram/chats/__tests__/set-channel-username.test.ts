@@ -23,12 +23,11 @@ const mockContext = {
 describe("telegram_set_channel_username", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockGetEntity.mockResolvedValue({ className: "Channel", id: 100n });
+    mockInvoke.mockResolvedValue(true);
   });
 
   it("sets username successfully", async () => {
-    mockGetEntity.mockResolvedValue({ className: "Channel", id: 100n });
-    mockInvoke.mockResolvedValue(true);
-
     const result = await telegramSetChannelUsernameExecutor(
       { channelId: "100", username: "my_channel" },
       mockContext
@@ -40,9 +39,6 @@ describe("telegram_set_channel_username", () => {
   });
 
   it("strips @ prefix", async () => {
-    mockGetEntity.mockResolvedValue({ className: "Channel", id: 100n });
-    mockInvoke.mockResolvedValue(true);
-
     const result = await telegramSetChannelUsernameExecutor(
       { channelId: "100", username: "@my_channel" },
       mockContext
@@ -53,9 +49,6 @@ describe("telegram_set_channel_username", () => {
   });
 
   it("removes username with empty string", async () => {
-    mockGetEntity.mockResolvedValue({ className: "Channel", id: 100n });
-    mockInvoke.mockResolvedValue(true);
-
     const result = await telegramSetChannelUsernameExecutor(
       { channelId: "100", username: "" },
       mockContext
@@ -89,21 +82,7 @@ describe("telegram_set_channel_username", () => {
     expect(result.error).toContain("not a channel/group");
   });
 
-  it("handles USERNAME_OCCUPIED", async () => {
-    mockGetEntity.mockResolvedValue({ className: "Channel", id: 100n });
-    mockInvoke.mockRejectedValue(new Error("USERNAME_OCCUPIED"));
-
-    const result = await telegramSetChannelUsernameExecutor(
-      { channelId: "100", username: "taken_name" },
-      mockContext
-    );
-
-    expect(result.success).toBe(false);
-    expect(result.error).toContain("already taken");
-  });
-
   it("treats USERNAME_NOT_MODIFIED as success", async () => {
-    mockGetEntity.mockResolvedValue({ className: "Channel", id: 100n });
     mockInvoke.mockRejectedValue(new Error("USERNAME_NOT_MODIFIED"));
 
     const result = await telegramSetChannelUsernameExecutor(
@@ -115,42 +94,20 @@ describe("telegram_set_channel_username", () => {
     expect((result.data as any).message).toContain("No changes");
   });
 
-  it("handles CHAT_ADMIN_REQUIRED", async () => {
-    mockGetEntity.mockResolvedValue({ className: "Channel", id: 100n });
-    mockInvoke.mockRejectedValue(new Error("CHAT_ADMIN_REQUIRED"));
+  it.each([
+    ["USERNAME_OCCUPIED", "taken_name", "already taken"],
+    ["CHAT_ADMIN_REQUIRED", "valid_name", "admin rights"],
+    ["CHANNELS_ADMIN_PUBLIC_TOO_MUCH", "valid_name", "too many public channels"],
+    ["USERNAME_PURCHASE_AVAILABLE", "premium_name", "fragment.com"],
+  ])("maps %s to a useful error", async (telegramError, username, expectedMessage) => {
+    mockInvoke.mockRejectedValue(new Error(telegramError));
 
     const result = await telegramSetChannelUsernameExecutor(
-      { channelId: "100", username: "valid_name" },
+      { channelId: "100", username },
       mockContext
     );
 
     expect(result.success).toBe(false);
-    expect(result.error).toContain("admin rights");
-  });
-
-  it("handles CHANNELS_ADMIN_PUBLIC_TOO_MUCH", async () => {
-    mockGetEntity.mockResolvedValue({ className: "Channel", id: 100n });
-    mockInvoke.mockRejectedValue(new Error("CHANNELS_ADMIN_PUBLIC_TOO_MUCH"));
-
-    const result = await telegramSetChannelUsernameExecutor(
-      { channelId: "100", username: "valid_name" },
-      mockContext
-    );
-
-    expect(result.success).toBe(false);
-    expect(result.error).toContain("too many public channels");
-  });
-
-  it("handles USERNAME_PURCHASE_AVAILABLE", async () => {
-    mockGetEntity.mockResolvedValue({ className: "Channel", id: 100n });
-    mockInvoke.mockRejectedValue(new Error("USERNAME_PURCHASE_AVAILABLE"));
-
-    const result = await telegramSetChannelUsernameExecutor(
-      { channelId: "100", username: "premium_name" },
-      mockContext
-    );
-
-    expect(result.success).toBe(false);
-    expect(result.error).toContain("fragment.com");
+    expect(result.error).toContain(expectedMessage);
   });
 });

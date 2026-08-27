@@ -40,7 +40,8 @@ LLM provider and agentic loop configuration.
 | `agent.provider` | `enum` | `"anthropic"` | LLM provider. One of: `anthropic`, `codex`, `grok-build`, `openai`, `google`, `xai`, `groq`, `openrouter`, `moonshot`, `mistral`, `cerebras`, `zai`, `minimax`, `huggingface`, `gocoon`, `local`. |
 | `agent.api_key` | `string` | `""` | API key for the chosen provider. Can be overridden with `TELETON_API_KEY` env var. |
 | `agent.model` | `string` | `"claude-haiku-4-5-20251001"` | Primary model ID. Auto-detected from provider if not set (only for non-Anthropic providers). |
-| `agent.utility_model` | `string` | *auto-detected* | Cheap/fast model used for summarization and compaction. If omitted, the platform selects one based on the provider (e.g., `claude-haiku-4-5-20251001` for Anthropic, `gpt-4o-mini` for OpenAI). |
+| `agent.reasoning_effort` | `enum` | `"medium"` | Codex reasoning effort: `none`, `minimal`, `low`, `medium`, `high`, `xhigh`, or `max`. |
+| `agent.utility_model` | `string` | *auto-detected* | Cheap/fast model used for summarization and compaction. If omitted, the platform selects one based on the provider (e.g., `claude-haiku-4-5-20251001` for Anthropic, `gpt-5.4-nano` for OpenAI). |
 | `agent.base_url` | `string` | *optional* | Base URL for local LLM server (e.g., `http://localhost:11434/v1`). Must be a valid URL. |
 | `agent.max_tokens` | `number` | `4096` | Maximum tokens in each LLM response. |
 | `agent.temperature` | `number` | `0.7` | Sampling temperature (0.0 = deterministic, 1.0 = creative). |
@@ -67,6 +68,7 @@ agent:
   provider: "anthropic"
   api_key: "sk-ant-..."
   model: "claude-haiku-4-5-20251001"
+  reasoning_effort: "medium"
   utility_model: "claude-haiku-4-5-20251001"
   max_tokens: 4096
   temperature: 0.7
@@ -89,29 +91,30 @@ When you change the `provider` and omit `model`, the platform auto-selects:
 | Provider | Default Model | Default Utility Model |
 |----------|--------------|----------------------|
 | `anthropic` | `claude-haiku-4-5-20251001` | `claude-haiku-4-5-20251001` |
-| `codex` | `gpt-5.5` | `gpt-5.1-codex-mini` |
-| `grok-build` | `grok-build` | `grok-build` |
-| `openai` | `gpt-5.5` | `gpt-4o-mini` |
-| `google` | `gemini-2.5-flash` | `gemini-2.0-flash-lite` |
-| `xai` | `grok-3` | `grok-3-mini-fast` |
-| `groq` | `llama-3.3-70b-versatile` | `llama-3.1-8b-instant` |
-| `openrouter` | `anthropic/claude-opus-4.5` | `google/gemini-2.5-flash-lite` |
-| `moonshot` | `k2p6` | `k2p6` |
-| `mistral` | `devstral-small-2507` | `ministral-8b-latest` |
-| `cerebras` | `qwen-3-235b-a22b-instruct-2507` | `llama3.1-8b` |
-| `zai` | `glm-5.1` | `glm-4.5-air` |
-| `minimax` | `MiniMax-M2.7` | `MiniMax-M2.7` |
-| `huggingface` | `deepseek-ai/DeepSeek-V3.2` | `Qwen/Qwen3-Next-80B-A3B-Instruct` |
+| `codex` | `gpt-5.6-terra` | `gpt-5.4-mini` |
+| `grok-build` | `grok-4.6` | `grok-4.6` |
+| `openai` | `gpt-5.6-terra` | `gpt-5.4-nano` |
+| `google` | `gemini-3.6-flash` | `gemini-3.5-flash-lite` |
+| `xai` | `grok-4.5` | `grok-4.3` |
+| `groq` | `openai/gpt-oss-120b` | `openai/gpt-oss-20b` |
+| `openrouter` | `anthropic/claude-opus-5` | `google/gemini-3.5-flash-lite` |
+| `moonshot` | `kimi-for-coding` | `kimi-for-coding` |
+| `mistral` | `mistral-medium-latest` | `mistral-small-2603` |
+| `cerebras` | `gpt-oss-120b` | `gemma-4-31b` |
+| `zai` | `glm-5.2` | `glm-5-turbo` |
+| `minimax` | `MiniMax-M3` | `MiniMax-M3` |
+| `huggingface` | `deepseek-ai/DeepSeek-V4-Pro` | `Qwen/Qwen3-Next-80B-A3B-Instruct` |
 | `gocoon` | `Qwen/Qwen3-32B` | `Qwen/Qwen3-32B` |
 | `local` | `auto` | `auto` |
 
 `grok-build` reads the browser/OIDC session created by `grok login` from
 `$GROK_HOME/auth.json` (default: `~/.grok/auth.json`) and connects directly to
-the Grok Build CLI proxy. The session token is not stored in Teleton's config.
+the Grok Build CLI proxy. `grok-4.6` is the default and `grok-4.5` remains
+available for existing configurations. The session token is not stored in
+Teleton's config.
 
-Codex model `gpt-5.6-luna` is hidden and rejected by default because the live
-backend does not currently advertise it. Keep production on `gpt-5.6-terra`;
-`TELETON_ENABLE_CODEX_LUNA=true` exists only for controlled backend revalidation.
+Codex exposes the full GPT-5.6 family. `gpt-5.6-terra` is the balanced default;
+`gpt-5.6-sol` favors capability and `gpt-5.6-luna` favors speed and cost.
 
 ---
 

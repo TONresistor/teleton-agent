@@ -196,7 +196,16 @@ export function createConfigRoutes(deps: WebUIServerDeps) {
     try {
       const parsed = meta.parse(value);
       const raw = readRawConfig(deps.configPath);
+      const previousValue = getNestedValue(raw, key);
       setNestedValue(raw, key, parsed);
+
+      // Provider and primary model are one restart-bound configuration change.
+      // Never derive the model from catalog order, and do not hot-reload it
+      // separately while the old provider is still active.
+      if (key === "agent.provider" && parsed !== previousValue) {
+        const providerMeta = getProviderMetadata(parsed as SupportedProvider);
+        setNestedValue(raw, "agent.model", providerMeta.defaultModel);
+      }
 
       // Auto-sync: setting owner_id also adds it to admin_ids
       if (key === "telegram.owner_id" && typeof parsed === "number") {

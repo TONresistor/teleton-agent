@@ -10,9 +10,14 @@ import type { AgentLifecycle, StateChangeEvent } from "../agent/lifecycle.js";
 export function createLifecycleSSE(c: Context, lifecycle: AgentLifecycle) {
   return streamSSE(c, async (stream) => {
     let aborted = false;
+    let resolveAbort!: () => void;
+    const abortPromise = new Promise<void>((resolve) => {
+      resolveAbort = resolve;
+    });
 
     stream.onAbort(() => {
       aborted = true;
+      resolveAbort();
     });
 
     // Push current state immediately on connection
@@ -42,17 +47,22 @@ export function createLifecycleSSE(c: Context, lifecycle: AgentLifecycle) {
     };
 
     lifecycle.on("stateChange", onStateChange);
-
-    // Heartbeat loop + keep connection alive
-    while (!aborted) {
-      await stream.sleep(30_000);
-      if (aborted) break;
-      await stream.writeSSE({
-        event: "ping",
-        data: "",
-      });
+    try {
+      // Heartbeat loop + keep connection alive. Racing the timer with abort
+      // ensures the lifecycle listener is removed immediately on disconnect.
+      while (!aborted) {
+        const outcome = await Promise.race([
+          stream.sleep(30_000).then(() => "heartbeat" as const),
+          abortPromise.then(() => "abort" as const),
+        ]);
+        if (outcome === "abort" || aborted) break;
+        await stream.writeSSE({
+          event: "ping",
+          data: "",
+        });
+      }
+    } finally {
+      lifecycle.off("stateChange", onStateChange);
     }
-
-    lifecycle.off("stateChange", onStateChange);
   });
 }

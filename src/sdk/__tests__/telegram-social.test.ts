@@ -126,7 +126,7 @@ describe("createTelegramSocialSDK", () => {
       ["sendGift", () => sdk.sendGift(123, "gift1")],
       ["getAvailableGifts", () => sdk.getAvailableGifts()],
       ["getMyGifts", () => sdk.getMyGifts()],
-      ["getResaleGifts", () => sdk.getResaleGifts()],
+      ["getResaleGifts", () => sdk.getResaleGifts("collection-1")],
       ["buyResaleGift", () => sdk.buyResaleGift("gift1")],
       ["sendStory", () => sdk.sendStory("/tmp/img.jpg")],
     ];
@@ -924,7 +924,7 @@ describe("createTelegramSocialSDK", () => {
   describe("getResaleGifts()", () => {
     it("throws on invoke error", async () => {
       // Layer 222 has GetResaleStarGifts natively — test invoke failure path
-      await expect(sdk.getResaleGifts()).rejects.toMatchObject({
+      await expect(sdk.getResaleGifts("collection-1")).rejects.toMatchObject({
         code: "OPERATION_FAILED",
       });
     });

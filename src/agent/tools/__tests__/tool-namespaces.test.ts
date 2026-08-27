@@ -31,6 +31,7 @@ describe("tool namespaces", () => {
   it.each([
     ["exec_run", "exec", "exec"],
     ["telegram_send_message", "telegram", "telegram.messaging"],
+    ["telegram_send_rich_message", "telegram", "telegram.media"],
     ["telegram_schedule_message", "telegram", "telegram.scheduling"],
     ["telegram_search_global", "telegram", "telegram.chats"],
     ["telegram_search_posts", "telegram", "telegram.chats"],

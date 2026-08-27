@@ -1,7 +1,14 @@
 import { readFileSync, writeFileSync, existsSync } from "fs";
 import { parse, stringify } from "yaml";
 import { expandPath } from "./loader.js";
-import { ConfigSchema, DMPolicy, GroupPolicy, ExecMode, ExecScope } from "./schema.js";
+import {
+  ConfigSchema,
+  DMPolicy,
+  GroupPolicy,
+  ExecMode,
+  ExecScope,
+  ReasoningEffort,
+} from "./schema.js";
 import { getSupportedProviders } from "./providers.js";
 
 // ── Types ──────────────────────────────────────────────────────────────
@@ -146,6 +153,18 @@ export const CONFIGURABLE_KEYS: Record<string, ConfigKeyMeta> = {
     sensitive: false,
     hotReload: "instant",
     validate: nonEmpty,
+    mask: identity,
+    parse: identity,
+  },
+  "agent.reasoning_effort": {
+    type: "enum",
+    category: "Agent",
+    label: "Reasoning Effort",
+    description: "Reasoning effort for Codex models",
+    sensitive: false,
+    hotReload: "instant",
+    options: ReasoningEffort.options,
+    validate: enumValidator(ReasoningEffort.options),
     mask: identity,
     parse: identity,
   },

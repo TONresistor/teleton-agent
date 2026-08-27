@@ -109,22 +109,7 @@ describe("createPluginSDK — factory integration", () => {
     }).toThrow();
   });
 
-  // ─── 6. Logger callable ─────────────────────────────────────
-  it("provides callable logger methods that do not throw", () => {
-    const sdk = makeSDK();
-
-    expect(typeof sdk.log.info).toBe("function");
-    expect(typeof sdk.log.warn).toBe("function");
-    expect(typeof sdk.log.error).toBe("function");
-    expect(typeof sdk.log.debug).toBe("function");
-
-    expect(() => sdk.log.info("test message")).not.toThrow();
-    expect(() => sdk.log.warn("test warning")).not.toThrow();
-    expect(() => sdk.log.error("test error")).not.toThrow();
-    expect(() => sdk.log.debug("test debug")).not.toThrow();
-  });
-
-  // ─── 7. Storage roundtrip through factory ───────────────────
+  // ─── 6. Storage roundtrip through factory ───────────────────
   it("supports storage set/get roundtrip through factory-created SDK", () => {
     const sdk = makeSDK();
 

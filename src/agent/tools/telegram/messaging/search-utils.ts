@@ -2,6 +2,10 @@ import { createHash } from "node:crypto";
 import { Api } from "telegram";
 import { getInputPeer, getPeerId } from "telegram/Utils.js";
 import { mapTelegramError } from "../../../../sdk/telegram-utils.js";
+import {
+  renderTelegramMessageText,
+  resolveTelegramMessageText,
+} from "../../../../telegram/rich-message.js";
 import { getErrorMessage } from "../../../../utils/errors.js";
 import { toLong } from "../../../../utils/gramjs-bigint.js";
 
@@ -318,7 +322,8 @@ function reactionCount(message: Api.Message): number | null {
 
 function formatSearchHit(
   message: Api.Message,
-  entities: Map<string, SearchEntity>
+  entities: Map<string, SearchEntity>,
+  text = renderTelegramMessageText(message)
 ): TelegramSearchHit {
   const chatId = getPeerId(message.peerId);
   const chatEntity = entities.get(chatId);
@@ -329,7 +334,7 @@ function formatSearchHit(
 
   return {
     id: message.id,
-    text: message.message ?? "",
+    text,
     date: message.date,
     timestamp: new Date(message.date * 1000).toISOString(),
     chatId,
@@ -366,6 +371,22 @@ export function extractSearchPage(response: Api.messages.TypeMessages): Extracte
     searchFlood: "searchFlood" in response ? (response.searchFlood ?? null) : null,
     entities,
   };
+}
+
+export async function resolveSearchPage(
+  client: Parameters<typeof resolveTelegramMessageText>[0],
+  response: Api.messages.TypeMessages
+): Promise<ExtractedSearchPage> {
+  const page = extractSearchPage(response);
+  const messages = page.rawMessages.filter(
+    (message): message is Api.Message => message instanceof Api.Message
+  );
+  const hits = await Promise.all(
+    messages.map(async (message) =>
+      formatSearchHit(message, page.entities, await resolveTelegramMessageText(client, message))
+    )
+  );
+  return { ...page, hits };
 }
 
 export function sortSearchHits(

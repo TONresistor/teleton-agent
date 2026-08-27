@@ -452,6 +452,94 @@ export function ensureVectorTables(db: Database.Database, dimensions: number): b
   return dimensionsChanged;
 }
 
+/** Normalize legacy/corrupt message embeddings before rebuilding the vec0 table. */
+export function normalizeInvalidTelegramMessageEmbeddings(
+  db: Database.Database,
+  dimensions: number
+): number {
+  const expectedBytes = dimensions * Float32Array.BYTES_PER_ELEMENT;
+  let changes = 0;
+
+  db.transaction(() => {
+    changes = db
+      .prepare(
+        `UPDATE tg_messages
+         SET embedding = NULL,
+             embedding_status = CASE
+               WHEN text IS NULL OR length(trim(text)) = 0 THEN 'disabled'
+               ELSE 'pending'
+             END,
+             indexed_at = unixepoch()
+         WHERE embedding_status = 'ready'
+           AND (
+             embedding IS NULL
+             OR typeof(embedding) != 'blob'
+             OR length(embedding) != ?
+           )`
+      )
+      .run(expectedBytes).changes;
+
+    const rebuildRequired =
+      changes > 0 ||
+      (
+        db
+          .prepare("SELECT value FROM meta WHERE key = 'tg_messages_vector_rebuild_required'")
+          .get() as { value?: string } | undefined
+      )?.value === "1";
+
+    if (rebuildRequired) {
+      const nonFiniteRows: Array<{ chat_id: string; id: string }> = [];
+      const candidates = db
+        .prepare(
+          `SELECT chat_id, id, embedding FROM tg_messages
+           WHERE embedding_status = 'ready'
+             AND typeof(embedding) = 'blob'
+             AND length(embedding) = ?`
+        )
+        .iterate(expectedBytes) as Iterable<{
+        chat_id: string;
+        id: string;
+        embedding: Buffer;
+      }>;
+
+      for (const row of candidates) {
+        let finite = true;
+        for (let offset = 0; offset < row.embedding.length; offset += 4) {
+          if (!Number.isFinite(row.embedding.readFloatLE(offset))) {
+            finite = false;
+            break;
+          }
+        }
+        if (!finite) nonFiniteRows.push({ chat_id: row.chat_id, id: row.id });
+      }
+
+      const reset = db.prepare(
+        `UPDATE tg_messages
+         SET embedding = NULL,
+             embedding_status = CASE
+               WHEN text IS NULL OR length(trim(text)) = 0 THEN 'disabled'
+               ELSE 'pending'
+             END,
+             indexed_at = unixepoch()
+         WHERE chat_id = ? AND id = ?`
+      );
+      for (const row of nonFiniteRows) {
+        changes += reset.run(row.chat_id, row.id).changes;
+      }
+    }
+
+    if (changes > 0) {
+      db.prepare(
+        `INSERT INTO meta (key, value, updated_at)
+         VALUES ('tg_messages_vector_rebuild_required', '1', unixepoch())
+         ON CONFLICT(key) DO UPDATE SET value = '1', updated_at = unixepoch()`
+      ).run();
+    }
+  })();
+
+  return changes;
+}
+
 export function getSchemaVersion(db: Database.Database): string | null {
   const row = db.prepare(`SELECT value FROM meta WHERE key = 'schema_version'`).get() as
     | { value: string }

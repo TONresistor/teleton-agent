@@ -139,6 +139,32 @@ describe("buildSystemPrompt() restructured sections", () => {
     expect(prompt).toContain("private owner profile");
     expect(prompt).toContain("private strategy");
   });
+
+  it("advertises native Rich Markdown for structured user-mode replies", () => {
+    const prompt = buildSystemPrompt({
+      soul: "Custom production soul.",
+      telegramMode: "user",
+    });
+
+    expect(prompt).toContain("## Telegram Rich Formatting");
+    expect(prompt).toContain("Plain responses use regular Telegram text");
+    expect(prompt).toContain("Structured responses");
+    expect(prompt).toContain("GitHub-Flavored Markdown");
+    expect(prompt).toContain("tables");
+    expect(prompt).toContain("<details>");
+    expect(prompt).toContain("telegram_send_rich_message");
+    expect(prompt).toContain("tg://photo?id=");
+    expect(prompt).toContain("below 4000 characters");
+  });
+
+  it("does not advertise Rich Markdown in the unsupported bot bridge", () => {
+    const prompt = buildSystemPrompt({
+      soul: "Custom production soul.",
+      telegramMode: "bot",
+    });
+
+    expect(prompt).not.toContain("## Telegram Rich Formatting");
+  });
 });
 
 // ── DEFAULT_SOUL / loadSoul() ────────────────────────────────────────────────

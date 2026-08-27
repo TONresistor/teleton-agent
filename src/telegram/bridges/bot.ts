@@ -5,6 +5,7 @@ import { classifyMedia } from "../bridge-interface.js";
 import type {
   ITelegramBridge,
   SentMessage,
+  SentDiceMessage,
   SendMessageOptions,
   EditMessageOptions,
   BotInfo,
@@ -253,7 +254,7 @@ export class GrammyBotBridge implements ITelegramBridge {
     return true;
   }
 
-  async sendDice(chatId: string, emoji?: string): Promise<SentMessage> {
+  async sendDice(chatId: string, emoji?: string): Promise<SentDiceMessage> {
     const result = await this.bot.api.sendDice(
       this.toChatId(chatId),
       emoji as Parameters<typeof this.bot.api.sendDice>[1]
@@ -263,6 +264,7 @@ export class GrammyBotBridge implements ITelegramBridge {
       id: result.message_id,
       date: result.date,
       chatId,
+      value: result.dice.value,
     };
   }
 
@@ -459,7 +461,9 @@ export class GrammyBotBridge implements ITelegramBridge {
       senderId: msg.from?.id ?? 0,
       senderUsername: msg.from?.username,
       senderFirstName: msg.from?.first_name,
-      text: msg.text || msg.caption || "",
+      text: msg.dice
+        ? `[Dice: ${msg.dice.emoji} = ${msg.dice.value}]`
+        : msg.text || msg.caption || "",
       isGroup: msg.chat.type === "group" || msg.chat.type === "supergroup",
       isChannel: (msg.chat.type as string) === "channel",
       isBot: msg.from?.is_bot ?? false,
@@ -485,6 +489,7 @@ export class GrammyBotBridge implements ITelegramBridge {
         "message:voice",
         "message:document",
         "message:sticker",
+        "message:dice",
       ],
       async (ctx) => {
         if (!ctx.message) return;

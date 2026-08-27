@@ -3,6 +3,7 @@ import Database from "better-sqlite3";
 import {
   ensureSchema,
   ensureVectorTables,
+  normalizeInvalidTelegramMessageEmbeddings,
   getSchemaVersion,
   setSchemaVersion,
   runMigrations,
@@ -1283,6 +1284,41 @@ describe("Memory Schema", () => {
   // ============================================
 
   describe("Vector Tables", () => {
+    it("normalizes invalid legacy message embeddings before a rebuild", () => {
+      ensureSchema(db);
+      db.prepare("INSERT INTO tg_chats (id, type) VALUES ('chat-a', 'group')").run();
+      const insert = db.prepare(
+        `INSERT INTO tg_messages
+           (id, chat_id, text, embedding, embedding_status, timestamp)
+         VALUES (?, 'chat-a', ?, ?, 'ready', 1)`
+      );
+      insert.run("empty-media", "", Buffer.alloc(0));
+      insert.run("corrupt-text", "retry me", Buffer.alloc(0));
+      insert.run(
+        "non-finite",
+        "retry this too",
+        Buffer.from(new Float32Array([0.1, NaN, 0.3]).buffer)
+      );
+      insert.run("valid", "keep me", Buffer.from(new Float32Array([0.1, 0.2, 0.3]).buffer));
+
+      expect(normalizeInvalidTelegramMessageEmbeddings(db, 3)).toBe(3);
+      expect(
+        db.prepare("SELECT id, embedding, embedding_status FROM tg_messages ORDER BY id").all()
+      ).toEqual([
+        { id: "corrupt-text", embedding: null, embedding_status: "pending" },
+        { id: "empty-media", embedding: null, embedding_status: "disabled" },
+        { id: "non-finite", embedding: null, embedding_status: "pending" },
+        {
+          id: "valid",
+          embedding: Buffer.from(new Float32Array([0.1, 0.2, 0.3]).buffer),
+          embedding_status: "ready",
+        },
+      ]);
+      expect(
+        db.prepare("SELECT value FROM meta WHERE key = 'tg_messages_vector_rebuild_required'").get()
+      ).toEqual({ value: "1" });
+    });
+
     it("ensureVectorTables creates knowledge_vec and tg_messages_vec tables", () => {
       ensureSchema(db);
 

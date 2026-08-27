@@ -8,11 +8,11 @@ import {
   createNextSearchCursor,
   createSearchRequestHash,
   decodeSearchCursor,
-  extractSearchPage,
   mapSearchTelegramError,
   normalizeHashtag,
   normalizeSearchQuota,
   normalizeSearchText,
+  resolveSearchPage,
   sortSearchHits,
   type TelegramSearchQuota,
   type TelegramSearchSort,
@@ -141,7 +141,7 @@ export const telegramSearchPostsExecutor: ToolExecutor<SearchPostsParams> = asyn
       })
     );
 
-    const page = extractSearchPage(response);
+    const page = await resolveSearchPage(client, response);
     const posts = sortSearchHits(page.hits, sort);
     if (page.searchFlood) quota = normalizeSearchQuota(page.searchFlood);
     const pagination = createNextSearchCursor({

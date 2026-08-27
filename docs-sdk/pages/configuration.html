@@ -29,7 +29,7 @@
         <aside class="sidebar" id="sidebar"><nav class="sidebar-nav">
             <div class="nav-section"><div class="nav-section-title">Start Here</div><ul class="nav-list"><div class="nav-list-inner"><li><a href="/index.html" class="nav-link">Introduction</a></li><li><a href="installation.html" class="nav-link">Installation</a></li><li><a href="quickstart.html" class="nav-link">Quick Start</a></li><li><a href="configuration.html" class="nav-link active">Configuration</a></li></div></ul></div>
 <div class="nav-section"><div class="nav-section-title">Understand</div><ul class="nav-list"><div class="nav-list-inner"><li><a href="architecture.html" class="nav-link">Architecture</a></li><li><a href="agentic-loop.html" class="nav-link">Agentic Loop</a></li><li><a href="memory-system.html" class="nav-link">Memory System</a></li><li><a href="security.html" class="nav-link">Security</a></li></div></ul></div>
-<div class="nav-section"><div class="nav-section-title">Tools</div><ul class="nav-list"><div class="nav-list-inner"><li><a href="tools-telegram.html" class="nav-link">Telegram (85)</a></li><li><a href="tools-ton.html" class="nav-link">TON Blockchain (15)</a></li><li><a href="tools-dex.html" class="nav-link">DEX Trading (10)</a></li><li><a href="tools-dns.html" class="nav-link">DNS &amp; Domains (8)</a></li><li><a href="tools-other.html" class="nav-link">Utilities</a></li></div></ul></div>
+<div class="nav-section"><div class="nav-section-title">Tools</div><ul class="nav-list"><div class="nav-list-inner"><li><a href="tools-telegram.html" class="nav-link">Telegram (86)</a></li><li><a href="tools-ton.html" class="nav-link">TON Blockchain (15)</a></li><li><a href="tools-dex.html" class="nav-link">DEX Trading (10)</a></li><li><a href="tools-dns.html" class="nav-link">DNS &amp; Domains (8)</a></li><li><a href="tools-other.html" class="nav-link">Utilities</a></li></div></ul></div>
 <div class="nav-section"><div class="nav-section-title">Build Plugins</div><ul class="nav-list"><div class="nav-list-inner"><li><a href="plugin-sdk.html" class="nav-link">Plugin SDK</a></li></div></ul></div>
 <div class="nav-section"><div class="nav-section-title">SDK Reference</div><ul class="nav-list"><div class="nav-list-inner"><li><a href="sdk-overview.html" class="nav-link">Overview</a></li><li><a href="sdk-ton.html" class="nav-link">TON Blockchain</a></li><li><a href="sdk-dex.html" class="nav-link">DEX Trading</a></li><li><a href="sdk-dns.html" class="nav-link">DNS &amp; Domains</a></li><li><a href="sdk-telegram.html" class="nav-link">Telegram</a></li><li><a href="sdk-bot.html" class="nav-link">Bot SDK</a></li><li><a href="sdk-utilities.html" class="nav-link">Utilities</a></li><li><a href="sdk-errors.html" class="nav-link">Error Handling</a></li><li><a href="tutorial-payment-bot.html" class="nav-link">Tutorial: Payment Bot</a></li><li><a href="tutorial-dex-bot.html" class="nav-link">Tutorial: DEX Bot</a></li><li><a href="tutorial-inline-bot.html" class="nav-link">Tutorial: Inline Bot</a></li></div></ul></div>
 <div class="nav-section"><div class="nav-section-title">Deploy &amp; Manage</div><ul class="nav-list"><div class="nav-list-inner"><li><a href="deploy-docker.html" class="nav-link">Docker</a></li><li><a href="cli-reference.html" class="nav-link">CLI Reference</a></li></div></ul></div>
@@ -48,6 +48,7 @@
                         <tr><td><code>agent.provider</code></td><td><code>enum</code></td><td><code>"anthropic"</code></td><td>LLM provider. One of: <code>anthropic</code>, <code>claude-code</code>, <code>openai</code>, <code>google</code>, <code>xai</code>, <code>groq</code>, <code>openrouter</code>, <code>moonshot</code>, <code>mistral</code>, <code>cerebras</code>, <code>zai</code>, <code>minimax</code>, <code>huggingface</code>, <code>cocoon</code>, <code>local</code>.</td></tr>
                         <tr><td><code>agent.api_key</code></td><td><code>string</code></td><td><code>""</code></td><td>API key for the chosen provider. Can be overridden with <code>TELETON_API_KEY</code> env var.</td></tr>
                         <tr><td><code>agent.model</code></td><td><code>string</code></td><td><code>"claude-haiku-4-5-20251001"</code></td><td>Primary model ID.</td></tr>
+                        <tr><td><code>agent.reasoning_effort</code></td><td><code>enum</code></td><td><code>"medium"</code></td><td>Codex reasoning effort: <code>none</code>, <code>minimal</code>, <code>low</code>, <code>medium</code>, <code>high</code>, <code>xhigh</code>, or <code>max</code>.</td></tr>
                         <tr><td><code>agent.utility_model</code></td><td><code>string</code></td><td><em>auto-detected</em></td><td>Cheap/fast model for summarization and compaction.</td></tr>
                         <tr><td><code>agent.base_url</code></td><td><code>string</code></td><td><em>optional</em></td><td>Base URL for local LLM server (e.g., <code>http://localhost:11434/v1</code>).</td></tr>
                         <tr><td><code>agent.max_tokens</code></td><td><code>number</code></td><td><code>4096</code></td><td>Maximum tokens in each LLM response.</td></tr>
@@ -72,12 +73,20 @@
                     <thead><tr><th>Provider</th><th>Default Model</th><th>Default Utility Model</th></tr></thead>
                     <tbody>
                         <tr><td><code>anthropic</code></td><td><code>claude-haiku-4-5-20251001</code></td><td><code>claude-haiku-4-5-20251001</code></td></tr>
-                        <tr><td><code>openai</code></td><td><code>gpt-5.4</code></td><td><code>gpt-4o-mini</code></td></tr>
-                        <tr><td><code>google</code></td><td><code>gemini-2.5-flash</code></td><td><code>gemini-2.0-flash-lite</code></td></tr>
-                        <tr><td><code>xai</code></td><td><code>grok-3</code></td><td><code>grok-3-mini-fast</code></td></tr>
-                        <tr><td><code>groq</code></td><td><code>llama-3.3-70b-versatile</code></td><td><code>llama-3.1-8b-instant</code></td></tr>
-                        <tr><td><code>openrouter</code></td><td><code>anthropic/claude-opus-4.5</code></td><td><code>google/gemini-2.5-flash-lite</code></td></tr>
-                        <tr><td><code>mistral</code></td><td><code>devstral-small-2507</code></td><td><code>ministral-8b-latest</code></td></tr>
+                        <tr><td><code>codex</code></td><td><code>gpt-5.6-terra</code></td><td><code>gpt-5.4-mini</code></td></tr>
+                        <tr><td><code>grok-build</code></td><td><code>grok-build</code></td><td><code>grok-build</code></td></tr>
+                        <tr><td><code>openai</code></td><td><code>gpt-5.6-terra</code></td><td><code>gpt-5.4-nano</code></td></tr>
+                        <tr><td><code>google</code></td><td><code>gemini-3.6-flash</code></td><td><code>gemini-3.5-flash-lite</code></td></tr>
+                        <tr><td><code>xai</code></td><td><code>grok-4.5</code></td><td><code>grok-4.3</code></td></tr>
+                        <tr><td><code>groq</code></td><td><code>openai/gpt-oss-120b</code></td><td><code>openai/gpt-oss-20b</code></td></tr>
+                        <tr><td><code>openrouter</code></td><td><code>anthropic/claude-opus-5</code></td><td><code>google/gemini-3.5-flash-lite</code></td></tr>
+                        <tr><td><code>moonshot</code></td><td><code>kimi-for-coding</code></td><td><code>kimi-for-coding</code></td></tr>
+                        <tr><td><code>mistral</code></td><td><code>mistral-medium-latest</code></td><td><code>mistral-small-2603</code></td></tr>
+                        <tr><td><code>cerebras</code></td><td><code>gpt-oss-120b</code></td><td><code>gemma-4-31b</code></td></tr>
+                        <tr><td><code>zai</code></td><td><code>glm-5.2</code></td><td><code>glm-5-turbo</code></td></tr>
+                        <tr><td><code>minimax</code></td><td><code>MiniMax-M3</code></td><td><code>MiniMax-M3</code></td></tr>
+                        <tr><td><code>huggingface</code></td><td><code>deepseek-ai/DeepSeek-V4-Pro</code></td><td><code>Qwen/Qwen3-Next-80B-A3B-Instruct</code></td></tr>
+                        <tr><td><code>gocoon</code></td><td><code>Qwen/Qwen3-32B</code></td><td><code>Qwen/Qwen3-32B</code></td></tr>
                         <tr><td><code>local</code></td><td><code>auto</code></td><td><code>auto</code></td></tr>
                     </tbody>
                 </table></div>
@@ -86,6 +95,7 @@
   provider: "anthropic"
   api_key: "sk-ant-..."
   model: "claude-haiku-4-5-20251001"
+  reasoning_effort: "medium"
   utility_model: "claude-haiku-4-5-20251001"
   max_tokens: 4096
   temperature: 0.7
