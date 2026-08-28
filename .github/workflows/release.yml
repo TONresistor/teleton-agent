@@ -32,10 +32,9 @@ jobs:
 
       - run: npm ci
       - run: cd web && npm ci
-      - run: npm run build -w packages/sdk
+      - run: npm run build
       - run: node scripts/check-sdk-package.mjs
       - run: npm run typecheck
-      - run: npm run build
       - run: node dist/cli/index.js --help
 
       - name: Run tests
@@ -44,12 +43,7 @@ jobs:
       - name: Enforce SDK coverage
         run: npm run test:sdk:coverage
 
-      - uses: actions/upload-artifact@v7
-        with:
-          name: dist
-          path: dist/
-
-  # Verify the image before any registry publication starts.
+  # Ensure Docker is buildable before publishing immutable npm packages.
   verify-docker:
     runs-on: ubuntu-latest
     timeout-minutes: 30
@@ -62,8 +56,6 @@ jobs:
         with:
           context: .
           push: false
-          cache-from: type=gha,scope=teleton-docker
-          cache-to: type=gha,mode=max,scope=teleton-docker
 
   # ---- Publish to npm ----
   publish-npm:
@@ -101,12 +93,6 @@ jobs:
         if: steps.check.outputs.publish == 'true'
       - run: cd web && npm ci
         if: steps.check.outputs.publish == 'true'
-
-      - uses: actions/download-artifact@v8
-        if: steps.check.outputs.publish == 'true'
-        with:
-          name: dist
-          path: dist/
 
       - run: npm publish --provenance --access public
         if: steps.check.outputs.publish == 'true'
@@ -185,8 +171,8 @@ jobs:
         with:
           context: .
           push: true
-          cache-from: type=gha,scope=teleton-docker
-          cache-to: type=gha,mode=max,scope=teleton-docker
+          cache-from: type=registry,ref=ghcr.io/${{ steps.meta.outputs.repo }}:latest
+          cache-to: type=inline
           tags: |
             ghcr.io/${{ steps.meta.outputs.repo }}:${{ steps.meta.outputs.version }}
             ghcr.io/${{ steps.meta.outputs.repo }}:latest

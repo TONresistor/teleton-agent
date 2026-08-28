@@ -93,9 +93,6 @@ jobs:
       - name: Install WebUI dependencies
         run: cd web && npm ci
 
-      - name: Build SDK workspace
-        run: npm run build -w packages/sdk
-
       - name: Build
         run: npm run build
 
@@ -121,8 +118,6 @@ jobs:
         with:
           context: .
           push: false
-          cache-from: type=gha,scope=teleton-docker
-          cache-to: type=gha,mode=max,scope=teleton-docker
 
   # ---- Telegram notification (one summary per push, pushes only) ----
   notify:
