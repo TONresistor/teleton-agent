@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.1] - 2026-08-28
+
+### Changed
+
+- Unified user-mode Rich Message text, media, documents, and URL/copy buttons under `telegram_send_message`, with the same structure available for edits.
+- Moved embedding inference and vector retrieval to worker threads so RAG no longer blocks Telegram's main event loop.
+- Batched Telegram message embeddings and made vector indexing asynchronous after the durable message write.
+
+### Fixed
+
+- Applied chat and message filters inside sqlite-vec KNN queries, excluded the current message, and deduplicated local and cross-chat retrieval results.
+- Separated query and document embedding cache entries to preserve Voyage input-type semantics.
+- Serialized local query and batch inference in one worker to prevent concurrent ONNX sessions from crashing the agent process.
+
 ## [0.11.0] - 2026-08-27
 
 ### Added
@@ -581,7 +595,8 @@ Git history rewritten to fix commit attribution (email update from `tonresistor@
 - Professional distribution (npm, Docker, CI/CD)
 - Pre-commit hooks and linting infrastructure
 
-[Unreleased]: https://github.com/TONresistor/teleton-agent/compare/v0.11.0...HEAD
+[Unreleased]: https://github.com/TONresistor/teleton-agent/compare/v0.11.1...HEAD
+[0.11.1]: https://github.com/TONresistor/teleton-agent/compare/v0.11.0...v0.11.1
 [0.11.0]: https://github.com/TONresistor/teleton-agent/compare/v0.10.1...v0.11.0
 [0.10.1]: https://github.com/TONresistor/teleton-agent/compare/v0.10.0...v0.10.1
 [0.10.0]: https://github.com/TONresistor/teleton-agent/compare/v0.9.0...v0.10.0

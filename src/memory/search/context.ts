@@ -1,31 +1,23 @@
 import type Database from "better-sqlite3";
 import type { EmbeddingProvider } from "../embeddings/provider.js";
-import { HybridSearch, parseTemporalIntent } from "./hybrid.js";
+import { HybridSearch, parseTemporalIntent, type HybridSearchResult } from "./hybrid.js";
 import { MessageStore } from "../feed/messages.js";
 import { createLogger } from "../../utils/logger.js";
 import { FEED_MESSAGE_MAX_CHARS } from "../../constants/limits.js";
+import type { VectorSearchResult } from "../workers/protocol.js";
+import type { VectorSearchWorkerClient } from "../workers/vector-search-client.js";
 
 const log = createLogger("Memory");
 
-/**
- * Reorder chunks using "edges-first" pattern to mitigate the "lost in the middle"
- * effect (Stanford, 2023; Chroma, 2025). Models attend best to the beginning and
- * end of context. Assumes input is sorted by descending relevance score.
- *
- * Input:  [best, 2nd, 3rd, 4th, 5th]  (by score)
- * Output: [best, 3rd, 5th, 4th, 2nd]  (best at start, 2nd-best at end)
- */
+/** Put the highest-ranked chunks at the context edges to reduce lost-in-the-middle. */
 function reorderForEdges<T>(items: T[]): T[] {
   if (items.length <= 2) return items;
   const result: T[] = new Array(items.length);
   let left = 0;
   let right = items.length - 1;
   for (let i = 0; i < items.length; i++) {
-    if (i % 2 === 0) {
-      result[left++] = items[i];
-    } else {
-      result[right--] = items[i];
-    }
+    if (i % 2 === 0) result[left++] = items[i];
+    else result[right--] = items[i];
   }
   return result;
 }
@@ -35,16 +27,21 @@ function truncateFeedMessage(text: string): string {
   return text.slice(0, FEED_MESSAGE_MAX_CHARS) + "... [truncated]";
 }
 
+function normalizeResultText(text: string): string {
+  return text.trim().replace(/\s+/g, " ").toLowerCase();
+}
+
 export interface ContextOptions {
   query: string;
   chatId: string;
   includeAgentMemory?: boolean;
   includeFeedHistory?: boolean;
-  searchAllChats?: boolean; // Search across all chats, not just current
+  searchAllChats?: boolean;
   maxRecentMessages?: number;
   maxRelevantChunks?: number;
   maxTokens?: number;
   queryEmbedding?: number[];
+  currentMessageId?: string;
 }
 
 export interface Context {
@@ -61,7 +58,8 @@ export class ContextBuilder {
   constructor(
     private db: Database.Database,
     private embedder: EmbeddingProvider,
-    vectorEnabled: boolean
+    vectorEnabled: boolean,
+    private vectorSearchWorker?: VectorSearchWorkerClient
   ) {
     this.hybridSearch = new HybridSearch(db, vectorEnabled);
     this.messageStore = new MessageStore(db, embedder, vectorEnabled);
@@ -76,101 +74,149 @@ export class ContextBuilder {
       searchAllChats = false,
       maxRecentMessages = 20,
       maxRelevantChunks = 5,
+      currentMessageId,
     } = options;
 
     const queryEmbedding = options.queryEmbedding ?? (await this.embedder.embedQuery(query));
-
-    const recentTgMessages = this.messageStore.getRecentMessages(chatId, maxRecentMessages);
-    const recentMessages = recentTgMessages.map((m) => ({
-      role: m.isFromAgent ? "assistant" : "user",
-      content: m.text ?? "",
+    const recentTgMessages = this.messageStore
+      .getRecentMessages(chatId, maxRecentMessages + (currentMessageId ? 1 : 0))
+      .filter((message) => message.id !== currentMessageId)
+      .slice(-maxRecentMessages);
+    const recentMessages = recentTgMessages.map((message) => ({
+      role: message.isFromAgent ? "assistant" : "user",
+      content: message.text ?? "",
     }));
-
-    const recentTextsSet = new Set(
-      // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- filtered for non-null text above
-      recentTgMessages.filter((m) => m.text && m.text.length > 0).map((m) => m.text!)
+    const recentTexts = new Set(
+      recentTgMessages
+        .map((message) => message.text && normalizeResultText(message.text))
+        .filter((text): text is string => Boolean(text))
     );
 
-    // Run knowledge + feed searches in parallel (independent queries)
-    const knowledgePromise = includeAgentMemory
-      ? this.hybridSearch
-          .searchKnowledge(query, queryEmbedding, { limit: maxRelevantChunks })
-          .catch((error) => {
-            log.warn({ err: error }, "Knowledge search failed");
-            return [] as { text: string }[];
-          })
-      : Promise.resolve([] as { text: string }[]);
-
     const { afterTimestamp } = parseTemporalIntent(query);
+    const searchResults = await this.searchContext({
+      query,
+      queryEmbedding,
+      chatId,
+      currentMessageId,
+      afterTimestamp,
+      includeAgentMemory,
+      includeFeedHistory,
+      searchAllChats,
+      maxRelevantChunks,
+    });
 
-    const feedPromise = includeFeedHistory
-      ? this.hybridSearch
-          .searchMessages(query, queryEmbedding, {
-            chatId,
-            limit: maxRelevantChunks,
-            afterTimestamp,
-          })
-          .catch((error) => {
-            log.warn({ err: error }, "Feed search failed");
-            return [] as { text: string; source?: string }[];
-          })
-      : Promise.resolve([] as { text: string; source?: string }[]);
-
-    const [knowledgeResults, feedResults] = await Promise.all([knowledgePromise, feedPromise]);
-
-    const relevantKnowledge: string[] = [];
-    if (knowledgeResults.length > 0) {
-      relevantKnowledge.push(...reorderForEdges(knowledgeResults.map((r) => r.text)));
-    }
-
+    const relevantKnowledge = reorderForEdges(searchResults.knowledge.map((result) => result.text));
     const relevantFeed: string[] = [];
     if (includeFeedHistory) {
-      for (const r of feedResults) {
-        if (!recentTextsSet.has(r.text)) {
-          relevantFeed.push(truncateFeedMessage(r.text));
-        }
-      }
-
-      if (searchAllChats) {
-        try {
-          const globalResults = await this.hybridSearch.searchMessages(query, queryEmbedding, {
-            limit: maxRelevantChunks,
-          });
-          const existingTexts = new Set(relevantFeed);
-          for (const r of globalResults) {
-            const truncated = truncateFeedMessage(r.text);
-            if (!existingTexts.has(truncated)) {
-              relevantFeed.push(`[From chat ${r.source}]: ${truncated}`);
-            }
-          }
-        } catch (error) {
-          log.warn({ err: error }, "Global feed search failed");
-        }
+      const seenIds = new Set<string>();
+      const seenTexts = new Set(recentTexts);
+      for (const result of [...searchResults.currentChat, ...searchResults.otherChats]) {
+        const normalized = normalizeResultText(result.text);
+        if (!normalized || seenIds.has(result.id) || seenTexts.has(normalized)) continue;
+        seenIds.add(result.id);
+        seenTexts.add(normalized);
+        const text = truncateFeedMessage(result.text);
+        relevantFeed.push(
+          result.source === chatId ? text : `[From chat ${result.source}]: ${text}`
+        );
       }
 
       if (relevantFeed.length === 0 && recentTgMessages.length > 0) {
-        const recentTexts = recentTgMessages
-          .filter((m) => m.text && m.text.length > 0)
-          .slice(-maxRelevantChunks)
-          .map((m) => {
-            const sender = m.isFromAgent ? "Agent" : "User";
-            return `[${sender}]: ${m.text}`;
-          });
-        relevantFeed.push(...recentTexts);
+        relevantFeed.push(
+          ...recentTgMessages
+            .filter((message) => message.text && message.text.length > 0)
+            .slice(-maxRelevantChunks)
+            .map((message) => `[${message.isFromAgent ? "Agent" : "User"}]: ${message.text}`)
+        );
       }
     }
 
     const allText =
-      recentMessages.map((m) => m.content).join(" ") +
+      recentMessages.map((message) => message.content).join(" ") +
       relevantKnowledge.join(" ") +
       relevantFeed.join(" ");
-    const estimatedTokens = Math.ceil(allText.length / 4);
-
     return {
       recentMessages,
       relevantKnowledge,
       relevantFeed,
-      estimatedTokens,
+      estimatedTokens: Math.ceil(allText.length / 4),
     };
+  }
+
+  private async searchContext(options: {
+    query: string;
+    queryEmbedding: number[];
+    chatId: string;
+    currentMessageId?: string;
+    afterTimestamp?: number;
+    includeAgentMemory: boolean;
+    includeFeedHistory: boolean;
+    searchAllChats: boolean;
+    maxRelevantChunks: number;
+  }): Promise<Pick<VectorSearchResult, "knowledge" | "currentChat" | "otherChats">> {
+    if (this.vectorSearchWorker && options.queryEmbedding.length > 0) {
+      try {
+        const result = await this.vectorSearchWorker.search({
+          type: "search",
+          query: options.query,
+          queryEmbedding: options.queryEmbedding,
+          chatId: options.chatId,
+          currentMessageId: options.currentMessageId,
+          afterTimestamp: options.afterTimestamp,
+          includeKnowledge: options.includeAgentMemory,
+          includeFeedHistory: options.includeFeedHistory,
+          knowledgeLimit: options.maxRelevantChunks,
+          messageLimit: options.maxRelevantChunks,
+          searchAllChats: options.searchAllChats,
+        });
+        log.debug({ timingsMs: result.timingsMs }, "RAG vector worker search complete");
+        this.trackKnowledgeAccess(result.knowledge);
+        return result;
+      } catch (error) {
+        log.warn({ err: error }, "Vector search worker failed; falling back to FTS");
+      }
+    }
+
+    const search = this.vectorSearchWorker ? new HybridSearch(this.db, false) : this.hybridSearch;
+    const knowledge = options.includeAgentMemory
+      ? await search.searchKnowledge(options.query, options.queryEmbedding, {
+          limit: options.maxRelevantChunks,
+        })
+      : [];
+    const currentChat = options.includeFeedHistory
+      ? await search.searchMessages(options.query, options.queryEmbedding, {
+          chatId: options.chatId,
+          excludeMessageId: options.currentMessageId,
+          limit: options.maxRelevantChunks,
+          afterTimestamp: options.afterTimestamp,
+        })
+      : [];
+    const otherChats =
+      options.includeFeedHistory && options.searchAllChats
+        ? await search.searchMessages(options.query, options.queryEmbedding, {
+            excludeChatId: options.chatId,
+            limit: options.maxRelevantChunks,
+            afterTimestamp: options.afterTimestamp,
+          })
+        : [];
+    return { knowledge, currentChat, otherChats };
+  }
+
+  private trackKnowledgeAccess(results: HybridSearchResult[]): void {
+    if (results.length === 0) return;
+    const ids = results.map((result) => result.id);
+    setImmediate(() => {
+      try {
+        const placeholders = ids.map(() => "?").join(", ");
+        this.db
+          .prepare(
+            `UPDATE knowledge SET access_count = access_count + 1, last_accessed_at = unixepoch()
+             WHERE id IN (${placeholders})`
+          )
+          .run(...ids);
+      } catch {
+        // Best-effort metadata; search results remain valid.
+      }
+    });
   }
 }

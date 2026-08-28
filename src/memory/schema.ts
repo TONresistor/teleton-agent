@@ -421,20 +421,39 @@ export function ensureSchema(db: Database.Database): void {
 }
 
 export function ensureVectorTables(db: Database.Database, dimensions: number): boolean {
-  const existingDims = db
-    .prepare(
-      `
-    SELECT sql FROM sqlite_master
-    WHERE type='table' AND name='knowledge_vec'
-  `
-    )
-    .get() as { sql?: string } | undefined;
+  const vectorTableSql = (name: string): string => {
+    const row = db
+      .prepare("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = ?")
+      .get(name) as { sql?: string } | undefined;
+    return row?.sql?.toLowerCase().replace(/\s+/g, " ") ?? "";
+  };
+
+  const knowledgeSql = vectorTableSql("knowledge_vec");
+  const messageSql = vectorTableSql("tg_messages_vec");
 
   let dimensionsChanged = false;
-  if (existingDims?.sql && !existingDims.sql.includes(`[${dimensions}]`)) {
+  if (
+    (knowledgeSql && !knowledgeSql.includes(`[${dimensions}]`)) ||
+    (messageSql && !messageSql.includes(`[${dimensions}]`))
+  ) {
     db.exec(`DROP TABLE IF EXISTS knowledge_vec`);
     db.exec(`DROP TABLE IF EXISTS tg_messages_vec`);
     dimensionsChanged = true;
+  } else if (
+    messageSql &&
+    (!messageSql.includes("chat_id text partition key") ||
+      !messageSql.includes("message_id text") ||
+      !messageSql.includes("timestamp integer"))
+  ) {
+    // vec0 virtual tables cannot be safely renamed: their shadow tables keep
+    // the original name. Recreate the table in place, then repopulate it from
+    // the canonical BLOBs after invalid rows have been normalized.
+    db.prepare(
+      `INSERT INTO meta (key, value, updated_at)
+       VALUES ('tg_messages_vector_rebuild_required', '1', unixepoch())
+       ON CONFLICT(key) DO UPDATE SET value = '1', updated_at = unixepoch()`
+    ).run();
+    db.exec(`DROP TABLE tg_messages_vec`);
   }
 
   db.exec(`
@@ -445,9 +464,30 @@ export function ensureVectorTables(db: Database.Database, dimensions: number): b
 
     CREATE VIRTUAL TABLE IF NOT EXISTS tg_messages_vec USING vec0(
       id TEXT PRIMARY KEY,
+      chat_id TEXT partition key,
+      message_id TEXT,
+      timestamp INTEGER,
       embedding FLOAT[${dimensions}] distance_metric=cosine
     );
   `);
+
+  if (!dimensionsChanged) {
+    const missingMetadata = (
+      db
+        .prepare(
+          `SELECT COUNT(*) AS count FROM tg_messages_vec
+           WHERE chat_id IS NULL OR message_id IS NULL OR timestamp IS NULL`
+        )
+        .get() as { count: number }
+    ).count;
+    if (missingMetadata > 0) {
+      db.prepare(
+        `INSERT INTO meta (key, value, updated_at)
+         VALUES ('tg_messages_vector_rebuild_required', '1', unixepoch())
+         ON CONFLICT(key) DO UPDATE SET value = '1', updated_at = unixepoch()`
+      ).run();
+    }
+  }
 
   return dimensionsChanged;
 }
@@ -557,7 +597,7 @@ export function setSchemaVersion(db: Database.Database, version: string): void {
   ).run(version);
 }
 
-export const CURRENT_SCHEMA_VERSION = "1.23.0";
+export const CURRENT_SCHEMA_VERSION = "1.25.0";
 
 export function runMigrations(db: Database.Database): void {
   const currentVersion = getSchemaVersion(db);
@@ -1103,6 +1143,38 @@ export function runMigrations(db: Database.Database): void {
       log.error({ err: error }, "Migration 1.23.0 failed");
       throw error;
     }
+  }
+
+  if (!currentVersion || versionLessThan(currentVersion, "1.24.0")) {
+    log.info("Running migration 1.24.0: Prepare chat-partitioned Telegram vector index");
+    // The vec0 extension is loaded after regular schema migrations. Its table
+    // shape and data rebuild are handled idempotently by ensureVectorTables().
+    log.info("Migration 1.24.0 complete: Vector index migration scheduled");
+  }
+
+  if (!currentVersion || versionLessThan(currentVersion, "1.25.0")) {
+    log.info("Running migration 1.25.0: Regenerate Telegram document embeddings");
+    // Message vectors used embedQuery before 1.25.0. Providers such as Voyage
+    // distinguish query and document input types, so retaining those vectors
+    // would mix incompatible semantics in one index. Preserve message text and
+    // let the bounded background backfill regenerate document embeddings.
+    db.transaction(() => {
+      db.prepare(
+        `UPDATE tg_messages
+         SET embedding = NULL,
+             embedding_status = CASE
+               WHEN text IS NULL OR length(trim(text)) = 0 THEN 'disabled'
+               ELSE 'pending'
+             END,
+             indexed_at = unixepoch()`
+      ).run();
+      db.prepare(
+        `INSERT INTO meta (key, value, updated_at)
+         VALUES ('tg_messages_vector_rebuild_required', '1', unixepoch())
+         ON CONFLICT(key) DO UPDATE SET value = '1', updated_at = unixepoch()`
+      ).run();
+    })();
+    log.info("Migration 1.25.0 complete: Telegram document embeddings scheduled");
   }
 
   setSchemaVersion(db, CURRENT_SCHEMA_VERSION);

@@ -8,6 +8,11 @@ type MessageWithRichContent = Api.Message & {
 type RichMessageClient = Pick<TelegramClient, "invoke">;
 type RichMessageMediaType = "photo" | "document" | "video" | "audio";
 
+export interface ResolvedTelegramMessageContent {
+  text: string;
+  richMessage?: Api.TypeRichMessage;
+}
+
 const MAX_CONCURRENT_RICH_MESSAGE_HYDRATIONS = 4;
 let activeRichMessageHydrations = 0;
 const richMessageHydrationWaiters: Array<() => void> = [];
@@ -36,6 +41,45 @@ async function withRichMessageHydrationSlot<T>(operation: () => Promise<T>): Pro
   } finally {
     releaseRichMessageHydrationSlot();
   }
+}
+
+function renderUnhandledRichNode(node: never): string {
+  const className = (node as { className?: string }).className ?? "Unknown";
+  return `[Unsupported rich content: ${className}]`;
+}
+
+function renderButtonStyle(style?: Api.TypeRichButtonStyle): string | undefined {
+  if (!(style instanceof Api.RichButtonStyle)) return undefined;
+  if (style.bgPrimary) return "primary";
+  if (style.bgDanger) return "danger";
+  if (style.bgSuccess) return "success";
+  if (style.link) return "link";
+  return undefined;
+}
+
+function renderButtonAction(type?: Api.TypeInlineButtonType): string | undefined {
+  if (type instanceof Api.InlineButtonTypeUrl) return `url=${type.url}`;
+  if (type instanceof Api.InlineButtonTypeUrlAuth) return `login-url=${type.url}`;
+  if (type instanceof Api.InlineButtonTypeWebView) return `web-view=${type.url}`;
+  if (type instanceof Api.InlineButtonTypeCopy) return `copy=${JSON.stringify(type.copyText)}`;
+  if (type instanceof Api.InlineButtonTypeUserProfile) return `user=${type.userId.toString()}`;
+  if (type instanceof Api.InlineButtonTypeSwitchInline) return "switch-inline";
+  if (type instanceof Api.InlineButtonTypeCallback) return "callback";
+  if (type instanceof Api.InlineButtonTypeGame) return "game";
+  if (type instanceof Api.InlineButtonTypeBuy) return "buy";
+  if (type instanceof Api.InlineButtonTypeDisabled) return "disabled";
+  return undefined;
+}
+
+function renderButtonLabel(
+  text: Api.TypeRichText,
+  type?: Api.TypeInlineButtonType,
+  style?: Api.TypeRichButtonStyle
+): string {
+  const label = renderRichText(text);
+  const details = [renderButtonAction(type), renderButtonStyle(style)].filter(Boolean);
+  const suffix = details.length > 0 ? ` | ${details.join(" | ")}` : "";
+  return label ? `[Button: ${label}${suffix}]` : `[Button${suffix}]`;
 }
 
 function renderRichText(text: Api.TypeRichText): string {
@@ -79,7 +123,8 @@ function renderRichText(text: Api.TypeRichText): string {
     return renderRichText(text.text);
   }
   if (text instanceof Api.TextDiff) return renderRichText(text.text);
-  return "";
+  if (text instanceof Api.TextButton) return renderButtonLabel(text.text, text.type, text.style);
+  return renderUnhandledRichNode(text);
 }
 
 function renderCaption(caption: Api.TypePageCaption): string {
@@ -243,7 +288,25 @@ ${renderBlocks(block.blocks)}
   if (block instanceof Api.PageBlockThinking) {
     return quote(`Thinking: ${renderRichText(block.text)}`);
   }
-  return "";
+  if (block instanceof Api.InputPageBlockMap) {
+    return ["[Map]", renderCaption(block.caption)].filter(Boolean).join("\n\n");
+  }
+  if (block instanceof Api.PageBlockButtonRow) {
+    const alignment = block.alignLeft
+      ? "left"
+      : block.alignCenter
+        ? "center"
+        : block.alignRight
+          ? "right"
+          : "default";
+    return `[Button row: ${alignment}] ${block.buttons
+      .map((button) => renderButtonLabel(button.text, button.type, button.style))
+      .join(" ")}`;
+  }
+  if (block instanceof Api.PageBlockDocument) {
+    return ["[Document]", renderCaption(block.caption)].filter(Boolean).join("\n\n");
+  }
+  return renderUnhandledRichNode(block);
 }
 
 function renderBlocks(blocks: Api.TypePageBlock[]): string {
@@ -268,6 +331,7 @@ function classifyRichMessageBlock(block: Api.TypePageBlock): RichMessageMediaTyp
   if (block instanceof Api.PageBlockPhoto) return "photo";
   if (block instanceof Api.PageBlockVideo) return "video";
   if (block instanceof Api.PageBlockAudio) return "audio";
+  if (block instanceof Api.PageBlockDocument) return "document";
   if (block instanceof Api.PageBlockCover) return classifyRichMessageBlock(block.cover);
   if (block instanceof Api.PageBlockCollage || block instanceof Api.PageBlockSlideshow) {
     for (const item of block.items) {
@@ -278,12 +342,9 @@ function classifyRichMessageBlock(block: Api.TypePageBlock): RichMessageMediaTyp
   return undefined;
 }
 
-export function classifyTelegramRichMessageMedia(
-  message: Api.Message
+export function classifyRichMessageMedia(
+  richMessage: Api.TypeRichMessage
 ): RichMessageMediaType | undefined {
-  const richMessage = getTelegramRichMessage(message);
-  if (!richMessage) return undefined;
-
   for (const block of richMessage.blocks) {
     const mediaType = classifyRichMessageBlock(block);
     if (mediaType) return mediaType;
@@ -291,6 +352,13 @@ export function classifyTelegramRichMessageMedia(
   if (richMessage.photos.length > 0) return "photo";
   if (richMessage.documents.length > 0) return "document";
   return undefined;
+}
+
+export function classifyTelegramRichMessageMedia(
+  message: Api.Message
+): RichMessageMediaType | undefined {
+  const richMessage = getTelegramRichMessage(message);
+  return richMessage ? classifyRichMessageMedia(richMessage) : undefined;
 }
 
 export function renderTelegramMessageText(message: Api.Message): string {
@@ -302,13 +370,16 @@ export function renderTelegramMessageText(message: Api.Message): string {
   return message.message ?? "";
 }
 
-export async function resolveTelegramMessageText(
+export async function resolveTelegramMessageContent(
   client: RichMessageClient,
   message: Api.Message,
   peer?: Api.TypeEntityLike
-): Promise<string> {
+): Promise<ResolvedTelegramMessageContent> {
   const richMessage = getTelegramRichMessage(message);
-  const fallback = renderTelegramMessageText(message);
+  const fallback = {
+    text: renderTelegramMessageText(message),
+    richMessage,
+  };
   if (!richMessage?.part) return fallback;
 
   const targetPeer = peer ?? message.peerId;
@@ -330,11 +401,23 @@ export async function resolveTelegramMessageText(
     );
     if (complete) {
       const resolved = renderTelegramMessageText(complete);
-      if (resolved) return resolved;
+      return {
+        text: resolved || fallback.text,
+        richMessage: getTelegramRichMessage(complete) ?? richMessage,
+      };
     }
   } catch {
     // The embedded partial payload is still useful when hydration is unavailable.
   }
 
   return fallback;
+}
+
+export async function resolveTelegramMessageText(
+  client: RichMessageClient,
+  message: Api.Message,
+  peer?: Api.TypeEntityLike
+): Promise<string> {
+  const content = await resolveTelegramMessageContent(client, message, peer);
+  return content.text;
 }

@@ -259,7 +259,7 @@ Use telegram_send_buttons for any interactive choice (pagination, confirmations,
 Plain responses use regular Telegram text. Structured responses containing formatting are delivered natively as Telegram Rich Markdown.
 Use GitHub-Flavored Markdown naturally when structure improves clarity: headings, lists, task lists, tables, quotes, links, code blocks, and LaTeX formulas.
 Telegram-specific HTML such as <u>, <sub>, <sup>, and <details> is also supported inside Rich Markdown.
-To embed local workspace media between text blocks, use telegram_send_rich_message with matching tg://photo?id=, tg://video?id=, or tg://audio?id= references. After it succeeds, do not send a duplicate confirmation.
+For a native Rich Message, use telegram_send_message with its rich structure. Define attachments and blocks explicitly; never write tg:// references yourself. After it succeeds in the current chat, do not send a duplicate confirmation.
 Keep the full response below 4000 characters and keep short replies simple.
 Do not call a Telegram send tool merely to format the current reply.`);
   }

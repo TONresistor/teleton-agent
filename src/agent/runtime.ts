@@ -11,7 +11,7 @@ import type { SupportedProvider } from "../config/providers.js";
 import { getDatabase } from "../memory/index.js";
 import { resetSession } from "../session/store.js";
 import { CompactionManager, DEFAULT_COMPACTION_CONFIG } from "../memory/compaction.js";
-import { ContextBuilder } from "../memory/search/context.js";
+import type { ContextBuilder } from "../memory/search/context.js";
 import type { EmbeddingProvider } from "../memory/embeddings/provider.js";
 import type { ToolRegistry } from "./tools/registry.js";
 import { createLogger } from "../utils/logger.js";
@@ -105,11 +105,10 @@ export class AgentRuntime {
     this.userHookEvaluator = evaluator;
   }
 
-  initializeContextBuilder(embedder: EmbeddingProvider, vectorEnabled: boolean): void {
+  initializeContextBuilder(embedder: EmbeddingProvider, contextBuilder: ContextBuilder): void {
     this.embedder = embedder;
     this.toolRegistry?.setEmbedder(embedder);
-    const db = getDatabase().getDb();
-    this.contextBuilder = new ContextBuilder(db, embedder, vectorEnabled);
+    this.contextBuilder = contextBuilder;
   }
 
   getToolRegistry(): ToolRegistry | null {

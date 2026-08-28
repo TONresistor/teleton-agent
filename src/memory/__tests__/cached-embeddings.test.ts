@@ -26,7 +26,7 @@ describe("CachedEmbeddingProvider", () => {
     db.prepare(
       `INSERT INTO embedding_cache (hash, model, provider, embedding, dims)
        VALUES (?, ?, ?, ?, ?)`
-    ).run(hashText("hello"), inner.model, inner.id, Buffer.alloc(0), inner.dimensions);
+    ).run(hashText("query\u0000hello"), inner.model, inner.id, Buffer.alloc(0), inner.dimensions);
 
     const result = await new CachedEmbeddingProvider(inner, db).embedQuery("hello");
 
@@ -35,8 +35,28 @@ describe("CachedEmbeddingProvider", () => {
     expect(
       db
         .prepare("SELECT length(embedding) AS bytes FROM embedding_cache WHERE hash = ?")
-        .get(hashText("hello"))
+        .get(hashText("query\u0000hello"))
     ).toEqual({ bytes: 12 });
+  });
+
+  it("keeps query and document embeddings in separate cache namespaces", async () => {
+    const inner = {
+      id: "anthropic",
+      model: "voyage-test",
+      dimensions: 3,
+      embedQuery: vi.fn().mockResolvedValue([1, 0, 0]),
+      embedBatch: vi.fn().mockResolvedValue([[0, 1, 0]]),
+    } satisfies EmbeddingProvider;
+    const cached = new CachedEmbeddingProvider(inner, db);
+
+    await expect(cached.embedQuery("same text")).resolves.toEqual([1, 0, 0]);
+    await expect(cached.embedBatch(["same text"])).resolves.toEqual([[0, 1, 0]]);
+    await expect(cached.embedQuery("same text")).resolves.toEqual([1, 0, 0]);
+    await expect(cached.embedBatch(["same text"])).resolves.toEqual([[0, 1, 0]]);
+
+    expect(inner.embedQuery).toHaveBeenCalledOnce();
+    expect(inner.embedBatch).toHaveBeenCalledOnce();
+    expect(db.prepare("SELECT COUNT(*) AS count FROM embedding_cache").get()).toEqual({ count: 2 });
   });
 
   it("does not cache an unavailable embedding", async () => {

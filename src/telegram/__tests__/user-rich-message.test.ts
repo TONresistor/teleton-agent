@@ -41,6 +41,7 @@ vi.mock("../media-metadata.js", () => ({
 }));
 
 import { GramJSUserBridge } from "../bridges/user.js";
+import type { TelegramMessage } from "../bridge-interface.js";
 
 function createBridge(): GramJSUserBridge {
   return new GramJSUserBridge({
@@ -49,6 +50,25 @@ function createBridge(): GramJSUserBridge {
     phone: "+10000000000",
     sessionPath: "/tmp",
   });
+}
+
+function plain(text: string): Api.TextPlain {
+  return new Api.TextPlain({ text });
+}
+
+function emptyCaption(): Api.PageCaption {
+  return new Api.PageCaption({
+    text: new Api.TextEmpty(),
+    credit: new Api.TextEmpty(),
+  });
+}
+
+function parseMessage(bridge: GramJSUserBridge, message: Api.Message): Promise<TelegramMessage> {
+  return (
+    bridge as unknown as {
+      parseMessage(message: Api.Message): Promise<TelegramMessage>;
+    }
+  ).parseMessage(message);
 }
 
 beforeEach(() => {
@@ -77,6 +97,84 @@ beforeEach(() => {
 });
 
 describe("GramJSUserBridge rich messages", () => {
+  it("uses hydrated rich content for both text and media classification", async () => {
+    const partial = new Api.Message({
+      id: 42,
+      peerId: new Api.PeerUser({ userId: toLong(1) }),
+      date: 1_750_000_000,
+      message: "",
+      richMessage: new Api.RichMessage({
+        part: true,
+        blocks: [new Api.PageBlockParagraph({ text: plain("Loading") })],
+        photos: [],
+        documents: [],
+      }),
+    } as any);
+    const complete = new Api.Message({
+      id: 42,
+      peerId: partial.peerId,
+      date: partial.date,
+      message: "",
+      richMessage: new Api.RichMessage({
+        blocks: [
+          new Api.PageBlockPhoto({
+            photoId: toLong(10),
+            caption: emptyCaption(),
+          }),
+        ],
+        photos: [],
+        documents: [],
+      }),
+    } as any);
+    mocks.invoke.mockResolvedValue(
+      new Api.messages.Messages({
+        messages: [complete],
+        topics: [],
+        chats: [],
+        users: [],
+      })
+    );
+
+    const parsed = await parseMessage(createBridge(), partial);
+
+    expect(parsed).toMatchObject({
+      text: "[Photo]",
+      hasMedia: true,
+      mediaType: "photo",
+    });
+    expect(mocks.invoke).toHaveBeenCalledOnce();
+  });
+
+  it("keeps partial rich text and media classification when hydration fails", async () => {
+    const partial = new Api.Message({
+      id: 43,
+      peerId: new Api.PeerUser({ userId: toLong(1) }),
+      date: 1_750_000_000,
+      message: "",
+      richMessage: new Api.RichMessage({
+        part: true,
+        blocks: [
+          new Api.PageBlockPhoto({
+            photoId: toLong(11),
+            caption: emptyCaption(),
+          }),
+        ],
+        photos: [],
+        documents: [],
+      }),
+    } as any);
+    mocks.invoke.mockRejectedValue(new Error("RPC failed"));
+
+    const parsed = await parseMessage(createBridge(), partial);
+
+    expect(parsed).toMatchObject({
+      text: "[Photo]",
+      hasMedia: true,
+      mediaType: "photo",
+    });
+    expect(mocks.invoke).toHaveBeenCalledOnce();
+  });
+
   it("sends structured user-mode replies as native Rich Markdown", async () => {
     const bridge = createBridge();
 
@@ -126,10 +224,17 @@ describe("GramJSUserBridge rich messages", () => {
     const bridge = createBridge();
 
     try {
-      const sent = await bridge.sendRichMessage({
+      const sent = await bridge.sendMessage({
         chatId: "123",
-        text: "Before\n\n![Chart](tg://photo?id=chart)\n\nAfter",
-        media: [{ id: "chart", type: "photo", path: photoPath }],
+        text: "",
+        rich: {
+          attachments: [{ id: "chart", type: "photo", path: photoPath }],
+          blocks: [
+            { type: "paragraph", markdown: "Before" },
+            { type: "attachment", id: "chart" },
+            { type: "paragraph", markdown: "After" },
+          ],
+        },
         replyToId: 7,
       });
 
@@ -193,10 +298,12 @@ describe("GramJSUserBridge rich messages", () => {
       const bridge = createBridge();
 
       try {
-        const sent = await bridge.sendRichMessage({
+        const sent = await bridge.sendMessage({
           chatId: "123",
-          text: `Before\n\n![Media](tg://${type}?id=media)\n\nAfter`,
-          media: [{ id: "media", type, path: mediaPath }],
+          text: "Before",
+          rich: {
+            attachments: [{ id: "media", type, path: mediaPath }],
+          },
         });
 
         expect(sent.id).toBe(322);
@@ -236,6 +343,84 @@ describe("GramJSUserBridge rich messages", () => {
       }
     }
   );
+
+  it("uploads a general document without audio or video attributes", async () => {
+    const directory = mkdtempSync(join(tmpdir(), "teleton-rich-document-"));
+    const documentPath = join(directory, "report.pdf");
+    writeFileSync(documentPath, Buffer.from("test-document"));
+    const uploadedDocument = new Api.Document({
+      id: toLong(50),
+      accessHash: toLong(60),
+      fileReference: Buffer.from([7, 8, 9]),
+      date: 1_750_000_000,
+      mimeType: "application/pdf",
+      size: toLong(10),
+      dcId: 2,
+      attributes: [],
+    });
+    mocks.invoke.mockImplementation(async (request) => {
+      if (request instanceof Api.messages.UploadMedia) {
+        return new Api.MessageMediaDocument({ document: uploadedDocument });
+      }
+      return new Api.UpdateShortSentMessage({
+        id: 323,
+        pts: 1,
+        ptsCount: 1,
+        date: 1_750_000_000,
+      });
+    });
+
+    try {
+      await createBridge().sendMessage({
+        chatId: "123",
+        text: "",
+        rich: {
+          attachments: [{ id: "report", type: "document", path: documentPath }],
+        },
+      });
+
+      const uploadRequest = mocks.invoke.mock.calls[0][0];
+      expect(uploadRequest.media).toBeInstanceOf(Api.InputMediaUploadedDocument);
+      expect(uploadRequest.media.attributes).toEqual([expect.any(Api.DocumentAttributeFilename)]);
+      const sendRequest = mocks.invoke.mock.calls[1][0];
+      expect(sendRequest.richMessage.markdown).toContain("tg://document?id=report");
+      expect(sendRequest.richMessage.files[0]).toBeInstanceOf(Api.InputRichFileDocument);
+      expect(mocks.readRichDocumentMetadata).not.toHaveBeenCalled();
+    } finally {
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
+  it("sends URL and copy buttons through one structured message", async () => {
+    await createBridge().sendMessage({
+      chatId: "123",
+      text: "Choose an action",
+      rich: {
+        buttonRows: [
+          {
+            align: "center",
+            buttons: [
+              {
+                label: "Open",
+                action: { type: "url", url: "https://example.com" },
+                style: "primary",
+              },
+              { label: "Copy", action: { type: "copy", text: "TON" } },
+            ],
+          },
+        ],
+      },
+    });
+
+    const request = mocks.invoke.mock.calls[0][0];
+    expect(request.richMessage.markdown).toContain('<tg-button-row align="center">');
+    expect(request.richMessage.markdown).toContain(
+      '<tg-button type="url" style="primary" url="https://example.com">Open</tg-button>'
+    );
+    expect(request.richMessage.markdown).toContain(
+      '<tg-button type="copy_text" text="TON">Copy</tg-button>'
+    );
+  });
 
   it("keeps plain replies as classic Telegram messages", async () => {
     const bridge = createBridge();

@@ -1,8 +1,10 @@
 import { Type } from "@sinclair/typebox";
+import type { RichMessageContent } from "../../../../telegram/bridge-interface.js";
+import { RICH_MESSAGE_MAX_BYTES } from "../../../../telegram/outgoing-rich-message.js";
 import type { Tool, ToolExecutor, ToolResult } from "../../types.js";
-import { TELEGRAM_MAX_MESSAGE_LENGTH } from "../../../../constants/limits.js";
 import { getErrorMessage } from "../../../../utils/errors.js";
 import { createLogger } from "../../../../utils/logger.js";
+import { prepareRichMessageContent, richMessageContentSchema } from "./rich-content.js";
 
 const log = createLogger("Tools");
 
@@ -12,7 +14,8 @@ const log = createLogger("Tools");
 interface EditMessageParams {
   chatId: string;
   messageId: number;
-  text: string;
+  text?: string;
+  rich?: RichMessageContent;
 }
 
 /**
@@ -21,7 +24,7 @@ interface EditMessageParams {
 export const telegramEditMessageTool: Tool = {
   name: "telegram_edit_message",
   description:
-    "Modify a previously sent message in-place. Requires chatId + messageId. Only your own messages can be edited, within 48h. Supports Markdown formatting.",
+    "Modify a previously sent message in-place. Use text alone for a normal edit or add rich to replace it with the same native Rich Message structure supported by telegram_send_message.",
   parameters: Type.Object({
     chatId: Type.String({
       description: "The chat ID where the message was sent",
@@ -29,10 +32,13 @@ export const telegramEditMessageTool: Tool = {
     messageId: Type.Number({
       description: "The ID of the message to edit",
     }),
-    text: Type.String({
-      description: "The new text content for the message (max 4096 characters)",
-      maxLength: TELEGRAM_MAX_MESSAGE_LENGTH,
-    }),
+    text: Type.Optional(
+      Type.String({
+        description: "New plain text or Rich Markdown content",
+        maxLength: RICH_MESSAGE_MAX_BYTES,
+      })
+    ),
+    rich: Type.Optional(richMessageContentSchema),
   }),
 };
 
@@ -44,8 +50,17 @@ export const telegramEditMessageExecutor: ToolExecutor<EditMessageParams> = asyn
   context
 ): Promise<ToolResult> => {
   try {
-    const { chatId, messageId, text } = params;
-    const result = await context.bridge.editMessage({ chatId, messageId, text });
+    const text = params.text ?? "";
+    const rich = prepareRichMessageContent(params.rich, context);
+    if (!text.trim() && !rich) {
+      return { success: false, error: "Message content cannot be empty" };
+    }
+    const result = await context.bridge.editMessage({
+      chatId: params.chatId,
+      messageId: params.messageId,
+      text,
+      rich,
+    });
 
     return {
       success: true,
@@ -54,6 +69,7 @@ export const telegramEditMessageExecutor: ToolExecutor<EditMessageParams> = asyn
         chatId: result.chatId,
         edited: true,
         date: result.date,
+        deliveryKind: rich ? "rich" : "text",
       },
     };
   } catch (error) {

@@ -152,8 +152,8 @@ describe("buildSystemPrompt() restructured sections", () => {
     expect(prompt).toContain("GitHub-Flavored Markdown");
     expect(prompt).toContain("tables");
     expect(prompt).toContain("<details>");
-    expect(prompt).toContain("telegram_send_rich_message");
-    expect(prompt).toContain("tg://photo?id=");
+    expect(prompt).toContain("telegram_send_message");
+    expect(prompt).toContain("never write tg:// references yourself");
     expect(prompt).toContain("below 4000 characters");
   });
 

@@ -67,13 +67,14 @@ function prepareTools(tools: Tool[] | undefined): Tool[] | undefined {
 
   return tools.map((tool) => {
     if (!TELEGRAM_SEND_TOOLS.has(tool.name)) return tool;
-    if (tool.name === "telegram_send_rich_message") {
+    if (tool.name === "telegram_send_message") {
       return {
         ...tool,
         description:
           `${tool.description} This action sends immediately. ` +
-          "Use it for the current reply only when local workspace media must be embedded inside one Rich Message. " +
-          "After it succeeds, do not return a duplicate confirmation.",
+          "For the current reply, return normal assistant text unless native Rich Message structure is required. " +
+          "When rich structure is required, call this tool once and do not return a duplicate confirmation. " +
+          "Use it normally for intentional messages to another chat.",
       };
     }
     return {

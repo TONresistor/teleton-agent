@@ -1,8 +1,13 @@
 import { Type } from "@sinclair/typebox";
+import type { RichMessageContent } from "../../../../telegram/bridge-interface.js";
+import {
+  compileRichMessageMarkdown,
+  RICH_MESSAGE_MAX_BYTES,
+} from "../../../../telegram/outgoing-rich-message.js";
 import type { Tool, ToolExecutor, ToolResult } from "../../types.js";
-import { TELEGRAM_MAX_MESSAGE_LENGTH } from "../../../../constants/limits.js";
 import { getErrorMessage } from "../../../../utils/errors.js";
 import { createLogger } from "../../../../utils/logger.js";
+import { prepareRichMessageContent, richMessageContentSchema } from "./rich-content.js";
 
 const log = createLogger("Tools");
 
@@ -10,9 +15,10 @@ const log = createLogger("Tools");
  * Parameters for telegram_send_message tool
  */
 interface SendMessageParams {
-  chatId: string;
-  text: string;
+  chatId?: string;
+  text?: string;
   replyToId?: number;
+  rich?: RichMessageContent;
 }
 
 /**
@@ -21,20 +27,25 @@ interface SendMessageParams {
 export const telegramSendMessageTool: Tool = {
   name: "telegram_send_message",
   description:
-    "Send a text message to a Telegram chat. For inline keyboard buttons use telegram_send_buttons; for custom reply keyboards use telegram_reply_keyboard; for standalone media use telegram_send_photo/gif/sticker; for local media embedded between Rich Markdown blocks use telegram_send_rich_message.",
+    "Send a Telegram message. Omit chatId to use the current chat. Use text alone for a normal message, or add rich for one native user-mode Rich Message with structured blocks, local attachments, URL/copy buttons, alignment, and styles. Do not write tg:// references yourself.",
   parameters: Type.Object({
-    chatId: Type.String({
-      description: "The chat ID to send the message to",
-    }),
-    text: Type.String({
-      description: "The message text to send (max 4096 characters)",
-      maxLength: TELEGRAM_MAX_MESSAGE_LENGTH,
-    }),
+    chatId: Type.Optional(
+      Type.String({
+        description: "Destination chat ID. Defaults to the current chat.",
+      })
+    ),
+    text: Type.Optional(
+      Type.String({
+        description: "Plain text or Rich Markdown content",
+        maxLength: RICH_MESSAGE_MAX_BYTES,
+      })
+    ),
     replyToId: Type.Optional(
       Type.Number({
         description: "Optional message ID to reply to",
       })
     ),
+    rich: Type.Optional(richMessageContentSchema),
   }),
 };
 
@@ -46,20 +57,34 @@ export const telegramSendMessageExecutor: ToolExecutor<SendMessageParams> = asyn
   context
 ): Promise<ToolResult> => {
   try {
-    const { chatId, text, replyToId } = params;
+    const chatId = params.chatId ?? context.chatId;
+    const text = params.text ?? "";
+    const rich = prepareRichMessageContent(params.rich, context);
+    if (!text.trim() && !rich) {
+      return { success: false, error: "Message content cannot be empty" };
+    }
 
-    // Send message via Telegram bridge
+    const compiled = rich ? compileRichMessageMarkdown(text, rich) : null;
+
     const sentMessage = await context.bridge.sendMessage({
       chatId,
       text,
-      replyToId,
+      replyToId: params.replyToId,
+      rich,
     });
+
+    const firstAttachment = rich?.attachments?.[0];
 
     return {
       success: true,
       data: {
         messageId: sentMessage?.id ?? null,
         date: sentMessage?.date ?? null,
+        chatId,
+        deliveryKind: rich ? "rich" : "text",
+        renderedText: compiled?.markdown ?? text,
+        hasMedia: Boolean(rich?.attachments?.length),
+        mediaType: firstAttachment?.type,
       },
     };
   } catch (error) {

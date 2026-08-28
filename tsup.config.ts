@@ -29,6 +29,8 @@ export default defineConfig({
   entry: {
     index: "src/index.ts",
     "cli/index": "src/cli/index.ts",
+    "memory/workers/embedding-worker": "src/memory/workers/embedding-worker.ts",
+    "memory/workers/vector-search-worker": "src/memory/workers/vector-search-worker.ts",
   },
   format: "esm",
   target: "node22",

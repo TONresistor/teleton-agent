@@ -7,6 +7,7 @@ import type { PluginModule } from "./agent/tools/types.js";
 import { getProviderMetadata, type SupportedProvider } from "./config/providers.js";
 import { getDatabase } from "./memory/index.js";
 import type { EmbeddingProvider } from "./memory/embeddings/provider.js";
+import type { VectorSearchWorkerClient } from "./memory/workers/vector-search-client.js";
 import { createLogger } from "./utils/logger.js";
 import { getErrorMessage } from "./utils/errors.js";
 
@@ -27,7 +28,8 @@ export class PluginOrchestrator {
     private registry: ToolRegistry,
     private config: Config,
     private sdkDeps: SDKDependencies,
-    private embedder: EmbeddingProvider
+    private embedder: EmbeddingProvider,
+    private vectorSearchWorker?: VectorSearchWorkerClient
   ) {}
 
   async loadAll(
@@ -96,11 +98,17 @@ export class PluginOrchestrator {
     // Initialize Tool RAG index
     if (this.config.tool_rag.enabled) {
       const { ToolIndex } = await import("./agent/tools/tool-index.js");
-      const toolIndex = new ToolIndex(db, this.embedder, getDatabase().isVectorSearchReady(), {
-        topK: this.config.tool_rag.top_k,
-        alwaysInclude: this.config.tool_rag.always_include,
-        skipUnlimitedProviders: this.config.tool_rag.skip_unlimited_providers,
-      });
+      const toolIndex = new ToolIndex(
+        db,
+        this.embedder,
+        getDatabase().isVectorSearchReady(),
+        {
+          topK: this.config.tool_rag.top_k,
+          alwaysInclude: this.config.tool_rag.always_include,
+          skipUnlimitedProviders: this.config.tool_rag.skip_unlimited_providers,
+        },
+        this.vectorSearchWorker
+      );
       toolIndex.ensureSchema();
       this.registry.setToolIndex(toolIndex);
 

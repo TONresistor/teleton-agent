@@ -11,7 +11,8 @@ import type { ToolContext } from "../agent/tools/types.js";
 import { isSilentReply } from "../constants/tokens.js";
 import {
   deliveredTelegramMessageId,
-  deliveredTelegramRichMessage,
+  deliveredTelegramMessageIdFromCall,
+  deliveredTelegramStructuredMessage,
   deliveredTelegramText,
 } from "../agent/telegram-send-state.js";
 import { transcribeAudio } from "../sdk/telegram-utils.js";
@@ -207,7 +208,8 @@ export class MessageHandler {
     db: Database.Database,
     embedder: EmbeddingProvider,
     vectorEnabled: boolean,
-    fullConfig?: Config
+    fullConfig?: Config,
+    messageStore?: MessageStore
   ) {
     this.bridge = bridge;
     this.config = config;
@@ -219,7 +221,7 @@ export class MessageHandler {
       config.rate_limit_groups_per_minute
     );
 
-    this.messageStore = new MessageStore(db, embedder, vectorEnabled);
+    this.messageStore = messageStore ?? new MessageStore(db, embedder, vectorEnabled);
     this.chatStore = new ChatStore(db);
     this.userStore = new UserStore(db);
     this.pendingHistory = new PendingHistory();
@@ -589,37 +591,30 @@ export class MessageHandler {
             message.chatId,
             response.content
           );
-          const deliveredRichMessage = deliveredTelegramRichMessage(
+          const deliveredStructuredMessage = deliveredTelegramStructuredMessage(
             response.toolCalls,
             message.chatId
           );
 
-          if (deliveredRichMessage) {
-            // A rich-message tool call is the response itself. Never append the
+          if (deliveredStructuredMessage) {
+            // A structured send is the response itself. Never append the
             // model's final acknowledgement as a separate Telegram message.
+            const deliveryData =
+              deliveredStructuredMessage.result?.data &&
+              typeof deliveredStructuredMessage.result.data === "object"
+                ? (deliveredStructuredMessage.result.data as Record<string, unknown>)
+                : {};
             const richText =
-              typeof deliveredRichMessage.input.text === "string"
-                ? deliveredRichMessage.input.text
-                : "";
-            const deliveredMessageId = deliveredTelegramMessageId(
-              response.toolCalls,
-              message.chatId,
-              richText
+              typeof deliveryData.renderedText === "string" ? deliveryData.renderedText : "";
+            const deliveredMessageId = deliveredTelegramMessageIdFromCall(
+              deliveredStructuredMessage
             );
-            const rawMedia = deliveredRichMessage.input.media;
-            const firstMedia =
-              Array.isArray(rawMedia) &&
-              rawMedia[0] &&
-              typeof rawMedia[0] === "object" &&
-              "type" in rawMedia[0]
-                ? rawMedia[0]
-                : null;
             const mediaType =
-              firstMedia &&
-              (firstMedia.type === "photo" ||
-                firstMedia.type === "video" ||
-                firstMedia.type === "audio")
-                ? firstMedia.type
+              deliveryData.mediaType === "photo" ||
+              deliveryData.mediaType === "video" ||
+              deliveryData.mediaType === "audio" ||
+              deliveryData.mediaType === "document"
+                ? deliveryData.mediaType
                 : undefined;
 
             await this.storeTelegramMessage(
@@ -633,7 +628,7 @@ export class MessageHandler {
                 isBot: false,
                 mentionsMe: false,
                 timestamp: new Date(),
-                hasMedia: Array.isArray(rawMedia) && rawMedia.length > 0,
+                hasMedia: deliveryData.hasMedia === true,
                 mediaType,
               },
               true

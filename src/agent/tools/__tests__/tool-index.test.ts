@@ -6,6 +6,7 @@ import {
 } from "../../../memory/embeddings/provider.js";
 import { ToolIndex } from "../tool-index.js";
 import type { ToolNamespaceCatalogEntry } from "../tool-namespaces.js";
+import type { VectorSearchWorkerClient } from "../../../memory/workers/vector-search-client.js";
 
 const CONFIG = { topK: 5, alwaysInclude: [], skipUnlimitedProviders: false };
 
@@ -20,7 +21,13 @@ describe("ToolIndex hierarchical search", () => {
         description TEXT NOT NULL,
         search_text TEXT NOT NULL,
         updated_at INTEGER NOT NULL DEFAULT (unixepoch())
-      )
+      );
+      CREATE VIRTUAL TABLE tool_index_fts USING fts5(
+        search_text,
+        name UNINDEXED,
+        content='tool_index',
+        content_rowid='rowid'
+      );
     `);
   });
 
@@ -43,6 +50,30 @@ describe("ToolIndex hierarchical search", () => {
 
     expect(results.map((result) => result.name)).toEqual(["exec_run", "exec_status"]);
     expect(results.map((result) => result.name)).not.toContain("web_search");
+  });
+
+  it("delegates global sqlite-vec retrieval to the vector worker", async () => {
+    const embedder: EmbeddingProvider = {
+      id: "test",
+      model: "test",
+      dimensions: 2,
+      embedQuery: vi.fn(async () => [1, 0]),
+      embedBatch: vi.fn(async () => []),
+    };
+    const searchTools = vi
+      .fn()
+      .mockResolvedValue([{ name: "memory_search", description: "Search memory", distance: 0.1 }]);
+    const worker = { searchTools } as unknown as VectorSearchWorkerClient;
+    const index = new ToolIndex(db, embedder, true, CONFIG, worker);
+
+    const results = await index.search("remember", [1, 0], 5);
+
+    expect(results.map((result) => result.name)).toEqual(["memory_search"]);
+    expect(searchTools).toHaveBeenCalledWith({
+      type: "searchTools",
+      queryEmbedding: [1, 0],
+      limit: 15,
+    });
   });
 
   it("invalidates namespace embeddings when searchable tool metadata changes", async () => {
