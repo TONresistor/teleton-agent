@@ -27,7 +27,7 @@ interface SendMessageParams {
 export const telegramSendMessageTool: Tool = {
   name: "telegram_send_message",
   description:
-    "Send a Telegram message. Omit chatId to use the current chat. Use text alone for a normal message, or add rich for one native user-mode Rich Message with structured blocks, local attachments, URL/copy buttons, alignment, and styles. Do not write tg:// references yourself.",
+    "Send a Telegram message. Omit chatId to use the current chat. Use text alone for a normal message, or add rich for one native user-mode Rich Message with structured blocks, local attachments, small inline or row URL/copy buttons, alignment, and styles. Do not write tg:// references yourself.",
   parameters: Type.Object({
     chatId: Type.Optional(
       Type.String({

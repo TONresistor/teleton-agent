@@ -25,6 +25,36 @@ describe("compileRichMessageMarkdown", () => {
     expect(compiled).toMatchObject({ rtl: true, disableAutoLinks: true });
   });
 
+  it("compiles small buttons inline with surrounding text", () => {
+    const compiled = compileRichMessageMarkdown("", {
+      blocks: [
+        {
+          type: "inline",
+          items: [
+            { type: "text", text: "Read " },
+            {
+              type: "button",
+              label: "Docs",
+              action: { type: "url", url: "https://example.com/docs?a=1&b=2" },
+              style: "link",
+            },
+            { type: "text", text: " or copy " },
+            {
+              type: "button",
+              label: "Ticker",
+              action: { type: "copy", text: "TON&USD" },
+            },
+            { type: "text", text: "." },
+          ],
+        },
+      ],
+    });
+
+    expect(compiled.markdown).toBe(
+      '<p>Read <tg-button type="url" style="link" url="https://example.com/docs?a=1&amp;b=2">Docs</tg-button> or copy <tg-button type="copy_text" text="TON&amp;USD">Ticker</tg-button>.</p>'
+    );
+  });
+
   it("rejects ambiguous simple and advanced layouts", () => {
     expect(() =>
       compileRichMessageMarkdown("top-level", {
