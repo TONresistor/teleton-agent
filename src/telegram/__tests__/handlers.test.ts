@@ -40,6 +40,8 @@ vi.mock("../../memory/pending-history.js", () => ({
     addMessage = vi.fn();
     getAndClearPending = vi.fn().mockReturnValue(null);
     clearPending = vi.fn();
+    getPendingCount = vi.fn().mockReturnValue(0);
+    hasPending = vi.fn().mockReturnValue(false);
   },
 }));
 
@@ -50,7 +52,7 @@ vi.mock("../../agent/tools/telegram/media/transcribe-audio.js", () => ({
 
 import { ChatQueue, MessageHandler, type MessageContext } from "../handlers.js";
 import type { TelegramMessage } from "../bridge.js";
-import type { TelegramConfig } from "../../config/schema.js";
+import type { Config, TelegramConfig } from "../../config/schema.js";
 import { TELEGRAM_SEND_TOOLS } from "../../constants/tools.js";
 import type { MessageStore } from "../../memory/feed/messages.js";
 
@@ -125,7 +127,18 @@ function createHandler(
   const bridge = deps?.bridge ?? makeBridge();
   const agent = deps?.agent ?? makeAgent();
   const config = makeConfig(configOverrides);
-  const handler = new MessageHandler(bridge, config, agent, makeDb(), makeEmbedder(), false);
+  // Humanization's reply-probability gate is randomized and time-of-day dependent —
+  // disable it so handleMessage's downstream behavior is deterministic in tests.
+  const fullConfig = { telegram: { humanization: { enabled: false } } } as unknown as Config;
+  const handler = new MessageHandler(
+    bridge,
+    config,
+    agent,
+    makeDb(),
+    makeEmbedder(),
+    false,
+    fullConfig
+  );
   return { handler, bridge, agent, config };
 }
 
@@ -309,6 +322,38 @@ describe("MessageHandler", () => {
 
       expect(ctx.shouldRespond).toBe(false);
       expect(ctx.reason).toBe("Sender is self");
+    });
+
+    it("own reaction events → shouldRespond=true", () => {
+      const { handler } = createHandler({ dm_policy: "open" });
+      handler.setOwnUserId("222");
+
+      const ctx = handler.analyzeMessage(
+        makeMessage({
+          senderId: 222,
+          isSystemEvent: true,
+          text: "[SYSTEM TELEGRAM_REACTION_EVENT]",
+        })
+      );
+
+      expect(ctx.shouldRespond).toBe(true);
+    });
+
+    it("reaction events with synthetic negative ids bypass offset dedup", () => {
+      mockReadOffset.mockReturnValue(100);
+      const { handler } = createHandler({ dm_policy: "open" });
+      handler.setOwnUserId("222");
+
+      const ctx = handler.analyzeMessage(
+        makeMessage({
+          id: -Date.now(),
+          senderId: 222,
+          isSystemEvent: true,
+          text: "[SYSTEM TELEGRAM_REACTION_EVENT]",
+        })
+      );
+
+      expect(ctx.shouldRespond).toBe(true);
     });
 
     it("message.id <= chatOffset → shouldRespond=false (already processed)", () => {
@@ -794,6 +839,24 @@ describe("MessageHandler", () => {
 
       expect(mockWriteOffset).not.toHaveBeenCalled();
     });
+
+    it("reaction events (negative synthetic id) must not be used as replyToId", async () => {
+      const agent = makeAgent();
+      agent.processMessage.mockRejectedValue(
+        new Error("API error: Codex error: The usage limit has been reached")
+      );
+
+      const { handler, bridge } = createHandler({ dm_policy: "open" }, { agent });
+      await handler.handleMessage(
+        makeMessage({ id: -Date.now(), chatId: "chat1", isSystemEvent: true })
+      );
+
+      expect(bridge.sendMessage).toHaveBeenCalledWith({
+        chatId: "chat1",
+        text: expect.any(String),
+        replyToId: undefined,
+      });
+    });
   });
 
   // ── Edge cases ───────────────────────────────────────────────────────────
@@ -848,5 +911,35 @@ describe("ChatQueue", () => {
     await vi.waitFor(() => expect(release).toBeTypeOf("function"));
     release();
     await first;
+  });
+});
+
+describe("MessageHandler.handleBatch", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockReadOffset.mockReturnValue(null);
+  });
+
+  it("answers a rapid DM burst once, with earlier messages as pending context", async () => {
+    const agent = makeAgent();
+    const { handler } = createHandler({ dm_policy: "open" }, { agent });
+
+    const first = makeMessage({ id: 101, text: "first message" });
+    const second = makeMessage({ id: 102, text: "second message" });
+
+    await handler.handleBatch([first, second]);
+
+    // Agent called once for the anchor message with the merged pending context.
+    expect(agent.processMessage).toHaveBeenCalledTimes(1);
+    expect(agent.processMessage).toHaveBeenCalledWith(expect.objectContaining({ messageId: 102 }));
+  });
+
+  it("routes single messages straight through handleMessage", async () => {
+    const agent = makeAgent();
+    const { handler } = createHandler({ dm_policy: "open" }, { agent });
+    await handler.handleBatch([makeMessage({ id: 201 })]);
+
+    expect(agent.processMessage).toHaveBeenCalledTimes(1);
+    expect(agent.processMessage).toHaveBeenCalledWith(expect.objectContaining({ messageId: 201 }));
   });
 });

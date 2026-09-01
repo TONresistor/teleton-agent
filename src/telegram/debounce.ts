@@ -4,41 +4,61 @@ import { createLogger } from "../utils/logger.js";
 
 const log = createLogger("Telegram");
 
+/** How often to recheck whether a chat is still busy before flushing a held buffer. */
+const BUSY_RECHECK_MS = 1_500;
+/** Safety valve: stop waiting on "busy" after this long even if still active. */
+const MAX_BUSY_WAIT_MS = 5 * 60_000;
+
 interface DebounceBuffer {
   messages: TelegramMessage[];
   timer: NodeJS.Timeout | null;
+  debounceMs: number;
 }
 
 interface DebounceConfig {
   debounceMs: number;
+  dmDebounceMs?: number;
   maxDebounceMs?: number;
   maxBufferSize?: number;
 }
 
 export class MessageDebouncer {
   private buffers: Map<string, DebounceBuffer> = new Map();
-  private maxDebounceMs: number;
   private readonly maxBufferSize: number;
 
   constructor(
     private config: DebounceConfig,
     private shouldDebounce: (message: TelegramMessage) => boolean,
     private onFlush: (messages: TelegramMessage[]) => Promise<void>,
-    private onError?: (error: unknown, messages: TelegramMessage[]) => void
+    private onError?: (error: unknown, messages: TelegramMessage[]) => void,
+    /**
+     * Optional: report whether a chat is still mid-turn (generating/sending a
+     * reply to an earlier message). While true, a newly buffered message is
+     * held rather than flushed, so it merges into the next turn instead of
+     * getting its own immediate, out-of-context reply.
+     */
+    private isBusy?: (chatId: string) => boolean
   ) {
-    this.maxDebounceMs = config.maxDebounceMs ?? config.debounceMs * DEBOUNCE_MAX_MULTIPLIER;
     this.maxBufferSize = config.maxBufferSize ?? DEBOUNCE_MAX_BUFFER_SIZE;
   }
 
   updateDebounceMs(debounceMs: number): void {
     this.config = { ...this.config, debounceMs };
-    this.maxDebounceMs = debounceMs * DEBOUNCE_MAX_MULTIPLIER;
     for (const [key, buffer] of this.buffers) this.resetTimer(key, buffer);
+  }
+
+  updateDmDebounceMs(dmDebounceMs: number): void {
+    this.config = { ...this.config, dmDebounceMs };
+    for (const [key, buffer] of this.buffers) {
+      if (buffer.debounceMs > 0) this.resetTimer(key, buffer);
+    }
   }
 
   async enqueue(message: TelegramMessage): Promise<void> {
     const isGroup = message.isGroup ? "group" : "dm";
     const shouldDebounce = this.config.debounceMs > 0 && this.shouldDebounce(message);
+    const debounceMs = message.isGroup ? this.config.debounceMs : (this.config.dmDebounceMs ?? 0);
+    const effectiveDebounce = shouldDebounce ? debounceMs : 0;
 
     log.debug(
       `📩 [Debouncer] Received ${isGroup} message from ${message.senderId} in ${message.chatId} (debounce: ${shouldDebounce})`
@@ -64,7 +84,11 @@ export class MessageDebouncer {
           `[Debouncer] Buffer full for ${key} (${existing.messages.length}/${this.maxBufferSize}), flushing`
         );
         await this.flushKey(key);
-        const newBuffer: DebounceBuffer = { messages: [message], timer: null };
+        const newBuffer: DebounceBuffer = {
+          messages: [message],
+          timer: null,
+          debounceMs: effectiveDebounce,
+        };
         this.buffers.set(key, newBuffer);
         this.resetTimer(key, newBuffer);
       } else {
@@ -78,6 +102,7 @@ export class MessageDebouncer {
       const buffer: DebounceBuffer = {
         messages: [message],
         timer: null,
+        debounceMs: effectiveDebounce,
       };
       this.buffers.set(key, buffer);
       this.resetTimer(key, buffer);
@@ -89,11 +114,22 @@ export class MessageDebouncer {
       clearTimeout(buffer.timer);
     }
 
-    // Clamp delay so total wait never exceeds maxDebounceMs
     const firstMsgTime = buffer.messages[0]?.timestamp?.getTime() ?? Date.now();
     const elapsed = Date.now() - firstMsgTime;
-    const remaining = Math.max(0, this.maxDebounceMs - elapsed);
-    const delay = Math.min(this.config.debounceMs, remaining);
+
+    // The chat is still generating/sending a reply to an earlier message —
+    // hold this buffer instead of flushing, so it answers as one coherent
+    // follow-up turn rather than a disjointed reply that ignores it.
+    if (this.isBusy?.(key) && elapsed < MAX_BUSY_WAIT_MS) {
+      buffer.timer = setTimeout(() => this.resetTimer(key, buffer), BUSY_RECHECK_MS);
+      buffer.timer.unref?.();
+      return;
+    }
+
+    // Clamp delay so total wait never exceeds the buffer's own window (x multiplier)
+    const maxWait = buffer.debounceMs * DEBOUNCE_MAX_MULTIPLIER;
+    const remaining = Math.max(0, maxWait - elapsed);
+    const delay = Math.min(buffer.debounceMs, remaining);
 
     buffer.timer = setTimeout(() => {
       this.flushKey(key).catch((error) => {

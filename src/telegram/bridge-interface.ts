@@ -17,7 +17,24 @@ export interface TelegramMessage {
   hasMedia: boolean;
   mediaType?: "photo" | "document" | "video" | "audio" | "voice" | "sticker";
   replyToId?: number;
+  reactionSummary?: string;
+  /** Internal Telegram update such as a reaction; not a user-authored message. */
+  isSystemEvent?: boolean;
   _rawMessage?: Api.Message;
+}
+
+/** A user's change to the reactions on one of the agent's messages. */
+export interface TelegramReaction {
+  chatId: string;
+  messageId: number;
+  userId: number;
+  username?: string;
+  firstName?: string;
+  oldEmojis: string[];
+  newEmojis: string[];
+  isGroup: boolean;
+  isChannel: boolean;
+  timestamp: Date;
 }
 
 type MediaType = NonNullable<TelegramMessage["mediaType"]>;
@@ -202,5 +219,9 @@ export interface ITelegramBridge {
     handler: (msg: TelegramMessage) => void | Promise<void>,
     filters?: { incoming?: boolean; outgoing?: boolean; chats?: string[] }
   ): void;
+  /** Bot API supports individual reactions to the bot's messages. */
+  onReaction?(handler: (reaction: TelegramReaction) => void | Promise<void>): void;
+  /** User-mode capability for deterministic startup inbox recovery. */
+  getUnreadDirectDialogs?(): Promise<Array<{ chatId: string; unreadCount: number }>>;
   fetchReplyContext(rawMsg: unknown): Promise<ReplyContext | null>;
 }

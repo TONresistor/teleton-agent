@@ -147,8 +147,8 @@ export class AgentLifecycleController {
     await this.emitAgentStartHook(deps, pluginNames.length, toolCount);
 
     const adminChatId = deps.config.telegram.admin_ids[0];
-    if (deps.config.heartbeat.enabled && adminChatId) {
-      deps.heartbeatRunner.start(adminChatId, deps.config.heartbeat.interval_ms);
+    if (deps.config.heartbeat.enabled && (adminChatId || deps.config.heartbeat.proactive_enabled)) {
+      deps.heartbeatRunner.start(adminChatId ?? 0, deps.config.heartbeat.interval_ms);
     }
 
     void deps.memory.messages.startPendingEmbeddingBackfill();

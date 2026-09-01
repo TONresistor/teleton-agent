@@ -33,13 +33,19 @@ const TELEGRAM_GIFT_MANAGE_RE =
  */
 const BUILTIN_NAMESPACE_RULES: NamespaceRule[] = [
   {
+    name: "spotify",
+    description: "Search Spotify tracks, inspect previews, and save personal ratings.",
+    matches: (name) => name.startsWith("spotify_"),
+  },
+  {
     name: "system.discovery",
     description: "Discover and load additional tools for the current task.",
     matches: (name) => name === "tool_search",
   },
   {
     name: "telegram.scheduling",
-    description: "Create, inspect, send, or delete scheduled Telegram messages and tasks.",
+    description:
+      "Create, inspect, send, or delete scheduled Telegram messages and tasks. Создать напоминание, таймер, отложенное сообщение, расписание.",
     matches: (name) => name.startsWith("telegram_") && TELEGRAM_SCHEDULE_RE.test(name),
   },
   {
@@ -123,9 +129,11 @@ const BUILTIN_NAMESPACE_RULES: NamespaceRule[] = [
   },
   {
     name: "telegram.profile",
-    description: "Update the Telegram profile, bio, username, and personal channel.",
+    description: "Update the Telegram profile, avatar, bio, username, and personal channel.",
     matches: (name) =>
-      /telegram_(update_profile|set_bio|set_username|set_personal_channel)/.test(name),
+      /telegram_(update_profile|update_profile_photo|set_bio|set_username|set_personal_channel)/.test(
+        name
+      ),
   },
   {
     name: "telegram.stars",
@@ -141,43 +149,6 @@ const BUILTIN_NAMESPACE_RULES: NamespaceRule[] = [
     name: "telegram.memory",
     description: "Read, search, and update agent memory and prior session history.",
     matches: (name) => /^(memory_read|memory_search|memory_write|session_search)$/.test(name),
-  },
-  {
-    name: "ton.jettons",
-    description:
-      "Inspect and transfer TON jettons, balances, metadata, prices, holders, and history.",
-    matches: (name) => name.startsWith("jetton_"),
-  },
-  {
-    name: "ton.market",
-    description: "Inspect TON prices and charts, compare DEX quotes, and list wallet NFTs.",
-    matches: (name) => /^(ton_price|ton_chart|dex_quote|nft_list)$/.test(name),
-  },
-  {
-    name: "ton.wallet",
-    description: "Inspect the TON wallet, balances and transactions, or send TON.",
-    matches: (name) => name.startsWith("ton_") && name !== "ton_proxy_status",
-  },
-  {
-    name: "ton.dns",
-    description:
-      "Resolve and manage TON DNS names, auctions, bids, wallet links, and site records.",
-    matches: (name) => name.startsWith("dns_"),
-  },
-  {
-    name: "ton.stonfi",
-    description: "Search STON.fi assets and pools, inspect trends and quotes, or execute swaps.",
-    matches: (name) => name.startsWith("stonfi_"),
-  },
-  {
-    name: "ton.dedust",
-    description: "Inspect DeDust pools, tokens, prices and quotes, or execute swaps.",
-    matches: (name) => name.startsWith("dedust_"),
-  },
-  {
-    name: "ton.infrastructure",
-    description: "Inspect and manage local TON infrastructure services.",
-    matches: (name) => name === "ton_proxy_status",
   },
   {
     name: "workspace",
@@ -397,7 +368,7 @@ function renderBoundedPromptLines(lines: string[]): string {
 function tokenize(text: string): string[] {
   return text
     .toLowerCase()
-    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/[^\p{L}\p{N}]+/gu, " ")
     .split(/\s+/)
     .filter((token) => token.length > 1);
 }
@@ -431,7 +402,7 @@ export function rankToolsLexically<T extends { name: string; description?: strin
   limit: number
 ): T[] {
   const queryTokens = new Set(tokenize(query));
-  const normalizedQuery = query.toLowerCase().replace(/[^a-z0-9]+/g, "_");
+  const normalizedQuery = query.toLowerCase().replace(/[^\p{L}\p{N}]+/gu, "_");
   return tools
     .map((tool) => {
       const candidateTokens = new Set(tokenize(`${tool.name} ${tool.description ?? ""}`));

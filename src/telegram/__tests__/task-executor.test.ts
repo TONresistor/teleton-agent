@@ -13,6 +13,25 @@ function taskWithTool(tool: string) {
 }
 
 describe("executeScheduledTask", () => {
+  it("marks scheduled runs as immediate execution, not planning", async () => {
+    const prompt = await executeScheduledTask(
+      {
+        ...taskWithTool("ton_get_price"),
+        payload: JSON.stringify({
+          type: "agent_task",
+          instructions: "Send the reminder now",
+        }),
+      },
+      {} as never,
+      {} as never,
+      { getToolCategory: vi.fn(() => "data-bearing") } as never
+    );
+
+    expect(prompt).toContain("live scheduler now");
+    expect(prompt).toContain("Do not create a plan");
+    expect(prompt).toContain("complete the requested external actions");
+  });
+
   it("does not auto-execute action tools", async () => {
     const registry = {
       getToolCategory: vi.fn(() => undefined),

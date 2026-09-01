@@ -64,7 +64,8 @@ export async function selectTools(
   isAdmin: boolean,
   senderId: number | undefined,
   toolLimit: number | null,
-  queryEmbedding: number[] | undefined
+  queryEmbedding: number[] | undefined,
+  hasMedia = false
 ): Promise<PiAiTool[] | undefined> {
   if (!registry) return undefined;
   const toolIndex = registry.getToolIndex();
@@ -75,10 +76,12 @@ export async function selectTools(
     !(toolLimit === null && config.tool_rag?.skip_unlimited_providers !== false);
 
   if (config.tool_search?.enabled) {
-    const tools = enforceProviderToolLimit(
-      registry.getCoreTools(effectiveIsGroup, chatId, isAdmin, senderId),
-      toolLimit
-    );
+    const selected = registry.getCoreTools(effectiveIsGroup, chatId, isAdmin, senderId);
+    if (hasMedia) {
+      const vision = registry.getAll().find((tool) => tool.name === "vision_analyze");
+      if (vision && !selected.some((tool) => tool.name === vision.name)) selected.push(vision);
+    }
+    const tools = enforceProviderToolLimit(selected, toolLimit);
     log.info(`ToolSearch: ${tools.length} core tools (${registry.count} total available)`);
     return tools;
   }

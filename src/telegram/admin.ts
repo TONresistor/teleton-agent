@@ -12,6 +12,12 @@ import type { ToolRegistry } from "../agent/tools/registry.js";
 import { writePluginSecret, deletePluginSecret, listPluginSecretKeys } from "../sdk/secrets.js";
 import { readRawConfig, writeRawConfig, setNestedValue } from "../config/configurable-keys.js";
 import { getErrorMessage } from "../utils/errors.js";
+import { getDatabase } from "../memory/index.js";
+import {
+  RelationshipStore,
+  parseRelationshipLevel,
+  relationshipLabel,
+} from "../memory/feed/relationships.js";
 
 export interface AdminCommand {
   command: string;
@@ -22,6 +28,7 @@ export interface AdminCommand {
 
 const VALID_DM_POLICIES = ["open", "allowlist", "admin-only", "disabled"] as const;
 const VALID_GROUP_POLICIES = ["open", "allowlist", "admin-only", "disabled"] as const;
+const VALID_REPLY_STYLES = ["auto", "plain", "reply"] as const;
 const VALID_MODULE_LEVELS = ["open", "admin", "disabled"] as const;
 
 export class AdminHandler {
@@ -121,6 +128,9 @@ export class AdminHandler {
         return this.handleModulesCommand(command, isGroup ?? false);
       case "plugin":
         return this.handlePluginCommand(command);
+      case "relationship":
+      case "relations":
+        return this.handleRelationshipCommand(command);
       case "help":
         return this.handleHelpCommand();
       case "ping":
@@ -150,6 +160,56 @@ export class AdminHandler {
     }
 
     return status;
+  }
+
+  private handleRelationshipCommand(command: AdminCommand): string {
+    const store = new RelationshipStore(getDatabase().getDb());
+    const action = command.args[0]?.toLowerCase();
+    if (action === "set") {
+      const userId = command.args[1];
+      const level = command.args[2] ? parseRelationshipLevel(command.args[2]) : undefined;
+      if (!userId || !/^\d+$/.test(userId) || !level) {
+        return "Usage: /relationship set <user_id> <stranger|surface|acquaintance|buddy|comrade|friend|best_friend|partner|family>";
+      }
+      store.setManualLevel(userId, level);
+      return `✅ Relationship for \`${userId}\` set to **${relationshipLabel(level)}**.`;
+    }
+    if (action === "approve") {
+      const userId = command.args[1];
+      if (!userId || !/^\d+$/.test(userId)) return "Usage: /relationship approve <user_id>";
+      const level = store.approveProposal(userId);
+      return level
+        ? `✅ Applied suggested relationship for \`${userId}\`: **${relationshipLabel(level)}**.`
+        : `No pending relationship suggestion for \`${userId}\`.`;
+    }
+    if (action === "auto") {
+      const userId = command.args[1];
+      if (!userId || !/^\d+$/.test(userId)) return "Usage: /relationship auto <user_id>";
+      return store.clearManualLevel(userId)
+        ? `✅ Automatic relationship scoring restored for \`${userId}\`.`
+        : `Relationship for \`${userId}\` is already automatic.`;
+    }
+
+    const userId = action || String(command.senderId);
+    if (!/^\d+$/.test(userId)) return "Usage: /relationship [telegram_user_id]";
+
+    const profile = store.get(userId);
+    if (!profile) return `No relationship profile yet for user ${userId}.`;
+
+    let text = `🤝 **Relationship**\n\n`;
+    text += `User: \`${userId}\`\n`;
+    text += `Level: **${relationshipLabel(profile.level)}**\n`;
+    text += `Rapport: ${profile.rapport}/100\n`;
+    text += `Interactions: ${profile.interactions}\n`;
+    text += `Tone: ${profile.tone}\n`;
+    if (profile.manualLevel) text += `Mode: manual override\n`;
+    const proposal = store.getProposal(userId);
+    if (proposal) {
+      text += `\n⚠️ Suggested for your review: **${relationshipLabel(proposal)}**. It is not applied automatically.`;
+    }
+    text +=
+      "\nManage: `/relationship set <user_id> <level>`\nRestore automatic: `/relationship auto <user_id>`";
+    return text;
   }
 
   private async handleClearCommand(command: AdminCommand): Promise<string> {
@@ -211,7 +271,8 @@ export class AdminHandler {
       return (
         `📬 DM policy: **${this.config.dm_policy}**\n` +
         `👥 Group policy: **${this.config.group_policy}**\n\n` +
-        `Usage:\n/policy dm <${VALID_DM_POLICIES.join("|")}>\n/policy group <${VALID_GROUP_POLICIES.join("|")}>`
+        `↩️ Reply style: **${this.config.reply_style ?? "auto"}**\n\n` +
+        `Usage:\n/policy dm <${VALID_DM_POLICIES.join("|")}>\n/policy group <${VALID_GROUP_POLICIES.join("|")}>\n/policy reply <${VALID_REPLY_STYLES.join("|")}>`
       );
     }
 
@@ -245,7 +306,21 @@ export class AdminHandler {
       return `👥 Group policy: **${old}** → **${value}**`;
     }
 
-    return `❌ Unknown target: ${target}. Use "dm" or "group".`;
+    if (target === "reply") {
+      if (!(VALID_REPLY_STYLES as readonly string[]).includes(value)) {
+        return `❌ Invalid reply style. Valid: ${VALID_REPLY_STYLES.join(", ")}`;
+      }
+      const old = this.config.reply_style ?? "auto";
+      const next = value as (typeof VALID_REPLY_STYLES)[number];
+      const error = this.persistConfigValue("telegram.reply_style", next, () => {
+        this.config.reply_style = next;
+        this.agent.getConfig().telegram.reply_style = next;
+      });
+      if (error) return error;
+      return `↩️ Reply style: **${old}** → **${value}**`;
+    }
+
+    return `❌ Unknown target: ${target}. Use "dm", "group" or "reply".`;
   }
 
   private handlePauseCommand(): string {
@@ -563,8 +638,15 @@ Switch LLM model
 **/loop** <1-50>
 Set max agentic iterations
 
-**/policy** <dm|group> <value>
+**/policy** <dm|group|reply> <value>
 Change access policy
+
+**/policy reply <auto|plain|reply>
+Change outgoing reply style
+
+auto = reply only when message has a clear conversational anchor
+plain = never reply
+reply = always reply
 
 **/modules** [set|info|reset]
 Manage per-group module permissions

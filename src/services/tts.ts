@@ -6,6 +6,7 @@
  * - edge: Free Microsoft Edge TTS (fallback)
  * - openai: OpenAI TTS API
  * - elevenlabs: ElevenLabs API
+ * - minimax: MiniMax API (t2a_v2)
  */
 
 import { spawn, type ChildProcess, type SpawnOptions } from "child_process";
@@ -16,9 +17,9 @@ import { randomUUID } from "crypto";
 import { TELETON_ROOT } from "../workspace/paths.js";
 import { fetchWithTimeout } from "../utils/fetch.js";
 import { TTS_TIMEOUT_MS } from "../constants/timeouts.js";
-import { OPENAI_TTS_URL, ELEVENLABS_TTS_URL } from "../constants/api-endpoints.js";
+import { OPENAI_TTS_URL, ELEVENLABS_TTS_URL, MINIMAX_TTS_URL } from "../constants/api-endpoints.js";
 
-export type TTSProvider = "piper" | "edge" | "openai" | "elevenlabs";
+export type TTSProvider = "piper" | "edge" | "openai" | "elevenlabs" | "minimax";
 
 // Piper voices directory and venv
 const PIPER_VOICES_DIR = join(TELETON_ROOT, "piper-voices");
@@ -54,6 +55,7 @@ const DEFAULT_VOICES: Record<TTSProvider, string> = {
   edge: "en-US-BrianNeural", // Casual, sincere - fallback
   openai: "onyx", // Deep male voice
   elevenlabs: "21m00Tcm4TlvDq8ikWAM", // Rachel
+  minimax: "male-qn-qingse", // Mature male - natural
 };
 
 // Popular Edge TTS voices
@@ -107,6 +109,30 @@ export const EDGE_VOICES: Record<string, string> = {
   "ko-kr-female": "ko-KR-SunHiNeural",
 };
 
+// Minimax TTS voices (voice_id → description)
+export const MINIMAX_VOICES: Record<string, string> = {
+  // Male
+  "male-qn-qingse": "Mature, natural (default)",
+  "male-qn-jingying": "Youthful, energetic",
+  "male-tianle": "Bright, lively",
+  "male-qn-dada": "Deep, authoritative",
+  "male-qn-jingdu": "Calm, steady",
+  "male-qn-zhejiang": "Warm, regional",
+  "male-chengshu": "Mature, calm",
+  "male-jianwen": "Engaging, articulate",
+  // Female
+  "female-shaonv": "Youthful, sweet",
+  "female-yujie": "Elegant, composed",
+  "female-chengshu": "Mature, warm",
+  "female-tianmei": "Sweet, gentle",
+  "female-qingchen": "Crisp, clear",
+  "female-qn-jingying": "Energetic, fresh",
+  "female-qn-jingdu": "Steady, professional",
+  // Aliases
+  male: "male-qn-qingse",
+  female: "female-shaonv",
+};
+
 /**
  * Generate speech from text
  */
@@ -123,6 +149,8 @@ export async function generateSpeech(options: TTSOptions): Promise<TTSResult> {
       return generateOpenAITTS(options.text, voice);
     case "elevenlabs":
       return generateElevenLabsTTS(options.text, voice);
+    case "minimax":
+      return generateMinimaxTTS(options.text, voice);
     default:
       throw new Error(`Unknown TTS provider: ${provider}`);
   }
@@ -393,6 +421,66 @@ async function generateElevenLabsTTS(text: string, voiceId: string): Promise<TTS
   return {
     filePath: outputPath,
     provider: "elevenlabs",
+    voice: voiceId,
+  };
+}
+
+/**
+ * Generate TTS using MiniMax API (t2a_v2)
+ * Requires MINIMAX_API_KEY and MINIMAX_GROUP_ID environment variables.
+ */
+async function generateMinimaxTTS(text: string, voiceId: string): Promise<TTSResult> {
+  const apiKey = process.env.MINIMAX_API_KEY;
+  if (!apiKey) {
+    throw new Error("MINIMAX_API_KEY not set. Set it in your environment or .env file.");
+  }
+  const groupId = process.env.MINIMAX_GROUP_ID;
+  if (!groupId) {
+    throw new Error("MINIMAX_GROUP_ID not set. Set it in your environment or .env file.");
+  }
+
+  const tempDir = ensureTtsTempDir();
+
+  const outputPath = join(tempDir, `${randomUUID()}.mp3`);
+
+  const url = `${MINIMAX_TTS_URL}?GroupId=${encodeURIComponent(groupId)}`;
+
+  const response = await fetchWithTimeout(url, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      model: "speech-02-turbo",
+      text,
+      voice_setting: {
+        voice_id: voiceId,
+        speed: 1.0,
+        vol: 1.0,
+        pitch: 0,
+      },
+      audio_setting: {
+        sample_rate: 32000,
+        bitrate: 128000,
+        format: "mp3",
+        channel: 1,
+      },
+    }),
+    timeoutMs: TTS_TIMEOUT_MS,
+  });
+
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(`MiniMax TTS error: ${error}`);
+  }
+
+  const buffer = Buffer.from(await response.arrayBuffer());
+  writeFileSync(outputPath, buffer);
+
+  return {
+    filePath: outputPath,
+    provider: "minimax",
     voice: voiceId,
   };
 }

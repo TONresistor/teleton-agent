@@ -2,12 +2,8 @@ import { existsSync, readFileSync, readdirSync } from "node:fs";
 import { extname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { tools as dedustTools } from "../../agent/tools/dedust/index.js";
-import { tools as dnsTools } from "../../agent/tools/dns/index.js";
 import { tools as journalTools } from "../../agent/tools/journal/index.js";
-import { tools as stonfiTools } from "../../agent/tools/stonfi/index.js";
 import { tools as telegramTools } from "../../agent/tools/telegram/index.js";
-import { tools as tonTools } from "../../agent/tools/ton/index.js";
 import { tools as webTools } from "../../agent/tools/web/index.js";
 import { tools as workspaceTools } from "../../agent/tools/workspace/index.js";
 
@@ -53,37 +49,21 @@ function usesUnsupportedLightLottieFeature(value: unknown): boolean {
 describe("current product surfaces", () => {
   it("keeps documented built-in category counts anchored to the registry", () => {
     const baseToolCount =
-      telegramTools.length +
-      tonTools.length +
-      dnsTools.length +
-      stonfiTools.length +
-      dedustTools.length +
-      journalTools.length +
-      workspaceTools.length +
-      webTools.length +
-      2; // tool_search and tool_result_read are registered after the category arrays.
+      telegramTools.length + journalTools.length + workspaceTools.length + webTools.length + 2; // tool_search and tool_result_read are registered after the category arrays.
 
     expect({
       base: baseToolCount,
       telegram: telegramTools.length,
       telegramUserMode: telegramTools.filter((entry) => entry.mode !== "bot").length,
       telegramBotMode: telegramTools.filter((entry) => entry.mode !== "user").length,
-      ton: tonTools.length,
-      dns: dnsTools.length,
-      stonfi: stonfiTools.length,
-      dedust: dedustTools.length,
       journal: journalTools.length,
       workspace: workspaceTools.length,
       web: webTools.length,
     }).toEqual({
-      base: 131,
-      telegram: 85,
-      telegramUserMode: 82,
+      base: 102,
+      telegram: 89,
+      telegramUserMode: 86,
       telegramBotMode: 17,
-      ton: 15,
-      dns: 8,
-      stonfi: 5,
-      dedust: 5,
       journal: 3,
       workspace: 6,
       web: 2,

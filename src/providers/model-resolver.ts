@@ -48,7 +48,10 @@ export async function registerGocoonModels(httpPort: number): Promise<string[]> 
     const res = await fetchWithTimeout(`http://localhost:${httpPort}/v1/models`, {
       timeoutMs: 3000,
     });
-    if (!res.ok) return [];
+    if (!res.ok) {
+      log.warn({ status: res.status, port: httpPort }, "Gocoon model discovery failed");
+      return [];
+    }
     const body = (await res.json()) as {
       data?: { id?: string; name?: string }[];
       models?: { id?: string; name?: string }[];
@@ -91,9 +94,15 @@ export async function registerGocoonModels(httpPort: number): Promise<string[]> 
 const LOCAL_MODELS: Record<string, Model<"openai-completions">> = {};
 
 /** Register models discovered from a local OpenAI-compatible server */
-export async function registerLocalModels(baseUrl: string): Promise<string[]> {
+export async function registerLocalModels(
+  baseUrl: string,
+  apiKey?: string,
+  configuredModelId?: string,
+  visionModelIds: string[] = []
+): Promise<string[]> {
   for (const key of Object.keys(LOCAL_MODELS)) delete LOCAL_MODELS[key];
   clearProviderModels("local");
+  const visionSet = new Set(visionModelIds);
   try {
     const parsed = new URL(baseUrl);
     if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
@@ -101,8 +110,17 @@ export async function registerLocalModels(baseUrl: string): Promise<string[]> {
       return [];
     }
     const url = baseUrl.replace(/\/+$/, "");
-    const res = await fetchWithTimeout(`${url}/models`, { timeoutMs: 10_000 });
-    if (!res.ok) return [];
+    const res = await fetchWithTimeout(`${url}/models`, {
+      timeoutMs: 30_000,
+      headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : undefined,
+    });
+    if (!res.ok) {
+      log.warn(
+        { status: res.status, url: `${url}/models` },
+        "OpenAI-compatible model discovery failed"
+      );
+      return registerConfiguredLocalModel(url, apiKey, configuredModelId);
+    }
     const body = (await res.json()) as {
       data?: { id?: string; name?: string }[];
       models?: { id?: string; name?: string }[];
@@ -119,8 +137,9 @@ export async function registerLocalModels(baseUrl: string): Promise<string[]> {
         api: "openai-completions",
         provider: "local",
         baseUrl: url,
+        headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : undefined,
         reasoning: false,
-        input: ["text"],
+        input: visionSet.has(id) ? ["text", "image"] : ["text"],
         cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
         contextWindow: 128000,
         maxTokens: 4096,
@@ -135,9 +154,46 @@ export async function registerLocalModels(baseUrl: string): Promise<string[]> {
       ids.push(id);
     }
     return ids;
-  } catch {
-    return [];
+  } catch (error) {
+    log.warn({ err: error, baseUrl }, "OpenAI-compatible model discovery failed");
+    return registerConfiguredLocalModel(
+      baseUrl.replace(/\/+$/, ""),
+      apiKey,
+      configuredModelId,
+      visionSet
+    );
   }
+}
+
+function registerConfiguredLocalModel(
+  baseUrl: string,
+  apiKey: string | undefined,
+  modelId: string | undefined,
+  visionModelIds?: Set<string>
+): string[] {
+  if (!modelId || modelId === "auto") return [];
+  LOCAL_MODELS[modelId] = {
+    id: modelId,
+    name: modelId,
+    api: "openai-completions",
+    provider: "local",
+    baseUrl,
+    headers: apiKey ? { Authorization: `Bearer ${apiKey}` } : undefined,
+    reasoning: false,
+    input: visionModelIds?.has(modelId) ? ["text", "image"] : ["text"],
+    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+    contextWindow: 128000,
+    maxTokens: 4096,
+    compat: {
+      supportsStore: false,
+      supportsDeveloperRole: false,
+      supportsReasoningEffort: false,
+      supportsStrictMode: false,
+      maxTokensField: "max_tokens",
+    },
+  };
+  log.warn(`Using configured OpenAI-compatible model without discovery: ${modelId}`);
+  return [modelId];
 }
 
 /**

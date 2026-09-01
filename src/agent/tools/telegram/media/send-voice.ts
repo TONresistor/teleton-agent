@@ -14,6 +14,7 @@ import {
   generateSpeech,
   EDGE_VOICES,
   PIPER_VOICES,
+  MINIMAX_VOICES,
   type TTSProvider,
 } from "../../../../services/tts.js";
 import { validateReadPath, WorkspaceSecurityError } from "../../../../workspace/index.js";
@@ -39,7 +40,7 @@ interface SendVoiceParams {
 export const telegramSendVoiceTool: Tool = {
   name: "telegram_send_voice",
   description:
-    "Send a voice message. Either provide voicePath for an existing file, or text for TTS generation. Default TTS: piper (Trump voice). Available providers: piper, edge, openai, elevenlabs.",
+    "Send a voice message. Either provide voicePath for an existing file, or text for TTS generation. Default TTS: piper (Trump voice). Available providers: piper, edge, openai, elevenlabs, minimax.",
 
   parameters: Type.Object({
     chatId: Type.String({
@@ -63,8 +64,8 @@ export const telegramSendVoiceTool: Tool = {
     ttsProvider: Type.Optional(
       Type.String({
         description:
-          "TTS provider: 'piper' (default, Trump voice), 'edge', 'openai', or 'elevenlabs'",
-        enum: ["piper", "edge", "openai", "elevenlabs"],
+          "TTS provider: 'piper' (default, Trump voice), 'edge', 'openai', 'elevenlabs', or 'minimax'",
+        enum: ["piper", "edge", "openai", "elevenlabs", "minimax"],
       })
     ),
     rate: Type.Optional(
@@ -157,6 +158,11 @@ export const telegramSendVoiceExecutor: ToolExecutor<SendVoiceParams> = async (
         // Then check Edge voices
         else if (voice in EDGE_VOICES) {
           resolvedVoice = EDGE_VOICES[voice as keyof typeof EDGE_VOICES];
+        }
+        // Then check MiniMax voices
+        else if (voice in MINIMAX_VOICES) {
+          const mapped = MINIMAX_VOICES[voice];
+          resolvedVoice = voice === "male" || voice === "female" ? mapped : voice;
         }
       }
 

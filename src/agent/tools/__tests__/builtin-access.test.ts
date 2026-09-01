@@ -3,11 +3,6 @@ import { ToolRegistry } from "../registry.js";
 import { registerAllTools } from "../register-all.js";
 
 const ADMIN_ONLY_TOOLS = [
-  "ton_get_address",
-  "ton_send",
-  "jetton_send",
-  "stonfi_swap",
-  "dedust_swap",
   "telegram_get_dialogs",
   "telegram_get_history",
   "telegram_search_global",
@@ -26,11 +21,6 @@ const ADMIN_ONLY_TOOLS = [
 ] as const;
 
 const OWNER_PRIVATE_READS = [
-  "ton_get_address",
-  "ton_get_balance",
-  "ton_my_transactions",
-  "jetton_balances",
-  "nft_list",
   "telegram_get_admined_channels",
   "telegram_get_blocked",
   "telegram_get_common_chats",
@@ -75,7 +65,6 @@ describe("built-in tool access policy", () => {
     );
 
     expect(visible.has("telegram_send_message")).toBe(true);
-    expect(visible.has("ton_send")).toBe(false);
     expect(visible.has("telegram_get_history")).toBe(false);
   });
 

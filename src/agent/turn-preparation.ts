@@ -14,6 +14,8 @@ import type {
   MessageReceiveEvent,
   PromptAfterEvent,
 } from "../sdk/hooks/types.js";
+import { formatEmotionalState, updateEmotionalState } from "./emotions.js";
+import { formatRelationshipProfile, RelationshipStore } from "../memory/feed/relationships.js";
 import { saveSessionMemory } from "../session/memory-hook.js";
 import {
   getOrCreateSession,
@@ -68,6 +70,7 @@ export async function prepareTurn(
     mediaType,
     messageId,
     replyContext,
+    reactionSummary,
     isHeartbeat,
   } = opts;
 
@@ -188,6 +191,19 @@ export async function prepareTurn(
 
   const previousTimestamp = session.updatedAt;
 
+  const mediaInstruction =
+    hasMedia &&
+    (mediaType === "photo" ||
+      mediaType === "document" ||
+      mediaType === "sticker" ||
+      mediaType === "video")
+      ? "\n[Media instruction: this message contains an image. Use vision_analyze with this chat ID and message ID before answering if the image matters. Do not claim to see it from the marker alone.]"
+      : "";
+  const messageBody = `${effectiveMessage}${mediaInstruction}`;
+  const reactionContext = reactionSummary
+    ? `\n[Reactions on this message: ${reactionSummary}]`
+    : "";
+
   let formattedMessage = formatMessageEnvelope({
     channel: "Telegram",
     senderId: toolContext?.senderId ? String(toolContext.senderId) : chatId,
@@ -196,7 +212,7 @@ export async function prepareTurn(
     senderRank,
     timestamp: now,
     previousTimestamp,
-    body: effectiveMessage,
+    body: `${messageBody}${reactionContext}`,
     isGroup: effectiveIsGroup,
     hasMedia,
     mediaType,
@@ -303,10 +319,31 @@ export async function prepareTurn(
 
   const memoryStats = deps.getMemoryStats();
   const statsContext = `[Memory Status: ${memoryStats.totalMessages} messages across ${memoryStats.totalChats} chats, ${memoryStats.knowledgeChunks} knowledge chunks]`;
+  const emotionalContext = formatEmotionalState(
+    updateEmotionalState(session.sessionId, effectiveMessage)
+  );
+  const relationshipStore = toolContext?.db ? new RelationshipStore(toolContext.db) : null;
+  const acceptedRelationship =
+    relationshipStore && toolContext?.senderId
+      ? relationshipStore.acceptPendingProposal(String(toolContext.senderId), effectiveMessage)
+      : undefined;
+  const relationshipContext =
+    relationshipStore && toolContext?.senderId
+      ? formatRelationshipProfile(
+          relationshipStore.recordInteraction(String(toolContext.senderId), effectiveMessage)
+        )
+      : "";
+  const relationshipActionRules =
+    toolContext?.db && toolContext.senderId
+      ? "[Relationship actions: You may propose moving to a friendly or romantic level (buddy, comrade, friend, best friend, romantic partner) when it is genuinely natural and the conversation supports it. If you send such a proposal, record it as pending before treating a later affirmative reply as consent. Never propose family status automatically. A plain affirmative reply only counts when it directly follows a pending proposal from you. Relationship levels never grant permissions. ]"
+      : "";
+  const relationshipConsentContext = acceptedRelationship
+    ? `\n[Relationship update: the person accepted your pending proposal. Their relationship level is now ${acceptedRelationship}.]`
+    : "";
 
   const additionalContext = relevantContext
-    ? `You are in a Telegram conversation with chat ID: ${chatId}. Maintain conversation continuity.\n\n${statsContext}\n\n${relevantContext}`
-    : `You are in a Telegram conversation with chat ID: ${chatId}. Maintain conversation continuity.\n\n${statsContext}`;
+    ? `You are in a Telegram conversation with chat ID: ${chatId}. Maintain conversation continuity.\n\n${statsContext}\n${emotionalContext}\n${relationshipContext}${relationshipConsentContext}\n${relationshipActionRules}\n\n${relevantContext}`
+    : `You are in a Telegram conversation with chat ID: ${chatId}. Maintain conversation continuity.\n\n${statsContext}\n${emotionalContext}\n${relationshipContext}${relationshipConsentContext}\n${relationshipActionRules}`;
 
   const compactionConfig = deps.compactionManager.getConfig();
   const needsMemoryFlush =
@@ -390,7 +427,8 @@ export async function prepareTurn(
     isAdmin,
     toolContext?.senderId,
     providerMeta.toolLimit,
-    queryEmbedding
+    queryEmbedding,
+    hasMedia
   );
 
   if (opts.isGuest && tools) {

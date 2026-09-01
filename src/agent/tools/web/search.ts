@@ -15,7 +15,7 @@ interface WebSearchParams {
 export const webSearchTool: Tool = {
   name: "web_search",
   description:
-    "Search the general internet via Tavily. Use ONLY after domain-specific tools fail or don't exist for the query. NOT for: .ton domains (dns_resolve), jetton prices (jetton_price/ton_price), Telegram messages or public posts (telegram_search_messages/telegram_search_global/telegram_search_posts/session_search), token addresses (stonfi_search), DEX rates (dex_quote). Topic options: general, news, finance.",
+    "Search the general internet via Tavily. Use ONLY after domain-specific tools fail or don't exist for the query. NOT for: Telegram messages or public posts (telegram_search_messages/telegram_search_global/telegram_search_posts/session_search). Topic options: general, news, finance.",
   category: "data-bearing",
   parameters: Type.Object({
     query: Type.String({ description: "Search query" }),

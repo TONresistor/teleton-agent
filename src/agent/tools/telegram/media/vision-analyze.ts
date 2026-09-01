@@ -7,8 +7,10 @@ import {
 } from "@earendil-works/pi-ai/compat";
 import { chatWithContext, getProviderModel } from "../../../client.js";
 import { getProviderMetadata, type SupportedProvider } from "../../../../config/providers.js";
-import { readFileSync, existsSync } from "fs";
-import { extname } from "path";
+import { readFileSync, existsSync, mkdtempSync, rmSync, writeFileSync } from "fs";
+import { extname, join } from "path";
+import { tmpdir } from "os";
+import { spawn } from "child_process";
 import type { Tool, ToolExecutor, ToolResult } from "../../types.js";
 import { validateReadPath, WorkspaceSecurityError } from "../../../../workspace/index.js";
 import { getErrorMessage } from "../../../../utils/errors.js";
@@ -33,7 +35,7 @@ interface VisionAnalyzeParams {
 export const visionAnalyzeTool: Tool = {
   name: "vision_analyze",
   description:
-    "Inspect an image using the configured vision LLM. Provide chatId+messageId for chat images or filePath for local workspace files. Accepts an optional prompt to ask specific questions. Supports JPG, PNG, GIF, WEBP up to 5 MB.",
+    "Inspect an image, static sticker, or video sticker using the configured vision LLM. Video stickers are analyzed from one representative frame. Provide chatId+messageId for chat media or filePath for local workspace files. Accepts an optional prompt. Supports JPG, PNG, GIF, WEBP up to 5 MB. TGS/Lottie stickers are not supported.",
   category: "data-bearing",
   parameters: Type.Object({
     chatId: Type.Optional(
@@ -76,6 +78,49 @@ const EXT_TO_MIME: Record<string, string> = {
 
 // Max image size (5MB)
 const MAX_IMAGE_SIZE = 5 * 1024 * 1024;
+
+async function extractVideoFrame(video: Buffer, extension: ".mp4" | ".webm"): Promise<Buffer> {
+  const tempDir = mkdtempSync(join(tmpdir(), "teleton-vision-"));
+  const inputPath = join(tempDir, `video${extension}`);
+  const outputPath = join(tempDir, "frame.png");
+  writeFileSync(inputPath, video);
+
+  try {
+    await new Promise<void>((resolve, reject) => {
+      const process = spawn(
+        "ffmpeg",
+        [
+          "-y",
+          "-ss",
+          "0.5",
+          "-i",
+          inputPath,
+          "-frames:v",
+          "1",
+          "-vf",
+          "scale='min(1024,iw)':-2",
+          outputPath,
+        ],
+        { stdio: "ignore" }
+      );
+      const timeout = setTimeout(() => {
+        process.kill();
+        reject(new Error("Timed out extracting video sticker frame"));
+      }, 20_000);
+      process.once("error", (error) => {
+        clearTimeout(timeout);
+        reject(error);
+      });
+      process.once("exit", (code) => {
+        clearTimeout(timeout);
+        code === 0 ? resolve() : reject(new Error(`ffmpeg exited with code ${code}`));
+      });
+    });
+    return readFileSync(outputPath);
+  } finally {
+    rmSync(tempDir, { recursive: true, force: true });
+  }
+}
 
 function getVisionProviderFailure(
   provider: string,
@@ -205,6 +250,7 @@ export const visionAnalyzeExecutor: ToolExecutor<VisionAnalyzeParams> = async (
     let data: Buffer;
     let mimeType: string;
     let source: string;
+    let videoExtension: ".mp4" | ".webm" | undefined;
 
     if (hasFilePath) {
       log.info(`Reading local image: ${filePath}`);
@@ -281,6 +327,31 @@ export const visionAnalyzeExecutor: ToolExecutor<VisionAnalyzeParams> = async (
 
       if (message.photo) {
         mimeType = "image/jpeg";
+      } else if (message.sticker) {
+        const sticker = message.sticker;
+        const stickerMime = "mimeType" in sticker ? sticker.mimeType : undefined;
+        mimeType = stickerMime || "image/webp";
+        if (mimeType === "application/x-tgsticker") {
+          return {
+            success: false,
+            error: "TGS/Lottie stickers are not supported for vision analysis yet",
+          };
+        }
+        if (mimeType === "video/webm") videoExtension = ".webm";
+      } else if (message.video) {
+        const video = message.video;
+        const videoMime = "mimeType" in video ? video.mimeType : undefined;
+        mimeType = videoMime || "video/mp4";
+        if (mimeType === "video/mp4") {
+          videoExtension = ".mp4";
+        } else if (mimeType === "video/webm") {
+          videoExtension = ".webm";
+        } else {
+          return {
+            success: false,
+            error: `Unsupported video type: ${mimeType}. Vision supports MP4 and WEBM videos`,
+          };
+        }
       } else if (message.document) {
         const doc = message.document;
         mimeType = ("mimeType" in doc ? doc.mimeType : undefined) || "application/octet-stream";
@@ -310,6 +381,11 @@ export const visionAnalyzeExecutor: ToolExecutor<VisionAnalyzeParams> = async (
 
       data = Buffer.isBuffer(buffer) ? buffer : Buffer.from(buffer);
       source = `telegram:${chatId}/${messageId}`;
+      if (videoExtension) {
+        data = await extractVideoFrame(data, videoExtension);
+        mimeType = "image/png";
+        source += ":frame";
+      }
     }
 
     // Check size

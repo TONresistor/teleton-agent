@@ -15,6 +15,7 @@ export interface TaskRow {
   result: string | null;
   error: string | null;
   scheduled_for: number | null;
+  repeat_every_ms: number | null;
   payload: string | null;
   reason: string | null;
   scheduled_message_id: number | null;

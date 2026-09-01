@@ -198,6 +198,35 @@ describe("MessageStore", () => {
     expect(db.prepare("SELECT COUNT(*) AS count FROM tg_messages_vec").get()).toEqual({ count: 0 });
   });
 
+  it("appends derived media context for later recall", async () => {
+    const embedder = {
+      id: "noop",
+      model: "none",
+      dimensions: 0,
+      embedQuery: vi.fn().mockResolvedValue([]),
+      embedBatch: vi.fn().mockResolvedValue([]),
+    } satisfies EmbeddingProvider;
+    const store = new MessageStore(db, embedder, false);
+    await store.storeMessage({
+      id: "media-1",
+      chatId: "chat-a",
+      senderId: null,
+      text: "Look at this",
+      isFromAgent: false,
+      hasMedia: true,
+      mediaType: "photo",
+      timestamp: 4,
+    });
+
+    await store.appendContext("chat-a", "media-1", "[Media description: a red bicycle]");
+
+    expect(
+      db
+        .prepare("SELECT id, text FROM tg_messages WHERE chat_id = ? AND id = ?")
+        .get("chat-a", "media-1:media")
+    ).toEqual({ id: "media-1:media", text: "[Media description: a red bicycle]" });
+  });
+
   it("persists the raw message when vector storage is unavailable", async () => {
     db.exec("DROP TABLE tg_messages_vec");
     const embedder = {

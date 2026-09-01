@@ -31,9 +31,8 @@ export interface PreparedModelRequest {
   options: ProviderStreamOptions;
 }
 
-/** Resolve the effective API key for a provider (local/gocoon need no real key). */
+/** Resolve the effective API key for a provider (gocoon needs no real key). */
 export function getEffectiveApiKey(provider: string, rawKey: string): string {
-  if (provider === "local") return "local";
   if (provider === "gocoon") return "gocoon";
   if (provider === "codex") return getCodexApiKey(rawKey);
   if (provider === "grok-build") return getGrokBuildApiKey();

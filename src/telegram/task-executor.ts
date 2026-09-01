@@ -183,10 +183,13 @@ function buildAgentPrompt(
   }
 
   prompt += `\n`;
+  prompt += `EXECUTION MODE: This task is being run by the live scheduler now.\n`;
+  prompt += `Do not create a plan, open a loop, defer the task, or claim that automatic timers are unavailable.\n`;
+  prompt += `Use the available tools immediately and complete the requested external actions in this turn.\n`;
 
   if (!executionData) {
     // Simple reminder
-    prompt += `This is a reminder you scheduled for yourself.\n`;
+    prompt += `This is a reminder you scheduled for yourself. The scheduler has already fired it.\n`;
     return prompt;
   }
 
@@ -217,7 +220,7 @@ function buildAgentPrompt(
       prompt += `Context: ${truncateJson(executionData.context, 4000)}\n\n`;
     }
 
-    prompt += `→ Execute these instructions step by step using available tools.\n`;
+    prompt += `→ Execute these instructions step by step using available tools now. Do not stop at a plan or explanation.\n`;
   }
 
   // Final safety check: truncate entire prompt if too large
