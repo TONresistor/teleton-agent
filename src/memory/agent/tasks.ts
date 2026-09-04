@@ -16,6 +16,7 @@ export interface Task {
   result?: string;
   error?: string;
   scheduledFor?: Date;
+  repeatEveryMs?: number;
   payload?: string;
   reason?: string;
   scheduledMessageId?: number;
@@ -32,6 +33,7 @@ export class TaskStore {
     priority?: number;
     createdBy?: string;
     scheduledFor?: Date;
+    repeatEveryMs?: number;
     payload?: string;
     reason?: string;
     scheduledMessageId?: number;
@@ -48,10 +50,10 @@ export class TaskStore {
         `
       INSERT INTO tasks (
         id, description, status, priority, created_by, created_at,
-        scheduled_for, payload, reason, scheduled_message_id,
+         scheduled_for, repeat_every_ms, payload, reason, scheduled_message_id,
         origin_sender_id, origin_chat_id, origin_is_group
       )
-      VALUES (?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+       VALUES (?, ?, 'pending', ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `
       )
       .run(
@@ -61,6 +63,7 @@ export class TaskStore {
         task.createdBy ?? null,
         now,
         task.scheduledFor ? Math.floor(task.scheduledFor.getTime() / 1000) : null,
+        task.repeatEveryMs ?? null,
         task.payload ?? null,
         task.reason ?? null,
         task.scheduledMessageId ?? null,
@@ -83,6 +86,7 @@ export class TaskStore {
       createdBy: task.createdBy,
       createdAt: new Date(now * 1000),
       scheduledFor: task.scheduledFor,
+      repeatEveryMs: task.repeatEveryMs,
       payload: task.payload,
       reason: task.reason,
       scheduledMessageId: task.scheduledMessageId,
@@ -177,6 +181,7 @@ export class TaskStore {
       result: row.result ?? undefined,
       error: row.error ?? undefined,
       scheduledFor: row.scheduled_for ? new Date(row.scheduled_for * 1000) : undefined,
+      repeatEveryMs: row.repeat_every_ms ?? undefined,
       payload: row.payload ?? undefined,
       reason: row.reason ?? undefined,
       scheduledMessageId: row.scheduled_message_id ?? undefined,
@@ -226,12 +231,33 @@ export class TaskStore {
     return rows.map((row) => this.rowToTask(row));
   }
 
+  getDueTasks(now = new Date()): Task[] {
+    const rows = this.db
+      .prepare(
+        `SELECT * FROM tasks
+         WHERE status = 'pending' AND scheduled_for IS NOT NULL AND scheduled_for <= ?
+         ORDER BY priority DESC, scheduled_for ASC, created_at ASC`
+      )
+      .all(Math.floor(now.getTime() / 1000)) as TaskRow[];
+    return rows.map((row) => this.rowToTask(row));
+  }
+
   deleteTask(taskId: string): boolean {
     const result = this.db.prepare(`DELETE FROM tasks WHERE id = ?`).run(taskId);
     return result.changes > 0;
   }
 
   completeTask(taskId: string, result?: string): Task | undefined {
+    const task = this.getTask(taskId);
+    if (task?.repeatEveryMs && task.scheduledFor) {
+      const next = new Date(Math.max(Date.now(), task.scheduledFor.getTime()) + task.repeatEveryMs);
+      this.db
+        .prepare(
+          "UPDATE tasks SET status = 'pending', scheduled_for = ?, result = ?, started_at = NULL, completed_at = NULL WHERE id = ?"
+        )
+        .run(Math.floor(next.getTime() / 1000), result ?? null, taskId);
+      return this.getTask(taskId);
+    }
     return this.updateTask(taskId, { status: "done", result });
   }
 

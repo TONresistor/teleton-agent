@@ -615,8 +615,8 @@ export interface PluginSDK {
   /** SDK version (semver, e.g. "2.0.0") */
   readonly version: string;
 
-  /** TON blockchain operations */
-  readonly ton: TonSDK;
+  /** TON blockchain operations (null if ton_features.enabled is false) */
+  readonly ton: TonSDK | null;
 
   /** Telegram messaging and user operations */
   readonly telegram: TelegramSDK;

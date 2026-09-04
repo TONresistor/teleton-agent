@@ -1,7 +1,7 @@
 import { TelegramClient, Api } from "telegram";
 import { Logger, LogLevel } from "telegram/extensions/Logger.js";
 import { StringSession } from "telegram/sessions/index.js";
-import { NewMessage } from "telegram/events/index.js";
+import { NewMessage, Raw } from "telegram/events/index.js";
 import type { NewMessageEvent } from "telegram/events/NewMessage.js";
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from "fs";
 import { dirname } from "path";
@@ -12,6 +12,22 @@ import { renderTelegramMessageText } from "./rich-message.js";
 import { createLogger } from "../utils/logger.js";
 
 const log = createLogger("Telegram");
+
+function formatReaction(reaction: Api.TypeReaction): string | null {
+  // Raw MTProto updates may be constructed by a different GramJS module copy,
+  // making instanceof unreliable even though the serialized fields are present.
+  const value = reaction as Api.TypeReaction & {
+    className?: string;
+    emoticon?: string;
+    documentId?: bigint | string;
+  };
+  if (value.emoticon) return value.emoticon;
+  if (value.className === "ReactionCustomEmoji" && value.documentId !== undefined) {
+    return `custom_emoji:${value.documentId}`;
+  }
+  if (value.className === "ReactionPaid") return "paid_reaction";
+  return null;
+}
 
 function promptInput(question: string): Promise<string> {
   const rl = createInterface({ input: process.stdin, output: process.stdout });
@@ -48,6 +64,7 @@ export class TelegramUserClient {
   private config: TelegramClientConfig;
   private connected = false;
   private me?: TelegramUser;
+  private seenReactionKeys: Set<string> = new Set();
 
   constructor(config: TelegramClientConfig) {
     this.config = config;
@@ -268,6 +285,116 @@ export class TelegramUserClient {
     });
   }
 
+  addReactionHandler(
+    handler: (reaction: {
+      chatId: string;
+      messageId: number;
+      userId: number;
+      emojis: string[];
+      isGroup: boolean;
+      isChannel: boolean;
+      timestamp: Date;
+    }) => Promise<void>
+  ): void {
+    // GramJS has no high-level reaction event, so listen to this MTProto update directly.
+    this.client.addEventHandler(
+      // eslint-disable-next-line @typescript-eslint/no-misused-promises -- GramJS event handler accepts async
+      async (update) => {
+        if (
+          !(update instanceof Api.UpdateMessageReactions) &&
+          update.className !== "UpdateMessageReactions"
+        ) {
+          return;
+        }
+
+        const reactionUpdate = update as Api.UpdateMessageReactions;
+        const recentReactions = reactionUpdate.reactions.recentReactions ?? [];
+        log.info(
+          {
+            messageId: reactionUpdate.msgId,
+            recent: recentReactions.map((recent) => ({
+              type: recent.reaction.className,
+              reaction: formatReaction(recent.reaction),
+            })),
+            results: reactionUpdate.reactions.results.map((result) => ({
+              type: result.reaction.className,
+              reaction: formatReaction(result.reaction),
+              count: result.count,
+            })),
+          },
+          "Received raw Telegram reaction update"
+        );
+        if (recentReactions.length === 0) {
+          const emojis = reactionUpdate.reactions.results
+            .map((result) => formatReaction(result.reaction))
+            .filter((emoji): emoji is string => emoji !== null);
+          if (emojis.length > 0) {
+            const chatId = await this.client.getPeerId(reactionUpdate.peer);
+            log.info(
+              { chatId, messageId: reactionUpdate.msgId, emojis },
+              "Received Telegram reaction summary"
+            );
+            await handler({
+              chatId,
+              messageId: reactionUpdate.msgId,
+              userId: 0,
+              emojis,
+              isGroup:
+                reactionUpdate.peer instanceof Api.PeerChat ||
+                reactionUpdate.peer instanceof Api.PeerChannel,
+              isChannel: reactionUpdate.peer instanceof Api.PeerChannel,
+              timestamp: new Date(),
+            });
+            return;
+          }
+          log.debug(
+            { messageId: reactionUpdate.msgId },
+            "Telegram reaction update has no individual reaction details"
+          );
+          return;
+        }
+
+        for (const recent of recentReactions) {
+          // `recent.my` means the controlling user account reacted. These events are
+          // meaningful to a userbot too, so they must reach the agent as system events.
+          if (!(recent.peerId instanceof Api.PeerUser)) continue;
+          const emoji = formatReaction(recent.reaction);
+          if (!emoji) continue;
+
+          const chatId = await this.client.getPeerId(reactionUpdate.peer);
+          const key = `${chatId}:${reactionUpdate.msgId}:${recent.peerId.userId}:${emoji}:${recent.date}`;
+          if (this.seenReactionKeys.has(key)) continue;
+          this.seenReactionKeys.add(key);
+          if (this.seenReactionKeys.size > 5000) {
+            this.seenReactionKeys = new Set([...this.seenReactionKeys].slice(-2500));
+          }
+
+          log.info(
+            {
+              chatId,
+              messageId: reactionUpdate.msgId,
+              userId: String(recent.peerId.userId),
+              emoji,
+            },
+            "Received Telegram reaction"
+          );
+          await handler({
+            chatId,
+            messageId: reactionUpdate.msgId,
+            userId: Number(recent.peerId.userId),
+            emojis: [emoji],
+            isGroup:
+              reactionUpdate.peer instanceof Api.PeerChat ||
+              reactionUpdate.peer instanceof Api.PeerChannel,
+            isChannel: reactionUpdate.peer instanceof Api.PeerChannel,
+            timestamp: new Date(recent.date * 1000),
+          });
+        }
+      },
+      new Raw({ types: [Api.UpdateMessageReactions] })
+    );
+  }
+
   addCallbackQueryHandler(handler: (event: unknown) => Promise<void>): void {
     // eslint-disable-next-line @typescript-eslint/no-misused-promises -- GramJS event handler accepts async
     this.client.addEventHandler(async (update) => {
@@ -358,6 +485,22 @@ export class TelegramUserClient {
       isGroup: d.isGroup,
       isChannel: d.isChannel,
     }));
+  }
+
+  async getUnreadDirectDialogs(): Promise<Array<{ chatId: string; unreadCount: number }>> {
+    const dialogs = await this.client.getDialogs({});
+    return dialogs
+      .filter(
+        (dialog) =>
+          dialog.isUser &&
+          !dialog.isGroup &&
+          !dialog.isChannel &&
+          dialog.unreadCount > 0 &&
+          !(dialog.entity instanceof Api.User && dialog.entity.bot)
+      )
+      .flatMap((dialog) =>
+        dialog.id ? [{ chatId: dialog.id.toString(), unreadCount: dialog.unreadCount }] : []
+      );
   }
 
   async setTyping(entity: string): Promise<void> {

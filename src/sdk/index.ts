@@ -111,7 +111,15 @@ export function createPluginSDK(deps: SDKDependencies, opts: CreatePluginSDKOpti
   const log = createLogger(opts.pluginName);
 
   const safeDb = opts.db ? createSafePluginDb(opts.db) : null;
-  const ton = Object.freeze(createTonSDK(log, safeDb, opts.pluginName));
+
+  // TON SDK is optional - only create if ton_features.enabled is true
+  const tonFeatures = opts.sanitizedConfig?.ton_features;
+  const tonFeaturesEnabled =
+    typeof tonFeatures === "object" && tonFeatures !== null && "enabled" in tonFeatures
+      ? Boolean((tonFeatures as { enabled?: unknown }).enabled)
+      : false;
+  const ton = tonFeaturesEnabled ? Object.freeze(createTonSDK(log, safeDb, opts.pluginName)) : null;
+
   const telegram = Object.freeze(createTelegramSDK(deps.bridge, log));
   const secrets = Object.freeze(
     createSecretsSDK(opts.pluginName, opts.pluginConfig, log, opts.secretDeclarations)

@@ -5,6 +5,7 @@ import { mcpAddCommand, mcpRemoveCommand, mcpListCommand } from "./commands/mcp.
 import { configCommand } from "./commands/config.js";
 import { apiRotateKeyCommand, apiFingerprintCommand } from "./commands/api.js";
 import { registerGocoonCommand } from "./commands/gocoon.js";
+import { spotifyConnectCommand } from "./commands/spotify.js";
 import { main as startApp } from "../index.js";
 import { configExists, getDefaultConfigPath } from "../config/loader.js";
 import { getErrorMessage } from "../utils/errors.js";
@@ -119,6 +120,21 @@ program
   .action(async () => {
     try {
       await doctorCommand();
+    } catch (error) {
+      console.error("Error:", getErrorMessage(error));
+      process.exit(1);
+    }
+  });
+
+const spotify = program.command("spotify").description("Manage Spotify integration");
+
+spotify
+  .command("connect")
+  .description("Authorize Spotify playback history access in a local browser")
+  .option("-c, --config <path>", "Config file path", getDefaultConfigPath())
+  .action(async (options) => {
+    try {
+      await spotifyConnectCommand(options.config);
     } catch (error) {
       console.error("Error:", getErrorMessage(error));
       process.exit(1);

@@ -21,6 +21,7 @@ export interface ProcessMessageOptions {
   mediaType?: string;
   messageId?: number;
   replyContext?: { senderName?: string; text: string; isAgent?: boolean };
+  reactionSummary?: string;
   isHeartbeat?: boolean;
   isGuest?: boolean;
   streamToChat?: { chatId: string; bridge: ITelegramBridge; mode: "all" | "replace" | "off" };

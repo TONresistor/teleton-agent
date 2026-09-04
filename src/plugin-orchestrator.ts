@@ -123,7 +123,7 @@ export class PluginOrchestrator {
     const allNames = [...moduleNames, ...pluginNames, ...mcpServerNames];
     toolCount = this.registry.count;
     log.info(
-      `🔌 ${toolCount} tools loaded (${allNames.join(", ")})${pluginToolCount > 0 ? ` — ${pluginToolCount} from plugins` : ""}`
+      `${toolCount} tools loaded (${allNames.join(", ")})${pluginToolCount > 0 ? `; ${pluginToolCount} from plugins` : ""}`
     );
     if (providerMeta.toolLimit !== null && toolCount > providerMeta.toolLimit) {
       log.warn(

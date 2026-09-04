@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   classifyLlmError,
   isContextOverflowError,
+  isServerError,
   isTrivialMessage,
 } from "../../agent/runtime-utils.js";
 
@@ -103,6 +104,16 @@ describe("isContextOverflowError", () => {
 
   it.each(NON_CONTEXT_OVERFLOW_MESSAGES)("rejects %j", (message) => {
     expect(isContextOverflowError(message)).toBe(false);
+  });
+});
+
+describe("isServerError", () => {
+  it("treats provider timeouts as transient failures", () => {
+    expect(isServerError("API error: Request timed out.")).toBe(true);
+    expect(classifyLlmError("API error: Request timed out.")).toMatchObject({
+      kind: "server_error",
+      code: "PROVIDER_ERROR",
+    });
   });
 });
 

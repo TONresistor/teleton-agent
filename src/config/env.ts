@@ -47,6 +47,8 @@ const envSchema = z.object({
   TELETON_TAVILY_API_KEY: optionalString,
   TELETON_TONAPI_KEY: optionalString,
   TELETON_TONCENTER_API_KEY: optionalString,
+  SPOTIFY_CLIENT_ID: optionalString,
+  SPOTIFY_CLIENT_SECRET: optionalString,
 });
 
 export type TeletonEnv = z.infer<typeof envSchema>;

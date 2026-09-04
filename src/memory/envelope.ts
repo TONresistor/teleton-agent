@@ -109,7 +109,8 @@ export function formatMessageEnvelope(params: EnvelopeParams): string {
   const ts = formatTimestamp(params.timestamp);
   parts.push(ts);
 
-  const header = `[${parts.join(" ")}]`;
+  const messageId = params.messageId ? ` msg_id=${params.messageId}` : "";
+  const header = `[${parts.join(" ")}${messageId}]`;
 
   const safeBody = sanitizeForContext(params.body.replace(/<\/?user_message>/gi, ""));
   let body = params.isGroup
@@ -126,8 +127,7 @@ export function formatMessageEnvelope(params: EnvelopeParams): string {
         document: "📎",
         sticker: "🎨",
       }[params.mediaType] || "📎";
-    const msgIdHint = params.messageId ? ` msg_id=${params.messageId}` : "";
-    body = `[${mediaEmoji} ${params.mediaType}${msgIdHint}] ${body}`;
+    body = `[${mediaEmoji} ${params.mediaType}] ${body}`;
   }
 
   if (params.replyContext) {

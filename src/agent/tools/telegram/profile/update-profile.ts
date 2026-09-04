@@ -57,7 +57,7 @@ export const telegramUpdateProfileExecutor: ToolExecutor<UpdateProfileParams> = 
   try {
     const { firstName, lastName, about } = params;
 
-    if (!firstName && !lastName && about === undefined) {
+    if (firstName === undefined && lastName === undefined && about === undefined) {
       return {
         success: false,
         error: "At least one field must be provided to update",

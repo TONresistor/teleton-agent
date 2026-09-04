@@ -15,7 +15,7 @@
 
 ---
 
-<p align="center">Teleton is an autonomous AI agent platform that operates as a real Telegram user account or a Telegram Bot. It thinks through an agentic loop with tool calling, remembers conversations across sessions with hybrid RAG, and natively integrates the TON blockchain: send crypto, swap on DEXs, bid on domains, verify payments - all from a chat message. It can schedule tasks to run autonomously at any time. It ships with 131 always-registered tools plus 5 optional system tools, supports 16 LLM providers, and exposes a Plugin SDK so you can build your own tools on top of the platform.</p>
+<p align="center">Teleton is an autonomous AI agent platform that operates as a real Telegram user account or a Telegram Bot. It thinks through an agentic loop with tool calling, remembers conversations across sessions with hybrid RAG, and natively integrates the TON blockchain: verify payments and query on-chain state - all from a chat message. It can schedule tasks to run autonomously at any time. It ships with 102 always-registered tools plus 5 optional system tools, supports 16 LLM providers, and exposes a Plugin SDK so you can build your own tools on top of the platform.</p>
 
 ### Key Highlights
 
@@ -496,17 +496,13 @@ src/
 ├── agent/                  # Core agent runtime
 │   ├── runtime.ts          # Budgeted agentic loop, tool calling, masking, compaction
 │   ├── client.ts           # Multi-provider LLM client
-│   └── tools/              # 131 base tools plus 5 optional system tools
-│       ├── register-all.ts # Central tool registration (9 categories)
+│   └── tools/              # 102 base tools plus 5 optional system tools
+│       ├── register-all.ts # Central tool registration (5 categories)
 │       ├── registry.ts     # Tool registry, scope filtering, provider limits
 │       ├── module-loader.ts    # Built-in module loading (TON Proxy + exec)
 │       ├── plugin-loader.ts    # External plugin discovery, validation, hot-reload
 │       ├── mcp-loader.ts       # MCP client (stdio/SSE), tool discovery, lifecycle
-│       ├── telegram/       # Telegram operations (86 tools)
-│       ├── ton/            # TON blockchain + jettons + DEX router (15 tools)
-│       ├── stonfi/         # STON.fi DEX (5 tools)
-│       ├── dedust/         # DeDust DEX (5 tools)
-│       ├── dns/            # TON DNS (8 tools)
+│       ├── telegram/       # Telegram operations (83 tools)
 │       ├── exec/           # System execution — YOLO mode (4 tools)
 │       ├── journal/        # Business journal (3 tools)
 │       └── workspace/      # File operations (6 tools)

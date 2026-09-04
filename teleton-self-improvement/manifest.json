@@ -1,0 +1,52 @@
+{
+  "id": "teleton-self-improvement",
+  "name": "Teleton Self Improvement",
+  "version": "1.0.0",
+  "description": "Capture learnings, errors, and feature requests for Teleton",
+  "author": {
+    "name": "orlik"
+  },
+  "license": "MIT",
+  "entry": "index.js",
+  "teleton": ">=0.9.0",
+  "sdkVersion": "^2.0.0",
+  "tools": [
+    {
+      "name": "log_learning",
+      "description": "Record a learning, correction, or best practice"
+    },
+    {
+      "name": "log_error",
+      "description": "Record a command, integration, or runtime error"
+    },
+    {
+      "name": "log_feature_request",
+      "description": "Record a missing capability requested by the user"
+    },
+    {
+      "name": "list_learnings",
+      "description": "List recent learnings and errors"
+    },
+    {
+      "name": "open_loop",
+      "description": "Track an unresolved question, promise, or follow-up"
+    },
+    {
+      "name": "close_loop",
+      "description": "Mark an unresolved follow-up as completed"
+    },
+    {
+      "name": "list_open_loops",
+      "description": "List unresolved follow-ups for proactive checks"
+    }
+  ],
+  "permissions": [],
+  "tags": ["learning", "workflow", "memory", "self-improvement"],
+  "repository": "local",
+  "funding": null,
+  "defaultConfig": {
+    "enabled": true,
+    "max_entries": 200,
+    "feature_request_threshold": "medium"
+  }
+}

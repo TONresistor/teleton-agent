@@ -2,7 +2,8 @@
   "name": "teleton",
   "version": "0.11.1",
   "workspaces": [
-    "packages/*"
+    "packages/*",
+    "web"
   ],
   "description": "Personal AI Agent for Telegram",
   "author": "ZKProof (https://t.me/zkproof)",

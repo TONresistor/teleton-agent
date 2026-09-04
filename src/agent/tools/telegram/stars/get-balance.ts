@@ -16,8 +16,7 @@ interface GetStarsBalanceParams {
  */
 export const telegramGetStarsBalanceTool: Tool = {
   name: "telegram_get_stars_balance",
-  description:
-    "Check your Telegram Stars balance (in-app currency used for gifts and payments). Set ton=true to check the TON internal ledger balance instead. For on-chain TON balance, use ton_get_balance.",
+  description: "Check your Telegram Stars balance (in-app currency used for gifts and payments).",
   category: "data-bearing",
   parameters: Type.Object({
     ton: Type.Optional(

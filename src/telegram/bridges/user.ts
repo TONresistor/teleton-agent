@@ -31,6 +31,7 @@ import type {
   ReplyContext,
   BotInfo,
   ChatInfo,
+  TelegramReaction,
 } from "../bridge-interface.js";
 
 export type { TelegramMessage, InlineButton, SendMessageOptions } from "../bridge-interface.js";
@@ -133,11 +134,25 @@ function sentMessageFromUpdates(result: Api.TypeUpdates, chatId: string): SentMe
   return { id: 0, date: Math.floor(Date.now() / 1000), chatId };
 }
 
+/**
+ * System events (reactions) carry synthetic negative ids that must never be
+ * passed to GramJS as a reply target, or serialization throws ERR_OUT_OF_RANGE.
+ */
+function safeReplyTo(replyToId?: number): number | undefined {
+  return replyToId !== undefined && replyToId > 0 ? replyToId : undefined;
+}
+
 export class GramJSUserBridge implements ITelegramBridge {
   private client: TelegramUserClient;
   private ownUserId?: bigint;
   private ownUsername?: string;
   private peerCache: Map<string, Api.TypePeer> = new Map();
+  private reactionHandler?: (reaction: TelegramReaction) => void | Promise<void>;
+  private reactionPoller?: ReturnType<typeof setInterval>;
+  private readonly sentMessages = new Map<
+    string,
+    { chatId: string; messageId: number; emojis: string[]; expiresAt: number }
+  >();
 
   constructor(config: TelegramClientConfig) {
     this.client = new TelegramUserClient(config);
@@ -244,15 +259,16 @@ export class GramJSUserBridge implements ITelegramBridge {
       ) {
         try {
           const result = await withFloodRetry(
-            () =>
-              this.client.getClient().invoke(
+            () => {
+              const safeReplyToId = safeReplyTo(options.replyToId);
+              return this.client.getClient().invoke(
                 new Api.messages.SendMessage({
                   peer,
                   message: "",
                   randomId: randomLong(),
                   replyTo:
-                    options.replyToId !== undefined
-                      ? new Api.InputReplyToMessage({ replyToMsgId: options.replyToId })
+                    safeReplyToId !== undefined
+                      ? new Api.InputReplyToMessage({ replyToMsgId: safeReplyToId })
                       : undefined,
                   replyMarkup: buttons,
                   noWebpage: true,
@@ -260,7 +276,8 @@ export class GramJSUserBridge implements ITelegramBridge {
                     markdown: options.text,
                   }),
                 })
-              ),
+              );
+            },
             undefined,
             undefined,
             options.chatId
@@ -285,7 +302,7 @@ export class GramJSUserBridge implements ITelegramBridge {
           () =>
             gramJsClient.sendMessage(peer, {
               message: options.text,
-              replyTo: options.replyToId,
+              replyTo: safeReplyTo(options.replyToId),
               buttons,
             }),
           undefined,
@@ -297,7 +314,7 @@ export class GramJSUserBridge implements ITelegramBridge {
           () =>
             this.client.sendMessage(peer, {
               message: options.text,
-              replyTo: options.replyToId,
+              replyTo: safeReplyTo(options.replyToId),
             }),
           undefined,
           undefined,
@@ -305,6 +322,7 @@ export class GramJSUserBridge implements ITelegramBridge {
         );
       }
 
+      this.trackSentMessage(options.chatId, msg.id);
       return { id: msg.id, date: msg.date, chatId: options.chatId };
     } catch (error) {
       log.error({ err: error }, "Error sending message");
@@ -459,6 +477,7 @@ export class GramJSUserBridge implements ITelegramBridge {
   ): Promise<SentMessage> {
     try {
       const richMessage = await this.buildInputRichMessage(peer, chatId, text, rich);
+      const safeReplyToId = safeReplyTo(replyToId);
 
       const result = await withFloodRetry(
         () =>
@@ -468,8 +487,8 @@ export class GramJSUserBridge implements ITelegramBridge {
               message: "",
               randomId: randomLong(),
               replyTo:
-                replyToId !== undefined
-                  ? new Api.InputReplyToMessage({ replyToMsgId: replyToId })
+                safeReplyToId !== undefined
+                  ? new Api.InputReplyToMessage({ replyToMsgId: safeReplyToId })
                   : undefined,
               noWebpage: true,
               richMessage,
@@ -688,7 +707,7 @@ export class GramJSUserBridge implements ITelegramBridge {
       const result = await gramJsClient.sendFile(chatId, {
         file: photo,
         caption,
-        replyTo: replyToId,
+        replyTo: safeReplyTo(replyToId),
         forceDocument: false,
       });
       return { id: result.id, date: result.date, chatId };
@@ -827,6 +846,77 @@ export class GramJSUserBridge implements ITelegramBridge {
         chats: filters?.chats,
       }
     );
+  }
+
+  onReaction(handler: (reaction: TelegramReaction) => void | Promise<void>): void {
+    this.reactionHandler = handler;
+    this.client.addReactionHandler(async (reaction) => {
+      await handler({
+        ...reaction,
+        oldEmojis: [],
+        newEmojis: reaction.emojis,
+      });
+    });
+    this.startReactionPoller();
+  }
+
+  private trackSentMessage(chatId: string, messageId: number): void {
+    const key = `${chatId}:${messageId}`;
+    this.sentMessages.set(key, {
+      chatId,
+      messageId,
+      emojis: [],
+      // Reactions on recent messages matter most; keep polling bounded.
+      expiresAt: Date.now() + 60 * 60 * 1000,
+    });
+  }
+
+  private startReactionPoller(): void {
+    if (this.reactionPoller) return;
+    this.reactionPoller = setInterval(() => void this.pollSentMessageReactions(), 3_000);
+  }
+
+  private async pollSentMessageReactions(): Promise<void> {
+    if (!this.reactionHandler) return;
+
+    for (const [key, tracked] of this.sentMessages) {
+      if (tracked.expiresAt <= Date.now()) {
+        this.sentMessages.delete(key);
+        continue;
+      }
+
+      try {
+        const peer = this.peerCache.get(tracked.chatId) || tracked.chatId;
+        const [message] = await this.client.getClient().getMessages(peer, {
+          ids: [tracked.messageId],
+        });
+        const emojis = reactionEmojis(message);
+        if (sameEmojis(emojis, tracked.emojis)) continue;
+
+        const oldEmojis = tracked.emojis;
+        tracked.emojis = emojis;
+        log.info(
+          { chatId: tracked.chatId, messageId: tracked.messageId, oldEmojis, newEmojis: emojis },
+          "Detected reaction change on sent message"
+        );
+        await this.reactionHandler({
+          chatId: tracked.chatId,
+          messageId: tracked.messageId,
+          userId: 0,
+          oldEmojis,
+          newEmojis: emojis,
+          isGroup: tracked.chatId.startsWith("-"),
+          isChannel: false,
+          timestamp: new Date(),
+        });
+      } catch (error) {
+        log.debug({ err: error, messageId: tracked.messageId }, "Failed to poll message reactions");
+      }
+    }
+  }
+
+  async getUnreadDirectDialogs(): Promise<Array<{ chatId: string; unreadCount: number }>> {
+    return this.client.getUnreadDirectDialogs();
   }
 
   async fetchReplyContext(rawMsg: unknown): Promise<ReplyContext | null> {
@@ -983,6 +1073,7 @@ export class GramJSUserBridge implements ITelegramBridge {
     }
 
     const replyToMsgId = msg.replyToMsgId;
+    const reactionSummary = formatReactionSummary(msg);
 
     if (!text && msg.dice) {
       text = `[Dice: ${msg.dice.emoticon} = ${msg.dice.value}]`;
@@ -1023,6 +1114,7 @@ export class GramJSUserBridge implements ITelegramBridge {
       hasMedia,
       mediaType,
       replyToId: replyToMsgId,
+      reactionSummary,
       _rawMessage: hasMedia || !!replyToMsgId ? msg : undefined,
     };
   }
@@ -1125,4 +1217,37 @@ export class GramJSUserBridge implements ITelegramBridge {
       _rawPeer: msg.peerId,
     };
   }
+}
+
+function formatReactionSummary(msg: Api.Message): string | undefined {
+  const results = (
+    msg.reactions as
+      | { results?: Array<{ reaction?: { emoticon?: string }; count?: number }> }
+      | undefined
+  )?.results;
+  if (!results?.length) return undefined;
+  return results
+    .map((result) => `${result.reaction?.emoticon ?? "?"} ${result.count ?? 0}`)
+    .join(", ");
+}
+
+function reactionEmojis(message: Api.Message | undefined): string[] {
+  const results = message?.reactions?.results ?? [];
+  return results.flatMap((result) => {
+    const reaction = result.reaction as Api.TypeReaction & {
+      className?: string;
+      emoticon?: string;
+      documentId?: bigint | string;
+    };
+    if (reaction.emoticon) return [reaction.emoticon];
+    if (reaction.className === "ReactionCustomEmoji" && reaction.documentId !== undefined) {
+      return [`custom_emoji:${reaction.documentId}`];
+    }
+    if (reaction.className === "ReactionPaid") return ["paid_reaction"];
+    return [];
+  });
+}
+
+function sameEmojis(left: string[], right: string[]): boolean {
+  return left.length === right.length && left.every((emoji, index) => emoji === right[index]);
 }
