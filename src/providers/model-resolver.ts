@@ -4,6 +4,7 @@ import { createLogger } from "../utils/logger.js";
 import { fetchWithTimeout } from "../utils/fetch.js";
 import { getGrokBuildCliVersion } from "./grok-build-credentials.js";
 import { assertModelAvailable } from "../config/model-catalog.js";
+import { ADDITIONAL_MODELS } from "./additional-models.js";
 
 const log = createLogger("LLM");
 
@@ -253,7 +254,7 @@ export function getProviderModel(provider: SupportedProvider, modelId: string): 
 
   try {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any -- getModel requires literal provider+model types; dynamic strings need casts
-    const model = getModel(meta.piAiProvider as any, modelId as any);
+    const model = getModel(meta.piAiProvider as any, modelId as any) ?? ADDITIONAL_MODELS[cacheKey];
     if (!model) {
       throw new Error(`getModel returned undefined for ${provider}/${modelId}`);
     }

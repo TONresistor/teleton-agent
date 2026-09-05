@@ -47,6 +47,14 @@ const GOOGLE_MODELS_WITHOUT_SAMPLING_PARAMS = new Set([
 
 function modelSupportsTemperature(provider: SupportedProvider, modelId: string): boolean {
   if (provider === "codex" || provider === "grok-build") return false;
+  if (provider === "openai" && modelId === "gpt-6-astra") return false;
+  if (
+    provider === "openrouter" &&
+    ["anthropic/claude-fable-5.1", "openai/gpt-6-astra", "google/gemini-3.8-flash"].includes(
+      modelId
+    )
+  )
+    return false;
   if (provider === "google" && GOOGLE_MODELS_WITHOUT_SAMPLING_PARAMS.has(modelId)) return false;
   return true;
 }
@@ -128,6 +136,7 @@ export function prepareModelRequest(
       signal: request.signal,
       timeoutMs: request.timeoutMs,
       ...getReasoningOptions(provider, config.reasoning_effort),
+      ...(provider === "anthropic" && model.id === "claude-fable-5-1" && { thinkingEnabled: true }),
       ...getProviderPayloadOptions(provider),
     } as ProviderStreamOptions,
   };

@@ -92,7 +92,7 @@ describe("provider model catalog", () => {
     }
   });
 
-  it("resolves every static catalog entry through pi-ai", () => {
+  it("resolves every static catalog entry through the model resolver", () => {
     for (const provider of getSupportedProviders()) {
       if (PROVIDERS_WITHOUT_PI_REGISTRY_MODELS.has(provider.id)) continue;
 
