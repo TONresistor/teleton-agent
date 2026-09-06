@@ -319,12 +319,11 @@ export class GrammyBotBridge implements ITelegramBridge {
   /**
    * Stream text to chat via sendMessageDraft. Does NOT send a final message —
    * the caller decides when to finalize (after all tool iterations complete).
-   * When accumulated text approaches the Telegram message limit, the current
-   * draft is flushed as a real message and streaming continues in a new draft.
-   * Returns only the un-sent remainder (what finalizeDraft should send).
+   * Oversized text stops updating the preview; finalization publishes the full answer.
+   * Returns the accumulated text without publishing any part of it.
    */
   async streamDraft(chatId: string, textStream: AsyncIterable<string>): Promise<string> {
-    let draftId = this.activeDraftIds.get(chatId) ?? Math.floor(Math.random() * 2147483647) + 1;
+    const draftId = this.activeDraftIds.get(chatId) ?? Math.floor(Math.random() * 2147483647) + 1;
     this.activeDraftIds.set(chatId, draftId);
     let fullText = "";
     let lastDraftTime = 0;
@@ -338,24 +337,9 @@ export class GrammyBotBridge implements ITelegramBridge {
       // Don't stream silent tokens or heartbeat tokens as visible drafts
       if (fullText.trim() === "__SILENT__" || fullText.trim() === "NO_ACTION") continue;
 
-      // Auto-split: when accumulated text nears the limit, flush as real message
+      // Never publish here: response hooks have not run yet.
       const html = markdownToTelegramHtml(fullText);
-      if (html.length >= SPLIT_THRESHOLD) {
-        // Clear draft bubble and send as real message
-        try {
-          await this.bot.api.sendMessageDraft(numericChatId, draftId, " ");
-        } catch {
-          /* best effort */
-        }
-        await this.sendMessage({ chatId, text: fullText });
-
-        // Reset for next segment
-        fullText = "";
-        draftId = Math.floor(Math.random() * 2147483647) + 1;
-        this.activeDraftIds.set(chatId, draftId);
-        lastDraftTime = 0;
-        continue;
-      }
+      if (html.length >= SPLIT_THRESHOLD) continue;
 
       const now = Date.now();
       if (now - lastDraftTime >= THROTTLE_MS && fullText.length > 0) {
@@ -369,7 +353,7 @@ export class GrammyBotBridge implements ITelegramBridge {
     }
 
     // Send one final draft update with complete text
-    if (fullText.length > 0) {
+    if (fullText.length > 0 && markdownToTelegramHtml(fullText).length < SPLIT_THRESHOLD) {
       try {
         await this.bot.api.sendMessageDraft(
           numericChatId,

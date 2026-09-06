@@ -240,7 +240,15 @@ export class TaskStore {
   }
 
   startTask(taskId: string): Task | undefined {
-    return this.updateTask(taskId, { status: "in_progress" });
+    const claimed = this.db
+      .prepare(
+        `UPDATE tasks SET status = 'in_progress', started_at = ?
+      WHERE id = ? AND status = 'pending'
+      AND NOT EXISTS (SELECT 1 FROM task_dependencies d LEFT JOIN tasks p ON p.id = d.depends_on_task_id
+        WHERE d.task_id = tasks.id AND (p.id IS NULL OR p.status != 'done'))`
+      )
+      .run(Math.floor(Date.now() / 1000), taskId);
+    return claimed.changes === 1 ? this.getTask(taskId) : undefined;
   }
 
   cancelTask(taskId: string): Task | undefined {
