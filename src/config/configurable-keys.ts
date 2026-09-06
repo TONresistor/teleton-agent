@@ -1,4 +1,5 @@
-import { readFileSync, writeFileSync, existsSync } from "fs";
+import { writePrivateFileAtomic } from "../utils/atomic-file.js";
+import { readFileSync, existsSync } from "fs";
 import { parse, stringify } from "yaml";
 import { expandPath } from "./loader.js";
 import {
@@ -738,5 +739,5 @@ export function writeRawConfig(raw: Record<string, any>, configPath: string): vo
   raw.meta.last_modified_at = new Date().toISOString();
 
   const fullPath = expandPath(configPath);
-  writeFileSync(fullPath, stringify(raw), { encoding: "utf-8", mode: 0o600 });
+  writePrivateFileAtomic(fullPath, stringify(raw));
 }

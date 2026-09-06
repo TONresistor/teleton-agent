@@ -28,6 +28,8 @@ vi.mock("../../memory/daily-logs.js", () => ({
   readRecentMemory: vi.fn().mockReturnValue(null),
 }));
 
+vi.mock("../../memory/core-blocks.js", () => ({ getCoreMemoryForPrompt: () => "" }));
+
 vi.mock("../../utils/sanitize.js", () => ({
   sanitizeForPrompt: vi.fn((v: string) => v),
   sanitizeForContext: vi.fn((v: string) => `[sanitized]${v}`),
