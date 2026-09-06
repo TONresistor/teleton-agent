@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.2] - 2026-09-06
+
+### Added
+
+- Inline URL and copy buttons inside native Telegram Rich Message paragraphs, including a subtle link style.
+- Claude Fable 5.1, GPT-6 Astra, and Gemini 3.8 Flash across their supported native, Codex, and OpenRouter providers.
+
+### Changed
+
+- Simplified CI and release builds by removing redundant SDK and artifact stages and using the published Docker image as the release cache.
+
+### Fixed
+
+- Updated the transitive `fast-uri`, `qs`, and `browserslist` packages to patched versions required by the security audits.
+
 ## [0.11.1] - 2026-08-28
 
 ### Changed
@@ -595,7 +610,8 @@ Git history rewritten to fix commit attribution (email update from `tonresistor@
 - Professional distribution (npm, Docker, CI/CD)
 - Pre-commit hooks and linting infrastructure
 
-[Unreleased]: https://github.com/TONresistor/teleton-agent/compare/v0.11.1...HEAD
+[Unreleased]: https://github.com/TONresistor/teleton-agent/compare/v0.11.2...HEAD
+[0.11.2]: https://github.com/TONresistor/teleton-agent/compare/v0.11.1...v0.11.2
 [0.11.1]: https://github.com/TONresistor/teleton-agent/compare/v0.11.0...v0.11.1
 [0.11.0]: https://github.com/TONresistor/teleton-agent/compare/v0.10.1...v0.11.0
 [0.10.1]: https://github.com/TONresistor/teleton-agent/compare/v0.10.0...v0.10.1
