@@ -112,7 +112,7 @@ export function prepareModelRequest(
   request: ModelRequestOptions
 ): PreparedModelRequest {
   const provider = (config.provider || "anthropic") as SupportedProvider;
-  const model = getProviderModel(provider, config.model);
+  const model = getProviderModel(provider, config.model, config.base_url);
   const preparedTools = prepareTools(request.tools);
   const tools =
     provider === "google" && preparedTools ? sanitizeToolsForGemini(preparedTools) : preparedTools;

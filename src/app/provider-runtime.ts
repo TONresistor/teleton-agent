@@ -24,6 +24,17 @@ export class ProviderRuntime {
     if (this.config.agent.provider === "local") {
       await this.initializeLocal();
     }
+    for (const fallback of this.config.agent.fallbacks ?? []) {
+      const baseUrl =
+        fallback.base_url ??
+        (fallback.provider === this.config.agent.provider ? this.config.agent.base_url : undefined);
+      if (fallback.provider === "local" && baseUrl) {
+        const { registerLocalModels } = await import("../providers/model-resolver.js");
+        const ids = await registerLocalModels(baseUrl, false);
+        if (!ids.includes(fallback.model))
+          log.warn("Configured local fallback unavailable; primary remains usable");
+      }
+    }
   }
 
   /** Stop the supervised Gocoon resources without stopping the agent. */
@@ -116,6 +127,9 @@ export class ProviderRuntime {
         log.warn("No models found on local LLM server — is it running?");
         return;
       }
+      if (!this.config.agent.utility_model || this.config.agent.utility_model === "auto")
+        this.config.agent.utility_model =
+          this.config.agent.model === "auto" ? models[0] : this.config.agent.model;
       log.info(`Discovered ${models.length} local model(s): ${models.join(", ")}`);
       if (!this.config.agent.model || this.config.agent.model === "auto") {
         this.config.agent.model = models[0];

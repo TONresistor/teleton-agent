@@ -4,9 +4,10 @@ import { getProviderModel } from "./client.js";
 
 export function resolveModelTarget(
   provider: SupportedProvider,
-  requestedModel: string
+  requestedModel: string,
+  baseUrl?: string
 ): { resolvedModel: string; endpointFingerprint: string } {
-  const model = getProviderModel(provider, requestedModel);
+  const model = getProviderModel(provider, requestedModel, baseUrl);
   return {
     resolvedModel: model.id,
     endpointFingerprint: createHash("sha256")

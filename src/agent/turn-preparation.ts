@@ -379,7 +379,7 @@ export async function prepareTurn(
   const provider = (deps.config.agent.provider || "anthropic") as SupportedProvider;
   const providerMeta = getProviderMetadata(provider);
   const requestedModel = deps.config.agent.model;
-  const target = resolveModelTarget(provider, requestedModel);
+  const target = resolveModelTarget(provider, requestedModel, deps.config.agent.base_url);
   let tools = await selectTools(
     deps.config,
     deps.toolRegistry,

@@ -89,12 +89,19 @@ export async function registerGocoonModels(httpPort: number): Promise<string[]> 
   }
 }
 
+const LOCAL_ENDPOINTS = new Map<string, Record<string, Model<"openai-completions">>>();
+let defaultLocalModel: string | undefined;
 const LOCAL_MODELS: Record<string, Model<"openai-completions">> = {};
 
 /** Register models discovered from a local OpenAI-compatible server */
-export async function registerLocalModels(baseUrl: string): Promise<string[]> {
-  for (const key of Object.keys(LOCAL_MODELS)) delete LOCAL_MODELS[key];
+export async function registerLocalModels(baseUrl: string, makeDefault = true): Promise<string[]> {
+  const discovered: Record<string, Model<"openai-completions">> = {};
+  LOCAL_ENDPOINTS.delete(baseUrl.replace(/\/+$/, ""));
   clearProviderModels("local");
+  if (makeDefault) {
+    for (const key of Object.keys(LOCAL_MODELS)) delete LOCAL_MODELS[key];
+    defaultLocalModel = undefined;
+  }
   try {
     const parsed = new URL(baseUrl);
     if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
@@ -114,7 +121,7 @@ export async function registerLocalModels(baseUrl: string): Promise<string[]> {
     const ids: string[] = [];
     for (const m of models) {
       const id = m.id || m.name || String(m);
-      LOCAL_MODELS[id] = {
+      discovered[id] = {
         id,
         name: id,
         api: "openai-completions",
@@ -134,6 +141,13 @@ export async function registerLocalModels(baseUrl: string): Promise<string[]> {
         },
       };
       ids.push(id);
+    }
+    LOCAL_ENDPOINTS.set(url, discovered);
+    clearProviderModels("local");
+    if (makeDefault) {
+      for (const key of Object.keys(LOCAL_MODELS)) delete LOCAL_MODELS[key];
+      Object.assign(LOCAL_MODELS, discovered);
+      defaultLocalModel = ids[0];
     }
     return ids;
   } catch {
@@ -214,11 +228,16 @@ function resolveLegacyModelAlias(provider: SupportedProvider, modelId: string): 
   return replacement;
 }
 
-export function getProviderModel(provider: SupportedProvider, modelId: string): Model<Api> {
+export function getProviderModel(
+  provider: SupportedProvider,
+  modelId: string,
+  baseUrl?: string
+): Model<Api> {
   modelId = resolveLegacyModelAlias(provider, modelId);
   assertModelAvailable(provider, modelId);
 
-  const cacheKey = `${provider}:${modelId}`;
+  const endpoint = baseUrl?.replace(/\/+$/, "");
+  const cacheKey = `${provider}:${modelId}${endpoint ? `:${endpoint}` : ""}`;
   const cached = modelCache.get(cacheKey);
   if (cached) return cached;
 
@@ -244,7 +263,7 @@ export function getProviderModel(provider: SupportedProvider, modelId: string): 
   }
 
   if (meta.piAiProvider === "local") {
-    const model = LOCAL_MODELS[modelId];
+    const model = endpoint ? LOCAL_ENDPOINTS.get(endpoint)?.[modelId] : LOCAL_MODELS[modelId];
     if (model) {
       modelCache.set(cacheKey, model);
       return model;
@@ -253,13 +272,16 @@ export function getProviderModel(provider: SupportedProvider, modelId: string): 
   }
 
   try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- getModel requires literal provider+model types; dynamic strings need casts
-    const model = getModel(meta.piAiProvider as any, modelId as any) ?? ADDITIONAL_MODELS[cacheKey];
+    const model =
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- public catalog uses literal unions
+      getModel(meta.piAiProvider as any, modelId as any) ??
+      ADDITIONAL_MODELS[`${provider}:${modelId}`];
     if (!model) {
       throw new Error(`getModel returned undefined for ${provider}/${modelId}`);
     }
-    modelCache.set(cacheKey, model);
-    return model;
+    const target = endpoint ? { ...model, baseUrl: endpoint } : model;
+    modelCache.set(cacheKey, target);
+    return target;
   } catch (error) {
     throw new Error(`Could not resolve configured model ${provider}/${modelId}`, { cause: error });
   }
@@ -267,6 +289,8 @@ export function getProviderModel(provider: SupportedProvider, modelId: string): 
 
 export function getUtilityModel(provider: SupportedProvider, overrideModel?: string): Model<Api> {
   const meta = getProviderMetadata(provider);
-  const modelId = overrideModel || meta.utilityModel;
+  const requested = overrideModel || meta.utilityModel;
+  const modelId =
+    provider === "local" && requested === "auto" ? (defaultLocalModel ?? requested) : requested;
   return getProviderModel(provider, modelId);
 }
