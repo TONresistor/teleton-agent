@@ -31,7 +31,7 @@ function backoffMs(attempt: number): number {
  * hook instance opened its own SSE connection (badge + control = 2 streams).
  */
 class AgentStatusStore {
-  private snapshot: AgentStatusSnapshot = { state: 'stopped', error: null };
+  private snapshot: AgentStatusSnapshot = { state: 'stopped', error: 'Status not received' };
   private listeners = new Set<Listener>();
 
   private es: EventSource | null = null;
@@ -108,12 +108,12 @@ class AgentStatusStore {
     const poll = async () => {
       try {
         const res = await fetch(POLL_URL, { credentials: 'include' });
-        if (!res.ok) return;
+        if (!res.ok) throw new Error('Status unavailable');
         const json = await res.json();
         const data = json.data ?? json;
         this.setStatus(data.state, data.error ?? null);
       } catch {
-        // ignore fetch errors during polling
+        this.setStatus(this.snapshot.state, 'Connection unavailable');
       }
     };
     poll();
@@ -135,6 +135,7 @@ class AgentStatusStore {
     });
 
     es.onerror = () => {
+      this.setStatus(this.snapshot.state, 'Connection unavailable');
       this.closeSSE();
       if (this.listeners.size === 0) return;
 

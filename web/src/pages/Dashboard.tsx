@@ -1,3 +1,4 @@
+import { useAgentStatus } from '../hooks/useAgentStatus';
 import { useEffect, useState, type ReactNode } from 'react';
 import { useNavigate } from 'react-router';
 import { useConfigState } from '../hooks/useConfigState';
@@ -39,10 +40,12 @@ function CardHead({ title, desc, right }: { title: string; desc?: string; right?
 }
 
 function StatusBadge() {
+  const { state, error } = useAgentStatus();
+  const label = error ? 'Unavailable' : ({ stopped: 'Stopped', starting: 'Starting...', running: 'Running', stopping: 'Stopping...' })[state];
   return (
     <span className="dash-status">
-      <span className="dash-orb" aria-hidden="true" />
-      Running
+      <span className="dash-orb" aria-hidden="true" style={state !== 'running' || error ? { background: 'var(--text-tertiary)', animation: 'none' } : undefined} />
+      {label}
     </span>
   );
 }
