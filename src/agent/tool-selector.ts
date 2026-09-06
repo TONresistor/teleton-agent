@@ -41,7 +41,7 @@ export function computeRagEmbedding(
       })
       .filter((text) => text.length > 0);
     if (recentUserMessages.length > 0) {
-      searchQuery = `${recentUserMessages.join(" ")} ${effectiveMessage}`;
+      searchQuery = `${effectiveMessage} ${recentUserMessages.reverse().join(" ")}`;
     }
     const enrichedQuery = enrichRAGQuery(searchQuery);
     if (enrichedQuery !== searchQuery) {

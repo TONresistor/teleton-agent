@@ -472,7 +472,7 @@ export class ToolIndex {
     const effectiveVectorWeight = hasVectorResults ? TOOL_RAG_VECTOR_WEIGHT : 0;
 
     for (const r of vectorResults) {
-      byName.set(r.name, { ...r, vectorScore: r.score });
+      byName.set(r.name, { ...r, score: effectiveVectorWeight * r.score, vectorScore: r.score });
     }
 
     for (const r of keywordResults) {
