@@ -23,6 +23,26 @@ export interface AdminCommand {
 const VALID_DM_POLICIES = ["open", "allowlist", "admin-only", "disabled"] as const;
 const VALID_GROUP_POLICIES = ["open", "allowlist", "admin-only", "disabled"] as const;
 const VALID_MODULE_LEVELS = ["open", "admin", "disabled"] as const;
+const KNOWN_COMMANDS = new Set([
+  "status",
+  "clear",
+  "loop",
+  "model",
+  "policy",
+  "pause",
+  "resume",
+  "wallet",
+  "stop",
+  "verbose",
+  "rag",
+  "guest",
+  "modules",
+  "plugin",
+  "help",
+  "ping",
+  "boot",
+  "task",
+]);
 
 export class AdminHandler {
   private bridge: ITelegramBridge;
@@ -59,6 +79,10 @@ export class AdminHandler {
 
   isPaused(): boolean {
     return this.paused;
+  }
+
+  isKnownCommand(command: string): boolean {
+    return KNOWN_COMMANDS.has(command);
   }
 
   parseCommand(message: string): AdminCommand | null {

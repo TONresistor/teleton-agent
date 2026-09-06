@@ -71,10 +71,8 @@ export class MessagePipeline {
       { debounceMs: this.deps.config.telegram.debounce_ms },
       (message) => {
         if (!message.isGroup) return false;
-        if (message.text.startsWith("/")) {
-          const adminCommand = this.deps.adminHandler.parseCommand(message.text);
-          if (adminCommand && this.deps.adminHandler.isAdmin(message.senderId)) return false;
-        }
+        // Keep commands separate from ordinary messages in a debounced group batch.
+        if (this.deps.adminHandler.parseCommand(message.text)) return false;
         return true;
       },
       async (messages) => {
@@ -216,6 +214,12 @@ export class MessagePipeline {
       }
 
       const adminCommand = this.deps.adminHandler.parseCommand(message.text);
+      if (
+        message.isGroup &&
+        adminCommand &&
+        !this.deps.adminHandler.isKnownCommand(adminCommand.command)
+      )
+        return;
       if (adminCommand && this.deps.adminHandler.isAdmin(message.senderId)) {
         if (adminCommand.command === "boot") {
           const bootstrapContent = this.deps.adminHandler.getBootstrapContent();
