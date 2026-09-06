@@ -58,7 +58,7 @@ export interface RichMessageMediaUpload {
   caption?: string;
 }
 
-export type RichMessageButtonStyle = "primary" | "success" | "danger";
+export type RichMessageButtonStyle = "primary" | "success" | "danger" | "link";
 export type RichMessageButtonAlignment = "left" | "center" | "right";
 
 export type RichMessageButtonAction = { type: "url"; url: string } | { type: "copy"; text: string };
@@ -69,6 +69,10 @@ export interface RichMessageButton {
   style?: RichMessageButtonStyle;
 }
 
+export type RichMessageInlineItem =
+  | { type: "text"; text: string }
+  | ({ type: "button" } & RichMessageButton);
+
 export interface RichMessageButtonRow {
   align?: RichMessageButtonAlignment;
   buttons: RichMessageButton[];
@@ -76,6 +80,7 @@ export interface RichMessageButtonRow {
 
 export type RichMessageBlock =
   | { type: "paragraph"; markdown: string }
+  | { type: "inline"; items: RichMessageInlineItem[] }
   | { type: "heading"; text: string; level?: number }
   | { type: "quote"; text: string; caption?: string; collapsed?: boolean }
   | { type: "code"; code: string; language?: string }

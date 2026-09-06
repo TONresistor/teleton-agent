@@ -1,7 +1,7 @@
 /**
  * Shared model catalog used by WebUI setup, CLI onboard, and config routes.
  * To add a model, add it here — it will appear in all UIs automatically.
- * Models must exist in pi-ai's registry (or be entered as custom).
+ * Models must exist in pi-ai's registry or the additional model definitions.
  */
 
 export interface ModelOption {
@@ -21,6 +21,11 @@ interface CatalogModelOption extends ModelOption {
 
 const MODEL_OPTIONS: Record<string, CatalogModelOption[]> = {
   anthropic: [
+    {
+      value: "claude-fable-5-1",
+      name: "Claude Fable 5.1",
+      description: "Advanced agentic coding, reasoning, vision, 1M context",
+    },
     {
       value: "claude-fable-5",
       name: "Claude Fable 5",
@@ -68,6 +73,11 @@ const MODEL_OPTIONS: Record<string, CatalogModelOption[]> = {
     },
   ],
   openai: [
+    {
+      value: "gpt-6-astra",
+      name: "GPT-6 Astra",
+      description: "Advanced reasoning and coding, vision, 272K effective context",
+    },
     {
       value: "gpt-5.6-sol",
       name: "GPT-5.6 Sol",
@@ -126,6 +136,11 @@ const MODEL_OPTIONS: Record<string, CatalogModelOption[]> = {
       value: "gpt-5.6-terra",
       name: "GPT-5.6 Terra",
       description: "Balanced agentic coding model, 272K context",
+    },
+    {
+      value: "gpt-6-astra",
+      name: "GPT-6 Astra",
+      description: "Advanced agentic coding, reasoning, vision, 272K context",
     },
     {
       value: "gpt-5.6-sol",
@@ -210,6 +225,21 @@ const MODEL_OPTIONS: Record<string, CatalogModelOption[]> = {
     },
   ],
   openrouter: [
+    {
+      value: "anthropic/claude-fable-5.1",
+      name: "Claude Fable 5.1",
+      description: "Advanced Claude reasoning and agentic coding via OpenRouter",
+    },
+    {
+      value: "openai/gpt-6-astra",
+      name: "GPT-6 Astra",
+      description: "Advanced reasoning and coding via OpenRouter",
+    },
+    {
+      value: "google/gemini-3.8-flash",
+      name: "Gemini 3.8 Flash",
+      description: "Agentic coding and multimodal reasoning via OpenRouter",
+    },
     {
       value: "anthropic/claude-fable-5",
       name: "Claude Fable 5",

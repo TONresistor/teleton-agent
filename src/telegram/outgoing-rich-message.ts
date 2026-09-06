@@ -71,6 +71,18 @@ function renderButtonRow(row: RichMessageButtonRow): string {
   return `<tg-button-row${align}>\n${row.buttons.map(renderButton).join("\n")}\n</tg-button-row>`;
 }
 
+function renderInline(block: Extract<RichMessageBlock, { type: "inline" }>): string {
+  if (block.items.length === 0) throw new Error("Rich Message inline blocks cannot be empty");
+  const content = block.items
+    .map((item) => {
+      if (item.type === "button") return renderButton(item);
+      if (!item.text) throw new Error("Rich Message inline text cannot be empty");
+      return escapeHtml(item.text).replaceAll("\n", "<br>");
+    })
+    .join("");
+  return `<p>${content}</p>`;
+}
+
 function renderAttachment(attachment: RichMessageMediaUpload): string {
   const label = escapeMarkdownLabel(attachment.caption?.trim() || attachment.type);
   const title = attachment.caption?.trim()
@@ -143,6 +155,8 @@ function renderBlock(
   switch (block.type) {
     case "paragraph":
       return block.markdown;
+    case "inline":
+      return renderInline(block);
     case "heading": {
       const level = block.level ?? 2;
       if (!Number.isInteger(level) || level < 1 || level > 6) {
@@ -187,6 +201,10 @@ function blockContainsRawMediaReference(block: RichMessageBlock): boolean {
   switch (block.type) {
     case "paragraph":
       return RAW_MEDIA_REFERENCE.test(block.markdown);
+    case "inline":
+      return block.items.some(
+        (item) => item.type === "text" && RAW_MEDIA_REFERENCE.test(item.text)
+      );
     case "heading":
       return RAW_MEDIA_REFERENCE.test(block.text);
     case "quote":

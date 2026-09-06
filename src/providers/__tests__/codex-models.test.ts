@@ -4,10 +4,10 @@ import { getProviderMetadata } from "../../config/providers.js";
 import { AgentConfigSchema } from "../../config/schema.js";
 import { getProviderModel } from "../model-resolver.js";
 
-const GPT_56_CODEX_MODELS = ["gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"] as const;
+const CODEX_MODELS = ["gpt-6-astra", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"] as const;
 
-describe("Codex GPT-5.6 models", () => {
-  it.each(GPT_56_CODEX_MODELS)("resolves %s through the Codex Responses provider", (modelId) => {
+describe("Codex models", () => {
+  it.each(CODEX_MODELS)("resolves %s through the Codex Responses provider", (modelId) => {
     const model = getProviderModel("codex", modelId);
 
     expect(model.id).toBe(modelId);
@@ -18,10 +18,10 @@ describe("Codex GPT-5.6 models", () => {
     expect(model.maxTokens).toBe(128_000);
   });
 
-  it("offers every GPT-5.6 model advertised by the Codex backend", () => {
+  it("offers Astra and every GPT-5.6 model advertised by the Codex backend", () => {
     const modelIds = getModelsForProvider("codex").map((model) => model.value);
 
-    expect(modelIds).toEqual(expect.arrayContaining([...GPT_56_CODEX_MODELS]));
+    expect(modelIds).toEqual(expect.arrayContaining([...CODEX_MODELS]));
     expect(AgentConfigSchema.safeParse({ provider: "codex", model: "gpt-5.6-luna" }).success).toBe(
       true
     );

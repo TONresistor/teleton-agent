@@ -1,6 +1,6 @@
 {
   "name": "teleton",
-  "version": "0.11.1",
+  "version": "0.11.2",
   "workspaces": [
     "packages/*"
   ],
@@ -101,7 +101,7 @@
     "axios": ">=1.18.1",
     "brace-expansion": "5.0.9",
     "esbuild": "0.28.1",
-    "fast-uri": "3.1.5",
+    "fast-uri": "3.1.6",
     "ip-address": "10.3.1",
     "nanoid": "3.3.18",
     "sharp": "0.35.3"

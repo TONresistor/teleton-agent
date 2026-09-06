@@ -22,31 +22,48 @@ const buttonStyleSchema = Type.Union([
   Type.Literal("primary"),
   Type.Literal("success"),
   Type.Literal("danger"),
+  Type.Literal("link"),
 ]);
 
-const buttonSchema = Type.Object(
-  {
-    label: Type.String({ minLength: 1, maxLength: 256 }),
-    action: Type.Union([
-      Type.Object(
-        {
-          type: Type.Literal("url"),
-          url: Type.String({ minLength: 1, maxLength: 2048 }),
-        },
-        { additionalProperties: false }
-      ),
-      Type.Object(
-        {
-          type: Type.Literal("copy"),
-          text: Type.String({ minLength: 1, maxLength: 256 }),
-        },
-        { additionalProperties: false }
-      ),
-    ]),
-    style: Type.Optional(buttonStyleSchema),
-  },
-  { additionalProperties: false }
-);
+const buttonFields = {
+  label: Type.String({ minLength: 1, maxLength: 256 }),
+  action: Type.Union([
+    Type.Object(
+      {
+        type: Type.Literal("url"),
+        url: Type.String({ minLength: 1, maxLength: 2048 }),
+      },
+      { additionalProperties: false }
+    ),
+    Type.Object(
+      {
+        type: Type.Literal("copy"),
+        text: Type.String({ minLength: 1, maxLength: 256 }),
+      },
+      { additionalProperties: false }
+    ),
+  ]),
+  style: Type.Optional(buttonStyleSchema),
+};
+
+const buttonSchema = Type.Object(buttonFields, { additionalProperties: false });
+
+const inlineItemSchema = Type.Union([
+  Type.Object(
+    {
+      type: Type.Literal("text"),
+      text: Type.String({ minLength: 1, maxLength: RICH_MESSAGE_MAX_BYTES }),
+    },
+    { additionalProperties: false }
+  ),
+  Type.Object(
+    {
+      type: Type.Literal("button"),
+      ...buttonFields,
+    },
+    { additionalProperties: false }
+  ),
+]);
 
 const buttonRowFields = {
   align: Type.Optional(
@@ -75,6 +92,20 @@ const richBlockSchema = Type.Union([
       markdown: Type.String({ minLength: 1, maxLength: RICH_MESSAGE_MAX_BYTES }),
     },
     { additionalProperties: false }
+  ),
+  Type.Object(
+    {
+      type: Type.Literal("inline"),
+      items: Type.Array(inlineItemSchema, {
+        minItems: 1,
+        maxItems: RICH_MESSAGE_MAX_BLOCKS,
+      }),
+    },
+    {
+      additionalProperties: false,
+      description:
+        "One paragraph mixing plain text and small inline URL/copy buttons in exact order. Use link style for a subtle text-like button.",
+    }
   ),
   Type.Object(
     {

@@ -110,6 +110,37 @@ describe("telegram_send_message", () => {
     });
   });
 
+  it("sends small buttons inline with text", async () => {
+    const rich = {
+      blocks: [
+        {
+          type: "inline" as const,
+          items: [
+            { type: "text" as const, text: "Open " },
+            {
+              type: "button" as const,
+              label: "Docs",
+              action: { type: "url" as const, url: "https://example.com" },
+            },
+          ],
+        },
+      ],
+    };
+
+    const result = await telegramSendMessageExecutor({ rich }, context());
+
+    expect(result).toMatchObject({ success: true, data: { deliveryKind: "rich" } });
+    expect((result.data as { renderedText: string }).renderedText).toBe(
+      '<p>Open <tg-button type="url" url="https://example.com">Docs</tg-button></p>'
+    );
+    expect(mocks.sendMessage).toHaveBeenCalledWith({
+      chatId: "current",
+      text: "",
+      replyToId: undefined,
+      rich,
+    });
+  });
+
   it("resolves admin attachment paths before sending", async () => {
     const result = await telegramSendMessageExecutor(
       {
