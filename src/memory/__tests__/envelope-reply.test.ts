@@ -29,6 +29,12 @@ describe("formatMessageEnvelope — reply context", () => {
     expect(result).toMatch(/\]\n\[↩ reply to/);
   });
 
+  it("includes message ID for text messages", () => {
+    const result = formatMessageEnvelope({ ...BASE_PARAMS, messageId: 3 });
+
+    expect(result).toContain("msg_id=3");
+  });
+
   it("renders reply annotation for group message", () => {
     const result = formatMessageEnvelope({
       ...BASE_PARAMS,
@@ -121,7 +127,8 @@ describe("formatMessageEnvelope — reply context", () => {
     });
 
     expect(result).toContain("[↩ reply to Bob:");
-    expect(result).toContain("[📷 photo msg_id=999]");
+    expect(result).toContain("msg_id=999");
+    expect(result).toContain("[📷 photo]");
     expect(result).toContain("<user_message>Hello world</user_message>");
   });
 

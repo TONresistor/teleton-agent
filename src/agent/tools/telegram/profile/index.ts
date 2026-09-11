@@ -6,8 +6,19 @@ import {
   telegramSetPersonalChannelExecutor,
 } from "./set-personal-channel.js";
 import type { ToolEntry } from "../../types.js";
+import {
+  telegramUpdateProfilePhotoTool,
+  telegramUpdateProfilePhotoExecutor,
+} from "./update-profile-photo.js";
 
 export const tools: ToolEntry[] = [
+  {
+    tool: telegramUpdateProfilePhotoTool,
+    executor: telegramUpdateProfilePhotoExecutor,
+    scope: "dm-only",
+    mode: "user",
+    tags: ["social"],
+  },
   {
     tool: telegramUpdateProfileTool,
     executor: telegramUpdateProfileExecutor,

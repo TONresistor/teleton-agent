@@ -111,7 +111,12 @@ export class ProviderRuntime {
 
     try {
       const { registerLocalModels } = await import("../agent/client.js");
-      const models = await registerLocalModels(baseUrl);
+      const models = await registerLocalModels(
+        baseUrl,
+        this.config.agent.api_key,
+        this.config.agent.model,
+        this.config.agent.vision_models
+      );
       if (models.length === 0) {
         log.warn("No models found on local LLM server — is it running?");
         return;

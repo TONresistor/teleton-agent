@@ -30,7 +30,7 @@ describe("createPluginSDK — factory integration", () => {
       {
         pluginName: "test-plugin",
         db: overrides?.db !== undefined ? overrides.db : db,
-        sanitizedConfig: { foo: "bar" },
+        sanitizedConfig: { foo: "bar", ton_features: { enabled: true } },
         pluginConfig: { secret_key: "s3cret" },
       }
     );

@@ -22,6 +22,10 @@ describe("Telegram core tools", () => {
 
     expect(coreTools).not.toContain("telegram_edit_message");
     expect(coreTools).not.toContain("telegram_delete_message");
-    expect(coreTools).not.toContain("telegram_react");
+    expect(coreTools).toContain("telegram_react");
+  });
+
+  it("includes scheduled-task creation in the default core set", () => {
+    expect(coreToolNames()).toContain("telegram_create_scheduled_task");
   });
 });

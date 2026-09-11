@@ -16,6 +16,7 @@ interface CreateScheduledTaskParams {
   description: string;
   scheduleDate?: string;
   scheduleInSeconds?: number;
+  repeatEverySeconds?: number;
   payload?: string;
   reason?: string;
   priority?: number;
@@ -53,7 +54,7 @@ interface CreateScheduledTaskParams {
 export const telegramCreateScheduledTaskTool: Tool = {
   name: "telegram_create_scheduled_task",
   description:
-    "Schedule a task for future execution. Stores in DB and schedules a reminder in Saved Messages. Supports tool_call, agent_task payloads, or simple reminders. Can depend on other tasks. Example payload types: tool_call (auto-execute a tool), agent_task (multi-step), or reminder.",
+    "Create an automatic reminder/task that FIRES AT A SPECIFIED TIME: at the scheduled moment the agent will automatically execute the task or send a Telegram message to the owner — no manual action needed. Use for 'remind me at 21:00', 'send a message tomorrow 09:00', 'check price in 1 hour', recurring schedules. Русский: создать напоминание, таймер, отложенное сообщение, запланировать задачу, повторить через. Supports tool_call payload (auto-execute a tool), agent_task payload (multi-step), or a simple reminder (message to owner).\n\nAMBIGUOUS TIME: if the user says something like 'в 10 минут' / 'at 10 minutes', it is ambiguous — it could mean a relative delay ('in 10 minutes') or an absolute time ('at 19:10' or 'at 10:10'). ASK the user which they mean before scheduling. Never guess.",
   parameters: Type.Object({
     description: Type.String({
       description: "What the task is about (e.g., 'Check TON price and alert if > $5')",
@@ -68,7 +69,14 @@ export const telegramCreateScheduledTaskTool: Tool = {
     scheduleDate: Type.Optional(
       Type.String({
         description:
-          "Absolute execution time, ISO 8601. IMPORTANT: must be UTC ('Z' suffix) or carry an explicit offset (e.g. '+02:00'). Message timestamps are shown in LOCAL time, so do NOT copy the local wall-clock and append 'Z' — that shifts the task by your UTC offset. For relative delays use scheduleInSeconds. Optional if dependsOn is provided.",
+          "Absolute execution time, ISO 8601 or natural language. ISO must be UTC ('Z' suffix) or carry an explicit offset (e.g. '+02:00'). Natural language supported: '21:00' (today), 'завтра 09:00' / 'tomorrow 09:00', 'через 2 часа' / 'in 2 hours', 'через 30 минут'. A phrase like 'в 10 минут' usually means a RELATIVE delay (in 10 minutes) → use scheduleInSeconds instead. Message timestamps are shown in LOCAL time, so do NOT copy the local wall-clock and append 'Z' — that shifts the task by your UTC offset. For relative delays prefer scheduleInSeconds. Optional if dependsOn is provided.",
+      })
+    ),
+    repeatEverySeconds: Type.Optional(
+      Type.Number({
+        minimum: 60,
+        description:
+          "Repeat this task every N seconds after each successful execution (minimum 60).",
       })
     ),
     payload: Type.Optional(
@@ -116,8 +124,16 @@ export const telegramCreateScheduledTaskExecutor: ToolExecutor<CreateScheduledTa
   context
 ): Promise<ToolResult> => {
   try {
-    const { description, scheduleDate, scheduleInSeconds, payload, reason, priority, dependsOn } =
-      params;
+    const {
+      description,
+      scheduleDate,
+      scheduleInSeconds,
+      repeatEverySeconds,
+      payload,
+      reason,
+      priority,
+      dependsOn,
+    } = params;
 
     // Validate: scheduleInSeconds, scheduleDate, OR dependsOn must be provided
     if (
@@ -129,6 +145,12 @@ export const telegramCreateScheduledTaskExecutor: ToolExecutor<CreateScheduledTa
         success: false,
         error: "One of scheduleInSeconds, scheduleDate, or dependsOn must be provided",
       };
+    }
+    if (
+      repeatEverySeconds !== undefined &&
+      (!Number.isFinite(repeatEverySeconds) || repeatEverySeconds < 60)
+    ) {
+      return { success: false, error: "repeatEverySeconds must be at least 60 seconds" };
     }
 
     // Resolve the schedule timestamp. Relative (scheduleInSeconds) is timezone-proof
@@ -144,13 +166,16 @@ export const telegramCreateScheduledTaskExecutor: ToolExecutor<CreateScheduledTa
       if (!isNaN(parsedDate.getTime())) {
         scheduleTimestamp = Math.floor(parsedDate.getTime() / 1000);
       } else {
-        scheduleTimestamp = parseInt(scheduleDate, 10);
-        if (isNaN(scheduleTimestamp)) {
+        // Fall back to natural-language parsing (e.g. "21:00", "завтра 09:00", "через 2 часа")
+        const { parseNaturalSchedule } = await import("../../../../utils/parse-natural-time.js");
+        const naturalTs = parseNaturalSchedule(scheduleDate);
+        if (naturalTs === null) {
           return {
             success: false,
             error: "Invalid scheduleDate format",
           };
         }
+        scheduleTimestamp = naturalTs;
       }
 
       // Validate future date
@@ -250,6 +275,7 @@ export const telegramCreateScheduledTaskExecutor: ToolExecutor<CreateScheduledTa
       priority: priority ?? 0,
       createdBy: `telegram:${context.senderId}`,
       scheduledFor: scheduleTimestamp ? new Date(scheduleTimestamp * 1000) : undefined,
+      repeatEveryMs: repeatEverySeconds ? Math.floor(repeatEverySeconds * 1000) : undefined,
       payload,
       reason,
       originSenderId: context.senderId,
@@ -271,7 +297,7 @@ export const telegramCreateScheduledTaskExecutor: ToolExecutor<CreateScheduledTa
           message: `Task created: "${description}" (will execute when ${dependsOn.length} parent task(s) complete)`,
         },
       };
-    } else if (scheduleTimestamp) {
+    } else if (scheduleTimestamp && !repeatEverySeconds) {
       // Task has schedule date - schedule Telegram message
       const gramJsClient = getClient(context.bridge);
 
@@ -310,7 +336,33 @@ export const telegramCreateScheduledTaskExecutor: ToolExecutor<CreateScheduledTa
       };
     }
 
-    // Should never reach here due to validation above
+    if (scheduleTimestamp && repeatEverySeconds) {
+      return {
+        success: true,
+        data: {
+          taskId: task.id,
+          scheduledFor: new Date(scheduleTimestamp * 1000).toISOString(),
+          repeatEverySeconds,
+          message:
+            `Task scheduled for automatic execution at ${new Date(scheduleTimestamp * 1000).toISOString()} ` +
+            `and repeat every ${repeatEverySeconds} seconds. The running Teleton scheduler will execute it; ` +
+            "no manual action is required.",
+        },
+      };
+    }
+
+    // A dependency-only task is triggered by its parent completion.
+    if (dependsOn && dependsOn.length > 0) {
+      return {
+        success: true,
+        data: {
+          taskId: task.id,
+          dependsOn,
+          message: "Task saved and waiting for its parent task(s).",
+        },
+      };
+    }
+
     return {
       success: false,
       error: "Invalid state: no scheduleDate or dependsOn",

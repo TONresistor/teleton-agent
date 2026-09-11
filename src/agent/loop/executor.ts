@@ -8,7 +8,7 @@ import { isBotBridge } from "../../telegram/bridge-guards.js";
 import { createLogger } from "../../utils/logger.js";
 import { resolveModelTarget } from "../model-target.js";
 import { resolveProviderFallback } from "../provider-fallback.js";
-import { addUsage } from "../runtime-utils.js";
+import { addUsage, getLoopBudgetStop } from "../runtime-utils.js";
 import type { CompletedToolCall } from "../telegram-send-state.js";
 import { enforceProviderToolLimit } from "../tool-selector.js";
 import type { AgentTurnTraceRecorder } from "../turn-trace.js";
@@ -60,14 +60,13 @@ export async function executeAgentLoop(
   let streamAccumulatedText = "";
 
   while (iteration < maxIterations) {
-    if (Date.now() - processStartTime >= maxDurationMs) {
-      if (!lastResponse) {
-        throw new Error("Agent turn time budget exhausted before the first model response");
-      }
-      stopReason = "time_budget";
-      forcedContent =
-        "I stopped at a safe boundary because this turn reached its time budget. " +
-        "Send a follow-up to continue.";
+    const budgetStop = getLoopBudgetStop(
+      lastResponse !== null,
+      Date.now() - processStartTime,
+      maxDurationMs
+    );
+    if (budgetStop) {
+      ({ stopReason, forcedContent } = budgetStop);
       finalResponse = lastResponse;
       break;
     }
@@ -232,11 +231,9 @@ export async function executeAgentLoop(
     trace.progress(totalToolCalls, iteration, accumulatedUsage);
     log.info(`${iteration}/${maxIterations} → ${iterationToolNames.join(", ")}`);
 
-    if (Date.now() - processStartTime >= maxDurationMs) {
-      stopReason = "time_budget";
-      forcedContent =
-        "I stopped at a safe boundary because this turn reached its time budget. " +
-        "Send a follow-up to continue.";
+    const postToolBudgetStop = getLoopBudgetStop(true, Date.now() - processStartTime, maxDurationMs);
+    if (postToolBudgetStop) {
+      ({ stopReason, forcedContent } = postToolBudgetStop);
       finalResponse = response;
       break;
     }

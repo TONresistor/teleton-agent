@@ -13,10 +13,16 @@ const log = createLogger("Tools");
  * Parameters for telegram_get_history tool
  */
 interface GetHistoryParams {
-  chatId: string;
-  limit?: number;
+  chatId: string | number;
+  limit?: number | string;
   offsetId?: number;
 }
+
+const ChatIdLike = Type.Union([Type.String(), Type.Number()]);
+const LimitLike = Type.Union([
+  Type.Number({ minimum: 1, maximum: 100 }),
+  Type.String({ pattern: "^(?:[1-9]|[1-9][0-9]|100)$" }),
+]);
 
 /**
  * Tool definition for getting chat history
@@ -27,17 +33,8 @@ export const telegramGetHistoryTool: Tool = {
     "Retrieve message history from a chat by ID or @username. Returns sender, text, and timestamp per message. Defaults to 50 messages; set limit (max 100) and offsetId for pagination.",
   category: "data-bearing",
   parameters: Type.Object({
-    chatId: Type.String({
-      description: "Numeric chat ID (e.g. '123456789') or @username. Never use display names.",
-    }),
-    limit: Type.Optional(
-      Type.Number({
-        description:
-          "Maximum number of messages to retrieve (default: 50, max recommended: 100 for performance)",
-        minimum: 1,
-        maximum: 100,
-      })
-    ),
+    chatId: ChatIdLike,
+    limit: Type.Optional(LimitLike),
     offsetId: Type.Optional(
       Type.Number({
         description:
@@ -55,7 +52,9 @@ export const telegramGetHistoryExecutor: ToolExecutor<GetHistoryParams> = async 
   context
 ): Promise<ToolResult> => {
   try {
-    const { chatId, limit = 50, offsetId } = params;
+    const chatId = String(params.chatId);
+    const limit = typeof params.limit === "string" ? Number(params.limit) : (params.limit ?? 50);
+    const { offsetId } = params;
 
     const isNumeric = /^-?\d+$/.test(chatId);
     const isUsername = chatId.startsWith("@");

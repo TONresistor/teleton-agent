@@ -1,0 +1,41 @@
+{
+  "id": "teleton-humanizer",
+  "name": "Teleton Humanizer",
+  "version": "1.0.0",
+  "description": "Humanizes text and records learnings for Teleton turns",
+  "author": {
+    "name": "orlik"
+  },
+  "license": "MIT",
+  "entry": "index.js",
+  "teleton": ">=0.9.0",
+  "sdkVersion": "^2.0.0",
+  "tools": [
+    {
+      "name": "humanize_text",
+      "description": "Rewrite text to sound more natural, shorter, and less AI-like"
+    },
+    {
+      "name": "record_learning",
+      "description": "Append a short learning, error, or feature request note"
+    }
+  ],
+  "permissions": [],
+  "tags": ["humanizer", "learning", "writing", "workflow"],
+  "repository": "local",
+  "funding": null,
+  "defaultConfig": {
+    "reply_style": "auto",
+    "humanizer": {
+      "max_length": 420,
+      "prefer_short": true,
+      "avoid_em_dash": true,
+      "avoid_promotional_language": true
+    },
+    "learning": {
+      "enabled": true,
+      "log_errors": true,
+      "log_feature_requests": true
+    }
+  }
+}

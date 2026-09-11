@@ -9,13 +9,10 @@ import type { ToolRegistry } from "./registry.js";
 import type { ToolEntry } from "./types.js";
 
 import { tools as telegramTools } from "./telegram/index.js";
-import { tools as tonTools } from "./ton/index.js";
-import { tools as dnsTools } from "./dns/index.js";
-import { tools as stonfiTools } from "./stonfi/index.js";
-import { tools as dedustTools } from "./dedust/index.js";
 import { tools as journalTools } from "./journal/index.js";
 import { tools as workspaceTools } from "./workspace/index.js";
 import { tools as webTools } from "./web/index.js";
+import { tools as spotifyTools } from "./spotify/index.js";
 import {
   toolResultReadExecutor,
   toolResultReadTool,
@@ -26,13 +23,10 @@ import { getBuiltinMinimumAccess } from "./security-policy.js";
 
 const ALL_CATEGORIES: ToolEntry[][] = [
   telegramTools,
-  tonTools,
-  dnsTools,
-  stonfiTools,
-  dedustTools,
   journalTools,
   workspaceTools,
   webTools,
+  spotifyTools,
 ];
 
 export function registerAllTools(registry: ToolRegistry): void {

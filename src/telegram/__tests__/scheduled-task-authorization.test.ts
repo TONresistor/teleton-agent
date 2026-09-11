@@ -69,6 +69,7 @@ describe("ScheduledTaskHandler authority", () => {
       originSenderId: 12345,
       originChatId: "telegram:group:-10042",
       originIsGroup: true,
+      payload: JSON.stringify({ type: "agent_task", instructions: "run" }),
     };
     mocks.taskStore.getTask.mockReturnValue(task);
 
@@ -113,5 +114,34 @@ describe("ScheduledTaskHandler authority", () => {
     );
     expect(mocks.executeScheduledTask).not.toHaveBeenCalled();
     expect(agent.processMessage).not.toHaveBeenCalled();
+  });
+
+  it("notifies the owner when a scheduled task execution fails", async () => {
+    mocks.taskStore.getTask.mockReturnValue({
+      id: "task-1",
+      description: "send report",
+      status: "pending",
+      priority: 0,
+      createdAt: new Date(),
+      originSenderId: 12345,
+      originChatId: "telegram:group:-10042",
+      originIsGroup: true,
+      payload: JSON.stringify({ type: "agent_task", instructions: "run" }),
+    });
+    mocks.taskStore.getParentResults.mockReturnValue([]);
+    mocks.executeScheduledTask.mockRejectedValueOnce(new Error("API error: Request timed out."));
+
+    const handler = new ScheduledTaskHandler(agent as never, bridge as never, config as never);
+    await handler.execute(savedMessage as never);
+
+    expect(mocks.taskStore.failTask).toHaveBeenCalledWith(
+      "task-1",
+      "API error: Request timed out."
+    );
+    expect(bridge.sendMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        text: expect.stringContaining("Scheduled task failed"),
+      })
+    );
   });
 });

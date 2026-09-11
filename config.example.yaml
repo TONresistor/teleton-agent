@@ -3,7 +3,7 @@
 # Or run: teleton setup
 
 agent:
-  provider: "anthropic"              # anthropic | codex | grok-build | openai | google | xai | groq | openrouter
+  provider: "anthropic" # anthropic | codex | grok-build | openai | google | xai | groq | openrouter
   api_key: "YOUR_API_KEY"
   model: "claude-haiku-4-5-20251001" # Model ID (varies by provider)
   # utility_model: "claude-3-5-haiku-20241022"  # Optional: cheap model for summarization
@@ -13,36 +13,50 @@ agent:
   max_agentic_iterations: 5
   session_reset_policy:
     daily_reset_enabled: true
-    daily_reset_hour: 4              # 0-23, hour of day to reset sessions
+    daily_reset_hour: 4 # 0-23, hour of day to reset sessions
     idle_expiry_enabled: true
-    idle_expiry_minutes: 1440        # 24 hours
+    idle_expiry_minutes: 1440 # 24 hours
 
 telegram:
-  mode: "user"                       # "user" (default) or "bot" — user requires phone auth, bot requires bot_token
-  api_id: 0                          # From https://my.telegram.org/apps
+  mode: "user" # "user" (default) or "bot" — user requires phone auth, bot requires bot_token
+  api_id: 0 # From https://my.telegram.org/apps
   api_hash: "YOUR_API_HASH"
-  phone: "+1234567890"               # Phone number linked to Telegram account
-  session_name: "teleton_session"    # GramJS session file name
-  session_path: "~/.teleton"         # Directory for session files
-  dm_policy: "open"                  # open | allowlist | admin-only | disabled
-  allow_from: []                     # Telegram user IDs (for allowlist policy)
-  group_policy: "open"               # open | allowlist | disabled
-  group_allow_from: []               # Group chat IDs (for allowlist group policy)
-  require_mention: true              # In groups, only respond when mentioned
+  phone: "+1234567890" # Phone number linked to Telegram account
+  session_name: "teleton_session" # GramJS session file name
+  session_path: "~/.teleton" # Directory for session files
+  dm_policy: "open" # open | allowlist | admin-only | disabled
+  allow_from: [] # Telegram user IDs (for allowlist policy)
+  group_policy: "open" # open | allowlist | disabled
+  group_allow_from: [] # Group chat IDs (for allowlist group policy)
+  require_mention: true # In groups, only respond when mentioned
   # max_message_length: 4096         # MTProto limit, rarely needs changing
-  typing_simulation: true            # Show "typing..." while processing
+  typing_simulation: true # Show "typing..." while processing
+  reaction_events: true # Let the bot receive reactions to its messages
   rate_limit_messages_per_second: 1.0
   rate_limit_groups_per_minute: 20
-  admin_ids: [123456789]             # Your Telegram user ID (from @userinfobot)
+  admin_ids: [123456789] # Your Telegram user ID (from @userinfobot)
   # agent_channel: null              # Channel username or ID for announcements
   owner_name: "Your Name"
   owner_username: "your_username"
   # owner_id: 123456789              # Owner's Telegram user ID
-  debounce_ms: 1500                  # Group message batching delay (0 = disabled)
+  debounce_ms: 1500 # Group message batching delay (0 = disabled)
+  dm_debounce_ms: 1000 # Direct-message batching window: rapid DMs are merged into one context-aware reply (0 = disabled)
 
   # Optional in user mode: plugin inline cards and callback handling
   # bot_token: "123456:ABC-DEF..."   # From @BotFather
   # bot_username: "your_agent_bot"
+
+# Optional: periodic heartbeat and proactive checks
+heartbeat:
+  enabled: true
+  interval_ms: 3600000 # Every 60 min
+  # startup_prompt: "Greet me once at startup." # One-time prompt on first tick
+  min_interval_between_replies_ms: 30000 # Min time between two heartbeat replies to the same chat (0 = off)
+  reply_delay_ms: 1000 # Human-like delay before sending a heartbeat reply (0 = none)
+
+# Optional: Enable TON blockchain features (wallet, DEX, DNS, jettons, NFTs)
+# ton_features:
+#   enabled: false                    # Set to true to enable TON SDK in plugins
 
 # Optional: TonAPI key for higher rate limits
 # tonapi_key: "YOUR_TONAPI_KEY"      # From @tonapi_bot
@@ -50,9 +64,13 @@ telegram:
 # Optional: Tavily API key for web search/fetch tools
 # tavily_api_key: "YOUR_TAVILY_KEY"  # From https://tavily.com
 
+# Optional: MiniMax TTS keys for telegram_send_voice with ttsProvider: minimax
+# MINIMAX_API_KEY: sk-cp-WJx00mS7JhhsX4PxDqVBBdHZAihV3_KEbbtnM-MRC1uNBYFfbhT3X9fPEKSd1etdPyk6BXPL3N3-hN83hKEitfSLiOodkp8k_IQQruxcqnvNAL_OUuyoGTA   # From https://platform.minimax.io/
+# MINIMAX_GROUP_ID: "YOUR_MINIMAX_GROUP_ID" # Account GroupId (see platform console)
+
 # Embedding provider for RAG vector search
 embedding:
-  provider: "local"                  # local | anthropic | none
+  provider: "local" # local | anthropic | none
   # model: "Xenova/all-MiniLM-L6-v2" # Model override (auto-detected per provider)
   #
   # local    = ONNX runtime, runs entirely on CPU, no API calls needed
@@ -61,14 +79,15 @@ embedding:
 
 # Optional: WebUI dashboard (disabled by default for security)
 webui:
-  enabled: false                      # Enable web dashboard
-  port: 7777                          # HTTP server port
-  host: "127.0.0.1"                   # Localhost only (secure)
+  enabled: false # Enable web dashboard
+  port: 7777 # HTTP server port
+  host: "127.0.0.1" # Localhost only (secure)
   # auth_token: "..."                 # Auto-generated if omitted
   cors_origins:
-    - "http://localhost:5173"         # Vite dev server
-    - "http://localhost:7777"         # Production server
-  log_requests: false                 # Log HTTP requests
+    - "http://localhost:5173" # Vite dev server
+    - "http://localhost:7777" # Production server
+  log_requests: false # Log HTTP requests
+
 
 # Tool RAG: semantic tool selection per message (ENABLED by default)
 # Reduces tool definitions sent to the LLM from 120+ to ~25 most relevant.
@@ -106,8 +125,35 @@ webui:
 #     remote:
 #       url: http://localhost:3001/mcp
 
+# Optional: Human-like behavior enhancements
+# Makes the agent behave more like a real person
+humanization:
+  enabled: true
+  reply_probability:
+    dm_base: 0.85            # 85% chance to reply in DMs
+    group_mentioned: 0.50    # 50% chance when mentioned in group
+    group_replied_to_us: 0.90 # 90% if someone replied to our message
+    group_unmentioned: 0.05  # 5% without mention (smart silence)
+    min_interval_ms: 3000    # Don't reply faster than 3s in same chat
+    high_activity_threshold: 5  # Messages/min threshold for "busy chat"
+    high_activity_multiplier: 0.3  # Reduce replies 70% in busy groups
+  time_of_day:
+    enabled: true
+    quiet_hours_start: 23    # 11 PM
+    quiet_hours_end: 6       # 6 AM
+    timezone_offset_minutes: 180  # UTC+3 (Moscow). Adjust for your zone
+  writing_style:
+    typo_probability: 0.03       # 3% chance of simulating a typo
+    edit_after_send_probability: 0.05  # 5% chance of edit after send
+    max_edit_delay_ms: 15000     # Max delay for edit simulation
+    staging_probability: 0.03    # 3% show typing but don't send
+    emoji_enabled: true
+    fillers_enabled: true
+
 # Per-plugin configuration (key = plugin name)
 # plugins:
 #   casino:
 #     min_bet: 0.1
 #     cooldown_seconds: 30
+# Spotify search and track metadata (optional; create an app at developer.spotify.com)
+# Set SPOTIFY_CLIENT_ID and SPOTIFY_CLIENT_SECRET in the environment.

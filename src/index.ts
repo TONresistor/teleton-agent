@@ -30,6 +30,7 @@ import type { WebUIServer } from "./webui/server.js";
 import type { ApiServer } from "./api/server.js";
 import { HeartbeatRunner } from "./heartbeat.js";
 import { ScheduledTaskHandler } from "./scheduled-tasks.js";
+import { TaskScheduler } from "./task-scheduler.js";
 import { ProviderRuntime } from "./app/provider-runtime.js";
 import { createServerDeps } from "./app/server-deps.js";
 import { MessagePipeline } from "./app/message-pipeline.js";
@@ -55,6 +56,7 @@ export class TeletonApp {
   private userHookEvaluator: UserHookEvaluator | null = null;
   private heartbeatRunner: HeartbeatRunner;
   private scheduledTaskHandler: ScheduledTaskHandler;
+  private taskScheduler: TaskScheduler;
   private inlineRouter = new InlineRouter();
   private pluginRateLimiter = new PluginRateLimiter();
   private inlineMiddlewareBridge: ITelegramBridge | null = null;
@@ -96,9 +98,12 @@ export class TeletonApp {
     this.messageHandler.updateConfig(this.config);
     this.adminHandler.updateConfig(this.config.telegram);
     this.scheduledTaskHandler.updateConfig(this.config);
+    this.taskScheduler.updateConfig(this.config);
     this.heartbeatRunner.updateConfig(this.config);
     if (key === "telegram.debounce_ms") {
       this.messagePipeline.updateDebounceMs(this.config.telegram.debounce_ms);
+    } else if (key === "telegram.dm_debounce_ms") {
+      this.messagePipeline.updateDmDebounceMs(this.config.telegram.dm_debounce_ms);
     }
     initLoggerFromConfig(this.config.logging);
 
@@ -145,6 +150,7 @@ export class TeletonApp {
     this.bridge = createBridge(this.config);
     this.heartbeatRunner = new HeartbeatRunner(this.agent, this.bridge, this.config);
     this.scheduledTaskHandler = new ScheduledTaskHandler(this.agent, this.bridge, this.config);
+    this.taskScheduler = new TaskScheduler(this.agent, this.bridge, this.config);
 
     const embeddingProvider = this.config.embedding.provider;
     this.memory = initializeMemory({
@@ -251,10 +257,7 @@ export class TeletonApp {
 
   /** Start agent subsystems without WebUI/API servers. For bootstrap mode. */
   async startAgentSubsystems(): Promise<void> {
-    this.lifecycle.registerCallbacks(
-      () => this.startAgent(),
-      () => this.stopAgent()
-    );
+    this.registerLifecycleCallbacks();
     await this.lifecycle.start();
   }
 
@@ -288,11 +291,8 @@ ${blue}  ┌──────────────────────�
   └────────────────────────────────────────────────────────────────── DEV: ZKPROOF.T.ME ──┘${reset}
 `);
 
-    // Register lifecycle callbacks so WebUI routes can call start()/stop() without args
-    this.lifecycle.registerCallbacks(
-      () => this.startAgent(),
-      () => this.stopAgent()
-    );
+    // Register lifecycle callbacks so WebUI/API routes can call start()/stop() without args
+    this.registerLifecycleCallbacks();
 
     // Start WebUI server if enabled (before agent — survives agent stop/restart)
     if (this.config.webui.enabled) {
@@ -329,6 +329,13 @@ ${blue}  ┌──────────────────────�
 
     // Keep process alive
     await new Promise(() => {});
+  }
+
+  private registerLifecycleCallbacks(): void {
+    this.lifecycle.registerCallbacks(
+      () => this.startAgent(),
+      () => this.stopAgent()
+    );
   }
 
   /**
@@ -383,6 +390,7 @@ ${blue}  ┌──────────────────────�
       providerRuntime: this.providerRuntime,
       heartbeatRunner: this.heartbeatRunner,
     });
+    this.taskScheduler.start();
   }
 
   private createMemorySystem(): MemorySystem {
@@ -440,6 +448,7 @@ ${blue}  ┌──────────────────────�
     );
     this.heartbeatRunner = new HeartbeatRunner(this.agent, this.bridge, this.config);
     this.scheduledTaskHandler = new ScheduledTaskHandler(this.agent, this.bridge, this.config);
+    this.taskScheduler = new TaskScheduler(this.agent, this.bridge, this.config);
   }
 
   private preparePluginBotRuntime(): void {
@@ -505,6 +514,7 @@ ${blue}  ┌──────────────────────�
    * Called by lifecycle.stop() — do NOT call directly.
    */
   private async stopAgent(): Promise<void> {
+    await this.taskScheduler.stop();
     await this.agentLifecycleController.stop();
   }
 }

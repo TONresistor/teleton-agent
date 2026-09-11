@@ -98,7 +98,7 @@ You should see:
 ✅ Knowledge indexed
 ✅ Telegram: @your_agent connected
 ✅ TON Blockchain: connected
-✅ Agent is ready! (131 base tools)
+✅ Agent is ready! (102 base tools)
 ```
 
 **Verify:** Send `/ping` to your agent on Telegram.
@@ -169,15 +169,11 @@ Admin commands are only available to users listed in `admin_ids`. All commands w
 
 ## Tool Categories
 
-Teleton has **131 always-registered tools**, plus 5 optional system tools:
+Teleton has **102 always-registered tools**, plus 5 optional system tools:
 
 | Category | Count | Highlights |
 |----------|-------|------------|
-| **Telegram** | 85 | Messaging, media, chats, groups, polls, stickers, gifts, stars, stories, contacts, folders, profile, memory, tasks |
-| **TON & Jettons** | 15 | W5R1 wallet, send/receive TON & jettons, balances, prices, holders, history, charts, NFTs, DEX quotes |
-| **STON.fi DEX** | 5 | Swap, quote, search, trending tokens, liquidity pools |
-| **DeDust DEX** | 5 | Swap, quote, pools, prices, token info |
-| **TON DNS** | 8 | Domain check, auctions, bidding, resolution, TON Sites |
+| **Telegram** | 83 | Messaging, media, chats, groups, polls, stickers, gifts, stars, stories, contacts, folders, profile, memory, tasks |
 | **Journal** | 3 | Log trades/operations with reasoning and P&L |
 | **Workspace** | 6 | Sandboxed file operations |
 | **Web** | 2 | Search and page extraction |
@@ -323,7 +319,7 @@ For contributors, create a TypeScript tool in `src/agent/tools/` and register it
 src/
 ├── index.ts        # Main application entry point (TeletonApp)
 ├── agent/          # LLM runtime and tool registry
-│   └── tools/      # telegram/, ton/, stonfi/, dedust/, dns/, journal/, workspace/
+│   └── tools/      # telegram/, journal/, workspace/, web/, spotify/, exec/
 ├── telegram/       # GramJS bridge, message handlers, admin commands, debouncing
 ├── memory/         # SQLite database, RAG search (FTS5 + vector), compaction
 ├── ton/            # Wallet operations, payment verification, TON blockchain

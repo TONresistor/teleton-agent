@@ -137,6 +137,48 @@ export class MessageStore {
     }
   }
 
+  /**
+   * Store derived media context as a linked message for later recall. Updating an
+   * external-content FTS row in place is unsafe with older SQLite builds.
+   */
+  async appendContext(chatId: string, messageId: string, context: string): Promise<void> {
+    const row = this.db
+      .prepare("SELECT sender_id, timestamp FROM tg_messages WHERE chat_id = ? AND id = ?")
+      .get(chatId, messageId) as { sender_id: string | null; timestamp: number } | undefined;
+    if (!row || !context.trim()) return;
+
+    const derivedId = `${messageId}:media`;
+    this.db
+      .prepare(
+        `INSERT OR IGNORE INTO tg_messages (
+          id, chat_id, sender_id, text, embedding, embedding_status,
+          is_from_agent, has_media, media_type, timestamp
+        ) VALUES (?, ?, ?, ?, NULL, ?, 0, 1, 'derived_context', ?)`
+      )
+      .run(
+        derivedId,
+        chatId,
+        row.sender_id,
+        context.trim(),
+        this.vectorEnabled ? "pending" : "disabled",
+        row.timestamp
+      );
+
+    if (!this.vectorEnabled) return;
+    const trimmedContext = context.trim();
+    try {
+      const [embedding] = await this.embedder.embedBatch([trimmedContext]);
+      assertValidEmbedding(embedding, this.embedder.dimensions);
+      this.persistPreparedEmbedding({ chat_id: chatId, id: derivedId, text: trimmedContext }, embedding);
+    } catch (error) {
+      this.markEmbeddingFailed(chatId, derivedId, trimmedContext);
+      log.warn(
+        { err: error, chatId, messageId },
+        "Media context persisted but vector indexing failed"
+      );
+    }
+  }
+
   async backfillPendingEmbeddings(
     limit = 100,
     includeFailed = true

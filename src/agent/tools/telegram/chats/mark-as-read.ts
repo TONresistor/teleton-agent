@@ -10,7 +10,7 @@ const log = createLogger("Tools");
  * Parameters for telegram_mark_as_read tool
  */
 interface MarkAsReadParams {
-  chatId: string;
+  chatId: string | number;
   messageId?: number;
   clearMentions?: boolean;
 }
@@ -23,9 +23,7 @@ export const telegramMarkAsReadTool: Tool = {
   description:
     "Mark messages as read in a chat. Can mark up to a specific message or clear all unread.",
   parameters: Type.Object({
-    chatId: Type.String({
-      description: "The chat ID to mark as read",
-    }),
+    chatId: Type.Union([Type.String(), Type.Number()]),
     messageId: Type.Optional(
       Type.Number({
         description:
@@ -48,7 +46,8 @@ export const telegramMarkAsReadExecutor: ToolExecutor<MarkAsReadParams> = async 
   context
 ): Promise<ToolResult> => {
   try {
-    const { chatId, messageId, clearMentions = true } = params;
+    const chatId = String(params.chatId);
+    const { messageId, clearMentions = true } = params;
 
     // Get underlying GramJS client
     const gramJsClient = getClient(context.bridge);

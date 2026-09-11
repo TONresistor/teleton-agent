@@ -11,6 +11,28 @@ export interface UsageAccumulator {
 }
 
 /**
+ * Decide whether the agentic loop should stop because its time budget is
+ * exhausted. Extracted as a pure function so the boundary condition (and the
+ * "no response yet" failure) can be tested without driving the whole loop.
+ */
+export function getLoopBudgetStop(
+  hasLastResponse: boolean,
+  elapsedMs: number,
+  maxDurationMs: number
+): { stopReason: "time_budget"; forcedContent: string } | null {
+  if (elapsedMs < maxDurationMs) return null;
+  if (!hasLastResponse) {
+    throw new Error("Agent turn time budget exhausted before the first model response");
+  }
+  return {
+    stopReason: "time_budget",
+    forcedContent:
+      "I stopped at a safe boundary because this turn reached its time budget. " +
+      "Send a follow-up to continue.",
+  };
+}
+
+/**
  * Accumulate a single iteration's usage into the running per-turn accumulator.
  * Mutates and returns `acc`. Missing cache/cost fields default to 0.
  */
@@ -59,6 +81,8 @@ export function isServerError(errorMessage?: string): boolean {
     errorMessage.includes("overloaded") ||
     errorMessage.includes("Internal server error") ||
     errorMessage.includes("api_error") ||
+    errorMessage.toLowerCase().includes("timed out") ||
+    errorMessage.toLowerCase().includes("timeout") ||
     // Transient streaming-transport drops are retryable: an LLM provider WebSocket
     // closing mid-stream (1012 service restart, 1006 abnormal, 1011 server error)
     // or a dropped socket is not a terminal error — back off and retry.

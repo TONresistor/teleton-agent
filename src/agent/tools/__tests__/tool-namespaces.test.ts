@@ -37,8 +37,8 @@ describe("tool namespaces", () => {
     ["telegram_get_resale_gifts", "telegram", "telegram.gifts.market"],
     ["telegram_get_collectible_info", "telegram", "telegram.gifts.market"],
     ["telegram_buy_resale_gift", "telegram", "telegram.gifts.manage"],
-    ["jetton_info", "jetton", "ton.jettons"],
-    ["dex_quote", "dex", "ton.market"],
+    ["ton_proxy_status", "ton", "ton"],
+    ["web_search", "web", "web"],
     ["uranus_create_meme", "uranus", "uranus"],
   ])("routes %s to %s", (toolName, module, expectedNamespace) => {
     expect(resolveToolNamespace(toolName, module, "description").name).toBe(expectedNamespace);
@@ -108,6 +108,30 @@ describe("tool namespaces", () => {
     const [result] = rankNamespacesLexically("run a shell command in the repository", catalog, 1);
 
     expect(result.name).toBe("exec");
+  });
+
+  it("routes Russian reminder requests to scheduling", () => {
+    const catalog = buildToolNamespaceCatalog([
+      registeredTool(
+        "telegram_create_scheduled_task",
+        "telegram",
+        "Create scheduled reminders and delayed messages"
+      ),
+      registeredTool("open_loop", "teleton.self.improvement", "Track a follow-up loop"),
+    ]);
+
+    const [result] = rankNamespacesLexically("запиши напоминание на 00:44", catalog, 1);
+
+    expect(result.name).toBe("telegram.scheduling");
+  });
+
+  it("exposes telegram_create_scheduled_task as a core tool without tool_search", () => {
+    const registry = new ToolRegistry("user");
+    registerAllTools(registry);
+
+    const coreNames = registry.getCoreTools(false, null, true, 42).map((tool) => tool.name);
+
+    expect(coreNames).toContain("telegram_create_scheduled_task");
   });
 
   it("covers every context-visible built-in exactly once within the namespace bound", () => {

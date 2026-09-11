@@ -1,4 +1,8 @@
-import { DEFAULT_TOOL_RAG_ALWAYS_INCLUDE, type Config } from "../../../config/schema.js";
+import {
+  DEFAULT_TOOL_RAG_ALWAYS_INCLUDE,
+  HumanizationConfigSchema,
+  type Config,
+} from "../../../config/schema.js";
 import type { SupportedProvider } from "../../../config/providers.js";
 import { TELEGRAM_MAX_MESSAGE_LENGTH } from "../../../constants/limits.js";
 
@@ -48,6 +52,7 @@ export function buildConfig(input: BuildConfigInput): Config {
       ...(input.baseUrl ? { base_url: input.baseUrl } : {}),
       model: input.model,
       reasoning_effort: "medium",
+      vision_models: [],
       max_tokens: 4096,
       temperature: 0.7,
       system_prompt: null,
@@ -75,16 +80,20 @@ export function buildConfig(input: BuildConfigInput): Config {
       require_mention: input.requireMention,
       max_message_length: TELEGRAM_MAX_MESSAGE_LENGTH,
       typing_simulation: true,
+      reaction_events: true,
       rate_limit_messages_per_second: 1.0,
       rate_limit_groups_per_minute: 20,
       admin_ids: [input.userId],
       owner_id: input.userId,
       agent_channel: null,
       debounce_ms: 1500,
+      dm_debounce_ms: 1000,
       bot_token: input.botToken,
       bot_username: input.botUsername,
       stream_mode: "all",
+      reply_style: "auto",
       guest_mode: false,
+      humanization: HumanizationConfigSchema.parse({}),
     },
     storage: {
       sessions_file: `${input.workspaceRoot}/sessions.json`,
@@ -119,11 +128,28 @@ export function buildConfig(input: BuildConfigInput): Config {
       },
     },
     ton_proxy: { enabled: false, port: 8080 },
+    ton_features: { enabled: false },
     heartbeat: {
       enabled: true,
       interval_ms: 3_600_000,
       prompt: "Execute your HEARTBEAT.md checklist now. Work through each item using tool calls.",
+      startup_prompt: null,
+      min_interval_between_replies_ms: 30_000,
+      reply_delay_ms: 1_000,
       self_configurable: false,
+      proactive_enabled: false,
+      proactive_chat_ids: [],
+      proactive_cooldown_ms: 86_400_000,
+      proactive_mode: "suggestion",
+      proactive_min_score: 7,
+      proactive_prompt:
+        "Review this chat's recent context. Only send a message if there is a genuinely useful reason to check in, follow up, remind, or share something relevant. Otherwise answer HEARTBEAT_OK. Do not send generic greetings or filler.",
+    },
+    scheduler: {
+      enabled: true,
+      poll_interval_ms: 15_000,
+      max_catch_up_ms: 86_400_000,
+      default_timezone: "UTC",
     },
     plugins: {},
     ...(input.provider === "gocoon" && input.gocoonPort

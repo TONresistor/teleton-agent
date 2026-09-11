@@ -906,22 +906,30 @@ export function createTelegramSocialSDK(
         const { basename } = await import("path");
 
         const { resolve, normalize } = await import("path");
-        const { homedir } = await import("os");
+        const { homedir, tmpdir } = await import("os");
         const { realpathSync } = await import("fs");
+        const { relative, sep } = await import("path");
 
         const filePath = realpathSync(resolve(normalize(mediaPath)));
         const home = homedir();
-        const teletonWorkspace = `${home}/.teleton/workspace/`;
-        const allowedPrefixes = [
-          "/tmp/",
-          `${home}/Downloads/`,
-          `${home}/Pictures/`,
-          `${home}/Videos/`,
-          `${teletonWorkspace}uploads/`,
-          `${teletonWorkspace}downloads/`,
-          `${teletonWorkspace}memes/`,
+        const teletonWorkspace = resolve(home, ".teleton", "workspace");
+        const allowedRoots = [
+          tmpdir(),
+          resolve(home, "Downloads"),
+          resolve(home, "Pictures"),
+          resolve(home, "Videos"),
+          resolve(teletonWorkspace, "uploads"),
+          resolve(teletonWorkspace, "downloads"),
+          resolve(teletonWorkspace, "memes"),
         ];
-        if (!allowedPrefixes.some((p) => filePath.startsWith(p))) {
+        const isWithinAllowedRoot = allowedRoots.some((root) => {
+          const relativePath = relative(root, filePath);
+          return (
+            relativePath === "" ||
+            (!relativePath.startsWith("..") && !relativePath.startsWith(`..${sep}`))
+          );
+        });
+        if (!isWithinAllowedRoot) {
           throw new PluginSDKError(
             "sendStory: media path must be within /tmp, Downloads, Pictures, or Videos",
             "OPERATION_FAILED"

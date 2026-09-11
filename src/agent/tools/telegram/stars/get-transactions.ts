@@ -23,7 +23,7 @@ interface GetTransactionsParams {
 export const telegramGetStarsTransactionsTool: Tool = {
   name: "telegram_get_stars_transactions",
   description:
-    "Get your Telegram Stars payment history (gift purchases, received Stars). Filter by direction: inbound or outbound. NOT for TON blockchain transactions — use ton_my_transactions for those.",
+    "Get your Telegram Stars payment history (gift purchases, received Stars). Filter by direction: inbound or outbound.",
   category: "data-bearing",
   parameters: Type.Object({
     limit: Type.Optional(

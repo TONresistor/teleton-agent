@@ -9,7 +9,7 @@ import { ProviderRuntime } from "../provider-runtime.js";
 
 function localConfig(baseUrl: string): Config {
   return {
-    agent: { provider: "local", base_url: baseUrl, model: "auto" },
+    agent: { provider: "local", base_url: baseUrl, model: "auto", vision_models: [] },
   } as Config;
 }
 
@@ -27,7 +27,12 @@ describe("ProviderRuntime", () => {
     runtime.updateConfig(reloaded);
     await runtime.initialize();
 
-    expect(mocks.registerLocalModels).toHaveBeenCalledWith("http://new.local/v1");
+    expect(mocks.registerLocalModels).toHaveBeenCalledWith(
+      "http://new.local/v1",
+      undefined,
+      "auto",
+      []
+    );
     expect(reloaded.agent.model).toBe("model-a");
     expect(initial.agent.model).toBe("auto");
   });

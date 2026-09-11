@@ -8,6 +8,7 @@ import {
   telegramTranscribeAudioTool,
   telegramTranscribeAudioExecutor,
 } from "./transcribe-audio.js";
+import { telegramAnalyzeMusicTool, telegramAnalyzeMusicExecutor } from "./analyze-music.js";
 import type { ToolEntry } from "../../types.js";
 
 export const tools: ToolEntry[] = [
@@ -51,6 +52,13 @@ export const tools: ToolEntry[] = [
   {
     tool: telegramTranscribeAudioTool,
     executor: telegramTranscribeAudioExecutor,
+    mode: "user",
+    tags: ["media"],
+  },
+  {
+    tool: telegramAnalyzeMusicTool,
+    executor: telegramAnalyzeMusicExecutor,
+    minimumAccess: "admin",
     mode: "user",
     tags: ["media"],
   },

@@ -9,22 +9,66 @@ import { readOffset, writeOffset } from "./offset-store.js";
 import { PendingHistory } from "../memory/pending-history.js";
 import type { ToolContext } from "../agent/tools/types.js";
 import { isSilentReply } from "../constants/tokens.js";
+import { analyzeAudioBuffer } from "../spotify/preview-analysis.js";
+import { getTrack } from "../spotify/client.js";
 import {
   deliveredTelegramMessageId,
   deliveredTelegramMessageIdFromCall,
   deliveredTelegramStructuredMessage,
   deliveredTelegramText,
 } from "../agent/telegram-send-state.js";
-import { transcribeAudio } from "../sdk/telegram-utils.js";
+import { getClient, transcribeAudio } from "../sdk/telegram-utils.js";
+import { isUserBridge } from "./bridge-guards.js";
+import { visionAnalyzeExecutor } from "../agent/tools/telegram/media/vision-analyze.js";
 import { TYPING_REFRESH_MS } from "../constants/timeouts.js";
 import { createLogger } from "../utils/logger.js";
 import { getErrorMessage } from "../utils/errors.js";
 import { randomUUID } from "crypto";
+import {
+  calculateTypingDelay,
+  calculateReadDelay,
+  shouldShowTyping,
+  isSimpleAcknowledgment,
+} from "./human-behavior.js";
+import {
+  decideReply,
+  activityTracker,
+  getReplyProbabilityConfig,
+} from "./human/reply-probability.js";
+import { getTimeOfDayConfig, getTimeFactors } from "./human/time-of-day.js";
 
 const log = createLogger("Telegram");
 import type { PluginMessageEvent } from "@teleton-agent/sdk";
 
 type FeedTelegramMessage = Omit<TelegramMessage, "id"> & { id: number | string };
+
+/**
+ * Split a natural-language reply into separate Telegram messages when it
+ * reads like distinct thoughts (blank-line-separated paragraphs) — the way a
+ * person sends a short burst of messages instead of one long block.
+ * Conservative on purpose: skips splitting for code blocks, replies with no
+ * real paragraph break, or an unusually high paragraph count (more likely a
+ * structured list/explanation that should stay together).
+ */
+function splitIntoNaturalMessages(text: string): string[] {
+  if (text.includes("```")) return [text];
+
+  const parts = text
+    .split(/\n{2,}/)
+    .map((p) => p.trim())
+    .filter((p) => p.length > 0);
+
+  if (parts.length < 2 || parts.length > 4) return [text];
+
+  return parts;
+}
+
+function extractSpotifyTrackId(text: string): string | null {
+  const match = text.match(
+    /(?:open\.spotify\.com\/(?:intl-[^/]+\/)?track\/|spotify:track:)([A-Za-z0-9]{22})/i
+  );
+  return match?.[1] ?? null;
+}
 
 function providerFailureReply(error: unknown): string {
   const message = getErrorMessage(error).toLowerCase();
@@ -182,6 +226,11 @@ export class ChatQueue {
   get activeChats(): number {
     return this.chains.size;
   }
+
+  /** Whether a chat currently has a task running or waiting in its chain. */
+  hasActive(chatId: string): boolean {
+    return this.chains.has(chatId);
+  }
 }
 
 export class MessageHandler {
@@ -227,6 +276,19 @@ export class MessageHandler {
     this.pendingHistory = new PendingHistory();
   }
 
+  private shouldReplyToMessage(message: TelegramMessage): boolean {
+    if (message.isSystemEvent) return false;
+
+    const replyStyle = this.config.reply_style ?? "auto";
+    if (replyStyle === "reply") return true;
+    if (replyStyle === "plain") return false;
+
+    // Auto: reply only when there is an explicit conversational anchor.
+    if (message.replyToId) return true;
+    if (message.isGroup && message.mentionsMe) return true;
+    return false;
+  }
+
   setOwnUserId(userId: string | undefined): void {
     this.ownUserId = userId;
   }
@@ -255,11 +317,60 @@ export class MessageHandler {
     await this.chatQueue.drain();
   }
 
+  /**
+   * Whether this chat is currently mid-turn (still generating/sending a reply
+   * to an earlier message). Used by the debouncer to hold a fast follow-up
+   * message instead of answering it as its own disjointed turn.
+   */
+  isChatBusy(chatId: string): boolean {
+    return this.chatQueue.hasActive(chatId);
+  }
+
+  /**
+   * Process a debounced batch of direct messages as a single turn: earlier
+   * messages become pending context for the last message, so the agent answers
+   * once with the full picture instead of replying to each message blindly.
+   * Group/channel batches are forwarded one-by-one to preserve existing flows.
+   */
+  async handleBatch(messages: TelegramMessage[]): Promise<void> {
+    if (messages.length <= 1) {
+      await this.handleMessage(messages[0]);
+      return;
+    }
+
+    const sorted = [...messages].sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+    const dmMessages = sorted.filter((message) => !message.isGroup && !message.isChannel);
+    const groupMessages = sorted.filter((message) => message.isGroup || message.isChannel);
+
+    for (const message of groupMessages) {
+      await this.handleMessage(message);
+    }
+
+    if (dmMessages.length <= 1) {
+      if (dmMessages.length === 1) await this.handleMessage(dmMessages[0]);
+      return;
+    }
+
+    const anchor = dmMessages[dmMessages.length - 1];
+    const earlier = dmMessages.slice(0, -1);
+    for (const message of earlier) {
+      await this.storeTelegramMessage(message, false);
+      this.pendingHistory.addMessage(message.chatId, message);
+    }
+
+    await this.handleMessage(anchor);
+
+    if (this.bridge.requiresOffsetDedup()) {
+      for (const message of earlier) writeOffset(message.id, message.chatId);
+    }
+  }
+
   analyzeMessage(message: TelegramMessage): MessageContext {
     const isAdmin = this.config.admin_ids.includes(message.senderId);
 
     // Bridges that redeliver (user mode) need handler-side dedup; bot mode dedupes via update_id.
-    if (this.bridge.requiresOffsetDedup()) {
+    // System events (reactions) carry synthetic negative IDs, so they must bypass offset dedup.
+    if (this.bridge.requiresOffsetDedup() && !message.isSystemEvent) {
       const chatOffset = readOffset(message.chatId) ?? 0;
       if (message.id <= chatOffset) {
         return {
@@ -275,7 +386,8 @@ export class MessageHandler {
     if (
       ownSenderId !== undefined &&
       Number.isFinite(ownSenderId) &&
-      message.senderId === ownSenderId
+      message.senderId === ownSenderId &&
+      !message.isSystemEvent
     ) {
       return {
         message,
@@ -447,6 +559,57 @@ export class MessageHandler {
       return;
     }
 
+    // 2b. Humanization: reply probability check (skip probabilistically)
+    const humanConfig = this.fullConfig?.telegram?.humanization;
+    if (humanConfig?.enabled ?? true) {
+      const replyConfig = getReplyProbabilityConfig({
+        dmBase: humanConfig?.reply_probability?.dm_base,
+        groupMentioned: humanConfig?.reply_probability?.group_mentioned,
+        groupRepliedToUs: humanConfig?.reply_probability?.group_replied_to_us,
+        groupUnmentioned: humanConfig?.reply_probability?.group_unmentioned,
+        minIntervalMs: humanConfig?.reply_probability?.min_interval_ms,
+        highActivityThreshold: humanConfig?.reply_probability?.high_activity_threshold,
+        highActivityMultiplier: humanConfig?.reply_probability?.high_activity_multiplier,
+      });
+
+      // Quiet-hours dampening: a real person is less eager to chat late at night.
+      if (humanConfig?.time_of_day?.enabled ?? true) {
+        const todFactors = getTimeFactors(
+          getTimeOfDayConfig({
+            timezoneOffsetMinutes: humanConfig?.time_of_day?.timezone_offset_minutes,
+            quietHoursStart: humanConfig?.time_of_day?.quiet_hours_start,
+            quietHoursEnd: humanConfig?.time_of_day?.quiet_hours_end,
+          })
+        );
+        if (todFactors.isQuietHours) {
+          replyConfig.dmBase *= todFactors.replyProbabilityFactor;
+          replyConfig.groupMentioned *= todFactors.replyProbabilityFactor;
+          replyConfig.groupUnmentioned *= todFactors.replyProbabilityFactor;
+        }
+      }
+
+      const isReplyToUs = message.replyToId !== undefined;
+      const decision = decideReply({
+        chatId: message.chatId,
+        isGroup: message.isGroup,
+        isMentioned: message.mentionsMe,
+        isReplyToUs,
+        config: replyConfig,
+      });
+
+      // Record message for activity tracking regardless of reply decision
+      activityTracker.recordMessage(message.chatId);
+
+      if (!decision.shouldReply) {
+        // Still track in pending history for groups (context preservation)
+        if (message.isGroup) {
+          this.pendingHistory.addMessage(message.chatId, message);
+        }
+        log.debug(`Skipping message ${message.id}: humanization decision — ${decision.reason}`);
+        return;
+      }
+    }
+
     // 3. Check rate limits
     if (!this.rateLimiter.canSendMessage()) {
       log.debug("Rate limit reached, skipping message");
@@ -463,7 +626,7 @@ export class MessageHandler {
       try {
         // Re-check offset after queue wait to prevent duplicate processing
         // (GramJS may fire duplicate NewMessage events during reconnection).
-        if (this.bridge.requiresOffsetDedup()) {
+        if (this.bridge.requiresOffsetDedup() && !message.isSystemEvent) {
           const postQueueOffset = readOffset(message.chatId) ?? 0;
           if (message.id <= postQueueOffset) {
             log.debug(`Skipping message ${message.id} (already processed after queue wait)`);
@@ -471,9 +634,15 @@ export class MessageHandler {
           }
         }
 
-        // 4. Persistent typing simulation if enabled
+        // 4. Persistent typing simulation if enabled with variable delay
         let typingInterval: ReturnType<typeof setInterval> | undefined;
+
         if (this.config.typing_simulation) {
+          // Wait a bit before starting typing (reading the message)
+          const readDelay = calculateReadDelay(message.text.length);
+          await new Promise((resolve) => setTimeout(resolve, readDelay));
+
+          // Now show typing indicator
           await this.bridge.setTyping(message.chatId);
           typingInterval = setInterval(() => {
             void this.bridge.setTyping(message.chatId);
@@ -481,9 +650,10 @@ export class MessageHandler {
         }
 
         try {
-          // 5. Get pending history for groups (if any)
+          // 5. Get pending history for groups (if any) — also applies to DMs
+          // merged by the debouncer via handleBatch.
           let pendingContext: string | null = null;
-          if (message.isGroup) {
+          if (message.isGroup || this.pendingHistory.hasPending(message.chatId)) {
             pendingContext = this.pendingHistory.getAndClearPending(message.chatId);
           }
 
@@ -498,7 +668,8 @@ export class MessageHandler {
 
           // 5c. Auto-transcribe voice/audio messages
           let transcriptionText: string | null = null;
-          if (message.mediaType === "voice" || message.mediaType === "audio") {
+          let audioDescription: string | null = null;
+          if (message.mediaType === "voice") {
             try {
               const transcribeResult = await transcribeAudio(
                 this.bridge,
@@ -520,6 +691,42 @@ export class MessageHandler {
             }
           }
 
+          if (
+            message.mediaType === "audio" &&
+            message._rawMessage &&
+            this.bridge.getMode() === "user"
+          ) {
+            try {
+              const audioBytes = await getClient(this.bridge).downloadMedia(
+                message._rawMessage,
+                {}
+              );
+              if (audioBytes instanceof Buffer) {
+                const analysis = await analyzeAudioBuffer(audioBytes, "telegram_audio");
+                audioDescription = `[Music audio analysis: duration=${analysis.durationSeconds.toFixed(1)}s, mean_volume=${analysis.meanVolumeDb ?? "unknown"} dB, max_volume=${analysis.maxVolumeDb ?? "unknown"} dB]`;
+              }
+            } catch (innerError) {
+              log.warn(
+                { err: innerError, messageId: message.id },
+                "Failed to analyze incoming music"
+              );
+            }
+          }
+
+          let spotifyDescription: string | null = null;
+          const spotifyTrackId = extractSpotifyTrackId(message.text);
+          if (spotifyTrackId) {
+            try {
+              const track = await getTrack(spotifyTrackId);
+              spotifyDescription = `[Spotify track: ${track.name} — ${track.artists.join(", ")}; album=${track.album}; id=${track.id}; preview=${track.previewUrl ? "available" : "unavailable"}; url=${track.spotifyUrl ?? "unknown"}]`;
+            } catch (innerError) {
+              log.warn(
+                { err: innerError, messageId: message.id },
+                "Failed to resolve Spotify link"
+              );
+            }
+          }
+
           // 6. Build tool context
           const toolContext: Omit<ToolContext, "chatId" | "isGroup"> = {
             bridge: this.bridge,
@@ -528,13 +735,71 @@ export class MessageHandler {
             config: this.fullConfig,
           };
 
+          // 5d. Describe images and static stickers up front so their content is
+          // available both to this reply and to future memory/search retrieval.
+          let mediaDescription: string | null = null;
+          if (
+            this.bridge.getMode() === "user" &&
+            (message.mediaType === "photo" ||
+              message.mediaType === "sticker" ||
+              message.mediaType === "video")
+          ) {
+            try {
+              const visionResult = await visionAnalyzeExecutor(
+                {
+                  chatId: message.chatId,
+                  messageId: message.id,
+                  prompt:
+                    "Describe what is shown, including relevant text, people, objects, mood, and any details useful for remembering this message.",
+                },
+                { ...toolContext, chatId: message.chatId, isGroup: message.isGroup }
+              );
+              const data = visionResult.data as { analysis?: unknown } | undefined;
+              if (visionResult.success && typeof data?.analysis === "string") {
+                mediaDescription = `[Media description: ${data.analysis}]`;
+              } else {
+                log.warn(
+                  {
+                    messageId: message.id,
+                    mediaType: message.mediaType,
+                    error: visionResult.error,
+                  },
+                  "Media analysis was unavailable"
+                );
+              }
+            } catch (innerError) {
+              log.warn({ err: innerError, messageId: message.id }, "Failed to analyze media");
+            }
+          }
+
           // 7. Get response from agent (with tools)
           const userName =
             message.senderFirstName || message.senderUsername || `user:${message.senderId}`;
           // Inject transcription into message text if available
-          const effectiveText = transcriptionText
-            ? `🎤 (voice): ${transcriptionText}${message.text ? `\n${message.text}` : ""}`
-            : message.text;
+          const effectiveText = [
+            transcriptionText ? `🎤 (voice): ${transcriptionText}` : null,
+            message.text || null,
+            mediaDescription,
+            audioDescription,
+            spotifyDescription,
+          ]
+            .filter(Boolean)
+            .join("\n");
+          const mediaContext = [
+            transcriptionText ? `[Audio transcript: ${transcriptionText}]` : null,
+            mediaDescription,
+            audioDescription,
+            spotifyDescription,
+          ]
+            .filter(Boolean)
+            .join("\n");
+          if (mediaContext) {
+            await this.messageStore.appendContext(
+              message.chatId,
+              message.id.toString(),
+              mediaContext
+            );
+          }
           const streamMode = this.fullConfig?.telegram?.stream_mode ?? "all";
           const streamToChat =
             this.bridge.streamResponse && streamMode !== "off"
@@ -561,6 +826,7 @@ export class MessageHandler {
               mediaType: message.mediaType,
               messageId: message.id,
               replyContext,
+              reactionSummary: message.reactionSummary,
               streamToChat,
             });
           } catch (error) {
@@ -570,7 +836,7 @@ export class MessageHandler {
               await this.bridge.sendMessage({
                 chatId: message.chatId,
                 text: providerFailureReply(error),
-                replyToId: message.id,
+                replyToId: message.id > 0 ? message.id : undefined,
               });
 
               if (this.bridge.requiresOffsetDedup()) {
@@ -650,28 +916,46 @@ export class MessageHandler {
               responseText = responseText.slice(0, this.config.max_message_length - 3) + "...";
             }
 
-            const sentMessage = await this.bridge.sendMessage({
-              chatId: message.chatId,
-              text: responseText,
-              replyToId: message.id,
-            });
+            // A real person often sends a short burst of messages instead of
+            // one long block — split on natural paragraph breaks when it fits.
+            const messageChunks = splitIntoNaturalMessages(responseText);
 
-            // Store agent's response to feed
-            await this.storeTelegramMessage(
-              {
-                id: sentMessage.id,
+            for (let chunkIndex = 0; chunkIndex < messageChunks.length; chunkIndex++) {
+              const chunk = messageChunks[chunkIndex];
+
+              // Add realistic typing delay based on this chunk's length
+              const isSimpleAck = isSimpleAcknowledgment(chunk);
+              const showTyping = shouldShowTyping(chunk.length, isSimpleAck);
+
+              if (showTyping && this.config.typing_simulation) {
+                const typingDelay = calculateTypingDelay(chunk.length, message.isGroup);
+                await new Promise((resolve) => setTimeout(resolve, typingDelay));
+              }
+
+              const sentMessage = await this.bridge.sendMessage({
                 chatId: message.chatId,
-                senderId: this.ownUserId ? parseInt(this.ownUserId, 10) : 0,
-                text: responseText,
-                isGroup: message.isGroup,
-                isChannel: message.isChannel,
-                isBot: false,
-                mentionsMe: false,
-                timestamp: new Date(sentMessage.date * 1000),
-                hasMedia: false,
-              },
-              true
-            );
+                text: chunk,
+                replyToId:
+                  chunkIndex === 0 && this.shouldReplyToMessage(message) ? message.id : undefined,
+              });
+
+              // Store agent's response to feed
+              await this.storeTelegramMessage(
+                {
+                  id: sentMessage.id,
+                  chatId: message.chatId,
+                  senderId: this.ownUserId ? parseInt(this.ownUserId, 10) : 0,
+                  text: chunk,
+                  isGroup: message.isGroup,
+                  isChannel: message.isChannel,
+                  isBot: false,
+                  mentionsMe: false,
+                  timestamp: new Date(sentMessage.date * 1000),
+                  hasMedia: false,
+                },
+                true
+              );
+            }
           } else if (
             responseAlreadyDelivered &&
             response.content &&
@@ -707,8 +991,25 @@ export class MessageHandler {
           }
 
           // Mark as processed AFTER successful handling (prevents message loss on crash).
-          if (this.bridge.requiresOffsetDedup()) {
-            writeOffset(message.id, message.chatId);
+          // System events (reactions) carry synthetic negative IDs — never a real
+          // Telegram message ID — so they must not be written as an offset or
+          // passed to markAsRead (Telegram's API rejects out-of-range int32 IDs).
+          if (!message.isSystemEvent) {
+            if (this.bridge.requiresOffsetDedup()) {
+              writeOffset(message.id, message.chatId);
+            }
+
+            // A user account can acknowledge the message after it has been handled.
+            // Bot accounts do not control the account-level read state.
+            if (isUserBridge(this.bridge)) {
+              try {
+                const client = getClient(this.bridge);
+                const peer = this.bridge.getPeer(message.chatId) ?? message.chatId;
+                await client.markAsRead(peer, message.id, { clearMentions: true });
+              } catch (error) {
+                log.warn({ err: error, chatId: message.chatId }, "Failed to mark message as read");
+              }
+            }
           }
         } finally {
           if (typingInterval) clearInterval(typingInterval);

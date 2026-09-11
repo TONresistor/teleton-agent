@@ -73,11 +73,13 @@ export function assertTrustedPluginPath(modulePath: string, pluginsDir: string):
     if (metadata.isSymbolicLink()) {
       throw new Error(`Plugin path must not contain symlinks: ${current}`);
     }
-    if ((metadata.mode & 0o022) !== 0) {
-      throw new Error(`Plugin path is group/world writable: ${current}`);
-    }
-    if (expectedUid !== undefined && metadata.uid !== expectedUid) {
-      throw new Error(`Plugin path is not owned by the Teleton process user: ${current}`);
+    if (process.platform !== "win32") {
+      if ((metadata.mode & 0o022) !== 0) {
+        throw new Error(`Plugin path is group/world writable: ${current}`);
+      }
+      if (expectedUid !== undefined && metadata.uid !== expectedUid) {
+        throw new Error(`Plugin path is not owned by the Teleton process user: ${current}`);
+      }
     }
     if (realpathSync(current) === root) break;
     const parent = dirname(current);
@@ -501,6 +503,12 @@ export async function loadEnhancedPlugins(
     const { entry, mod } = result.value;
 
     try {
+      const pluginConfigKey = entry.replace(/\.js$/, "").replace(/-/g, "_");
+      const pluginConfig = config.plugins?.[pluginConfigKey] as Record<string, unknown> | undefined;
+      if (pluginConfig?.enabled === false) {
+        log.info(`Plugin "${entry}" is disabled in config`);
+        continue;
+      }
       if (!mod.tools || (typeof mod.tools !== "function" && !Array.isArray(mod.tools))) {
         log.warn(`Plugin "${entry}": no 'tools' array or function exported, skipping`);
         continue;

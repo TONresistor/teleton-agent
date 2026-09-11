@@ -5,6 +5,7 @@ import {
   type AssistantMessage,
   type Message,
 } from "@earendil-works/pi-ai/compat";
+import { randomUUID } from "node:crypto";
 import type { AgentConfig } from "../config/schema.js";
 import { appendToTranscript, readTranscript } from "../session/transcript.js";
 import type { SupportedProvider } from "../config/providers.js";
@@ -55,6 +56,35 @@ export interface ChatResponse {
 
 const THINK_RE = /<think>[\s\S]*?<\/think>/g;
 
+function ensureToolCallIds(response: AssistantMessage): void {
+  for (const block of response.content) {
+    if (block.type === "toolCall" && !block.id) {
+      // Some OpenAI-compatible gateways omit IDs, but require them on the next turn.
+      block.id = `call_${randomUUID()}`;
+    }
+  }
+}
+
+function normalizeContextToolCallIds(context: Context): void {
+  const pendingIds: string[] = [];
+
+  for (const message of context.messages) {
+    if (message.role === "assistant") {
+      for (const block of message.content) {
+        if (block.type !== "toolCall") continue;
+        if (!block.id) block.id = `call_${randomUUID()}`;
+        pendingIds.push(block.id);
+      }
+      continue;
+    }
+
+    if (message.role === "toolResult" && !message.toolCallId) {
+      const toolCallId = pendingIds.shift();
+      if (toolCallId) message.toolCallId = toolCallId;
+    }
+  }
+}
+
 /**
  * Shared post-processing for both complete() and stream() responses: strip
  * <think> blocks (Mistral, local models, etc.), persist the transcript, extract the
@@ -65,6 +95,7 @@ function finalizeResponse(
   context: Context,
   options: ChatOptions
 ): ChatResponse {
+  ensureToolCallIds(response);
   for (const block of response.content) {
     if (block.type === "text" && block.text.includes("<think>")) {
       block.text = block.text.replace(THINK_RE, "").trim();
@@ -112,6 +143,7 @@ export async function chatWithContext(
   config: AgentConfig,
   options: ChatOptions
 ): Promise<ChatResponse> {
+  normalizeContextToolCallIds(options.context);
   const request = prepareModelRequest(config, options);
   const initialResponse = await complete(request.model, request.context, request.options);
   const response = await retryAfterCredentialRefresh(request, initialResponse);
@@ -124,6 +156,7 @@ export interface StreamResult {
 }
 
 export function streamWithContext(config: AgentConfig, options: ChatOptions): StreamResult {
+  normalizeContextToolCallIds(options.context);
   const request = prepareModelRequest(config, options);
   const eventStream = stream(request.model, request.context, request.options);
 

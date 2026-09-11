@@ -51,6 +51,12 @@ export const AgentConfigSchema = z
       .string()
       .optional()
       .describe("Cheap model for summarization (auto-detected if omitted)"),
+    vision_models: z
+      .array(z.string())
+      .default([])
+      .describe(
+        "Model IDs considered vision-capable for media analysis (local providers cannot advertise this)"
+      ),
     max_tokens: z.number().default(4096),
     temperature: z.number().default(0.7),
     system_prompt: z.string().nullable().default(null),
@@ -97,6 +103,105 @@ export const AgentConfigSchema = z
     });
   });
 
+export const ReplyProbConfigSchema = z.object({
+  dm_base: z
+    .number()
+    .min(0)
+    .max(1)
+    .default(0.85)
+    .describe("Base probability of replying in DMs (0.0-1.0)"),
+  group_mentioned: z
+    .number()
+    .min(0)
+    .max(1)
+    .default(0.5)
+    .describe("Probability when mentioned in group"),
+  group_replied_to_us: z
+    .number()
+    .min(0)
+    .max(1)
+    .default(0.9)
+    .describe("Probability when someone replied to our message"),
+  group_unmentioned: z
+    .number()
+    .min(0)
+    .max(1)
+    .default(0.05)
+    .describe("Probability in group without mention"),
+  min_interval_ms: z
+    .number()
+    .min(0)
+    .default(3000)
+    .describe("Minimum ms between replies in same chat"),
+  high_activity_threshold: z
+    .number()
+    .min(1)
+    .default(5)
+    .describe("Messages/min threshold for high activity"),
+  high_activity_multiplier: z
+    .number()
+    .min(0)
+    .max(1)
+    .default(0.3)
+    .describe("Probability multiplier in high-activity groups"),
+});
+
+export const TimeOfDayConfigSchema = z.object({
+  enabled: z.boolean().default(true).describe("Adjust behavior by time of day"),
+  quiet_hours_start: z
+    .number()
+    .min(0)
+    .max(23)
+    .default(23)
+    .describe("Quiet hours start hour (0-23)"),
+  quiet_hours_end: z.number().min(0).max(23).default(6).describe("Quiet hours end hour (0-23)"),
+  timezone_offset_minutes: z
+    .number()
+    .default(180)
+    .describe("UTC offset in minutes (e.g. Moscow = 180)"),
+});
+
+export const WritingStyleConfigSchema = z.object({
+  typo_probability: z
+    .number()
+    .min(0)
+    .max(1)
+    .default(0.03)
+    .describe("Probability of simulating a typo"),
+  edit_after_send_probability: z
+    .number()
+    .min(0)
+    .max(1)
+    .default(0.05)
+    .describe("Probability of edit after sending"),
+  max_edit_delay_ms: z
+    .number()
+    .min(1000)
+    .default(15000)
+    .describe("Max delay for edit-after-send simulation (ms)"),
+  staging_probability: z
+    .number()
+    .min(0)
+    .max(1)
+    .default(0.03)
+    .describe("Show typing but don't send probability"),
+  emoji_enabled: z.boolean().default(true).describe("Allow natural emoji use"),
+  fillers_enabled: z.boolean().default(true).describe("Allow natural filler phrases"),
+});
+
+export const HumanizationConfigSchema = z.object({
+  enabled: z.boolean().default(true).describe("Enable human-like behavior enhancements"),
+  reply_probability: ReplyProbConfigSchema.default(ReplyProbConfigSchema.parse({})).describe(
+    "Context-aware reply probability settings"
+  ),
+  time_of_day: TimeOfDayConfigSchema.default(TimeOfDayConfigSchema.parse({})).describe(
+    "Time-of-day behavioral modulation"
+  ),
+  writing_style: WritingStyleConfigSchema.default(WritingStyleConfigSchema.parse({})).describe(
+    "Natural writing style imperfections"
+  ),
+});
+
 export const TelegramConfigSchema = z
   .object({
     mode: z.enum(["user", "bot"]).default("user"),
@@ -112,6 +217,10 @@ export const TelegramConfigSchema = z
     require_mention: z.boolean().default(true),
     max_message_length: z.number().default(TELEGRAM_MAX_MESSAGE_LENGTH),
     typing_simulation: z.boolean().default(true),
+    reaction_events: z
+      .boolean()
+      .default(true)
+      .describe("Send reactions to the agent as incoming events"),
     rate_limit_messages_per_second: z.number().default(1.0),
     rate_limit_groups_per_minute: z.number().default(20),
     admin_ids: z.array(z.number()).default([]),
@@ -123,6 +232,12 @@ export const TelegramConfigSchema = z
       .number()
       .default(1500)
       .describe("Debounce delay in milliseconds for group messages (0 = disabled)"),
+    dm_debounce_ms: z
+      .number()
+      .default(1000)
+      .describe(
+        "Debounce window in milliseconds for direct messages. When messages arrive faster than this window the bot waits, merges them into one context, and answers once (0 = disabled)"
+      ),
     bot_token: z
       .string()
       .optional()
@@ -134,10 +249,19 @@ export const TelegramConfigSchema = z
       .describe(
         "Bot streaming mode: replace=each iteration replaces draft (default), all=concatenate all iterations, off=no streaming"
       ),
+    reply_style: z
+      .enum(["auto", "plain", "reply"])
+      .default("auto")
+      .describe(
+        "Outgoing reply style: auto=reply only for quoted/contextual responses, plain=never reply, reply=always reply"
+      ),
     guest_mode: z
       .boolean()
       .default(false)
       .describe("Allow the bot to answer guest queries in chats it is not a member of"),
+    humanization: HumanizationConfigSchema.default(HumanizationConfigSchema.parse({})).describe(
+      "Human-like behavior enhancements (reply probability, time-of-day, writing style)"
+    ),
   })
   .superRefine((data, ctx) => {
     if (data.mode === "user") {
@@ -241,6 +365,14 @@ const _TonProxyObject = z.object({
     .describe("Custom path to tonutils-proxy-cli binary (auto-downloaded if omitted)"),
 });
 export const TonProxyConfigSchema = _TonProxyObject.default(_TonProxyObject.parse({}));
+
+const _TonFeaturesObject = z.object({
+  enabled: z
+    .boolean()
+    .default(false)
+    .describe("Enable TON blockchain features (wallet, DEX, DNS, jettons, NFTs)"),
+});
+export const TonFeaturesConfigSchema = _TonFeaturesObject.default(_TonFeaturesObject.parse({}));
 
 const _DevObject = z.object({
   hot_reload: z
@@ -357,12 +489,67 @@ const _HeartbeatObject = z.object({
     .string()
     .default("Execute your HEARTBEAT.md checklist now. Work through each item using tool calls.")
     .describe("Prompt sent to agent on each heartbeat tick"),
+  startup_prompt: z
+    .string()
+    .nullable()
+    .default(null)
+    .describe("Optional one-time prompt sent on the first heartbeat after agent startup"),
+  min_interval_between_replies_ms: z
+    .number()
+    .min(0)
+    .default(30_000)
+    .describe(
+      "Minimum time in ms between two heartbeat-initiated replies to the same chat. Prevents rapid-fire messages (0 = disabled)"
+    ),
+  reply_delay_ms: z
+    .number()
+    .min(0)
+    .default(1_000)
+    .describe("Artificial human-like delay in ms before the heartbeat sends its reply (0 = none)"),
   self_configurable: z
     .boolean()
     .default(false)
     .describe("Allow agent to modify heartbeat config via config_set"),
+  proactive_enabled: z
+    .boolean()
+    .default(false)
+    .describe("Allow heartbeat to initiate messages in explicitly approved chats"),
+  proactive_chat_ids: z
+    .array(z.number())
+    .default([])
+    .describe("Chat IDs where proactive messages are allowed"),
+  proactive_cooldown_ms: z
+    .number()
+    .min(3_600_000)
+    .default(86_400_000)
+    .describe("Minimum time between proactive messages per chat"),
+  proactive_mode: z
+    .enum(["suggestion", "send"])
+    .default("suggestion")
+    .describe("Suggest drafts to the owner or send qualifying proactive messages directly"),
+  proactive_min_score: z
+    .number()
+    .int()
+    .min(1)
+    .max(10)
+    .default(7)
+    .describe("Minimum 1-10 relevance score required for a proactive draft"),
+  proactive_prompt: z
+    .string()
+    .default(
+      "Review this chat's recent context. Only send a message if there is a genuinely useful reason to check in, follow up, remind, or share something relevant. Otherwise answer HEARTBEAT_OK. Do not send generic greetings or filler."
+    )
+    .describe("Prompt used for proactive chat checks"),
 });
 export const HeartbeatConfigSchema = _HeartbeatObject.default(_HeartbeatObject.parse({}));
+
+const _SchedulerObject = z.object({
+  enabled: z.boolean().default(true),
+  poll_interval_ms: z.number().int().min(1_000).default(15_000),
+  max_catch_up_ms: z.number().int().min(0).default(86_400_000),
+  default_timezone: z.string().default("UTC"),
+});
+export const SchedulerConfigSchema = _SchedulerObject.default(_SchedulerObject.parse({}));
 
 export const ConfigSchema = z.object({
   meta: MetaConfigSchema.default(MetaConfigSchema.parse({})),
@@ -378,7 +565,9 @@ export const ConfigSchema = z.object({
   capabilities: CapabilitiesConfigSchema,
   api: ApiConfigSchema.optional(),
   ton_proxy: TonProxyConfigSchema,
+  ton_features: TonFeaturesConfigSchema,
   heartbeat: HeartbeatConfigSchema,
+  scheduler: SchedulerConfigSchema,
   mcp: McpConfigSchema,
   plugins: z
     .record(z.string(), z.unknown())
@@ -421,5 +610,6 @@ export type WebUIConfig = z.infer<typeof WebUIConfigSchema>;
 export type McpConfig = z.infer<typeof McpConfigSchema>;
 export type McpServerConfig = z.infer<typeof McpServerSchema>;
 export type TonProxyConfig = z.infer<typeof TonProxyConfigSchema>;
+export type TonFeaturesConfig = z.infer<typeof TonFeaturesConfigSchema>;
 export type ApiConfig = z.infer<typeof _ApiObject>;
 export type ExecConfig = z.infer<typeof _ExecObject>;

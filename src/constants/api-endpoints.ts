@@ -51,4 +51,5 @@ export const GECKOTERMINAL_API_URL = "https://api.geckoterminal.com/api/v2";
 export const COINGECKO_API_URL = "https://api.coingecko.com/api/v3";
 export const OPENAI_TTS_URL = "https://api.openai.com/v1/audio/speech";
 export const ELEVENLABS_TTS_URL = "https://api.elevenlabs.io/v1/text-to-speech";
+export const MINIMAX_TTS_URL = "https://api.minimax.io/v1/t2a_v2";
 export const VOYAGE_API_URL = "https://api.voyageai.com/v1";

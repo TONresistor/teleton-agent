@@ -12,9 +12,29 @@ const log = createLogger("Tools");
  * Parameters for telegram_get_dialogs tool
  */
 interface GetDialogsParams {
-  limit?: number;
-  archived?: boolean;
-  unreadOnly?: boolean;
+  limit?: number | string;
+  archived?: boolean | string;
+  unreadOnly?: boolean | string;
+}
+
+const BooleanLike = Type.Union([Type.Boolean(), Type.Literal("true"), Type.Literal("false")]);
+const LimitLike = Type.Union([
+  Type.Number({ minimum: 1, maximum: 100 }),
+  Type.String({ pattern: "^(?:[1-9]|[1-9][0-9]|100)$" }),
+]);
+
+function asBoolean(value: boolean | string | undefined, defaultValue: boolean): boolean {
+  return typeof value === "boolean"
+    ? value
+    : value === "true"
+      ? true
+      : value === "false"
+        ? false
+        : defaultValue;
+}
+
+function asLimit(value: number | string | undefined): number {
+  return typeof value === "number" ? value : typeof value === "string" ? Number(value) : 50;
 }
 
 /**
@@ -26,24 +46,9 @@ export const telegramGetDialogsTool: Tool = {
     "Enumerate all conversations (DMs, groups, channels) with unread counts, last message preview, and pinned status. Returns chat IDs needed by other tools. Filter by archived or unreadOnly.",
   category: "data-bearing",
   parameters: Type.Object({
-    limit: Type.Optional(
-      Type.Number({
-        description: "Maximum number of dialogs to retrieve (default: 50, max: 100)",
-        minimum: 1,
-        maximum: 100,
-      })
-    ),
-    archived: Type.Optional(
-      Type.Boolean({
-        description:
-          "If true, get archived chats. If false, get active chats. Default: false (active chats)",
-      })
-    ),
-    unreadOnly: Type.Optional(
-      Type.Boolean({
-        description: "If true, only return dialogs with unread messages. Default: false",
-      })
-    ),
+    limit: Type.Optional(LimitLike),
+    archived: Type.Optional(BooleanLike),
+    unreadOnly: Type.Optional(BooleanLike),
   }),
 };
 
@@ -55,7 +60,9 @@ export const telegramGetDialogsExecutor: ToolExecutor<GetDialogsParams> = async 
   context
 ): Promise<ToolResult> => {
   try {
-    const { limit = 50, archived = false, unreadOnly = false } = params;
+    const limit = asLimit(params.limit);
+    const archived = asBoolean(params.archived, false);
+    const unreadOnly = asBoolean(params.unreadOnly, false);
 
     // Get underlying GramJS client
     const gramJsClient = getClient(context.bridge);

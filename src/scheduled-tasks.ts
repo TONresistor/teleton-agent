@@ -107,6 +107,19 @@ export class ScheduledTaskHandler {
         config: this.config,
       };
 
+      // Plain reminders do not need an LLM turn. Deliver them directly so a
+      // provider timeout cannot prevent a time-based notification.
+      if (!task.payload) {
+        await this.bridge.sendMessage({
+          chatId: task.originChatId ?? message.chatId,
+          text: `Reminder: ${task.description}`,
+          replyToId: message.id > 0 ? message.id : undefined,
+        });
+        taskStore.completeTask(taskId, task.description);
+        log.info({ taskId }, "Delivered scheduled reminder");
+        return;
+      }
+
       // Get tool registry from agent runtime
       const toolRegistry = this.agent.getToolRegistry();
       if (!toolRegistry) {
@@ -160,7 +173,22 @@ export class ScheduledTaskHandler {
 
       // Try to mark task as failed and cascade to dependents
       try {
-        taskStore.failTask(taskId, getErrorMessage(error));
+        const errorMessage = getErrorMessage(error);
+        taskStore.failTask(taskId, errorMessage);
+
+        // Notify the owner that a scheduled task failed so the failure is
+        // visible even when the agent turn itself errored.
+        try {
+          await this.bridge.sendMessage({
+            chatId: message.chatId,
+            text:
+              `⚠️ Scheduled task failed:\n"${message.text.replace(/^\[TASK:[^\]]+\]\s*/, "")}"\n` +
+              `Error: ${errorMessage}`,
+            replyToId: message.id,
+          });
+        } catch {
+          log.debug("Failed to notify owner about scheduled task error");
+        }
 
         // Initialize resolver if needed
         if (!this.dependencyResolver) {

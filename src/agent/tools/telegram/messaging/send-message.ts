@@ -8,6 +8,7 @@ import type { Tool, ToolExecutor, ToolResult } from "../../types.js";
 import { getErrorMessage } from "../../../../utils/errors.js";
 import { createLogger } from "../../../../utils/logger.js";
 import { prepareRichMessageContent, richMessageContentSchema } from "./rich-content.js";
+import { RelationshipStore } from "../../../../memory/feed/relationships.js";
 
 const log = createLogger("Tools");
 
@@ -72,6 +73,9 @@ export const telegramSendMessageExecutor: ToolExecutor<SendMessageParams> = asyn
       replyToId: params.replyToId,
       rich,
     });
+    const relationshipStore = new RelationshipStore(context.db);
+    const proposal = relationshipStore.inferProposal(text);
+    if (proposal) relationshipStore.setPendingProposal(chatId, proposal);
 
     const firstAttachment = rich?.attachments?.[0];
 

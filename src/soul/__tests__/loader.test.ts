@@ -110,6 +110,13 @@ describe("buildSystemPrompt() restructured sections", () => {
     expect(reminderIdx).toBeGreaterThan(lastNewline - 200);
   });
 
+  it("includes scheduling guidance directing reminders to telegram_create_scheduled_task", () => {
+    const prompt = buildSystemPrompt({});
+    expect(prompt).toContain("## Scheduling");
+    expect(prompt).toContain("telegram_create_scheduled_task");
+    expect(prompt).toContain("Do not use open_loop for reminders");
+  });
+
   it("does NOT include removed sections (Active Memory, Runtime tag)", () => {
     const prompt = buildSystemPrompt({});
     expect(prompt).not.toContain("## Active Memory");
@@ -119,6 +126,14 @@ describe("buildSystemPrompt() restructured sections", () => {
   it("includes __SILENT__ in DEFAULT_SOUL personality", () => {
     const prompt = buildSystemPrompt({});
     expect(prompt).toContain("__SILENT__");
+  });
+
+  it("includes autonomous social behavior guidance", () => {
+    const prompt = buildSystemPrompt({});
+    expect(prompt).toContain("not an automatic reply machine");
+    expect(prompt).toContain("reaction tool");
+    expect(prompt).toContain("Use a sticker");
+    expect(prompt).toContain("safe interests");
   });
 
   it("keeps owner profile and strategy in the global agent context", () => {

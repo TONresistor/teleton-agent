@@ -45,4 +45,16 @@ describe("dynamic model registry", () => {
     await expect(registerLocalModels("http://new.local/v1")).resolves.toEqual([]);
     expect(() => getProviderModel("local", "old-model")).toThrow(/not served/i);
   });
+
+  it("marks listed models as vision-capable and leaves others text-only", async () => {
+    mocks.fetchWithTimeout.mockResolvedValue({
+      ok: true,
+      json: async () => ({ data: [{ id: "vision-model" }, { id: "text-model" }] }),
+    });
+
+    await registerLocalModels("http://local.test/v1", undefined, undefined, ["vision-model"]);
+
+    expect(getProviderModel("local", "vision-model").input).toContain("image");
+    expect(getProviderModel("local", "text-model").input).not.toContain("image");
+  });
 });

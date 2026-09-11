@@ -255,6 +255,7 @@ export function ensureSchema(db: Database.Database): void {
       result TEXT,
       error TEXT,
       scheduled_for INTEGER,
+      repeat_every_ms INTEGER,
       payload TEXT,
       reason TEXT,
       scheduled_message_id INTEGER,
@@ -314,6 +315,32 @@ export function ensureSchema(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_tg_users_username ON tg_users(username) WHERE username IS NOT NULL;
     CREATE INDEX IF NOT EXISTS idx_tg_users_admin ON tg_users(is_admin) WHERE is_admin = 1;
     CREATE INDEX IF NOT EXISTS idx_tg_users_last_seen ON tg_users(last_seen_at DESC);
+
+    -- Relationship rapport (bounded conversational warmth; never grants permissions)
+    CREATE TABLE IF NOT EXISTS relationship_profiles (
+      user_id TEXT PRIMARY KEY,
+      rapport INTEGER NOT NULL DEFAULT 50 CHECK(rapport BETWEEN 0 AND 100),
+      interactions INTEGER NOT NULL DEFAULT 0,
+      tone TEXT NOT NULL DEFAULT 'neutral' CHECK(tone IN ('neutral', 'warm', 'careful')),
+      last_interaction_at INTEGER NOT NULL DEFAULT (unixepoch()),
+      FOREIGN KEY (user_id) REFERENCES tg_users(id) ON DELETE CASCADE
+    );
+    CREATE TABLE IF NOT EXISTS relationship_proposals (
+      user_id TEXT PRIMARY KEY,
+      level TEXT NOT NULL CHECK(level IN (
+        'stranger', 'surface_acquaintance', 'acquaintance', 'buddy', 'comrade',
+        'friend', 'best_friend', 'romantic_partner', 'family'
+      )),
+      created_at INTEGER NOT NULL DEFAULT (unixepoch())
+    );
+    CREATE TABLE IF NOT EXISTS relationship_overrides (
+      user_id TEXT PRIMARY KEY,
+      level TEXT NOT NULL CHECK(level IN (
+        'stranger', 'surface_acquaintance', 'acquaintance', 'buddy', 'comrade',
+        'friend', 'best_friend', 'romantic_partner', 'family'
+      )),
+      updated_at INTEGER NOT NULL DEFAULT (unixepoch())
+    );
 
     -- Messages
     CREATE TABLE IF NOT EXISTS tg_messages (
@@ -597,7 +624,7 @@ export function setSchemaVersion(db: Database.Database, version: string): void {
   ).run(version);
 }
 
-export const CURRENT_SCHEMA_VERSION = "1.25.0";
+export const CURRENT_SCHEMA_VERSION = "1.26.0";
 
 export function runMigrations(db: Database.Database): void {
   const currentVersion = getSchemaVersion(db);
@@ -1175,6 +1202,42 @@ export function runMigrations(db: Database.Database): void {
       ).run();
     })();
     log.info("Migration 1.25.0 complete: Telegram document embeddings scheduled");
+  }
+
+  if (!currentVersion || versionLessThan(currentVersion, "1.26.0")) {
+    const tasksTableExists = db
+      .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='tasks'")
+      .get();
+    if (tasksTableExists) addColumnIfNotExists(db, "tasks", "repeat_every_ms", "INTEGER");
+
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS relationship_profiles (
+        user_id TEXT PRIMARY KEY,
+        rapport INTEGER NOT NULL DEFAULT 50 CHECK(rapport BETWEEN 0 AND 100),
+        interactions INTEGER NOT NULL DEFAULT 0,
+        tone TEXT NOT NULL DEFAULT 'neutral' CHECK(tone IN ('neutral', 'warm', 'careful')),
+        last_interaction_at INTEGER NOT NULL DEFAULT (unixepoch()),
+        FOREIGN KEY (user_id) REFERENCES tg_users(id) ON DELETE CASCADE
+      );
+      CREATE TABLE IF NOT EXISTS relationship_proposals (
+        user_id TEXT PRIMARY KEY,
+        level TEXT NOT NULL CHECK(level IN (
+          'stranger', 'surface_acquaintance', 'acquaintance', 'buddy', 'comrade',
+          'friend', 'best_friend', 'romantic_partner', 'family'
+        )),
+        created_at INTEGER NOT NULL DEFAULT (unixepoch())
+      );
+      CREATE TABLE IF NOT EXISTS relationship_overrides (
+        user_id TEXT PRIMARY KEY,
+        level TEXT NOT NULL CHECK(level IN (
+          'stranger', 'surface_acquaintance', 'acquaintance', 'buddy', 'comrade',
+          'friend', 'best_friend', 'romantic_partner', 'family'
+        )),
+        updated_at INTEGER NOT NULL DEFAULT (unixepoch())
+      );
+    `);
+
+    log.info("Migration 1.26.0 complete: Repeating scheduled tasks and relationship rapport added");
   }
 
   setSchemaVersion(db, CURRENT_SCHEMA_VERSION);

@@ -29,7 +29,7 @@
         <aside class="sidebar" id="sidebar"><nav class="sidebar-nav">
             <div class="nav-section"><div class="nav-section-title">Start Here</div><ul class="nav-list"><div class="nav-list-inner"><li><a href="/index.html" class="nav-link">Introduction</a></li><li><a href="installation.html" class="nav-link">Installation</a></li><li><a href="quickstart.html" class="nav-link">Quick Start</a></li><li><a href="configuration.html" class="nav-link">Configuration</a></li></div></ul></div>
 <div class="nav-section"><div class="nav-section-title">Understand</div><ul class="nav-list"><div class="nav-list-inner"><li><a href="architecture.html" class="nav-link">Architecture</a></li><li><a href="agentic-loop.html" class="nav-link">Agentic Loop</a></li><li><a href="memory-system.html" class="nav-link">Memory System</a></li><li><a href="security.html" class="nav-link">Security</a></li></div></ul></div>
-<div class="nav-section"><div class="nav-section-title">Tools</div><ul class="nav-list"><div class="nav-list-inner"><li><a href="tools-telegram.html" class="nav-link active">Telegram (85)</a></li><li><a href="tools-ton.html" class="nav-link">TON Blockchain (15)</a></li><li><a href="tools-dex.html" class="nav-link">DEX Trading (10)</a></li><li><a href="tools-dns.html" class="nav-link">DNS &amp; Domains (8)</a></li><li><a href="tools-other.html" class="nav-link">Utilities</a></li></div></ul></div>
+<div class="nav-section"><div class="nav-section-title">Tools</div><ul class="nav-list"><div class="nav-list-inner"><li><a href="tools-telegram.html" class="nav-link active">Telegram</a></li><li><a href="tools-other.html" class="nav-link">Utilities</a></li></div></ul></div>
 <div class="nav-section"><div class="nav-section-title">Build Plugins</div><ul class="nav-list"><div class="nav-list-inner"><li><a href="plugin-sdk.html" class="nav-link">Plugin SDK</a></li></div></ul></div>
 <div class="nav-section"><div class="nav-section-title">SDK Reference</div><ul class="nav-list"><div class="nav-list-inner"><li><a href="sdk-overview.html" class="nav-link">Overview</a></li><li><a href="sdk-ton.html" class="nav-link">TON Blockchain</a></li><li><a href="sdk-dex.html" class="nav-link">DEX Trading</a></li><li><a href="sdk-dns.html" class="nav-link">DNS &amp; Domains</a></li><li><a href="sdk-telegram.html" class="nav-link">Telegram</a></li><li><a href="sdk-bot.html" class="nav-link">Bot SDK</a></li><li><a href="sdk-utilities.html" class="nav-link">Utilities</a></li><li><a href="sdk-errors.html" class="nav-link">Error Handling</a></li><li><a href="tutorial-payment-bot.html" class="nav-link">Tutorial: Payment Bot</a></li><li><a href="tutorial-dex-bot.html" class="nav-link">Tutorial: DEX Bot</a></li><li><a href="tutorial-inline-bot.html" class="nav-link">Tutorial: Inline Bot</a></li></div></ul></div>
 <div class="nav-section"><div class="nav-section-title">Deploy &amp; Manage</div><ul class="nav-list"><div class="nav-list-inner"><li><a href="deploy-docker.html" class="nav-link">Docker</a></li><li><a href="cli-reference.html" class="nav-link">CLI Reference</a></li></div></ul></div>
@@ -473,7 +473,7 @@
             </section>
 
             <section class="section" id="media">
-                <h2>Media (7)</h2>
+                <h2>Media (8)</h2>
 
                 <h3 id="telegram_send_photo"><code>telegram_send_photo</code></h3>
                 <p>Send a photo from a local workspace file. Supports JPG, PNG, WEBP.</p>
@@ -550,6 +550,16 @@
                     <tbody>
                         <tr><td><code>chatId</code></td><td>string</td><td>Chat ID containing the audio message</td></tr>
                         <tr><td><code>messageId</code></td><td>number</td><td>Message ID with audio/voice</td></tr>
+                    </tbody>
+                </table></div>
+
+                <h3 id="telegram_analyze_music"><code>telegram_analyze_music</code> <small>user</small></h3>
+                <p>Analyze a user-supplied music/audio message with an external audio model (requires OpenRouter). Sends only the first 45 seconds.</p>
+                <div class="table-wrapper"><table>
+                    <thead><tr><th>Parameter</th><th>Type</th><th>Description</th></tr></thead>
+                    <tbody>
+                        <tr><td><code>chatId</code></td><td>string</td><td>Chat containing the music message</td></tr>
+                        <tr><td><code>messageId</code></td><td>number</td><td>Telegram message ID containing the audio</td></tr>
                     </tbody>
                 </table></div>
             </section>
@@ -691,7 +701,7 @@
             </section>
 
             <section class="section" id="profile">
-                <h2>Profile (4)</h2>
+                <h2>Profile (5)</h2>
 
                 <h3 id="telegram_update_profile"><code>telegram_update_profile</code> <small>user · dm-only</small></h3>
                 <p>Update your display name.</p>
@@ -727,6 +737,16 @@
                     <thead><tr><th>Parameter</th><th>Type</th><th>Description</th></tr></thead>
                     <tbody>
                         <tr><td><code>channelId</code></td><td>string</td><td>Channel ID or username to link</td></tr>
+                    </tbody>
+                </table></div>
+
+                <h3 id="telegram_update_profile_photo"><code>telegram_update_profile_photo</code> <small>user</small></h3>
+                <p>Set or remove your personal Telegram profile avatar.</p>
+                <div class="table-wrapper"><table>
+                    <thead><tr><th>Parameter</th><th>Type</th><th>Description</th></tr></thead>
+                    <tbody>
+                        <tr><td><code>photoPath</code></td><td>string?</td><td>Workspace path to a JPG, PNG, or WEBP avatar</td></tr>
+                        <tr><td><code>remove</code></td><td>boolean?</td><td>Remove the current profile avatar</td></tr>
                     </tbody>
                 </table></div>
             </section>
@@ -913,7 +933,7 @@
             </section>
 
             <section class="section" id="stories-tasks">
-                <h2>Stories &amp; Tasks (2)</h2>
+                <h2>Stories &amp; Tasks (4)</h2>
 
                 <h3 id="telegram_send_story"><code>telegram_send_story</code></h3>
                 <p>Post a disappearing story (photo or video).</p>
@@ -934,6 +954,25 @@
                         <tr><td><code>task</code></td><td>string</td><td>Task description/instruction for the agent</td></tr>
                         <tr><td><code>timestamp</code></td><td>number</td><td>Unix timestamp for execution</td></tr>
                         <tr><td><code>chatId</code></td><td>string?</td><td>Chat context for the task</td></tr>
+                    </tbody>
+                </table></div>
+
+                <h3 id="telegram_list_scheduled_tasks"><code>telegram_list_scheduled_tasks</code></h3>
+                <p>List scheduled tasks (reminders and timed actions), optionally filtered by status.</p>
+                <div class="table-wrapper"><table>
+                    <thead><tr><th>Parameter</th><th>Type</th><th>Description</th></tr></thead>
+                    <tbody>
+                        <tr><td><code>status</code></td><td>string?</td><td>Filter by status: pending, in_progress, done, failed, cancelled</td></tr>
+                        <tr><td><code>limit</code></td><td>number?</td><td>Max tasks to return (default 20, max 100)</td></tr>
+                    </tbody>
+                </table></div>
+
+                <h3 id="telegram_cancel_scheduled_task"><code>telegram_cancel_scheduled_task</code></h3>
+                <p>Cancel a scheduled task by its task ID so it will not execute.</p>
+                <div class="table-wrapper"><table>
+                    <thead><tr><th>Parameter</th><th>Type</th><th>Description</th></tr></thead>
+                    <tbody>
+                        <tr><td><code>taskId</code></td><td>string</td><td>ID of the scheduled task to cancel (from <code>telegram_list_scheduled_tasks</code>)</td></tr>
                     </tbody>
                 </table></div>
             </section>

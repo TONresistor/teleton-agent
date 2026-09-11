@@ -28,7 +28,7 @@ export const tools: ToolEntry[] = [
     tool: telegramReactTool,
     executor: telegramReactExecutor,
     mode: "both",
-    tags: ["social"],
+    tags: ["core", "social"],
   },
   {
     tool: telegramSendDiceTool,

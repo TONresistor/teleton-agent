@@ -11,6 +11,7 @@ import type {
   BotInfo,
   ChatInfo,
   ReplyContext,
+  TelegramReaction,
 } from "../bridge-interface.js";
 import type { TelegramMessage, InlineButton } from "../bridge.js";
 import { createLogger } from "../../utils/logger.js";
@@ -19,8 +20,28 @@ import { answerCallbackOnce } from "../../bot/callback-answer.js";
 
 const log = createLogger("BotBridge");
 
+/**
+ * System events (reactions) carry synthetic negative ids that must never be
+ * passed to the Bot API as a reply target, or the API rejects the request.
+ */
+function safeReplyTo(replyToId?: number): number | undefined {
+  return replyToId !== undefined && replyToId > 0 ? replyToId : undefined;
+}
+
 interface GrammyBotBridgeConfig {
   bot_token: string;
+}
+
+function formatBotReactionSummary(msg: unknown): string | undefined {
+  const reactions = (
+    msg as {
+      reactions?: { results?: Array<{ type?: { emoji?: string }; count?: number }> };
+    }
+  ).reactions?.results;
+  if (!reactions?.length) return undefined;
+  return reactions
+    .map((reaction) => `${reaction.type?.emoji ?? "?"} ${reaction.count ?? 0}`)
+    .join(", ");
 }
 
 type GrammyMessage = NonNullable<Context["message"]>;
@@ -128,12 +149,17 @@ export class GrammyBotBridge implements ITelegramBridge {
 
     // Auto-split: if HTML exceeds Telegram limit, send in chunks
     if (html.length > TELEGRAM_MAX_MESSAGE_LENGTH) {
-      return this.sendLongMessage(options.chatId, html, options.replyToId, replyMarkup);
+      return this.sendLongMessage(
+        options.chatId,
+        html,
+        safeReplyTo(options.replyToId),
+        replyMarkup
+      );
     }
 
     const result = await this.bot.api.sendMessage(this.toChatId(options.chatId), html, {
       parse_mode: "HTML",
-      reply_to_message_id: options.replyToId,
+      reply_to_message_id: safeReplyTo(options.replyToId),
       reply_markup: replyMarkup,
     });
 
@@ -478,6 +504,7 @@ export class GrammyBotBridge implements ITelegramBridge {
       mediaType,
       timestamp: new Date(msg.date * 1000),
       replyToId: msg.reply_to_message?.message_id,
+      reactionSummary: formatBotReactionSummary(msg),
       // eslint-disable-next-line @typescript-eslint/no-explicit-any -- bot mode stores a Grammy message where the interface types a GramJS Api.Message
       _rawMessage: msg.reply_to_message ? (msg as any) : undefined,
     };
@@ -536,6 +563,35 @@ export class GrammyBotBridge implements ITelegramBridge {
             this.callbackHandler(synthetic);
           }
         }
+      }
+    });
+  }
+
+  onReaction(handler: (reaction: TelegramReaction) => void | Promise<void>): void {
+    this.bot.on("message_reaction", async (ctx) => {
+      const reaction = ctx.messageReaction;
+      if (!reaction) return;
+      const user = reaction.user;
+      if (!user) return;
+
+      const emojis = (items: readonly { type: string; emoji?: string }[]) =>
+        items.flatMap((item) => (item.type === "emoji" && item.emoji ? [item.emoji] : []));
+
+      try {
+        await handler({
+          chatId: String(reaction.chat.id),
+          messageId: reaction.message_id,
+          userId: user.id,
+          username: user.username,
+          firstName: user.first_name,
+          oldEmojis: emojis(reaction.old_reaction),
+          newEmojis: emojis(reaction.new_reaction),
+          isGroup: reaction.chat.type === "group" || reaction.chat.type === "supergroup",
+          isChannel: reaction.chat.type === "channel",
+          timestamp: new Date(reaction.date * 1000),
+        });
+      } catch (err) {
+        log.error({ err }, "Error in reaction handler");
       }
     });
   }

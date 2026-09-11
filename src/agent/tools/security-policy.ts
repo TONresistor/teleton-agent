@@ -27,11 +27,6 @@ const OWNER_PRIVATE_DATA = new Set([
   "telegram_search_global",
   "telegram_search_messages",
   "telegram_search_posts",
-  "ton_get_address",
-  "ton_get_balance",
-  "ton_my_transactions",
-  "jetton_balances",
-  "nft_list",
 ]);
 
 const OWNER_ONLY_ACTIONS = new Set(["telegram_create_scheduled_task"]);
