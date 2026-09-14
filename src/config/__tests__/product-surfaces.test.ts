@@ -89,9 +89,11 @@ describe("current product surfaces", () => {
       web: 2,
     });
 
-    expect(readFileSync(join(ROOT, "README.md"), "utf8")).toContain(
-      `${baseToolCount} always-registered tools`
-    );
+    const readme = readFileSync(join(ROOT, "README.md"), "utf8");
+    expect(readme).toContain(`${baseToolCount} always-registered tools`);
+    expect(readme).toContain("| Telegram      | 85    |");
+    expect(readme).not.toContain("129+");
+    expect(readme).toContain("TypeScript-5.9");
     expect(readFileSync(join(ROOT, "GETTING_STARTED.md"), "utf8")).toContain(
       `**${baseToolCount} always-registered tools**`
     );

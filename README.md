@@ -7,7 +7,7 @@
 <p align="center">
   <a href="https://opensource.org/licenses/MIT"><img src="https://img.shields.io/badge/License-MIT-yellow.svg" alt="License: MIT"></a>
   <a href="https://nodejs.org/"><img src="https://img.shields.io/badge/node-%5E22.22.2%20%7C%20%5E24.15.0%20%7C%20%3E%3D26.0.0-brightgreen" alt="Node.js ^22.22.2, ^24.15.0, or >=26.0.0"></a>
-  <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-5.7-blue" alt="TypeScript"></a>
+  <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-5.9-blue" alt="TypeScript"></a>
   <a href="https://teletonagent.dev"><img src="https://img.shields.io/badge/Website-teletonagent.dev-ff6600" alt="Website"></a>
   <a href="https://docs.teletonagent.dev"><img src="https://img.shields.io/badge/docs-Teleton%20Agents-blue" alt="Documentation"></a>
   <a href="https://ton.org"><img src="https://img.shields.io/badge/Built_on-TON-0098EA?logo=ton&logoColor=white" alt="Built on TON"></a>
@@ -15,7 +15,7 @@
 
 ---
 
-<p align="center">Teleton is an autonomous AI agent platform that operates as a real Telegram user account or a Telegram Bot. It thinks through an agentic loop with tool calling, remembers conversations across sessions with hybrid RAG, and natively integrates the TON blockchain: send crypto, swap on DEXs, bid on domains, verify payments - all from a chat message. It can schedule tasks to run autonomously at any time. It ships with 131 always-registered tools plus 5 optional system tools, supports 16 LLM providers, and exposes a Plugin SDK so you can build your own tools on top of the platform.</p>
+<p align="center">Teleton is an autonomous AI agent for Telegram (user account or bot). It loops with tools, keeps hybrid RAG memory, and talks to TON from chat. It ships with 131 always-registered tools plus 5 optional system tools, 16 LLM providers, and a Plugin SDK.</p>
 
 ### Key Highlights
 
@@ -28,7 +28,7 @@
 <tr>
 <td align="center"><br><b><ins>TON Blockchain</ins></b><br>Wallet, jettons, DEX swaps, DNS, NFTs<br><br></td>
 <td align="center"><br><b><ins>Persistent Memory</ins></b><br>Hybrid RAG, vector + keyword, auto-compaction<br><br></td>
-<td align="center"><br><b><ins>129+ Built-in Tools</ins></b><br>Messaging, media, crypto, DEX, DNS, files<br><br></td>
+<td align="center"><br><b><ins>131 Built-in Tools</ins></b><br>Messaging, media, crypto, DEX, DNS, files<br><br></td>
 </tr>
 <tr>
 <td align="center"><br><b><ins>Plugin SDK</ins></b><br>Custom tools, isolated DBs, secrets, hooks<br><br></td>
@@ -45,7 +45,7 @@
 
 | Category      | Tools | Description                                                    |
 | ------------- | ----- | -------------------------------------------------------------- |
-| Telegram      | 82    | Messages, media, chats, polls, stickers, gifts, stars, stories |
+| Telegram      | 85    | Messages, media, chats, polls, stickers, gifts, stars, stories |
 | TON & Jettons | 15    | Wallet, send/receive, balances, prices, NFTs, DEX router       |
 | STON.fi DEX   | 5     | Swap, quote, search, trending, pools                           |
 | DeDust DEX    | 5     | Swap, quote, pools, prices, token analytics                    |
@@ -53,7 +53,7 @@
 | Journal       | 3     | Trade logging, P&L tracking, natural language queries          |
 | Web           | 2     | Search and page extraction via Tavily                          |
 | Workspace     | 6     | Sandboxed file operations, path traversal protection           |
-| Tool Search   | 1     | Semantic retrieval across the complete tool registry           |
+| Tool Search   | 2     | Semantic retrieval plus reading stored tool results            |
 | System        | 5     | Exec (4) and TON Proxy status (1), both optional                |
 
 ### Advanced Capabilities
@@ -486,7 +486,7 @@ The SDK provides namespaced access to core services:
 | Embeddings | [@huggingface/transformers](https://www.npmjs.com/package/@huggingface/transformers) (local ONNX) or Voyage AI |
 | MCP Client | [@modelcontextprotocol/sdk](https://modelcontextprotocol.io/) (stdio + SSE + Streamable HTTP) |
 | WebUI | [Hono](https://hono.dev/) (API) + React + Vite (frontend) |
-| Language | TypeScript 5.7, Node.js `^22.22.2`, `^24.15.0`, or `>=26.0.0` |
+| Language | TypeScript 5.9, Node.js `^22.22.2`, `^24.15.0`, or `>=26.0.0` |
 
 ### Project Structure
 
@@ -502,7 +502,7 @@ src/
 │       ├── module-loader.ts    # Built-in module loading (TON Proxy + exec)
 │       ├── plugin-loader.ts    # External plugin discovery, validation, hot-reload
 │       ├── mcp-loader.ts       # MCP client (stdio/SSE), tool discovery, lifecycle
-│       ├── telegram/       # Telegram operations (86 tools)
+│       ├── telegram/       # Telegram operations (85 tools)
 │       ├── ton/            # TON blockchain + jettons + DEX router (15 tools)
 │       ├── stonfi/         # STON.fi DEX (5 tools)
 │       ├── dedust/         # DeDust DEX (5 tools)
@@ -656,10 +656,10 @@ Full documentation is available in the [`docs/`](docs/) directory:
 See [CONTRIBUTING.md](CONTRIBUTING.md) for the full guide.
 
 1. Fork the repository
-2. Create a feature branch from `main`
+2. Create a feature branch from `dev`
 3. Make your changes
 4. Verify: `npm run typecheck && npm run lint && npm test`
-5. Open a Pull Request against `main`
+5. Open a Pull Request against `dev`
 
 ---
 

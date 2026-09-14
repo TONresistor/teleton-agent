@@ -63,19 +63,19 @@ This starts the agent in watch mode with automatic restarts on file changes.
 
 ## Branch Strategy
 
-All work happens on **`main`**. There is no `dev` branch.
+All contributions target **`dev`**. Do not open PRs against `main`.
 
-- **`main`** is the only branch. Tags and releases are cut from `main` directly.
-- External contributors should fork the repo and open PRs against `main`.
-- PRs are squash-merged to keep history clean.
+- **`dev`** is the integration branch. Fork, branch from `dev`, and open PRs **against `dev` only**.
+- **`main`** is release-only. Maintainers merge `dev` into `main` and cut tags from `main`.
+- PRs are squash-merged into `dev`.
 
 ## Making Changes
 
 1. **Fork** the repository and clone your fork.
-2. **Create a branch** from `main`:
+2. **Create a branch** from `dev`:
    ```bash
-   git checkout main
-   git pull origin main
+   git checkout dev
+   git pull origin dev
    git checkout -b feature/my-change
    ```
 3. **Make your changes.** Keep commits focused on a single logical change.
@@ -95,11 +95,11 @@ All work happens on **`main`**. There is no `dev` branch.
 ## Pull Request Process
 
 1. Push your branch to your fork.
-2. Open a Pull Request **against `main`**.
+2. Open a Pull Request **against `dev`**. PRs targeting `main` will be closed.
 3. Fill out the PR template completely.
 4. Ensure all CI checks pass (type checking, linting, tests).
 5. A maintainer will review your PR. Address any requested changes.
-6. Once approved, your PR will be squash-merged into `main`.
+6. Once approved, your PR will be squash-merged into `dev`.
 
 ### PR Guidelines
 

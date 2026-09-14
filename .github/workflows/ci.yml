@@ -4,7 +4,7 @@ on:
   push:
     branches: [main, dev]
   pull_request:
-    branches: [main]
+    branches: [dev]
 
 # Cancel superseded runs on the same ref (rapid pushes / PR force-pushes).
 concurrency:

@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Documented `dev` as the only PR target, aligned supported security versions with 0.11.x, and corrected README tool counts.
+
 ## [0.11.2] - 2026-09-06
 
 ### Added
