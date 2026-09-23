@@ -2293,6 +2293,20 @@ button.btn-destructive:hover { background: var(--red); opacity: 0.9; }
 .md table { border-collapse: collapse; margin: 6px 0; font-size: var(--font-sm); }
 .md th, .md td { border: 1px solid var(--border); padding: 4px 8px; text-align: left; }
 
+/* Memory metadata — Telegram-style collapsible quote in the app accent. */
+.memory-metadata { margin: 12px 0 16px; border-left: 3px solid var(--accent); border-radius: var(--radius-sm); background: var(--glass-thin); overflow: hidden; }
+.memory-metadata summary { display: flex; align-items: center; gap: 12px; padding: 9px 12px; cursor: pointer; list-style: none; }
+.memory-metadata summary::-webkit-details-marker { display: none; }
+.memory-metadata summary::marker { content: ''; }
+.memory-metadata-label { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.memory-metadata-title { font-size: var(--font-sm); font-weight: 600; color: var(--text-primary); }
+.memory-metadata-preview { font-size: var(--font-sm); color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.memory-metadata-actions { display: flex; align-items: center; gap: 8px; margin-left: auto; color: var(--accent); flex-shrink: 0; }
+.memory-metadata-quote { font-size: 20px; line-height: 1; }
+.memory-metadata-actions svg { width: 16px; height: 16px; transition: transform var(--duration-color) var(--easing-standard); }
+.memory-metadata[open] .memory-metadata-actions svg { transform: rotate(180deg); }
+.memory-metadata-body { padding: 12px 14px 14px; border-top: 1px solid var(--border-glass); }
+
 /* Markdown inside an outgoing (accent) bubble */
 .chat-msg.out .chat-bubble .md a { color: #fff; }
 .chat-msg.out .chat-bubble .md code,
@@ -2394,6 +2408,7 @@ button.btn-destructive:hover { background: var(--red); opacity: 0.9; }
   color: #fff;
   flex-shrink: 0;
 }
+.ios-row-lead.file-type-icon { background: transparent; border-radius: 0; }
 .ios-row-main { flex: 1; min-width: 0; }
 .ios-row-title {
   font-size: var(--font-base);
@@ -2607,15 +2622,23 @@ button.btn-destructive:hover { background: var(--red); opacity: 0.9; }
   padding: var(--space-xl);
   margin-bottom: var(--space-lg);
 }
-.wallet-diamond {
+.wallet-diamond, .wallet-gram-icon {
   position: absolute;
+  opacity: 0.12;
+  pointer-events: none;
+}
+.wallet-diamond {
   top: -8px;
   right: 4px;
   width: 96px;
   height: 96px;
   color: var(--accent);
-  opacity: 0.12;
-  pointer-events: none;
+}
+.wallet-gram-icon {
+  top: 8px;
+  right: 20px;
+  width: 64px;
+  height: 64px;
 }
 .wallet-hero-empty {
   text-align: center;
@@ -2868,7 +2891,7 @@ button.btn-destructive:hover { background: var(--red); opacity: 0.9; }
 
 /* ── Dashboard ── */
 /* ── Command-center top row ── */
-.dash-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-rows: 330px; gap: 12px; margin-bottom: 12px; }
+.dash-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-auto-rows: 304px; gap: 12px; margin-bottom: 12px; }
 .dash-grid > .card { height: 100%; min-width: 0; min-height: 0; margin-bottom: 0; }
 @media (max-width: 720px) { .dash-grid { grid-template-columns: minmax(0, 1fr); } }
 
@@ -2896,7 +2919,10 @@ button.btn-destructive:hover { background: var(--red); opacity: 0.9; }
 .dash-agent { display: flex; flex-direction: column; }
 .dash-agent-handle { margin-left: 8px; font-size: var(--font-sm); font-weight: 400; color: var(--text-secondary); }
 .dash-agent-model-name { display: block; font-size: var(--font-2xl); font-weight: 700; letter-spacing: -0.6px; line-height: 1.1; color: var(--text-primary); }
-.dash-agent-selects { display: flex; gap: 12px; margin-top: auto; padding-top: 18px; }
+.dash-agent-activity { display: flex; flex-direction: column; gap: 5px; min-width: 0; margin: auto 0; }
+.dash-agent-activity-state { font-size: var(--font-base); font-weight: 600; color: var(--text-primary); }
+.dash-agent-activity-last { font-size: var(--font-sm); color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dash-agent-selects { display: flex; gap: 12px; padding-top: 18px; }
 .dash-hero-field { display: flex; flex-direction: column; gap: 6px; flex: 1; min-width: 0; }
 .dash-hero-label {
   font-size: var(--font-xs); font-weight: 600; text-transform: uppercase; letter-spacing: 0.4px;
@@ -2915,7 +2941,7 @@ button.btn-destructive:hover { background: var(--red); opacity: 0.9; }
 .dash-token-periods button { height: auto; padding: 0; border: 0; background: none; color: var(--text-secondary); font-size: var(--font-xs); white-space: nowrap; }
 .dash-token-periods button.active { color: var(--text-primary); }
 .dash-token-periods button:hover { color: var(--accent); }
-.dash-token-plot { height: 128px; flex: none; display: flex; flex-direction: column; justify-content: center; min-width: 0; }
+.dash-token-plot { height: 112px; flex: none; display: flex; flex-direction: column; justify-content: center; min-width: 0; }
 .dash-token-week { display: flex; flex-direction: column; gap: 3px; width: 100%; min-width: 0; }
 .dash-token-week-row { display: flex; align-items: center; gap: 10px; width: 100%; min-width: 0; }
 .dash-token-week-label { width: 74px; flex-shrink: 0; font-size: 11px; line-height: 11px; color: var(--text-tertiary); }
@@ -2941,12 +2967,12 @@ button.btn-destructive:hover { background: var(--red); opacity: 0.9; }
 /* GRAM chip in the usage header */
 .dash-gram {
   display: inline-flex; align-items: center; gap: 6px;
-  height: auto; padding: 5px 10px; background: var(--accent-subtle); color: var(--text-primary);
+  height: auto; padding: 1px 10px; background: var(--accent-subtle); color: var(--text-primary);
   border: 1px solid transparent; border-radius: var(--radius-pill);
   transition: border-color var(--duration-color) var(--easing-standard);
 }
 .dash-gram:hover { background: var(--accent-subtle); border-color: var(--accent); }
-.dash-gram-glyph { width: 15px; height: 15px; color: var(--accent); flex-shrink: 0; }
+.dash-gram-glyph { flex-shrink: 0; }
 .dash-gram-amt { font-size: var(--font-sm); font-weight: 600; color: var(--text-primary); font-variant-numeric: tabular-nums; }
 .dash-gram-unit { font-size: var(--font-xs); font-weight: 600; color: var(--accent); }
 
@@ -2961,11 +2987,14 @@ button.btn-destructive:hover { background: var(--red); opacity: 0.9; }
   transition: background var(--duration-color) var(--easing-standard);
 }
 .dash-activity-row:hover { background: var(--glass-thin); }
-.dash-activity-ava {
+.chat-avatar {
   width: 34px; height: 34px; border-radius: 50%; flex-shrink: 0;
   display: flex; align-items: center; justify-content: center;
   font-size: var(--font-sm); font-weight: 600; color: var(--accent); background: var(--accent-dim);
+  position: relative; overflow: hidden;
 }
+.chat-avatar img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
+.ios-row-lead.chat-list-avatar { width: 34px; height: 34px; border-radius: 50%; background: transparent; }
 .dash-activity-body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
 .dash-activity-name { font-size: var(--font-md); font-weight: 500; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .dash-activity-snip { font-size: var(--font-sm); color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -2980,12 +3009,15 @@ button.btn-destructive:hover { background: var(--red); opacity: 0.9; }
 .dashboard-settings { margin-bottom: 16px; align-items: stretch; }
 
 /* Settings cards */
-.dash-settings { display: flex; flex-direction: column; }
-.dash-settings .allowlist-rows { min-height: 72px; }
+.dash-settings { display: flex; flex-direction: column; padding: 16px; }
+.dash-settings .dash-head { margin-bottom: 8px; }
+.dash-settings .allowlists { flex: initial; gap: 8px; }
+.dash-settings .allowlist-rows { flex: initial; min-height: 56px; }
+.dash-settings .allowlist-add { margin-top: 4px; }
 
 /* Access Policy: stacked label + pill rows, divided */
-.dash-policy { display: flex; flex-direction: column; flex: 1; }
-.dash-policy-row { display: flex; flex-direction: column; gap: 10px; padding: 16px 0; }
+.dash-policy { display: flex; flex-direction: column; }
+.dash-policy-row { display: flex; flex-direction: column; gap: 6px; padding: 6px 0; }
 .dash-policy-row + .dash-policy-row { border-top: 1px solid var(--border-glass); }
 .dash-policy-label {
   display: flex; align-items: center; gap: 6px;

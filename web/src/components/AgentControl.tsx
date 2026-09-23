@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { useAgentStatus, AgentState } from '../hooks/useAgentStatus';
+import { useAgentStatus } from '../hooks/useAgentStatus';
 import { errMsg } from '../lib/utils';
 
 const API_BASE = '/api';
@@ -9,38 +9,6 @@ const RETRY_DELAYS = [1000, 2000, 4000];
 
 function jitter(ms: number): number {
   return ms + ms * 0.3 * Math.random();
-}
-
-const STATE_CONFIG: Record<AgentState | 'error', { dot: string; label: string; pulse: boolean }> = {
-  stopped:  { dot: 'var(--text-tertiary)', label: 'Stopped',     pulse: false },
-  starting: { dot: 'var(--warning)',        label: 'Starting...',  pulse: true },
-  running:  { dot: 'var(--green)',         label: 'Running',      pulse: true },
-  stopping: { dot: 'var(--warning)',       label: 'Stopping...',  pulse: true },
-  error:    { dot: 'var(--red)',           label: 'Error',        pulse: false },
-};
-
-export function AgentStatusBadge() {
-  const { state, error } = useAgentStatus();
-  const displayState = error && state === 'stopped' ? 'error' : state;
-  const config = STATE_CONFIG[displayState];
-
-  return (
-    <div style={{ display: 'flex', alignItems: 'center', gap: '8px', padding: '0 4px' }}>
-      <span
-        style={{
-          display: 'inline-block',
-          width: '8px',
-          height: '8px',
-          borderRadius: '50%',
-          backgroundColor: config.dot,
-          flexShrink: 0,
-        }}
-      />
-      <span style={{ fontSize: '12px', fontWeight: 600, color: 'var(--text-primary)', letterSpacing: '0.1px' }}>
-        {config.label}
-      </span>
-    </div>
-  );
 }
 
 export function AgentControl() {

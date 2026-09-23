@@ -16,6 +16,8 @@ import { Skeleton, SkeletonRows } from '../components/Skeleton';
 import { EmptyState } from '../components/EmptyState';
 import { Alert } from '../components/Alert';
 import { TokenActivity } from '../components/TokenActivity';
+import { ChatAvatar } from '../components/ChatAvatar';
+import { GramIcon } from '../components/GramIcon';
 
 function CardHead({ title, desc, right }: { title: ReactNode; desc?: string; right?: ReactNode }) {
   return (
@@ -40,12 +42,29 @@ function StatusBadge() {
   );
 }
 
-function GramGlyph() {
+function AgentActivity({ status, chats }: { status: StatusData; chats: ConversationChat[] | null }) {
+  const { state, error } = useAgentStatus();
+  const activity = status.agentActivity;
+  const chat = chats?.find((item) => item.id === activity?.lastChatId);
+  const chatName = chat?.title || chat?.username || activity?.lastChatName;
+  const age = activity?.lastProcessedAt ? timeAgo(activity.lastProcessedAt / 1000) : null;
+  const handledAt = age === 'now' ? 'just now' : age && /^\d+[mhd]$/.test(age) ? `${age} ago` : age ? `on ${age}` : null;
+  const label = error
+    ? 'Activity unavailable'
+    : state === 'starting' ? 'Agent starting'
+    : state === 'stopping' ? 'Agent stopping'
+    : state === 'stopped' ? 'Agent stopped'
+    : activity?.processing ? 'Processing a message'
+    : 'Waiting for messages';
+
   return (
-    <svg className="dash-gram-glyph" viewBox="0 0 56 56" fill="none" aria-hidden="true">
-      <path d="M14 16h28a2 2 0 0 1 1.7 3L29.6 41.4a2 2 0 0 1-3.3 0L12.3 19a2 2 0 0 1 1.7-3Z" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
-      <path d="M28 17v24M14.5 18.5 28 24l13.5-5.5" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
-    </svg>
+    <div className="dash-agent-activity">
+      <span className="dash-agent-activity-state">{label}</span>
+      <span className="dash-agent-activity-last">
+        {handledAt ? `Last handled ${handledAt}` : 'No recent processing yet'}
+        {chatName && handledAt ? ` · ${chatName}` : ''}
+      </span>
+    </div>
   );
 }
 
@@ -76,15 +95,25 @@ export function Dashboard() {
   const [recent, setRecent] = useState<ConversationChat[] | null>(null);
   useEffect(() => {
     let active = true;
-    const poll = () => api.getStatus().then((r) => { if (active) setLiveStatus(r.data); }).catch(() => {});
-    const id = setInterval(poll, 10_000);
+    let pollTimer: ReturnType<typeof setTimeout> | undefined;
+    const poll = async () => {
+      try {
+        const response = await api.getStatus();
+        if (active) setLiveStatus(response.data);
+      } catch {
+        // Keep the last known status during a temporary request failure.
+      } finally {
+        if (active) pollTimer = setTimeout(poll, 1_000);
+      }
+    };
+    void poll();
     api.getWallet().then((r) => { if (active) setBalance(r.data?.balance ?? null); }).catch(() => {});
     api.getConversations().then((r) => {
       if (!active) return;
       const chats = (r.data ?? []).slice().sort((a, b) => (b.last_message_at ?? 0) - (a.last_message_at ?? 0));
       setRecent(chats);
     }).catch(() => {});
-    return () => { active = false; clearInterval(id); };
+    return () => { active = false; if (pollTimer) clearTimeout(pollTimer); };
   }, []);
 
   if (loading) {
@@ -129,6 +158,7 @@ export function Dashboard() {
           <div className="dash-agent-id">
             <span className="dash-agent-model-name">{modelLabel}</span>
           </div>
+          <AgentActivity status={s} chats={recent} />
           <div className="dash-agent-selects">
             <div className="dash-hero-field">
               <span className="dash-hero-label">Provider</span>
@@ -152,7 +182,7 @@ export function Dashboard() {
             title="Token usage"
             right={
               <button type="button" className="dash-gram" onClick={() => navigate('/wallet')}>
-                <GramGlyph />
+                <GramIcon className="dash-gram-glyph" />
                 <span className="dash-gram-amt">{balance ?? '—'}</span>
                 <span className="dash-gram-unit">GRAM</span>
               </button>
@@ -198,7 +228,7 @@ export function Dashboard() {
                 const name = c.title || c.username || c.id;
                 return (
                   <button type="button" key={c.id} className="dash-activity-row" onClick={() => navigate('/conversations')}>
-                    <span className="dash-activity-ava">{name.charAt(0).toUpperCase()}</span>
+                    <ChatAvatar chatId={c.id} name={name} />
                     <span className="dash-activity-body">
                       <span className="dash-activity-name">{name}</span>
                       <span className="dash-activity-snip">{c.last_message || `${c.type} · ${c.message_count} msgs`}</span>

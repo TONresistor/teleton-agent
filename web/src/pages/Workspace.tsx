@@ -10,6 +10,8 @@ import { Alert } from '../components/Alert';
 import { SkeletonRows } from '../components/Skeleton';
 import { EmptyState } from '../components/EmptyState';
 import { RefreshButton } from '../components/RefreshButton';
+import folderBadge from '../assets/memory-folder.svg';
+import fileBadge from '../assets/workspace-file.svg';
 
 function formatSize(bytes: number): string {
   if (bytes === 0) return '—';
@@ -287,8 +289,8 @@ export function Workspace() {
             return (
               <Fragment key={entry.path}>
                 <ListRow
-                  leading={entry.isDirectory ? <FolderIcon /> : <DocIcon />}
-                  leadingClassName={entry.isDirectory ? undefined : 'muted'}
+                  leading={<img src={entry.isDirectory ? folderBadge : fileBadge} alt="" aria-hidden="true" />}
+                  leadingClassName="file-type-icon"
                   title={entry.name}
                   subtitle={entry.isDirectory ? 'Folder' : `${formatSize(entry.size)} · ${formatDate(entry.mtime)}`}
                   trailing={actions}

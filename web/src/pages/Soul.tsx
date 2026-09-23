@@ -84,19 +84,19 @@ export function Soul() {
         <div className={`alert ${message.type}`} style={{ marginBottom: '8px' }}>{message.text}</div>
       )}
 
-      <div className="card" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', padding: '12px' }}>
-        <div style={{ marginBottom: '10px', overflowX: 'auto' }}>
-          <Segmented<string>
-            value={activeTab}
-            onChange={(f) => { void handleTabSwitch(f); }}
-            ariaLabel="System prompt file"
-            options={SOUL_FILES.map((file) => ({
-              value: file,
-              label: file + (file === activeTab && dirty ? ' •' : ''),
-            }))}
-          />
-        </div>
+      <div style={{ marginBottom: '12px', overflowX: 'auto', flexShrink: 0 }}>
+        <Segmented<string>
+          value={activeTab}
+          onChange={(f) => { void handleTabSwitch(f); }}
+          ariaLabel="System prompt file"
+          options={SOUL_FILES.map((file) => ({
+            value: file,
+            label: file + (file === activeTab && dirty ? ' •' : ''),
+          }))}
+        />
+      </div>
 
+      <div className="card" style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden', padding: '12px', minHeight: 0 }}>
         {loading ? (
           <div className="loading">Loading...</div>
         ) : (
