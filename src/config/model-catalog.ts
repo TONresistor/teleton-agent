@@ -22,6 +22,11 @@ interface CatalogModelOption extends ModelOption {
 const MODEL_OPTIONS: Record<string, CatalogModelOption[]> = {
   anthropic: [
     {
+      value: "claude-opus-5-5",
+      name: "Claude Opus 5.5",
+      description: "Agentic coding, reasoning, vision, 1M context",
+    },
+    {
       value: "claude-fable-5-1",
       name: "Claude Fable 5.1",
       description: "Advanced agentic coding, reasoning, vision, 1M context",
@@ -73,6 +78,16 @@ const MODEL_OPTIONS: Record<string, CatalogModelOption[]> = {
     },
   ],
   openai: [
+    {
+      value: "gpt-6-sol",
+      name: "GPT-6 Sol",
+      description: "Agentic coding, reasoning, vision, 272K effective context",
+    },
+    {
+      value: "gpt-6-luna",
+      name: "GPT-6 Luna",
+      description: "Fast and cost-efficient, reasoning, vision, 272K effective context",
+    },
     {
       value: "gpt-6-astra",
       name: "GPT-6 Astra",
@@ -138,6 +153,16 @@ const MODEL_OPTIONS: Record<string, CatalogModelOption[]> = {
       description: "Balanced agentic coding model, 272K context",
     },
     {
+      value: "gpt-6-sol",
+      name: "GPT-6 Sol",
+      description: "Agentic coding, reasoning, vision, 272K context",
+    },
+    {
+      value: "gpt-6-luna",
+      name: "GPT-6 Luna",
+      description: "Agentic coding, reasoning, vision, 272K context",
+    },
+    {
       value: "gpt-6-astra",
       name: "GPT-6 Astra",
       description: "Advanced agentic coding, reasoning, vision, 272K context",
@@ -162,10 +187,11 @@ const MODEL_OPTIONS: Record<string, CatalogModelOption[]> = {
     },
   ],
   "grok-build": [
+    { value: "grok-4.7", name: "Grok 4.7", description: "Grok Build model, vision, 500K context" },
     {
       value: "grok-4.6",
       name: "Grok 4.6",
-      description: "Latest Grok Build model, vision, 500K context",
+      description: "Grok Build model, vision, 500K context",
     },
     {
       value: "grok-4.5",
@@ -202,6 +228,11 @@ const MODEL_OPTIONS: Record<string, CatalogModelOption[]> = {
   ],
   xai: [
     {
+      value: "grok-4.7",
+      name: "Grok 4.7",
+      description: "Coding and agentic work, reasoning, vision, 500K context",
+    },
+    {
       value: "grok-4.5",
       name: "Grok 4.5",
       description: "Coding and agentic work, reasoning, vision, 500K context",
@@ -225,6 +256,26 @@ const MODEL_OPTIONS: Record<string, CatalogModelOption[]> = {
     },
   ],
   openrouter: [
+    {
+      value: "openai/gpt-6-sol",
+      name: "GPT-6 Sol",
+      description: "Reasoning and vision via OpenRouter",
+    },
+    {
+      value: "openai/gpt-6-luna",
+      name: "GPT-6 Luna",
+      description: "Reasoning and vision via OpenRouter",
+    },
+    {
+      value: "anthropic/claude-opus-5.5",
+      name: "Claude Opus 5.5",
+      description: "Reasoning and vision via OpenRouter",
+    },
+    {
+      value: "x-ai/grok-4.7",
+      name: "Grok 4.7",
+      description: "Reasoning and vision via OpenRouter",
+    },
     {
       value: "anthropic/claude-fable-5.1",
       name: "Claude Fable 5.1",

@@ -18,14 +18,14 @@ describe("Grok Build models", () => {
 
     expect(metadata.defaultModel).toBe("grok-4.6");
     expect(metadata.utilityModel).toBe("grok-4.6");
-    expect(modelIds).toEqual(["grok-4.6", "grok-4.5"]);
+    expect(modelIds).toEqual(["grok-4.7", "grok-4.6", "grok-4.5"]);
   });
 
-  it.each(["grok-4.6", "grok-4.5"])("resolves %s through the CLI proxy", (modelId) => {
+  it.each(["grok-4.7", "grok-4.6", "grok-4.5"])("resolves %s through the CLI proxy", (modelId) => {
     const model = getProviderModel("grok-build", modelId);
 
     expect(model.id).toBe(modelId);
-    expect(model.name).toBe(modelId === "grok-4.6" ? "Grok 4.6" : "Grok 4.5");
+    expect(model.name).toBe(modelId.replace("grok-", "Grok "));
     expect(model.api).toBe("openai-responses");
     expect(model.baseUrl).toBe("https://cli-chat-proxy.grok.com/v1");
     expect(model.headers).toMatchObject({

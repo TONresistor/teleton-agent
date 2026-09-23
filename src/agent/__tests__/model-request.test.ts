@@ -64,6 +64,11 @@ describe("model request preparation", () => {
 
   it.each([
     ["openai", "gpt-6-astra"],
+    ["openai", "gpt-6-sol"],
+    ["openai", "gpt-6-luna"],
+    ["openrouter", "openai/gpt-6-sol"],
+    ["openrouter", "openai/gpt-6-luna"],
+    ["openrouter", "anthropic/claude-opus-5.5"],
     ["openrouter", "anthropic/claude-fable-5.1"],
     ["openrouter", "openai/gpt-6-astra"],
     ["openrouter", "google/gemini-3.8-flash"],
@@ -80,20 +85,23 @@ describe("model request preparation", () => {
     expect(request.options).not.toHaveProperty("temperature");
   });
 
-  it("enables mandatory adaptive thinking for Claude Fable 5.1", () => {
-    const config = AgentConfigSchema.parse({
-      provider: "anthropic",
-      model: "claude-fable-5-1",
-      api_key: "test-key",
-    });
-    const request = prepareModelRequest(config, { context: { messages: [] } });
+  it.each(["claude-fable-5-1", "claude-opus-5-5"])(
+    "enables mandatory adaptive thinking for %s",
+    (model) => {
+      const config = AgentConfigSchema.parse({
+        provider: "anthropic",
+        model,
+        api_key: "test-key",
+      });
+      const request = prepareModelRequest(config, { context: { messages: [] } });
 
-    expect(request.options.thinkingEnabled).toBe(true);
-    expect(request.model.compat).toMatchObject({
-      forceAdaptiveThinking: true,
-      supportsTemperature: false,
-    });
-  });
+      expect(request.options.thinkingEnabled).toBe(true);
+      expect(request.model.compat).toMatchObject({
+        forceAdaptiveThinking: true,
+        supportsTemperature: false,
+      });
+    }
+  );
 
   it("passes the configured reasoning effort to Codex", () => {
     const config = AgentConfigSchema.parse({

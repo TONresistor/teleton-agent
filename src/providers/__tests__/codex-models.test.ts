@@ -4,7 +4,14 @@ import { getProviderMetadata } from "../../config/providers.js";
 import { AgentConfigSchema } from "../../config/schema.js";
 import { getProviderModel } from "../model-resolver.js";
 
-const CODEX_MODELS = ["gpt-6-astra", "gpt-5.6-sol", "gpt-5.6-terra", "gpt-5.6-luna"] as const;
+const CODEX_MODELS = [
+  "gpt-6-sol",
+  "gpt-6-luna",
+  "gpt-6-astra",
+  "gpt-5.6-sol",
+  "gpt-5.6-terra",
+  "gpt-5.6-luna",
+] as const;
 
 describe("Codex models", () => {
   it.each(CODEX_MODELS)("resolves %s through the Codex Responses provider", (modelId) => {
@@ -18,7 +25,7 @@ describe("Codex models", () => {
     expect(model.maxTokens).toBe(128_000);
   });
 
-  it("offers Astra and every GPT-5.6 model advertised by the Codex backend", () => {
+  it("offers GPT-6 and existing GPT-5.6 models", () => {
     const modelIds = getModelsForProvider("codex").map((model) => model.value);
 
     expect(modelIds).toEqual(expect.arrayContaining([...CODEX_MODELS]));
