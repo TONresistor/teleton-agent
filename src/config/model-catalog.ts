@@ -460,7 +460,7 @@ const MODEL_OPTIONS: Record<string, CatalogModelOption[]> = {
     {
       value: "kimi-for-coding",
       name: "Kimi for Coding",
-      description: "Coding plan, reasoning, 262K context",
+      description: "Coding plan, reasoning, 1M context",
     },
     {
       value: "k3",

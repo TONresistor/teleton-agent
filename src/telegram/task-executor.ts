@@ -9,6 +9,7 @@ import {
   SECONDS_PER_DAY,
   SECONDS_PER_HOUR,
 } from "../constants/limits.js";
+import { parseToolArguments } from "../utils/tool-arguments.js";
 import { getErrorMessage } from "../utils/errors.js";
 
 /**
@@ -95,7 +96,7 @@ export async function executeScheduledTask(
         type: "toolCall",
         id: `scheduled-${task.id}`,
         name: payload.tool,
-        arguments: payload.params ?? {},
+        arguments: parseToolArguments(payload.params ?? {}),
       };
       const result = await toolRegistry.execute(toolCall, toolContext);
 

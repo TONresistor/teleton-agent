@@ -1,8 +1,45 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { complete } from "@earendil-works/pi-ai/compat";
 import { AgentConfigSchema } from "../../config/schema.js";
 import { prepareModelRequest } from "../model-request.js";
 
 describe("model request preparation", () => {
+  it.each([
+    ["openai", "gpt-6-sol"],
+    ["anthropic", "claude-fable-5-1"],
+    ["anthropic", "claude-opus-5-5"],
+  ])("sends compatible cache and thinking parameters for %s/%s", async (provider, model) => {
+    const config = AgentConfigSchema.parse({
+      provider,
+      model,
+      api_key: "test-key",
+      temperature: 0.4,
+    });
+    const request = prepareModelRequest(config, {
+      context: { messages: [{ role: "user", content: "test", timestamp: 1 }] },
+      sessionId: "payload-test",
+    });
+    const fetch = vi.fn().mockRejectedValue(new Error("Network disabled in test"));
+    let payload: unknown;
+    await complete(request.model, request.context, {
+      ...request.options,
+      fetch,
+      onPayload(value) {
+        payload = value;
+        throw new Error("Stop after payload capture");
+      },
+    });
+    expect(fetch).not.toHaveBeenCalled();
+    expect(payload).toBeDefined();
+    expect(payload).not.toHaveProperty("temperature");
+    if (provider === "openai") {
+      expect(payload).toHaveProperty("prompt_cache_options.ttl", "30m");
+      expect(payload).not.toHaveProperty("prompt_cache_retention", "24h");
+    } else {
+      expect(payload).toHaveProperty("thinking.type", "adaptive");
+    }
+  });
+
   it("builds one canonical request shape for all completion modes", () => {
     const config = AgentConfigSchema.parse({
       provider: "anthropic",
@@ -98,7 +135,6 @@ describe("model request preparation", () => {
       expect(request.options.thinkingEnabled).toBe(true);
       expect(request.model.compat).toMatchObject({
         forceAdaptiveThinking: true,
-        supportsTemperature: false,
       });
     }
   );
