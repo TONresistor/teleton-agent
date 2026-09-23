@@ -108,14 +108,20 @@ export const api = {
     return fetchAPI<APIResponse<MemoryStats>>("/memory/stats");
   },
 
-  async searchKnowledge(query: string, limit = 10) {
+  async searchKnowledge(query: string, limit = 10, filesOnly = false) {
     return fetchAPI<APIResponse<SearchResult[]>>(
-      `/memory/search?q=${encodeURIComponent(query)}&limit=${limit}`
+      `/memory/search?q=${encodeURIComponent(query)}&limit=${limit}${filesOnly ? '&files=true' : ''}`
     );
   },
 
   async getMemorySources() {
-    return fetchAPI<APIResponse<MemorySourceFile[]>>("/memory/sources");
+    return fetchAPI<APIResponse<MemorySourceFile[]>>("/memory/sources?files=true");
+  },
+
+  async getMemoryFile(sourceKey: string) {
+    return fetchAPI<APIResponse<{ content: string }>>(
+      `/memory/files/${encodeURIComponent(sourceKey)}`
+    );
   },
 
   async getSourceChunks(sourceKey: string) {

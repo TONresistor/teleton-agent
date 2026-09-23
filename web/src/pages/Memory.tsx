@@ -1,14 +1,19 @@
 import { useState, useEffect, Fragment } from 'react';
-import { api, MemorySourceFile, MemoryChunk, SearchResult } from '../lib/api';
+import { api, MemorySourceFile, SearchResult } from '../lib/api';
 import { formatDate, errMsg } from '../lib/utils';
 import { SearchBar } from '../components/SearchBar';
 import { List, ListRow } from '../components/List';
-import { CodeBlock } from '../components/CodeBlock';
+import { MemoryDocument } from '../components/MemoryDocument';
 import { useResource } from '../hooks/useResource';
 import { RefreshButton } from '../components/RefreshButton';
 import { Alert } from '../components/Alert';
 import { SkeletonRows } from '../components/Skeleton';
 import { EmptyState } from '../components/EmptyState';
+import memoryFolder from '../assets/memory-folder.svg';
+
+async function readMemoryFile(source: string): Promise<string> {
+  return (await api.getMemoryFile(source)).data?.content ?? '';
+}
 
 export function Memory() {
   const [filter, setFilter] = useState('');
@@ -18,10 +23,7 @@ export function Memory() {
     [],
   );
 
-  // Expanded source state
-  const [expandedSource, setExpandedSource] = useState<string | null>(null);
-  const [chunks, setChunks] = useState<MemoryChunk[]>([]);
-  const [chunksLoading, setChunksLoading] = useState(false);
+  const [openedFile, setOpenedFile] = useState<{ source: string; content: string | null; loading: boolean } | null>(null);
 
   // Semantic search state (wired to GET /memory/search)
   const [results, setResults] = useState<SearchResult[]>([]);
@@ -39,7 +41,7 @@ export function Memory() {
     setSearching(true);
     const timer = setTimeout(async () => {
       try {
-        const res = await api.searchKnowledge(query);
+        const res = await api.searchKnowledge(query, 50, true);
         if (!cancelled) setResults(res.data ?? []);
       } catch (err) {
         if (!cancelled) setError(errMsg(err));
@@ -54,32 +56,30 @@ export function Memory() {
   }, [query]);
 
   const toggleSource = async (sourceKey: string) => {
-    if (expandedSource === sourceKey) {
-      setExpandedSource(null);
-      setChunks([]);
+    if (openedFile?.source === sourceKey) {
+      setOpenedFile(null);
       return;
     }
-    setExpandedSource(sourceKey);
-    setChunksLoading(true);
+    setOpenedFile({ source: sourceKey, content: null, loading: true });
     try {
-      const res = await api.getSourceChunks(sourceKey);
-      setChunks(res.data ?? []);
+      const content = await readMemoryFile(sourceKey);
+      setOpenedFile((current) => current?.source === sourceKey ? { source: sourceKey, content, loading: false } : current);
     } catch (err) {
       setError(errMsg(err));
-    } finally {
-      setChunksLoading(false);
+      setOpenedFile((current) => current?.source === sourceKey ? { source: sourceKey, content: null, loading: false } : current);
     }
   };
 
-  const allSources = sources ?? [];
-  const totalChunks = allSources.reduce((sum, s) => sum + s.entryCount, 0);
+  const allSources = (sources ?? []).filter((source) => source.source.toLowerCase().endsWith('.md'));
+  const matchedSources = new Set(results.map((result) => result.source));
+  const visibleSources = query ? allSources.filter((source) => matchedSources.has(source.source)) : allSources;
 
   return (
     <div>
       <div className="header">
         <h1>Memory</h1>
         <p>
-          {allSources.length} {allSources.length === 1 ? 'source' : 'sources'} · {totalChunks} chunks indexed
+          {allSources.length} {allSources.length === 1 ? 'memory file' : 'memory files'}
         </p>
       </div>
 
@@ -95,83 +95,43 @@ export function Memory() {
         <RefreshButton onRefresh={reload} />
       </div>
 
-      {query ? (
-        /* ── Semantic search results ── */
-        searching ? (
-          <SkeletonRows />
-        ) : results.length === 0 ? (
-          <div className="card" style={{ padding: 0 }}>
-            <EmptyState
-              title="No results"
-              description={`No matches for "${query}".`}
-              action={<button className="btn-ghost btn-sm" onClick={() => setFilter('')}>Clear search</button>}
-            />
-          </div>
-        ) : (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-            {results.map((r) => (
-              <CodeBlock
-                key={r.id}
-                header={
-                  <>
-                    <span style={{ wordBreak: 'break-all' }}>{r.source}</span>
-                    <span className="badge count" style={{ flexShrink: 0 }}>score {r.score.toFixed(3)}</span>
-                  </>
-                }
-              >
-                {r.text}
-              </CodeBlock>
-            ))}
-          </div>
-        )
-      ) : loading ? (
+      {loading || (query && searching) ? (
         <SkeletonRows />
-      ) : allSources.length === 0 ? (
+      ) : visibleSources.length === 0 ? (
         <div className="card" style={{ padding: 0 }}>
-          <EmptyState title="No memory files indexed" description="Indexed knowledge sources will appear here once content is added." />
+          <EmptyState
+            title={query ? 'No results' : 'No memory files indexed'}
+            description={query ? `No matches for "${query}".` : 'Indexed Markdown files will appear here once content is added.'}
+            action={query ? <button className="btn-ghost btn-sm" onClick={() => setFilter('')}>Clear search</button> : undefined}
+          />
         </div>
       ) : (
-        /* ── Sources list ── */
         <List>
-          {allSources.map((src) => {
-            const isExpanded = expandedSource === src.source;
+          {visibleSources.map((src) => {
+            const isExpanded = openedFile?.source === src.source;
             return (
               <Fragment key={src.source}>
                 <ListRow
-                  leading={src.source.charAt(0).toUpperCase()}
+                  leading={<img src={memoryFolder} alt="" aria-hidden="true" />}
+                  leadingClassName="file-type-icon"
                   title={src.source}
-                  subtitle={`${src.entryCount} ${src.entryCount === 1 ? 'chunk' : 'chunks'} · ${formatDate(src.lastUpdated, 1000)}`}
+                  subtitle={formatDate(src.lastUpdated, 1000)}
                   disclosure
                   expanded={isExpanded}
                   onClick={() => toggleSource(src.source)}
                 />
                 {isExpanded && (
-                  <div className="ios-sublist" style={{ padding: '10px 14px 14px' }}>
-                    {chunksLoading ? (
+                  <div className="ios-sublist" style={{ padding: '16px 20px' }}>
+                    {openedFile.loading ? (
                       <SkeletonRows rows={3} />
-                    ) : chunks.length === 0 ? (
+                    ) : openedFile.content == null ? (
                       <div style={{ padding: '8px 0', textAlign: 'center', color: 'var(--text-secondary)', fontSize: 'var(--font-sm)' }}>
-                        No chunks
+                        File unavailable
                       </div>
+                    ) : openedFile.content === '' ? (
+                      <div style={{ color: 'var(--text-secondary)', fontSize: 'var(--font-sm)' }}>This file is empty.</div>
                     ) : (
-                      <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
-                        {chunks.map((chunk) => (
-                          <CodeBlock
-                            key={chunk.id}
-                            resizable
-                            header={
-                              <span>
-                                {chunk.startLine != null && chunk.endLine != null && (
-                                  <span>Lines {chunk.startLine}–{chunk.endLine} · </span>
-                                )}
-                                {formatDate(chunk.updatedAt, 1000)}
-                              </span>
-                            }
-                          >
-                            {chunk.text}
-                          </CodeBlock>
-                        ))}
-                      </div>
+                      <MemoryDocument content={openedFile.content} />
                     )}
                   </div>
                 )}
