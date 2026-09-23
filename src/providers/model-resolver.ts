@@ -163,7 +163,9 @@ export async function registerLocalModels(baseUrl: string, makeDefault = true): 
 const LEGACY_MODEL_ALIASES: Partial<Record<SupportedProvider, Readonly<Record<string, string>>>> = {
   codex: {
     "gpt-5.3-codex": "gpt-5.6-terra",
-    "gpt-5.1-codex-mini": "gpt-5.4-mini",
+    "gpt-5.1-codex-mini": "gpt-6-luna",
+    "gpt-5.4": "gpt-5.6-terra",
+    "gpt-5.4-mini": "gpt-6-luna",
   },
   "grok-build": {
     "grok-build": "grok-4.6",
@@ -192,7 +194,8 @@ const LEGACY_MODEL_ALIASES: Partial<Record<SupportedProvider, Readonly<Record<st
     "llama-3.1-8b-instant": "openai/gpt-oss-20b",
   },
   openrouter: {
-    "nvidia/nemotron-nano-9b-v2": "nvidia/nemotron-nano-9b-v2:free",
+    "nvidia/nemotron-nano-9b-v2": "qwen/qwen3.8-27b:free",
+    "nvidia/nemotron-nano-9b-v2:free": "qwen/qwen3.8-27b:free",
   },
   moonshot: {
     "kimi-k2.5": "kimi-for-coding",
@@ -207,7 +210,9 @@ const LEGACY_MODEL_ALIASES: Partial<Record<SupportedProvider, Readonly<Record<st
   cerebras: {
     "qwen-3-235b-a22b-instruct-2507": "gpt-oss-120b",
     "qwen-3-32b": "gpt-oss-120b",
-    "llama3.1-8b": "gemma-4-31b",
+    "llama3.1-8b": "qwen-3.8-27b",
+    "gemma-4-31b": "qwen-3.8-27b",
+    "zai-glm-4.7": "gpt-oss-120b",
   },
 };
 

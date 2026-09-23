@@ -178,8 +178,6 @@ const MODEL_OPTIONS: Record<string, CatalogModelOption[]> = {
       description: "Fast and affordable agentic coding model, 272K context",
     },
     { value: "gpt-5.5", name: "GPT-5.5", description: "Reasoning, 272K context" },
-    { value: "gpt-5.4", name: "GPT-5.4", description: "Reasoning, 272K context" },
-    { value: "gpt-5.4-mini", name: "GPT-5.4 Mini", description: "Fast & cheap, reasoning" },
     {
       value: "gpt-5.3-codex-spark",
       name: "GPT-5.3 Codex Spark",
@@ -256,6 +254,36 @@ const MODEL_OPTIONS: Record<string, CatalogModelOption[]> = {
     },
   ],
   openrouter: [
+    {
+      value: "deepseek/deepseek-v4.1-flash",
+      name: "DeepSeek V4.1 Flash",
+      description: "Reasoning and vision via OpenRouter",
+    },
+    {
+      value: "z-ai/glm-5.3",
+      name: "GLM 5.3",
+      description: "Long-context reasoning via OpenRouter",
+    },
+    {
+      value: "z-ai/glm-5.3-flash",
+      name: "GLM 5.3 Flash",
+      description: "Reasoning and vision via OpenRouter",
+    },
+    {
+      value: "qwen/qwen3.8-max-0902",
+      name: "Qwen3.8 Max (0902)",
+      description: "Reasoning and vision via OpenRouter",
+    },
+    {
+      value: "qwen/qwen3.8-flash",
+      name: "Qwen3.8 Flash",
+      description: "Reasoning and vision via OpenRouter",
+    },
+    {
+      value: "qwen/qwen3.8-27b:free",
+      name: "Qwen3.8 27B (free)",
+      description: "Free reasoning and vision via OpenRouter",
+    },
     {
       value: "openai/gpt-6-sol",
       name: "GPT-6 Sol",
@@ -427,11 +455,6 @@ const MODEL_OPTIONS: Record<string, CatalogModelOption[]> = {
       name: "Kimi K2.6",
       description: "Reasoning and vision, 262K context",
     },
-    {
-      value: "nvidia/nemotron-nano-9b-v2:free",
-      name: "Nemotron Nano 9B",
-      description: "Small free reasoning model",
-    },
   ],
   moonshot: [
     {
@@ -484,11 +507,10 @@ const MODEL_OPTIONS: Record<string, CatalogModelOption[]> = {
   ],
   cerebras: [
     { value: "gpt-oss-120b", name: "GPT OSS 120B", description: "Reasoning, 131K context" },
-    { value: "zai-glm-4.7", name: "ZAI GLM-4.7", description: "Reasoning, 131K context" },
     {
-      value: "gemma-4-31b",
-      name: "Gemma 4 31B",
-      description: "Fast multimodal reasoning, 131K context",
+      value: "qwen-3.8-27b",
+      name: "Qwen3.8 27B",
+      description: "Fast multimodal reasoning, 65K context",
     },
   ],
   zai: [
