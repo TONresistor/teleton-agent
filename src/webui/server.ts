@@ -8,6 +8,7 @@ import { applySecurityMiddleware, sharedBodyLimit } from "./http-common.js";
 import { findWebDist, createStaticHandler } from "./static-serving.js";
 import { startHonoServer, stopHonoServer } from "../utils/http-server.js";
 import { createLogger } from "../utils/logger.js";
+import { openBrowser } from "../utils/open-browser.js";
 
 const log = createLogger("WebUI");
 import { generateToken, safeCompare, COOKIE_NAME, COOKIE_MAX_AGE } from "./middleware/auth.js";
@@ -276,7 +277,7 @@ export class WebUIServer {
     });
   }
 
-  async start(): Promise<void> {
+  async start(options: { openBrowser?: boolean } = {}): Promise<void> {
     // Install log interceptor
     logInterceptor.install();
 
@@ -286,11 +287,17 @@ export class WebUIServer {
         hostname: this.deps.config.host,
         port: this.deps.config.port,
         onListen: (info) => {
-          const url = `http://${info.address}:${info.port}`;
+          const host = ["0.0.0.0", "::"].includes(info.address) ? "127.0.0.1" : info.address;
+          const url = `http://${host.includes(":") ? `[${host}]` : host}:${info.port}`;
 
           log.info(`WebUI server running`);
-          log.info(`URL: ${url}`);
-          log.info("Authentication token loaded; use the configured Bearer token for API access");
+          const authenticatedUrl = `${url}/auth/exchange?token=${encodeURIComponent(this.authToken)}`;
+          log.info(`URL: ${authenticatedUrl}`);
+          if (options.openBrowser) {
+            openBrowser(authenticatedUrl, () => {
+              log.warn("Could not open the browser automatically; use the URL above");
+            });
+          }
         },
       });
     } catch (error) {

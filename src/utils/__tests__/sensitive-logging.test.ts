@@ -5,7 +5,8 @@ import { describe, expect, it } from "vitest";
 const ROOT = fileURLToPath(new URL("../../../", import.meta.url));
 
 const FORBIDDEN_LOG_FRAGMENTS: Record<string, string[]> = {
-  "src/webui/server.ts": ["auth/exchange?token=${this.authToken}"],
+  // The authenticated WebUI URL is an intentional exception: startup prints it
+  // so a local user can sign in when the token was generated in memory.
   "src/agent/runtime.ts": [
     "Formatted message: ${formattedMessage",
     "const preview = formattedMessage",

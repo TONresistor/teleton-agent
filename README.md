@@ -325,7 +325,7 @@ Optional web dashboard, localhost only, token auth. Start with `teleton start --
 </tr>
 </table>
 
-Auth token is printed at startup. Stored as HttpOnly cookie for 7 days. For remote access:
+The full authenticated URL is printed at startup. `teleton start --webui` also opens it in the default browser. The token is exchanged for an HttpOnly cookie valid for 7 days. For remote access:
 
 ```bash
 ssh -L 7777:localhost:7777 user@remote-server

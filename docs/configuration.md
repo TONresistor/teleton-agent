@@ -215,7 +215,7 @@ Optional web dashboard for monitoring and management.
 | `webui.enabled` | `boolean` | `false` | Enable the WebUI server. Can also be enabled via `TELETON_WEBUI_ENABLED=true` env var or the `--webui` CLI flag. |
 | `webui.port` | `number` | `7777` | HTTP server port. Override with `TELETON_WEBUI_PORT` env var. |
 | `webui.host` | `string` | `"127.0.0.1"` | Bind address. Defaults to localhost only for security. Override with `TELETON_WEBUI_HOST` env var. Set to `"0.0.0.0"` to expose externally (not recommended without a reverse proxy). |
-| `webui.auth_token` | `string` | *auto-generated* | Bearer token for API authentication. If omitted, a random token is generated at startup and printed to the console. |
+| `webui.auth_token` | `string` | *auto-generated* | Bearer token for API authentication. If omitted, a random token is generated at startup. The full authenticated URL is printed at startup; `teleton start --webui` also opens it in the default browser. |
 | `webui.cors_origins` | `string[]` | `["http://localhost:5173", "http://localhost:7777"]` | Allowed CORS origins. Add your domain if accessing from a different host. |
 | `webui.log_requests` | `boolean` | `false` | Log all HTTP requests to the WebUI server. |
 
