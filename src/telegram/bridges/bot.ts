@@ -288,14 +288,8 @@ export class GrammyBotBridge implements ITelegramBridge {
   }
 
   async getMe(): Promise<BotInfo | undefined> {
-    const me = await this.bot.api.getMe();
-
-    return {
-      id: me.id,
-      username: me.username,
-      firstName: me.first_name,
-      isBot: me.is_bot,
-    };
+    // Loaded by connect(), like getOwnUserId() and getUsername().
+    return this.botInfo ? { ...this.botInfo } : undefined;
   }
 
   async setTyping(chatId: string): Promise<void> {

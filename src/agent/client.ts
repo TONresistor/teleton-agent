@@ -115,6 +115,7 @@ export async function chatWithContext(
   const request = prepareModelRequest(config, options);
   const initialResponse = await complete(request.model, request.context, request.options);
   const response = await retryAfterCredentialRefresh(request, initialResponse);
+  request.finalizeUsage?.(response);
   return finalizeResponse(response, request.context, options);
 }
 
@@ -144,6 +145,7 @@ export function streamWithContext(config: AgentConfig, options: ChatOptions): St
   const resultPromise = (async (): Promise<ChatResponse> => {
     const initialResponse = await eventStream.result();
     const response = await retryAfterCredentialRefresh(request, initialResponse);
+    request.finalizeUsage?.(response);
     return finalizeResponse(response, request.context, options);
   })();
 

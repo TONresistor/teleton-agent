@@ -3,6 +3,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Hono } from "hono";
 import { createStatusRoutes } from "../routes/status.js";
 import type { WebUIServerDeps } from "../types.js";
+import { ensureSchema } from "../../memory/schema.js";
+import { AgentTurnTraceRecorder } from "../../agent/turn-trace.js";
+import { accumulateTokenUsage, getTokenUsage } from "../../agent/token-usage.js";
 
 describe("WebUI token activity", () => {
   let db: Database.Database;
@@ -26,6 +29,47 @@ describe("WebUI token activity", () => {
   afterEach(() => {
     db.close();
     vi.useRealTimers();
+  });
+
+  it("counts cached tokens from the recorded turn exactly like the global counter", async () => {
+    db.exec("DROP TABLE agent_turn_traces");
+    ensureSchema(db);
+    const trace = new AgentTurnTraceRecorder(db, "cached-turn");
+    trace.start({
+      sessionId: "session",
+      chatId: "chat",
+      startedAt: Date.now(),
+      provider: "openrouter",
+      model: "test",
+      requestedModel: "test",
+      endpointFingerprint: "test",
+      selectedTools: [],
+    });
+    const usage = { input: 10, output: 5, cacheRead: 70, cacheWrite: 20, totalCost: 0.02 };
+    trace.progress([], 1, usage);
+    const row = () =>
+      db
+        .prepare(
+          "SELECT input_tokens, output_tokens, total_cost FROM agent_turn_traces WHERE id = ?"
+        )
+        .get("cached-turn");
+    expect(row()).toEqual({ input_tokens: 100, output_tokens: 5, total_cost: 0.02 });
+    trace.finish({
+      status: "completed",
+      calls: [],
+      iterations: 1,
+      usage,
+      stopReason: "completed",
+      provider: "openrouter",
+      model: "test",
+    });
+    expect(row()).toEqual({ input_tokens: 100, output_tokens: 5, total_cost: 0.02 });
+
+    const before = getTokenUsage().totalTokens;
+    accumulateTokenUsage(usage);
+    const { data } = await (await app.request("/status/token-activity?period=day")).json();
+    expect(data[12].tokens).toBe(105);
+    expect(data[12].tokens).toBe(getTokenUsage().totalTokens - before);
   });
 
   it("groups recorded tokens by hour or day for each selected period", async () => {

@@ -42,7 +42,11 @@ export async function finalizeAgentResponse(
   };
   updateSession(opts.sessionKey ?? chatId, sessionUpdate);
 
-  if (accumulatedUsage.input > 0 || accumulatedUsage.output > 0) {
+  if (
+    accumulatedUsage.input > 0 ||
+    accumulatedUsage.output > 0 ||
+    accumulatedUsage.costIncomplete
+  ) {
     const u = accumulatedUsage;
     const totalInput = u.input + u.cacheRead + u.cacheWrite;
     const inK = (totalInput / 1000).toFixed(1);
@@ -50,7 +54,8 @@ export async function finalizeAgentResponse(
     if (u.cacheRead) cacheParts.push(`${(u.cacheRead / 1000).toFixed(1)}K cached`);
     if (u.cacheWrite) cacheParts.push(`${(u.cacheWrite / 1000).toFixed(1)}K new`);
     const cacheInfo = cacheParts.length > 0 ? ` (${cacheParts.join(", ")})` : "";
-    log.info(`${inK}K in${cacheInfo}, ${u.output} out | $${u.totalCost.toFixed(3)}`);
+    const cost = u.costIncomplete ? "cost incomplete" : `$${u.totalCost.toFixed(3)}`;
+    log.info(`${inK}K in${cacheInfo}, ${u.output} out | ${cost}`);
     accumulateTokenUsage(u);
   }
 

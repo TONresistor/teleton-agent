@@ -30,6 +30,7 @@ export interface FinishAgentTurnTrace {
   inputTokens: number;
   outputTokens: number;
   totalCost: number;
+  costIncomplete?: boolean;
   stopReason: string;
   provider?: string;
   model?: string;
@@ -66,7 +67,7 @@ export function finishAgentTurnTrace(
   db.prepare(
     `UPDATE agent_turn_traces SET
        completed_at = ?, status = ?, tools_json = ?, iterations = ?, tool_calls = ?,
-       input_tokens = ?, output_tokens = ?, total_cost = ?, stop_reason = ?, error_message = ?,
+       input_tokens = ?, output_tokens = ?, total_cost = ?, cost_incomplete = ?, stop_reason = ?, error_message = ?,
        provider = COALESCE(?, provider), model = COALESCE(?, model)
      WHERE id = ?`
   ).run(
@@ -78,6 +79,7 @@ export function finishAgentTurnTrace(
     result.inputTokens,
     result.outputTokens,
     result.totalCost,
+    result.costIncomplete ? 1 : 0,
     result.stopReason,
     result.errorMessage?.slice(0, 2_000) ?? null,
     result.provider ?? null,
@@ -95,11 +97,12 @@ export function updateAgentTurnTraceProgress(
     inputTokens: number;
     outputTokens: number;
     totalCost: number;
+    costIncomplete?: boolean;
   }
 ): void {
   db.prepare(
     `UPDATE agent_turn_traces SET tools_json = ?, tool_calls = ?, iterations = ?,
-       input_tokens = ?, output_tokens = ?, total_cost = ?
+       input_tokens = ?, output_tokens = ?, total_cost = ?, cost_incomplete = ?
      WHERE id = ? AND status = 'running'`
   ).run(
     JSON.stringify(progress.tools),
@@ -108,6 +111,7 @@ export function updateAgentTurnTraceProgress(
     progress.inputTokens,
     progress.outputTokens,
     progress.totalCost,
+    progress.costIncomplete ? 1 : 0,
     traceId
   );
 }

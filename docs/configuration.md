@@ -50,6 +50,16 @@ LLM provider and agentic loop configuration.
 | `agent.max_turn_duration_ms` | `number` | `300000` | Wall-clock budget checked between safe loop phases. Running external actions are never cut off. |
 | `agent.fallbacks` | `array` | `[]` | Ordered provider/model fallbacks used only after quota or transient provider failures and only before any external action has started. |
 
+For OpenRouter, select **Custom...** under Model in the Dashboard or agent settings,
+then enter the exact model ID and save. The onboarding wizard and `agent.model` in
+the config file also accept manual IDs. IDs absent from pi-ai's catalog are sent
+directly to OpenRouter, which validates their availability. No catalog sync is
+required. Unknown models use text-only input and conservative local token-budget
+defaults. OpenRouter's reported cost is preserved when returned in the completion
+stream. If it is missing for an unknown model, usage is marked as cost-incomplete
+instead of treating the request as free. Known IDs retain their catalog metadata
+and capabilities.
+
 ### agent.session_reset_policy
 
 Controls when conversation sessions are cleared, giving the agent a fresh memory context.

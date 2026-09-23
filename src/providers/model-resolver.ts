@@ -10,6 +10,34 @@ const log = createLogger("LLM");
 
 const modelCache = new Map<string, Model<Api>>();
 
+export function isCustomOpenRouterModel(model: Model<Api>): boolean {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- user-entered IDs are not catalog literal unions
+  return model.provider === "openrouter" && !getModel("openrouter", model.id as any);
+}
+
+function createCustomOpenRouterModel(modelId: string): Model<"openai-completions"> {
+  return {
+    id: modelId,
+    name: modelId,
+    api: "openai-completions",
+    provider: "openrouter",
+    baseUrl: "https://openrouter.ai/api/v1",
+    reasoning: false,
+    input: ["text"],
+    // Unknown metadata: these are local budgeting defaults, not provider specifications.
+    contextWindow: 128000,
+    maxTokens: 4096,
+    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+    compat: {
+      supportsStore: false,
+      supportsDeveloperRole: false,
+      supportsReasoningEffort: false,
+      supportsStrictMode: false,
+      maxTokensField: "max_tokens",
+    },
+  };
+}
+
 const GOCOON_MODELS: Record<string, Model<"openai-completions">> = {};
 
 function clearProviderModels(provider: SupportedProvider): void {
@@ -238,6 +266,10 @@ export function getProviderModel(
   modelId: string,
   baseUrl?: string
 ): Model<Api> {
+  if (provider === "openrouter") {
+    modelId = modelId.trim();
+    if (!modelId || modelId === "__custom__") throw new Error("Enter an OpenRouter model ID");
+  }
   modelId = resolveLegacyModelAlias(provider, modelId);
   assertModelAvailable(provider, modelId);
 
@@ -280,7 +312,8 @@ export function getProviderModel(
     const model =
       // eslint-disable-next-line @typescript-eslint/no-explicit-any -- public catalog uses literal unions
       getModel(meta.piAiProvider as any, modelId as any) ??
-      ADDITIONAL_MODELS[`${provider}:${modelId}`];
+      ADDITIONAL_MODELS[`${provider}:${modelId}`] ??
+      (provider === "openrouter" ? createCustomOpenRouterModel(modelId) : undefined);
     if (!model) {
       throw new Error(`getModel returned undefined for ${provider}/${modelId}`);
     }

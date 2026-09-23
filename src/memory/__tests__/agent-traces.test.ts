@@ -76,6 +76,7 @@ describe("agent turn traces", () => {
       inputTokens: 10,
       outputTokens: 5,
       totalCost: 0,
+      costIncomplete: true,
     });
     updateAgentTurnTraceTarget(db, "turn-2", {
       provider: "openai",
@@ -92,8 +93,10 @@ describe("agent turn traces", () => {
       provider: string;
       model: string;
       endpoint_fingerprint: string;
+      cost_incomplete: number;
     };
     expect(row.status).toBe("error");
+    expect(row.cost_incomplete).toBe(1);
     expect(row.tool_calls).toBe(1);
     expect(JSON.parse(row.tools_json)[0].name).toBe("ton_get_balance");
     expect(row.error_message).toBe("provider unavailable");

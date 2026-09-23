@@ -4,6 +4,46 @@ import { AgentConfigSchema } from "../../config/schema.js";
 import { prepareModelRequest } from "../model-request.js";
 
 describe("model request preparation", () => {
+  it("forwards custom OpenRouter IDs and tools without optional sampling parameters", async () => {
+    const request = prepareModelRequest(
+      AgentConfigSchema.parse({
+        provider: "openrouter",
+        model: "example/brand-new",
+        api_key: "test-key",
+      }),
+      {
+        context: { messages: [{ role: "user", content: "test", timestamp: 1 }] },
+        tools: [
+          {
+            name: "read_info",
+            description: "Read info",
+            parameters: { type: "object", properties: {} },
+          },
+        ],
+      }
+    );
+    const fetch = vi.fn().mockRejectedValue(new Error("Network disabled in test"));
+    let payload: unknown;
+    await complete(request.model, request.context, {
+      ...request.options,
+      fetch,
+      onPayload(value) {
+        payload = value;
+        throw new Error("Stop after payload capture");
+      },
+    });
+    expect(fetch).not.toHaveBeenCalled();
+    expect(payload).toMatchObject({
+      model: "example/brand-new",
+      tools: [
+        expect.objectContaining({ function: expect.objectContaining({ name: "read_info" }) }),
+      ],
+    });
+    expect(payload).not.toHaveProperty("temperature");
+    expect(payload).not.toHaveProperty("reasoning_effort");
+    expect(payload).not.toHaveProperty("reasoning");
+  });
+
   it.each([
     ["openai", "gpt-6-sol"],
     ["anthropic", "claude-fable-5-1"],

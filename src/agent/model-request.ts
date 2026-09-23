@@ -1,5 +1,6 @@
 import type {
   Api,
+  AssistantMessage,
   Context,
   Model,
   ProviderStreamOptions,
@@ -9,7 +10,8 @@ import type { AgentConfig } from "../config/schema.js";
 import type { SupportedProvider } from "../config/providers.js";
 import { getCodexApiKey } from "../providers/codex-credentials.js";
 import { getGrokBuildApiKey } from "../providers/grok-build-credentials.js";
-import { getProviderModel } from "../providers/model-resolver.js";
+import { getProviderModel, isCustomOpenRouterModel } from "../providers/model-resolver.js";
+import { createOpenRouterUsageTracker } from "../providers/openrouter-usage.js";
 import { TELEGRAM_SEND_TOOLS } from "../constants/tools.js";
 import { sanitizeToolsForGemini } from "./schema-sanitizer.js";
 
@@ -29,6 +31,7 @@ export interface PreparedModelRequest {
   model: Model<Api>;
   context: Context;
   options: ProviderStreamOptions;
+  finalizeUsage?: (message: AssistantMessage) => void;
 }
 
 /** Resolve the effective API key for a provider (local/gocoon need no real key). */
@@ -128,15 +131,22 @@ export function prepareModelRequest(
     tools,
   };
   const temperature = request.temperature ?? config.temperature;
+  const usageTracker =
+    provider === "openrouter" && model.api === "openai-completions"
+      ? createOpenRouterUsageTracker(isCustomOpenRouterModel(model))
+      : undefined;
 
   return {
     provider,
     model,
     context,
+    finalizeUsage: usageTracker?.apply,
     options: {
+      ...(usageTracker && { fetch: usageTracker.fetch }),
       apiKey: getEffectiveApiKey(provider, config.api_key),
       maxTokens: request.maxTokens ?? config.max_tokens,
-      ...(modelSupportsTemperature(provider, model.id) && { temperature }),
+      ...(!isCustomOpenRouterModel(model) &&
+        modelSupportsTemperature(provider, model.id) && { temperature }),
       sessionId: request.sessionId,
       cacheRetention: getCacheRetention(provider),
       signal: request.signal,

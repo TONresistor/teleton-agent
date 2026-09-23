@@ -13,7 +13,7 @@ export interface StatusResponse {
   agentIdentity?: { firstName: string; username?: string };
   sessionCount: number;
   toolCount: number;
-  tokenUsage: { totalTokens: number; totalCost: number };
+  tokenUsage: { totalTokens: number; totalCost: number; costIncomplete?: boolean };
   platform: string;
 }
 

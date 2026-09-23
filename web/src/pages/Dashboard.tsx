@@ -8,6 +8,7 @@ import { ExecSettingsPanel } from '../components/ExecSettingsPanel';
 import { PillTabs } from '../components/PillTabs';
 import { InfoTip } from '../components/InfoTip';
 import { Select } from '../components/Select';
+import { ModelSelect } from '../components/ModelSelect';
 import { ProviderSwitchZone, PROVIDER_OPTIONS, PROVIDER_LABELS } from '../components/ProviderControl';
 import { api, StatusData, ConversationChat } from '../lib/api';
 import { errMsg, timeAgo } from '../lib/utils';
@@ -104,7 +105,9 @@ export function Dashboard() {
   const provider = pendingProvider ?? getLocal('agent.provider');
   const modelLabel = modelOptions.find((m) => m.value === getLocal('agent.model'))?.name ?? getLocal('agent.model');
   const tokens = s.tokenUsage ? `${(s.tokenUsage.totalTokens / 1000).toFixed(1)}K` : '0';
-  const cost = s.tokenUsage ? `$${s.tokenUsage.totalCost.toFixed(3)}` : '$0.000';
+  const cost = s.tokenUsage?.costIncomplete
+    ? 'Cost incomplete'
+    : `${s.tokenUsage ? `$${s.tokenUsage.totalCost.toFixed(3)}` : '$0.000'} spent`;
   const recentTop = (recent ?? []).slice(0, 7);
 
   return (
@@ -133,11 +136,11 @@ export function Dashboard() {
             </div>
             <div className="dash-hero-field">
               <span className="dash-hero-label">Model</span>
-              <Select
+              <ModelSelect
+                provider={getLocal('agent.provider')}
                 value={getLocal('agent.model')}
-                options={modelOptions.map((m) => m.value)}
-                labels={modelOptions.map((m) => m.name)}
-                onChange={(v) => saveConfig('agent.model', v)}
+                models={modelOptions}
+                onSave={(v) => saveConfig('agent.model', v)}
               />
             </div>
           </div>
@@ -157,7 +160,7 @@ export function Dashboard() {
           />
           <div className="dash-usage-hero">
             <span className="dash-usage-num">{tokens}</span>
-            <span className="dash-usage-cost">{cost} spent</span>
+            <span className="dash-usage-cost">{cost}</span>
           </div>
           <TokenActivity />
         </div>

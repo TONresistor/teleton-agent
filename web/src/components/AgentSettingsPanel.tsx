@@ -1,5 +1,6 @@
 import { ProviderMeta } from '../hooks/useConfigState';
 import { Select } from './Select';
+import { ModelSelect } from './ModelSelect';
 import { EditableField } from './EditableField';
 import { InfoTip } from './InfoTip';
 import { ProviderSwitchZone, PROVIDER_OPTIONS, PROVIDER_LABELS } from './ProviderControl';
@@ -66,11 +67,11 @@ export function AgentSettingsPanel({
 
         <div className="form-group" style={{ marginBottom: 0 }}>
           <label>Model <InfoTip text="Main LLM model ID" /></label>
-          <Select
+          <ModelSelect
+            provider={getLocal('agent.provider')}
             value={getLocal('agent.model')}
-            options={modelOptions.map((m) => m.value)}
-            labels={modelOptions.map((m) => m.name)}
-            onChange={(v) => saveConfig('agent.model', v)}
+            models={modelOptions}
+            onSave={(v) => saveConfig('agent.model', v)}
           />
         </div>
         {!compact && (
