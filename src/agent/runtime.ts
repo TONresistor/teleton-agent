@@ -115,6 +115,10 @@ export class AgentRuntime {
     return this.toolRegistry;
   }
 
+  getActiveTurnCount(): number {
+    return this.turnCoordinator.stats.active;
+  }
+
   async processMessage(opts: ProcessMessageOptions): Promise<AgentResponse> {
     return this.turnCoordinator.run(opts.sessionKey ?? opts.chatId, () =>
       this.processCoordinatedMessage(opts)

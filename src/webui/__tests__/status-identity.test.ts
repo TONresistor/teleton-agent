@@ -17,7 +17,10 @@ describe("WebUI agent identity", () => {
     getMe.mockClear();
     getMe.mockRejectedValue(new Error("Telegram unavailable"));
     const deps = {
-      agent: { getConfig: () => ({ agent: { model: "model", provider: "provider" } }) },
+      agent: {
+        getConfig: () => ({ agent: { model: "model", provider: "provider" } }),
+        getActiveTurnCount: () => 0,
+      },
       bridge,
       memory: { db: { prepare: () => ({ get: () => ({ count: 1 }) }) } },
       toolRegistry: { getAll: () => [] },
@@ -41,7 +44,10 @@ describe("WebUI agent identity", () => {
       isBot: true,
     });
     const deps = {
-      agent: { getConfig: () => ({ agent: { model: "model", provider: "provider" } }) },
+      agent: {
+        getConfig: () => ({ agent: { model: "model", provider: "provider" } }),
+        getActiveTurnCount: () => 0,
+      },
       bridge: { isAvailable: () => true, getMe },
       memory: { db: { prepare: () => ({ get: () => ({ count: 1 }) }) } },
       toolRegistry: { getAll: () => [] },

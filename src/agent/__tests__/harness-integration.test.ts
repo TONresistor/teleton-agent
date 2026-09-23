@@ -122,9 +122,11 @@ describe("Minimal harness regressions", () => {
     const second = handler.execute(taskMessage(task, 11) as any);
     await second;
     expect((runtime as any).turnCoordinator.stats.pending).toBe(1);
+    expect(runtime.getActiveTurnCount()).toBe(1);
     expect(mocks.complete).toHaveBeenCalledTimes(1);
     release();
     await Promise.all([first, second]);
+    expect(runtime.getActiveTurnCount()).toBe(0);
     expect(effect).toHaveBeenCalledTimes(1);
     expect(mocks.db.prepare("SELECT COUNT(*) AS n FROM action_executions").get().n).toBe(1);
   });

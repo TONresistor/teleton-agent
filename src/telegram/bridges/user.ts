@@ -808,6 +808,11 @@ export class GramJSUserBridge implements ITelegramBridge {
     return { id: chatId, type: "private" };
   }
 
+  async getChatPhoto(chatId: string): Promise<Buffer | undefined> {
+    const photo = await this.client.getClient().downloadProfilePhoto(chatId, { isBig: false });
+    return Buffer.isBuffer(photo) ? photo : undefined;
+  }
+
   onNewMessage(
     handler: (message: TelegramMessage) => void | Promise<void>,
     filters?: {

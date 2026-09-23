@@ -87,12 +87,31 @@ export function createStatusRoutes(deps: WebUIServerDeps) {
       const sessionCountRow = deps.memory.db
         .prepare("SELECT COUNT(*) as count FROM sessions")
         .get() as { count: number } | undefined;
+      const lastTurn = deps.memory.db
+        .prepare(
+          `SELECT t.chat_id, COALESCE(t.completed_at, t.started_at) as handled_at,
+            COALESCE(c.title,
+              NULLIF(TRIM(COALESCE(u.first_name, '') || ' ' || COALESCE(u.last_name, '')), ''),
+              c.username, u.username) as chat_name
+           FROM agent_turn_traces t
+           LEFT JOIN tg_chats c ON c.id = t.chat_id
+           LEFT JOIN tg_users u ON c.type = 'dm' AND u.id = c.id
+           WHERE t.status != 'running'
+           ORDER BY t.started_at DESC LIMIT 1`
+        )
+        .get() as { chat_id: string; handled_at: number; chat_name: string | null } | undefined;
 
       const data: StatusResponse = {
         uptime: process.uptime(),
         model: config.agent.model,
         provider: config.agent.provider,
         agentIdentity,
+        agentActivity: {
+          processing: deps.agent.getActiveTurnCount() > 0,
+          lastProcessedAt: lastTurn?.handled_at,
+          lastChatId: lastTurn?.chat_id,
+          lastChatName: lastTurn?.chat_name ?? undefined,
+        },
         sessionCount: sessionCountRow?.count ?? 0,
         toolCount: deps.toolRegistry.getAll().length,
         tokenUsage: getTokenUsage(),

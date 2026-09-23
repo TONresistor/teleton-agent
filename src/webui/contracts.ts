@@ -11,6 +11,12 @@ export interface StatusResponse {
   model: string;
   provider: string;
   agentIdentity?: { firstName: string; username?: string };
+  agentActivity?: {
+    processing: boolean;
+    lastProcessedAt?: number;
+    lastChatId?: string;
+    lastChatName?: string;
+  };
   sessionCount: number;
   toolCount: number;
   tokenUsage: { totalTokens: number; totalCost: number; costIncomplete?: boolean };

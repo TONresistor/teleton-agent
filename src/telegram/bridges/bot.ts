@@ -279,12 +279,31 @@ export class GrammyBotBridge implements ITelegramBridge {
 
     return {
       id: String(chat.id),
-      title: "title" in chat ? chat.title : undefined,
+      title:
+        "title" in chat
+          ? chat.title
+          : "first_name" in chat
+            ? [chat.first_name, "last_name" in chat ? chat.last_name : undefined]
+                .filter(Boolean)
+                .join(" ")
+            : undefined,
       type: chat.type as ChatInfo["type"],
       memberCount: undefined,
       description: "description" in chat ? chat.description : undefined,
       username: "username" in chat ? chat.username : undefined,
     };
+  }
+
+  async getChatPhoto(chatId: string): Promise<Buffer | undefined> {
+    const chat = await this.bot.api.getChat(this.toChatId(chatId));
+    if (!chat.photo) return undefined;
+    const file = await this.bot.api.getFile(chat.photo.small_file_id);
+    if (!file.file_path) return undefined;
+    const response = await fetch(
+      `https://api.telegram.org/file/bot${this.bot.token}/${file.file_path}`
+    );
+    if (!response.ok) return undefined;
+    return Buffer.from(await response.arrayBuffer());
   }
 
   async getMe(): Promise<BotInfo | undefined> {
