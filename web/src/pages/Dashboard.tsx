@@ -14,20 +14,9 @@ import { errMsg, timeAgo } from '../lib/utils';
 import { Skeleton, SkeletonRows } from '../components/Skeleton';
 import { EmptyState } from '../components/EmptyState';
 import { Alert } from '../components/Alert';
+import { TokenActivity } from '../components/TokenActivity';
 
-const PLATFORM_LABEL: Record<string, string> = { darwin: 'macOS', linux: 'Linux', win32: 'Windows' };
-
-function fmtUptime(sec: number): string {
-  if (sec < 3600) return `${Math.floor(sec / 60)}m`;
-  return `${Math.floor(sec / 3600)}h ${Math.floor((sec % 3600) / 60)}m`;
-}
-
-function providerLabel(provider: string): string {
-  const i = PROVIDER_OPTIONS.indexOf(provider);
-  return i >= 0 ? PROVIDER_LABELS[i] : provider;
-}
-
-function CardHead({ title, desc, right }: { title: string; desc?: string; right?: ReactNode }) {
+function CardHead({ title, desc, right }: { title: ReactNode; desc?: string; right?: ReactNode }) {
   return (
     <div className="dash-head">
       <div className="dash-head-text">
@@ -56,22 +45,6 @@ function GramGlyph() {
       <path d="M14 16h28a2 2 0 0 1 1.7 3L29.6 41.4a2 2 0 0 1-3.3 0L12.3 19a2 2 0 0 1 1.7-3Z" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
       <path d="M28 17v24M14.5 18.5 28 24l13.5-5.5" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
     </svg>
-  );
-}
-
-function Metric({ label, value, to }: { label: string; value: string | number; to?: string }) {
-  const navigate = useNavigate();
-  const clickable = !!to;
-  return (
-    <button
-      type="button"
-      className={`dash-metric${clickable ? ' clickable' : ''}`}
-      disabled={!clickable}
-      onClick={clickable ? () => navigate(to) : undefined}
-    >
-      <span className="dash-metric-v">{value}</span>
-      <span className="dash-metric-k">{label}</span>
-    </button>
   );
 }
 
@@ -128,7 +101,6 @@ export function Dashboard() {
   if (!status || !stats) return <div className="alert error">Failed to load dashboard data</div>;
 
   const s = liveStatus ?? status;
-  const platform = s.platform ? (PLATFORM_LABEL[s.platform] ?? s.platform) : null;
   const provider = pendingProvider ?? getLocal('agent.provider');
   const modelLabel = modelOptions.find((m) => m.value === getLocal('agent.model'))?.name ?? getLocal('agent.model');
   const tokens = s.tokenUsage ? `${(s.tokenUsage.totalTokens / 1000).toFixed(1)}K` : '0';
@@ -144,12 +116,15 @@ export function Dashboard() {
       <div className="dash-grid">
         {/* ── Agent ── */}
         <div className="card dash-agent">
-          <CardHead title="Agent" right={<StatusBadge />} />
+          <CardHead
+            title={<>
+              {s.agentIdentity?.firstName || 'Agent'}
+              {s.agentIdentity?.username && <span className="dash-agent-handle">@{s.agentIdentity.username}</span>}
+            </>}
+            right={<StatusBadge />}
+          />
           <div className="dash-agent-id">
             <span className="dash-agent-model-name">{modelLabel}</span>
-            <span className="dash-agent-provider">
-              {[providerLabel(provider), `up ${fmtUptime(s.uptime)}`, platform].filter(Boolean).join(' · ')}
-            </span>
           </div>
           <div className="dash-agent-selects">
             <div className="dash-hero-field">
@@ -184,11 +159,7 @@ export function Dashboard() {
             <span className="dash-usage-num">{tokens}</span>
             <span className="dash-usage-cost">{cost} spent</span>
           </div>
-          <div className="dash-metrics">
-            <Metric label="Sessions" value={s.sessionCount} />
-            <Metric label="Tools" value={s.toolCount} to="/tools" />
-            <Metric label="Knowledge" value={stats.knowledge} to="/memory" />
-          </div>
+          <TokenActivity />
         </div>
       </div>
 

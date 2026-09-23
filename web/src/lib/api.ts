@@ -19,6 +19,8 @@ import type {
   ToolAccessLevel,
   ToolConfigData,
   ToolRagStatus,
+  TokenActivityBucket,
+  TokenActivityPeriod,
   WalletInfo,
   WalletTransaction,
   WorkspaceInfo,
@@ -34,6 +36,12 @@ export { setup } from "./setup-api";
 export const api = {
   async getStatus() {
     return fetchAPI<APIResponse<StatusData>>("/status");
+  },
+
+  async getTokenActivity(period: TokenActivityPeriod) {
+    return fetchAPI<APIResponse<TokenActivityBucket[]>>(
+      `/status/token-activity?period=${period}&offsetMinutes=${new Date().getTimezoneOffset()}`
+    );
   },
 
   // gocoon: decentralized LLM on TON

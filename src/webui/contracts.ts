@@ -10,10 +10,18 @@ export interface StatusResponse {
   uptime: number;
   model: string;
   provider: string;
+  agentIdentity?: { firstName: string; username?: string };
   sessionCount: number;
   toolCount: number;
   tokenUsage: { totalTokens: number; totalCost: number };
   platform: string;
+}
+
+export type TokenActivityPeriod = "day" | "week" | "month";
+
+export interface TokenActivityBucket {
+  label: string;
+  tokens: number;
 }
 
 export type ToolAccessLevel = "all" | "allowlist" | "admin" | "off";
