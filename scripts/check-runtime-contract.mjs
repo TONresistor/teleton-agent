@@ -4,7 +4,9 @@ import { fileURLToPath } from "node:url";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..");
 const read = (path) => readFileSync(join(root, path), "utf8");
-const minimum = read(".nvmrc").trim();
+const buildVersion = read(".nvmrc").trim();
+const runtimeConstants = read("src/constants/runtime.ts");
+const minimum = runtimeConstants.match(/MINIMUM_NODE_VERSION = "([^"]+)"/)?.[1];
 const supportedRange = `^${minimum} || ^24.15.0 || >=26.0.0`;
 const failures = [];
 
@@ -13,8 +15,17 @@ function check(condition, message) {
 }
 
 check(
-  /^\d+\.\d+\.\d+$/.test(minimum),
-  `.nvmrc must contain an exact version, got "${minimum}"`
+  /^\d+\.\d+\.\d+$/.test(buildVersion),
+  `.nvmrc must contain an exact version, got "${buildVersion}"`
+);
+
+const versionParts = (version) => version.split(".").map(Number);
+const [buildMajor, buildMinor, buildPatch] = versionParts(buildVersion);
+const [minMajor, minMinor, minPatch] = versionParts(minimum ?? "0.0.0");
+check(
+  buildMajor === minMajor &&
+    (buildMinor > minMinor || (buildMinor === minMinor && buildPatch >= minPatch)),
+  ".nvmrc must use the minimum supported Node major at or above its minimum patch"
 );
 
 const packageJson = JSON.parse(read("package.json"));
@@ -33,7 +44,7 @@ check(
 );
 
 const dockerfile = read("Dockerfile");
-const dockerImage = `node:${minimum}-slim`;
+const dockerImage = `node:${buildVersion}-slim`;
 check(
   [...dockerfile.matchAll(/^FROM\s+(node:[^\s]+).*$/gm)].every(
     ([, image]) => image === dockerImage
@@ -45,11 +56,6 @@ check(
   "Dockerfile must keep exactly two stages"
 );
 
-const runtimeConstants = read("src/constants/runtime.ts");
-check(
-  runtimeConstants.includes(`MINIMUM_NODE_VERSION = "${minimum}"`),
-  "runtime minimum must match .nvmrc"
-);
 check(
   runtimeConstants.includes(`SUPPORTED_NODE_RANGE = "${supportedRange}"`),
   "runtime supported range must match package.json"
@@ -62,7 +68,7 @@ check(
 const ci = read(".github/workflows/ci.yml");
 check(ci.includes("node-version-file: .nvmrc"), "CI checks must use .nvmrc");
 check(
-  ci.includes(`node-version: ["${minimum}", "24.15.0", "26.0.0"]`),
+  ci.includes(`node-version: ["${buildVersion}", "24.15.0", "26.0.0"]`),
   "CI test matrix must cover each supported Node release line"
 );
 
