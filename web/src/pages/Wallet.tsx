@@ -9,6 +9,7 @@ import { Alert } from '../components/Alert';
 import { Skeleton, SkeletonRows } from '../components/Skeleton';
 import { EmptyState } from '../components/EmptyState';
 import { toast } from '../lib/toast';
+import { GramIcon } from '../components/GramIcon';
 
 type Dir = 'in' | 'out' | 'other';
 type Filter = 'all' | 'in' | 'out';
@@ -50,20 +51,6 @@ function DirIcon({ dir }: { dir: Dir }) {
   return (
     <svg width="14" height="14" viewBox="0 0 14 14" fill="none" aria-hidden="true">
       <path d={path} stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
-function TonDiamond() {
-  return (
-    <svg className="wallet-diamond" viewBox="0 0 56 56" fill="none" aria-hidden="true">
-      <path
-        d="M14 16h28a2 2 0 0 1 1.7 3L29.6 41.4a2 2 0 0 1-3.3 0L12.3 19a2 2 0 0 1 1.7-3Z"
-        stroke="currentColor"
-        strokeWidth="2"
-        strokeLinejoin="round"
-      />
-      <path d="M28 17v24M14.5 18.5 28 24l13.5-5.5" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" />
     </svg>
   );
 }
@@ -128,7 +115,7 @@ export function Wallet() {
 
       {/* ── Balance hero ── */}
       <div className="wallet-hero">
-        <TonDiamond />
+        <GramIcon className="wallet-gram-icon" />
         {loading ? (
           <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
             <Skeleton width={90} height={12} />

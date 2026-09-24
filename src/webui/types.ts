@@ -22,6 +22,8 @@ export type {
   MemorySourceFile,
   ModuleInfo,
   StatusResponse,
+  TokenActivityBucket,
+  TokenActivityPeriod,
   ToolAccessLevel,
   ToolInfo,
   ToolScope,

@@ -1,4 +1,5 @@
 import type { Context, TextContent, Usage } from "@earendil-works/pi-ai";
+import type { CostAwareUsage } from "../providers/openrouter-usage.js";
 import { extractToolNames, stripEnvelopePrefix, truncate } from "../utils/pi-message.js";
 
 /** Per-turn usage accumulator (input/output/cache + cost), summed across loop iterations. */
@@ -8,6 +9,7 @@ export interface UsageAccumulator {
   cacheRead: number;
   cacheWrite: number;
   totalCost: number;
+  costIncomplete?: boolean;
 }
 
 /**
@@ -20,6 +22,7 @@ export function addUsage(acc: UsageAccumulator, usage: Usage): UsageAccumulator 
   acc.cacheRead += usage.cacheRead ?? 0;
   acc.cacheWrite += usage.cacheWrite ?? 0;
   acc.totalCost += usage.cost?.total ?? 0;
+  if ((usage as CostAwareUsage).costIncomplete) acc.costIncomplete = true;
   return acc;
 }
 

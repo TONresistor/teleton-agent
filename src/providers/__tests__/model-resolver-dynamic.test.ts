@@ -3,10 +3,47 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({ fetchWithTimeout: vi.fn() }));
 vi.mock("../../utils/fetch.js", () => ({ fetchWithTimeout: mocks.fetchWithTimeout }));
 
-import { getProviderModel, registerLocalModels } from "../model-resolver.js";
+import {
+  getProviderModel,
+  isCustomOpenRouterModel,
+  registerLocalModels,
+} from "../model-resolver.js";
 
 describe("dynamic model registry", () => {
   beforeEach(() => mocks.fetchWithTimeout.mockReset());
+
+  it("resolves a manually entered OpenRouter ID without discovery", () => {
+    const model = getProviderModel("openrouter", "  example/new-model:free  ");
+    expect(model.id).toBe("example/new-model:free");
+    expect(model.api).toBe("openai-completions");
+    expect(model.baseUrl).toBe("https://openrouter.ai/api/v1");
+    expect(isCustomOpenRouterModel(model)).toBe(true);
+    expect(mocks.fetchWithTimeout).not.toHaveBeenCalled();
+    expect(getProviderModel("openrouter", model.id)).toBe(model);
+  });
+
+  it("keeps catalog metadata for known OpenRouter models", () => {
+    const model = getProviderModel("openrouter", "openai/gpt-6-sol");
+    expect(isCustomOpenRouterModel(model)).toBe(false);
+    expect(model.cost.input).toBeGreaterThan(0);
+    expect(model.input).toContain("image");
+  });
+
+  it.each(["", "   ", "__custom__"])("rejects an incomplete custom selection: %j", (id) => {
+    expect(() => getProviderModel("openrouter", id)).toThrow(/model ID/);
+  });
+
+  it("does not allow unknown IDs for other providers", () => {
+    expect(() => getProviderModel("anthropic", "example/missing-model")).toThrow(/resolve/);
+  });
+
+  it("keeps custom OpenRouter endpoints isolated", () => {
+    const model = getProviderModel("openrouter", "example/new-model", "https://relay.test/v1/");
+    expect(model.baseUrl).toBe("https://relay.test/v1");
+    expect(getProviderModel("openrouter", "example/new-model").baseUrl).toBe(
+      "https://openrouter.ai/api/v1"
+    );
+  });
 
   it("invalidates cached local models when the endpoint is re-registered", async () => {
     mocks.fetchWithTimeout.mockResolvedValue({

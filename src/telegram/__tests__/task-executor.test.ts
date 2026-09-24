@@ -13,6 +13,14 @@ function taskWithTool(tool: string) {
 }
 
 describe("executeScheduledTask", () => {
+  it("rejects scheduled arguments that are not a JSON object", async () => {
+    const registry = { getToolCategory: () => "data-bearing", execute: vi.fn() };
+    const task = taskWithTool("ton_get_price");
+    task.payload = JSON.stringify({ type: "tool_call", tool: "ton_get_price", params: [] });
+    await executeScheduledTask(task, {} as never, {} as never, registry as never);
+    expect(registry.execute).not.toHaveBeenCalled();
+  });
+
   it("does not auto-execute action tools", async () => {
     const registry = {
       getToolCategory: vi.fn(() => undefined),

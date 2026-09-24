@@ -8,6 +8,8 @@ import type {
   MemorySourceFile,
   ModuleInfo,
   StatusResponse,
+  TokenActivityBucket,
+  TokenActivityPeriod,
   ToolAccessLevel,
   ToolInfo,
   WorkspaceInfo,
@@ -27,6 +29,7 @@ export type {
 };
 export type StatusData = StatusResponse;
 export type SearchResult = MemorySearchResult;
+export type { TokenActivityBucket, TokenActivityPeriod };
 
 // ── Setup types ─────────────────────────────────────────────────────
 

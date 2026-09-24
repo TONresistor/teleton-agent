@@ -371,16 +371,15 @@ export async function prepareTurn(
     // eslint-disable-next-line @typescript-eslint/no-non-null-assertion -- session guaranteed to exist after compaction
     session = getSession(sessionKey)!;
     context = loadContextFromTranscript(session.sessionId);
-    context.messages.push(userMsg);
     captureMemorySnapshot(); // Refresh snapshot for the new compacted session
+  } else {
+    appendToTranscript(session.sessionId, userMsg);
   }
-
-  appendToTranscript(session.sessionId, userMsg);
 
   const provider = (deps.config.agent.provider || "anthropic") as SupportedProvider;
   const providerMeta = getProviderMetadata(provider);
   const requestedModel = deps.config.agent.model;
-  const target = resolveModelTarget(provider, requestedModel);
+  const target = resolveModelTarget(provider, requestedModel, deps.config.agent.base_url);
   let tools = await selectTools(
     deps.config,
     deps.toolRegistry,

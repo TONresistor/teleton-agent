@@ -13,7 +13,7 @@ Brief description of the changes and their motivation.
 ## Checklist
 
 - [ ] I have read the [Contributing Guide](../CONTRIBUTING.md)
-- [ ] My PR targets the `main` branch
+- [ ] My PR targets the `dev` branch
 - [ ] `npm run typecheck` passes
 - [ ] `npm run lint` passes
 - [ ] `npm test` passes

@@ -58,7 +58,7 @@ export class ScheduledTaskHandler {
       }
 
       // Skip cancelled tasks (e.g. cancelled via WebUI or admin)
-      if (task.status === "cancelled" || task.status === "done" || task.status === "failed") {
+      if (task.status !== "pending") {
         log.info(`Task ${taskId} already ${task.status}, skipping`);
         return;
       }
@@ -92,7 +92,7 @@ export class ScheduledTaskHandler {
       }
 
       // Mark task as in_progress
-      taskStore.startTask(taskId);
+      if (!taskStore.startTask(taskId)) return;
 
       // Get parent task results for context
       const parentResults = taskStore.getParentResults(taskId);

@@ -4,10 +4,10 @@
 
 | Version | Supported |
 |---------|-----------|
-| 0.5.x   | Yes       |
-| < 0.5   | No        |
+| 0.11.x  | Yes       |
+| < 0.11  | No        |
 
-Only the latest minor release receives security patches. We recommend always running the latest version.
+Only the latest minor release (currently **0.11.x**) receives security patches. Run the latest published version.
 
 ## Reporting a Vulnerability
 

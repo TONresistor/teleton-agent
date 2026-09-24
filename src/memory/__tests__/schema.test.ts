@@ -1091,7 +1091,7 @@ describe("Memory Schema", () => {
     });
 
     it("CURRENT_SCHEMA_VERSION is set to expected value", () => {
-      expect(CURRENT_SCHEMA_VERSION).toBe("1.25.0");
+      expect(CURRENT_SCHEMA_VERSION).toBe("1.26.0");
     });
   });
 
@@ -1100,6 +1100,21 @@ describe("Memory Schema", () => {
   // ============================================
 
   describe("Migrations", () => {
+    it("adds cost completeness to an existing trace database without resetting costs", () => {
+      ensureSchema(db);
+      db.exec("ALTER TABLE agent_turn_traces DROP COLUMN cost_incomplete");
+      db.exec(`INSERT INTO agent_turn_traces (id, session_id, chat_id, started_at, status, provider, model, total_cost)
+        VALUES ('old', 'session', 'chat', 1, 'completed', 'openrouter', 'test', 0.02)`);
+      setSchemaVersion(db, "1.25.0");
+      runMigrations(db);
+      runMigrations(db);
+      expect(
+        db
+          .prepare("SELECT total_cost, cost_incomplete FROM agent_turn_traces WHERE id = 'old'")
+          .get()
+      ).toEqual({ total_cost: 0.02, cost_incomplete: 0 });
+    });
+
     it("runMigrations sets schema version to CURRENT_SCHEMA_VERSION", () => {
       ensureSchema(db);
       runMigrations(db);

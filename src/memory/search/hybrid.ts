@@ -381,7 +381,7 @@ export class HybridSearch {
     const byId = new Map<string, HybridSearchResult>();
 
     for (const r of vectorResults) {
-      byId.set(r.id, { ...r, vectorScore: r.score });
+      byId.set(r.id, { ...r, score: vectorWeight * r.score, vectorScore: r.score });
     }
 
     for (const r of keywordResults) {

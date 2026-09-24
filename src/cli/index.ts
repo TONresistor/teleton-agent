@@ -58,7 +58,7 @@ program
   .command("start")
   .description("Start the Teleton agent")
   .option("-c, --config <path>", "Config file path", getDefaultConfigPath())
-  .option("--webui", "Enable WebUI server (overrides config)")
+  .option("--webui", "Enable WebUI server and open it in your browser")
   .option("--webui-port <port>", "WebUI server port (default: 7777)")
   .option("--api", "Enable Management API server (overrides config)")
   .option("--api-port <port>", "Management API port (default: 7778)")
@@ -106,7 +106,7 @@ program
         process.env.TELETON_JSON_CREDENTIALS = "true";
       }
 
-      await startApp(options.config);
+      await startApp(options.config, options.webui === true);
     } catch (error) {
       console.error("Error:", getErrorMessage(error));
       process.exit(1);

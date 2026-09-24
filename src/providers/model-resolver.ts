@@ -10,6 +10,34 @@ const log = createLogger("LLM");
 
 const modelCache = new Map<string, Model<Api>>();
 
+export function isCustomOpenRouterModel(model: Model<Api>): boolean {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- user-entered IDs are not catalog literal unions
+  return model.provider === "openrouter" && !getModel("openrouter", model.id as any);
+}
+
+function createCustomOpenRouterModel(modelId: string): Model<"openai-completions"> {
+  return {
+    id: modelId,
+    name: modelId,
+    api: "openai-completions",
+    provider: "openrouter",
+    baseUrl: "https://openrouter.ai/api/v1",
+    reasoning: false,
+    input: ["text"],
+    // Unknown metadata: these are local budgeting defaults, not provider specifications.
+    contextWindow: 128000,
+    maxTokens: 4096,
+    cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0 },
+    compat: {
+      supportsStore: false,
+      supportsDeveloperRole: false,
+      supportsReasoningEffort: false,
+      supportsStrictMode: false,
+      maxTokensField: "max_tokens",
+    },
+  };
+}
+
 const GOCOON_MODELS: Record<string, Model<"openai-completions">> = {};
 
 function clearProviderModels(provider: SupportedProvider): void {
@@ -21,7 +49,7 @@ function clearProviderModels(provider: SupportedProvider): void {
 function createGrokBuildModel(modelId: string): Model<"openai-responses"> {
   return {
     id: modelId,
-    name: modelId === "grok-4.6" ? "Grok 4.6" : modelId === "grok-4.5" ? "Grok 4.5" : modelId,
+    name: modelId.replace("grok-", "Grok "),
     api: "openai-responses",
     provider: "xai",
     baseUrl: "https://cli-chat-proxy.grok.com/v1",
@@ -89,12 +117,19 @@ export async function registerGocoonModels(httpPort: number): Promise<string[]> 
   }
 }
 
+const LOCAL_ENDPOINTS = new Map<string, Record<string, Model<"openai-completions">>>();
+let defaultLocalModel: string | undefined;
 const LOCAL_MODELS: Record<string, Model<"openai-completions">> = {};
 
 /** Register models discovered from a local OpenAI-compatible server */
-export async function registerLocalModels(baseUrl: string): Promise<string[]> {
-  for (const key of Object.keys(LOCAL_MODELS)) delete LOCAL_MODELS[key];
+export async function registerLocalModels(baseUrl: string, makeDefault = true): Promise<string[]> {
+  const discovered: Record<string, Model<"openai-completions">> = {};
+  LOCAL_ENDPOINTS.delete(baseUrl.replace(/\/+$/, ""));
   clearProviderModels("local");
+  if (makeDefault) {
+    for (const key of Object.keys(LOCAL_MODELS)) delete LOCAL_MODELS[key];
+    defaultLocalModel = undefined;
+  }
   try {
     const parsed = new URL(baseUrl);
     if (parsed.protocol !== "http:" && parsed.protocol !== "https:") {
@@ -114,7 +149,7 @@ export async function registerLocalModels(baseUrl: string): Promise<string[]> {
     const ids: string[] = [];
     for (const m of models) {
       const id = m.id || m.name || String(m);
-      LOCAL_MODELS[id] = {
+      discovered[id] = {
         id,
         name: id,
         api: "openai-completions",
@@ -135,6 +170,13 @@ export async function registerLocalModels(baseUrl: string): Promise<string[]> {
       };
       ids.push(id);
     }
+    LOCAL_ENDPOINTS.set(url, discovered);
+    clearProviderModels("local");
+    if (makeDefault) {
+      for (const key of Object.keys(LOCAL_MODELS)) delete LOCAL_MODELS[key];
+      Object.assign(LOCAL_MODELS, discovered);
+      defaultLocalModel = ids[0];
+    }
     return ids;
   } catch {
     return [];
@@ -149,7 +191,9 @@ export async function registerLocalModels(baseUrl: string): Promise<string[]> {
 const LEGACY_MODEL_ALIASES: Partial<Record<SupportedProvider, Readonly<Record<string, string>>>> = {
   codex: {
     "gpt-5.3-codex": "gpt-5.6-terra",
-    "gpt-5.1-codex-mini": "gpt-5.4-mini",
+    "gpt-5.1-codex-mini": "gpt-6-luna",
+    "gpt-5.4": "gpt-5.6-terra",
+    "gpt-5.4-mini": "gpt-6-luna",
   },
   "grok-build": {
     "grok-build": "grok-4.6",
@@ -178,7 +222,8 @@ const LEGACY_MODEL_ALIASES: Partial<Record<SupportedProvider, Readonly<Record<st
     "llama-3.1-8b-instant": "openai/gpt-oss-20b",
   },
   openrouter: {
-    "nvidia/nemotron-nano-9b-v2": "nvidia/nemotron-nano-9b-v2:free",
+    "nvidia/nemotron-nano-9b-v2": "qwen/qwen3.8-27b:free",
+    "nvidia/nemotron-nano-9b-v2:free": "qwen/qwen3.8-27b:free",
   },
   moonshot: {
     "kimi-k2.5": "kimi-for-coding",
@@ -193,7 +238,9 @@ const LEGACY_MODEL_ALIASES: Partial<Record<SupportedProvider, Readonly<Record<st
   cerebras: {
     "qwen-3-235b-a22b-instruct-2507": "gpt-oss-120b",
     "qwen-3-32b": "gpt-oss-120b",
-    "llama3.1-8b": "gemma-4-31b",
+    "llama3.1-8b": "qwen-3.8-27b",
+    "gemma-4-31b": "qwen-3.8-27b",
+    "zai-glm-4.7": "gpt-oss-120b",
   },
 };
 
@@ -214,18 +261,27 @@ function resolveLegacyModelAlias(provider: SupportedProvider, modelId: string): 
   return replacement;
 }
 
-export function getProviderModel(provider: SupportedProvider, modelId: string): Model<Api> {
+export function getProviderModel(
+  provider: SupportedProvider,
+  modelId: string,
+  baseUrl?: string
+): Model<Api> {
+  if (provider === "openrouter") {
+    modelId = modelId.trim();
+    if (!modelId || modelId === "__custom__") throw new Error("Enter an OpenRouter model ID");
+  }
   modelId = resolveLegacyModelAlias(provider, modelId);
   assertModelAvailable(provider, modelId);
 
-  const cacheKey = `${provider}:${modelId}`;
+  const endpoint = baseUrl?.replace(/\/+$/, "");
+  const cacheKey = `${provider}:${modelId}${endpoint ? `:${endpoint}` : ""}`;
   const cached = modelCache.get(cacheKey);
   if (cached) return cached;
 
   const meta = getProviderMetadata(provider);
 
   if (meta.piAiProvider === "grok-build") {
-    const supportedModelIds = ["grok-4.6", "grok-4.5"];
+    const supportedModelIds = ["grok-4.7", "grok-4.6", "grok-4.5"];
     if (!supportedModelIds.includes(modelId)) {
       throw new Error(`Grok Build model "${modelId}" is not supported`);
     }
@@ -244,7 +300,7 @@ export function getProviderModel(provider: SupportedProvider, modelId: string): 
   }
 
   if (meta.piAiProvider === "local") {
-    const model = LOCAL_MODELS[modelId];
+    const model = endpoint ? LOCAL_ENDPOINTS.get(endpoint)?.[modelId] : LOCAL_MODELS[modelId];
     if (model) {
       modelCache.set(cacheKey, model);
       return model;
@@ -253,13 +309,17 @@ export function getProviderModel(provider: SupportedProvider, modelId: string): 
   }
 
   try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- getModel requires literal provider+model types; dynamic strings need casts
-    const model = getModel(meta.piAiProvider as any, modelId as any) ?? ADDITIONAL_MODELS[cacheKey];
+    const model =
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- public catalog uses literal unions
+      getModel(meta.piAiProvider as any, modelId as any) ??
+      ADDITIONAL_MODELS[`${provider}:${modelId}`] ??
+      (provider === "openrouter" ? createCustomOpenRouterModel(modelId) : undefined);
     if (!model) {
       throw new Error(`getModel returned undefined for ${provider}/${modelId}`);
     }
-    modelCache.set(cacheKey, model);
-    return model;
+    const target = endpoint ? { ...model, baseUrl: endpoint } : model;
+    modelCache.set(cacheKey, target);
+    return target;
   } catch (error) {
     throw new Error(`Could not resolve configured model ${provider}/${modelId}`, { cause: error });
   }
@@ -267,6 +327,8 @@ export function getProviderModel(provider: SupportedProvider, modelId: string): 
 
 export function getUtilityModel(provider: SupportedProvider, overrideModel?: string): Model<Api> {
   const meta = getProviderMetadata(provider);
-  const modelId = overrideModel || meta.utilityModel;
+  const requested = overrideModel || meta.utilityModel;
+  const modelId =
+    provider === "local" && requested === "auto" ? (defaultLocalModel ?? requested) : requested;
   return getProviderModel(provider, modelId);
 }

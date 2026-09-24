@@ -8,6 +8,7 @@ import type {
 } from "../../sdk/hooks/types.js";
 import { appendToTranscript } from "../../session/transcript.js";
 import { createToolResultArtifact } from "../../memory/tool-result-artifacts.js";
+import { parseToolArguments } from "../../utils/tool-arguments.js";
 import { getErrorMessage } from "../../utils/errors.js";
 import { createLogger } from "../../utils/logger.js";
 import type { CompletedToolCall } from "../telegram-send-state.js";
@@ -97,7 +98,7 @@ export async function executeToolBatch(
     const startTime = Date.now();
     try {
       const result = await toolRegistry.execute(
-        { ...plan.block, arguments: plan.params },
+        { ...plan.block, arguments: parseToolArguments(plan.params) },
         fullContext
       );
       execResults[idx] = { result, durationMs: Date.now() - startTime, attempted: true };

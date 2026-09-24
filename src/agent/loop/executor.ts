@@ -143,7 +143,11 @@ export async function executeAgentLoop(
         fallbackIndex = fallback.nextIndex;
         activeProvider = fallback.provider;
         activeAgentConfig = fallback.config;
-        const fallbackTarget = resolveModelTarget(activeProvider, activeAgentConfig.model);
+        const fallbackTarget = resolveModelTarget(
+          activeProvider,
+          activeAgentConfig.model,
+          activeAgentConfig.base_url
+        );
         trace.updateTarget(
           activeProvider,
           fallbackTarget.resolvedModel,

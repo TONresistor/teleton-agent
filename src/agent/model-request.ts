@@ -1,5 +1,6 @@
 import type {
   Api,
+  AssistantMessage,
   Context,
   Model,
   ProviderStreamOptions,
@@ -9,7 +10,8 @@ import type { AgentConfig } from "../config/schema.js";
 import type { SupportedProvider } from "../config/providers.js";
 import { getCodexApiKey } from "../providers/codex-credentials.js";
 import { getGrokBuildApiKey } from "../providers/grok-build-credentials.js";
-import { getProviderModel } from "../providers/model-resolver.js";
+import { getProviderModel, isCustomOpenRouterModel } from "../providers/model-resolver.js";
+import { createOpenRouterUsageTracker } from "../providers/openrouter-usage.js";
 import { TELEGRAM_SEND_TOOLS } from "../constants/tools.js";
 import { sanitizeToolsForGemini } from "./schema-sanitizer.js";
 
@@ -29,6 +31,7 @@ export interface PreparedModelRequest {
   model: Model<Api>;
   context: Context;
   options: ProviderStreamOptions;
+  finalizeUsage?: (message: AssistantMessage) => void;
 }
 
 /** Resolve the effective API key for a provider (local/gocoon need no real key). */
@@ -47,12 +50,18 @@ const GOOGLE_MODELS_WITHOUT_SAMPLING_PARAMS = new Set([
 
 function modelSupportsTemperature(provider: SupportedProvider, modelId: string): boolean {
   if (provider === "codex" || provider === "grok-build") return false;
-  if (provider === "openai" && modelId === "gpt-6-astra") return false;
+  if (provider === "openai" && ["gpt-6-astra", "gpt-6-sol", "gpt-6-luna"].includes(modelId))
+    return false;
   if (
     provider === "openrouter" &&
-    ["anthropic/claude-fable-5.1", "openai/gpt-6-astra", "google/gemini-3.8-flash"].includes(
-      modelId
-    )
+    [
+      "anthropic/claude-fable-5.1",
+      "anthropic/claude-opus-5.5",
+      "openai/gpt-6-astra",
+      "openai/gpt-6-sol",
+      "openai/gpt-6-luna",
+      "google/gemini-3.8-flash",
+    ].includes(modelId)
   )
     return false;
   if (provider === "google" && GOOGLE_MODELS_WITHOUT_SAMPLING_PARAMS.has(modelId)) return false;
@@ -112,7 +121,7 @@ export function prepareModelRequest(
   request: ModelRequestOptions
 ): PreparedModelRequest {
   const provider = (config.provider || "anthropic") as SupportedProvider;
-  const model = getProviderModel(provider, config.model);
+  const model = getProviderModel(provider, config.model, config.base_url);
   const preparedTools = prepareTools(request.tools);
   const tools =
     provider === "google" && preparedTools ? sanitizeToolsForGemini(preparedTools) : preparedTools;
@@ -122,21 +131,29 @@ export function prepareModelRequest(
     tools,
   };
   const temperature = request.temperature ?? config.temperature;
+  const usageTracker =
+    provider === "openrouter" && model.api === "openai-completions"
+      ? createOpenRouterUsageTracker(isCustomOpenRouterModel(model))
+      : undefined;
 
   return {
     provider,
     model,
     context,
+    finalizeUsage: usageTracker?.apply,
     options: {
+      ...(usageTracker && { fetch: usageTracker.fetch }),
       apiKey: getEffectiveApiKey(provider, config.api_key),
       maxTokens: request.maxTokens ?? config.max_tokens,
-      ...(modelSupportsTemperature(provider, model.id) && { temperature }),
+      ...(!isCustomOpenRouterModel(model) &&
+        modelSupportsTemperature(provider, model.id) && { temperature }),
       sessionId: request.sessionId,
       cacheRetention: getCacheRetention(provider),
       signal: request.signal,
       timeoutMs: request.timeoutMs,
       ...getReasoningOptions(provider, config.reasoning_effort),
-      ...(provider === "anthropic" && model.id === "claude-fable-5-1" && { thinkingEnabled: true }),
+      ...(provider === "anthropic" &&
+        ["claude-fable-5-1", "claude-opus-5-5"].includes(model.id) && { thinkingEnabled: true }),
       ...getProviderPayloadOptions(provider),
     } as ProviderStreamOptions,
   };

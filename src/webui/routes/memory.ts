@@ -1,4 +1,8 @@
 import { Hono } from "hono";
+import { realpathSync, statSync } from "node:fs";
+import { readFile } from "node:fs/promises";
+import { resolve } from "node:path";
+import { MAX_FILE_SIZES, TELETON_ROOT } from "../../workspace/paths.js";
 import type {
   WebUIServerDeps,
   MemorySearchResult,
@@ -8,6 +12,28 @@ import type {
 } from "../types.js";
 import { apiError } from "../http.js";
 
+function resolveMemoryFile(sourceKey: string): string | undefined {
+  if (sourceKey !== "MEMORY.md" && !/^memory\/[^/\\]+\.md$/i.test(sourceKey)) return undefined;
+
+  const root = realpathSync(TELETON_ROOT);
+  const candidates = [sourceKey];
+  if (sourceKey.startsWith("memory/")) {
+    candidates.push(`memory/archived/${sourceKey.slice("memory/".length)}`);
+  }
+
+  for (const candidate of candidates) {
+    const expected = resolve(root, candidate);
+    try {
+      const actual = realpathSync(expected);
+      if (actual !== expected) return undefined;
+      if (statSync(actual).isFile()) return actual;
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+    }
+  }
+  return undefined;
+}
+
 export function createMemoryRoutes(deps: WebUIServerDeps) {
   const app = new Hono();
 
@@ -16,6 +42,7 @@ export function createMemoryRoutes(deps: WebUIServerDeps) {
     try {
       const query = c.req.query("q") || "";
       const limit = parseInt(c.req.query("limit") || "10", 10);
+      const filesOnly = c.req.query("files") === "true";
 
       if (!query) {
         const response: APIResponse = {
@@ -40,6 +67,7 @@ export function createMemoryRoutes(deps: WebUIServerDeps) {
           FROM knowledge_fts
           JOIN knowledge k ON knowledge_fts.rowid = k.rowid
           WHERE knowledge_fts MATCH ?
+          ${filesOnly ? "AND k.source = 'memory' AND k.path LIKE '%.md'" : ""}
           ORDER BY score DESC
           LIMIT ?
         `
@@ -151,7 +179,32 @@ export function createMemoryRoutes(deps: WebUIServerDeps) {
     }
   });
 
-  // Get chunks for a specific source
+  // Read an entire indexed Markdown file. The knowledge table grants access only
+  // to known memory paths; realpath rejects links to files outside that path.
+  app.get("/files/:sourceKey", async (c) => {
+    try {
+      const sourceKey = c.req.param("sourceKey");
+      const indexed = deps.memory.db
+        .prepare("SELECT 1 FROM knowledge WHERE source = 'memory' AND path = ? LIMIT 1")
+        .get(sourceKey);
+      if (!indexed) return c.json({ success: false, error: "Memory file not found" }, 404);
+
+      const filePath = resolveMemoryFile(sourceKey);
+      if (!filePath) return c.json({ success: false, error: "Memory file not found" }, 404);
+      if (statSync(filePath).size > MAX_FILE_SIZES.document) {
+        return c.json({ success: false, error: "Memory file is too large to display" }, 413);
+      }
+
+      const content = await readFile(filePath, "utf8");
+      return c.json({ success: true, data: { content } } satisfies APIResponse<{
+        content: string;
+      }>);
+    } catch (error) {
+      return apiError(c, error, 500);
+    }
+  });
+
+  // Get chunks for a specific source (retained for existing API consumers)
   app.get("/sources/:sourceKey", (c) => {
     try {
       const sourceKey = decodeURIComponent(c.req.param("sourceKey"));
@@ -198,6 +251,7 @@ export function createMemoryRoutes(deps: WebUIServerDeps) {
   // List indexed sources (grouped by file/source category)
   app.get("/sources", (c) => {
     try {
+      const filesOnly = c.req.query("files") === "true";
       const rows = deps.memory.db
         .prepare(
           `
@@ -206,6 +260,7 @@ export function createMemoryRoutes(deps: WebUIServerDeps) {
             COUNT(*) AS entry_count,
             MAX(updated_at) AS last_updated
           FROM knowledge
+          ${filesOnly ? "WHERE source = 'memory' AND path LIKE '%.md'" : ""}
           GROUP BY source_key
           ORDER BY last_updated DESC
         `

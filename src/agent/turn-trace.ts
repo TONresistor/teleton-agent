@@ -57,9 +57,10 @@ export class AgentTurnTraceRecorder {
       updateAgentTurnTraceProgress(this.db, this.turnId, {
         tools: toTraceTools(calls),
         iterations,
-        inputTokens: usage.input,
+        inputTokens: usage.input + usage.cacheRead + usage.cacheWrite,
         outputTokens: usage.output,
         totalCost: usage.totalCost,
+        costIncomplete: usage.costIncomplete,
       });
     } catch (error) {
       log.warn({ err: error }, "Unable to persist agent turn trace progress");
@@ -92,9 +93,10 @@ export class AgentTurnTraceRecorder {
         status: input.status,
         tools: toTraceTools(input.calls),
         iterations: input.iterations,
-        inputTokens: input.usage.input,
+        inputTokens: input.usage.input + input.usage.cacheRead + input.usage.cacheWrite,
         outputTokens: input.usage.output,
         totalCost: input.usage.totalCost,
+        costIncomplete: input.usage.costIncomplete,
         stopReason: input.stopReason,
         provider: input.provider,
         model: input.model,

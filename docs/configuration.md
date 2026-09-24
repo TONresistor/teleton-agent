@@ -50,6 +50,16 @@ LLM provider and agentic loop configuration.
 | `agent.max_turn_duration_ms` | `number` | `300000` | Wall-clock budget checked between safe loop phases. Running external actions are never cut off. |
 | `agent.fallbacks` | `array` | `[]` | Ordered provider/model fallbacks used only after quota or transient provider failures and only before any external action has started. |
 
+For OpenRouter, select **Custom...** under Model in the Dashboard or agent settings,
+then enter the exact model ID and save. The onboarding wizard and `agent.model` in
+the config file also accept manual IDs. IDs absent from pi-ai's catalog are sent
+directly to OpenRouter, which validates their availability. No catalog sync is
+required. Unknown models use text-only input and conservative local token-budget
+defaults. OpenRouter's reported cost is preserved when returned in the completion
+stream. If it is missing for an unknown model, usage is marked as cost-incomplete
+instead of treating the request as free. Known IDs retain their catalog metadata
+and capabilities.
+
 ### agent.session_reset_policy
 
 Controls when conversation sessions are cleared, giving the agent a fresh memory context.
@@ -215,7 +225,7 @@ Optional web dashboard for monitoring and management.
 | `webui.enabled` | `boolean` | `false` | Enable the WebUI server. Can also be enabled via `TELETON_WEBUI_ENABLED=true` env var or the `--webui` CLI flag. |
 | `webui.port` | `number` | `7777` | HTTP server port. Override with `TELETON_WEBUI_PORT` env var. |
 | `webui.host` | `string` | `"127.0.0.1"` | Bind address. Defaults to localhost only for security. Override with `TELETON_WEBUI_HOST` env var. Set to `"0.0.0.0"` to expose externally (not recommended without a reverse proxy). |
-| `webui.auth_token` | `string` | *auto-generated* | Bearer token for API authentication. If omitted, a random token is generated at startup and printed to the console. |
+| `webui.auth_token` | `string` | *auto-generated* | Bearer token for API authentication. If omitted, a random token is generated at startup. The full authenticated URL is printed at startup; `teleton start --webui` also opens it in the default browser. |
 | `webui.cors_origins` | `string[]` | `["http://localhost:5173", "http://localhost:7777"]` | Allowed CORS origins. Add your domain if accessing from a different host. |
 | `webui.log_requests` | `boolean` | `false` | Log all HTTP requests to the WebUI server. |
 

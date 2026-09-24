@@ -11,8 +11,6 @@ import type { ServerType } from "@hono/node-server";
 import { cors } from "hono/cors";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { spawn } from "node:child_process";
-import { platform } from "node:os";
 import { createSetupRoutes } from "./routes/setup.js";
 import { applySecurityMiddleware, sharedBodyLimit } from "./http-common.js";
 import { findWebDist, createStaticHandler } from "./static-serving.js";
@@ -22,27 +20,9 @@ import YAML from "yaml";
 import { TELETON_ROOT } from "../workspace/paths.js";
 import { createLogger } from "../utils/logger.js";
 import { getErrorMessage } from "../utils/errors.js";
+import { openBrowser } from "../utils/open-browser.js";
 
 const log = createLogger("Setup");
-
-function autoOpenBrowser(url: string): void {
-  const os = platform();
-  let prog: string;
-
-  if (os === "darwin") {
-    prog = "open";
-  } else if (os === "win32") {
-    prog = "explorer";
-  } else {
-    prog = "xdg-open";
-  }
-
-  const child = spawn(prog, [url], { detached: true, stdio: "ignore" });
-  child.on("error", () => {
-    log.info(`Open this URL in your browser: ${url}`);
-  });
-  child.unref();
-}
 
 export class SetupServer {
   private app: Hono;
@@ -160,7 +140,7 @@ export class SetupServer {
       onListen: () => {
         const url = `http://localhost:${this.port}/setup`;
         log.info(`Setup wizard: ${url}`);
-        autoOpenBrowser(url);
+        openBrowser(url, () => log.info(`Open this URL in your browser: ${url}`));
       },
     });
   }

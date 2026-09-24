@@ -120,7 +120,10 @@ export class TeletonApp {
     return this.providerRuntime.stopGocoon();
   }
 
-  constructor(configPath?: string) {
+  constructor(
+    configPath?: string,
+    private readonly openWebUI = false
+  ) {
     this.configPath = configPath ?? getDefaultConfigPath();
     this.config = loadConfig(this.configPath);
     this.providerRuntime = new ProviderRuntime(this.config);
@@ -299,7 +302,7 @@ ${blue}  ┌──────────────────────�
       try {
         const { WebUIServer } = await import("./webui/server.js");
         this.webuiServer = new WebUIServer(this.buildServerDeps());
-        await this.webuiServer.start();
+        await this.webuiServer.start({ openBrowser: this.openWebUI });
       } catch (error) {
         log.error({ err: error }, "Failed to start WebUI server");
         log.warn("Continuing without WebUI...");
@@ -512,10 +515,10 @@ ${blue}  ┌──────────────────────�
 /**
  * Start the application
  */
-export async function main(configPath?: string): Promise<void> {
+export async function main(configPath?: string, openWebUI = false): Promise<void> {
   let app: TeletonApp;
   try {
-    app = new TeletonApp(configPath);
+    app = new TeletonApp(configPath, openWebUI);
   } catch (error) {
     log.error(`Failed to initialize: ${getErrorMessage(error)}`);
     process.exit(1);

@@ -71,6 +71,7 @@ describe("ScheduledTaskHandler authority", () => {
       originIsGroup: true,
     };
     mocks.taskStore.getTask.mockReturnValue(task);
+    mocks.taskStore.startTask.mockReturnValue(task);
 
     const handler = new ScheduledTaskHandler(agent as never, bridge as never, config as never);
     await handler.execute(savedMessage as never);

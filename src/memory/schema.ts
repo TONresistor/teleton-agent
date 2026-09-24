@@ -76,6 +76,7 @@ const DDL_AGENT_RUNTIME = `
       input_tokens INTEGER NOT NULL DEFAULT 0,
       output_tokens INTEGER NOT NULL DEFAULT 0,
       total_cost REAL NOT NULL DEFAULT 0,
+      cost_incomplete INTEGER NOT NULL DEFAULT 0,
       stop_reason TEXT,
       error_message TEXT
     );
@@ -597,7 +598,7 @@ export function setSchemaVersion(db: Database.Database, version: string): void {
   ).run(version);
 }
 
-export const CURRENT_SCHEMA_VERSION = "1.25.0";
+export const CURRENT_SCHEMA_VERSION = "1.26.0";
 
 export function runMigrations(db: Database.Database): void {
   const currentVersion = getSchemaVersion(db);
@@ -1175,6 +1176,10 @@ export function runMigrations(db: Database.Database): void {
       ).run();
     })();
     log.info("Migration 1.25.0 complete: Telegram document embeddings scheduled");
+  }
+
+  if (!currentVersion || versionLessThan(currentVersion, "1.26.0")) {
+    addColumnIfNotExists(db, "agent_turn_traces", "cost_incomplete", "INTEGER NOT NULL DEFAULT 0");
   }
 
   setSchemaVersion(db, CURRENT_SCHEMA_VERSION);

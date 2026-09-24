@@ -9,6 +9,7 @@ import { RefreshButton } from '../components/RefreshButton';
 import { Alert } from '../components/Alert';
 import { SkeletonRows } from '../components/Skeleton';
 import { EmptyState } from '../components/EmptyState';
+import { ChatAvatar } from '../components/ChatAvatar';
 
 export function Conversations() {
   const [filter, setFilter] = useState('');
@@ -86,7 +87,8 @@ export function Conversations() {
                   <ListRow
                     key={chat.id}
                     className={chat.id === selectedId ? 'selected' : undefined}
-                    leading={name.charAt(0).toUpperCase()}
+                    leading={<ChatAvatar chatId={chat.id} name={name} />}
+                    leadingClassName="chat-list-avatar"
                     title={name}
                     subtitle={`${chat.type} · ${chat.message_count} ${chat.message_count === 1 ? 'msg' : 'msgs'}`}
                     onClick={() => selectChat(chat.id)}
@@ -103,7 +105,7 @@ export function Conversations() {
           ) : (
             <>
               <div className="chat-detail-head">
-                <div className="ios-row-lead">{selectedName.charAt(0).toUpperCase()}</div>
+                <ChatAvatar chatId={selected.id} name={selectedName} />
                 <div style={{ minWidth: 0 }}>
                   <div className="ios-row-title">{selectedName}</div>
                   <div className="ios-row-sub">{selected.type} · {selected.message_count} {selected.message_count === 1 ? 'message' : 'messages'}</div>

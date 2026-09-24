@@ -186,6 +186,7 @@ export interface ITelegramBridge {
 
   // Chat info
   getChatInfo(chatId: string): Promise<ChatInfo>;
+  getChatPhoto(chatId: string): Promise<Buffer | undefined>;
 
   // Capabilities
   /** True when the handler must dedup messages via the offset store (user mode redelivers; bot mode dedupes via update_id). */

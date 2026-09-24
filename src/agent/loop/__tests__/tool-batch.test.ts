@@ -56,6 +56,25 @@ describe("injectDiscoveredTools", () => {
 });
 
 describe("executeToolBatch scheduling", () => {
+  it("rejects non-JSON hook arguments before executing the tool", async () => {
+    const execute = vi.fn();
+    const hookRunner = {
+      runModifyingHook: async (_name: string, event: { params: Record<string, unknown> }) => {
+        event.params = { date: new Date() };
+      },
+    };
+    const { execResults } = await executeToolBatch(
+      { execute, getToolCategory: () => "data-bearing" } as never,
+      hookRunner as never,
+      [{ type: "toolCall", id: "invalid", name: "read_tool", arguments: {} }],
+      { bridge: {} as never, db: {} as never, chatId: "chat", senderId: 1, isGroup: false },
+      "chat",
+      false
+    );
+    expect(execute).not.toHaveBeenCalled();
+    expect(execResults[0].result.success).toBe(false);
+  });
+
   it("executes complete batches without a per-turn tool-call limit", async () => {
     const execute = vi.fn(async () => ({ success: true }));
     const calls = Array.from({ length: 25 }, (_, index) => ({

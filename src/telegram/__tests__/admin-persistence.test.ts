@@ -8,6 +8,8 @@ import { CONFIGURABLE_KEYS } from "../../config/configurable-keys.js";
 import { ConfigSchema, type Config } from "../../config/schema.js";
 import type { ITelegramBridge } from "../bridge-interface.js";
 import { AdminHandler } from "../admin.js";
+import { MessagePipeline, type MessagePipelineDependencies } from "../../app/message-pipeline.js";
+import type { TelegramMessage } from "../bridge.js";
 
 describe("AdminHandler config persistence", () => {
   let tempDir: string;
@@ -49,6 +51,37 @@ describe("AdminHandler config persistence", () => {
   function readPersisted(): Config {
     return ConfigSchema.parse(parse(readFileSync(configPath, "utf8")));
   }
+
+  it("silently ignores unknown group commands without invoking the agent", async () => {
+    const sendMessage = vi.fn();
+    const handleMessage = vi.fn();
+    const pipeline = new MessagePipeline({
+      adminHandler: createHandler(),
+      bridge: { getOwnUserId: () => null, sendMessage },
+      messageHandler: { handleMessage },
+    } as unknown as MessagePipelineDependencies);
+    const message = {
+      id: 1,
+      chatId: "group",
+      senderId: 111,
+      isGroup: true,
+      text: "/other_command",
+    } as TelegramMessage;
+    await pipeline["handleSingleMessage"](message);
+    await pipeline["handleSingleMessage"]({ ...message, senderId: 222 });
+    await pipeline["handleSingleMessage"]({ ...message, text: "/ping@other_bot" });
+    expect(sendMessage).not.toHaveBeenCalled();
+    expect(handleMessage).not.toHaveBeenCalled();
+
+    await pipeline["handleSingleMessage"]({ ...message, text: "/ping" });
+    expect(sendMessage).toHaveBeenLastCalledWith(expect.objectContaining({ text: "🏓 Pong!" }));
+    await pipeline["handleSingleMessage"]({ ...message, isGroup: false });
+    expect(sendMessage).toHaveBeenLastCalledWith(
+      expect.objectContaining({ text: expect.stringContaining("Unknown command") })
+    );
+    await pipeline["handleSingleMessage"]({ ...message, text: "bonjour" });
+    expect(handleMessage).toHaveBeenCalledOnce();
+  });
 
   it("persists model, loop, policy, and RAG changes before updating runtime", async () => {
     const handler = createHandler();

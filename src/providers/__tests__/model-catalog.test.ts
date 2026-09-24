@@ -13,7 +13,9 @@ const LEGACY_MODEL_CASES: ReadonlyArray<
   readonly [provider: SupportedProvider, legacyId: string, replacementId: string]
 > = [
   ["codex", "gpt-5.3-codex", "gpt-5.6-terra"],
-  ["codex", "gpt-5.1-codex-mini", "gpt-5.4-mini"],
+  ["codex", "gpt-5.1-codex-mini", "gpt-6-luna"],
+  ["codex", "gpt-5.4", "gpt-5.6-terra"],
+  ["codex", "gpt-5.4-mini", "gpt-6-luna"],
   ["google", "gemini-3.1-flash-lite-preview", "gemini-3.1-flash-lite"],
   ["google", "gemini-2.5-pro", "gemini-3.1-pro-preview"],
   ["google", "gemini-2.5-flash", "gemini-3.6-flash"],
@@ -31,7 +33,8 @@ const LEGACY_MODEL_CASES: ReadonlyArray<
   ["groq", "qwen/qwen3-32b", "openai/gpt-oss-120b"],
   ["groq", "llama-3.3-70b-versatile", "openai/gpt-oss-120b"],
   ["groq", "llama-3.1-8b-instant", "openai/gpt-oss-20b"],
-  ["openrouter", "nvidia/nemotron-nano-9b-v2", "nvidia/nemotron-nano-9b-v2:free"],
+  ["openrouter", "nvidia/nemotron-nano-9b-v2", "qwen/qwen3.8-27b:free"],
+  ["openrouter", "nvidia/nemotron-nano-9b-v2:free", "qwen/qwen3.8-27b:free"],
   ["moonshot", "kimi-k2.5", "kimi-for-coding"],
   ["moonshot", "k2p6", "kimi-for-coding"],
   ["moonshot", "kimi-k2-thinking", "kimi-for-coding"],
@@ -40,10 +43,28 @@ const LEGACY_MODEL_CASES: ReadonlyArray<
   ["mistral", "devstral-small-2507", "mistral-medium-latest"],
   ["cerebras", "qwen-3-235b-a22b-instruct-2507", "gpt-oss-120b"],
   ["cerebras", "qwen-3-32b", "gpt-oss-120b"],
-  ["cerebras", "llama3.1-8b", "gemma-4-31b"],
+  ["cerebras", "llama3.1-8b", "qwen-3.8-27b"],
+  ["cerebras", "gemma-4-31b", "qwen-3.8-27b"],
+  ["cerebras", "zai-glm-4.7", "gpt-oss-120b"],
 ];
 
 describe("provider model catalog", () => {
+  it.each([
+    ["codex", "gpt-5.4"],
+    ["codex", "gpt-5.4-mini"],
+    ["cerebras", "gemma-4-31b"],
+    ["cerebras", "zai-glm-4.7"],
+    ["openrouter", "nvidia/nemotron-nano-9b-v2:free"],
+  ])("removes unavailable %s/%s from the picker", (provider, modelId) => {
+    expect(getModelsForProvider(provider).map((model) => model.value)).not.toContain(modelId);
+  });
+
+  it("keeps GPT-5.4 models on the direct OpenAI API", () => {
+    for (const modelId of ["gpt-5.4", "gpt-5.4-mini"]) {
+      expect(getProviderModel("openai", modelId).id).toBe(modelId);
+    }
+  });
+
   it("contains unique model IDs with registry-backed context labels", () => {
     for (const provider of getSupportedProviders()) {
       const options = getModelsForProvider(provider.id);

@@ -1,6 +1,6 @@
 {
   "name": "teleton",
-  "version": "0.11.2",
+  "version": "0.11.3",
   "workspaces": [
     "packages/*"
   ],
@@ -68,7 +68,7 @@
   },
   "dependencies": {
     "@dedust/sdk": "^0.8.7",
-    "@earendil-works/pi-ai": "^0.82.1",
+    "@earendil-works/pi-ai": "^0.87.1",
     "@hono/node-server": "^2.0.11",
     "@huggingface/transformers": "^3.8.1",
     "@inquirer/prompts": "^8.3.2",
@@ -83,7 +83,7 @@
     "chokidar": "^5.0.0",
     "commander": "^14.0.3",
     "grammy": "^1.41.1",
-    "hono": "^4.12.34",
+    "hono": "^4.13.8",
     "hono-rate-limiter": "^0.5.3",
     "mediainfo.js": "^0.3.7",
     "ora": "^9.3.0",
@@ -93,7 +93,8 @@
     "sqlite-vec": "^0.1.7",
     "telegram": "github:TONresistor/gramjs#3d491e09c21bcda503be5e23f79cbf5bb5cf45f9",
     "yaml": "^2.8.3",
-    "zod": "^4.3.6"
+    "zod": "^4.3.6",
+    "eventsource-parser": "^3.0.8"
   },
   "overrides": {
     "@aws-sdk/xml-builder": "3.972.19",
@@ -104,7 +105,7 @@
     "fast-uri": "3.1.6",
     "ip-address": "10.3.1",
     "nanoid": "3.3.18",
-    "sharp": "0.35.3"
+    "sharp": "0.35.4"
   },
   "devDependencies": {
     "@ston-fi/api": "^0.32.0",
@@ -113,7 +114,7 @@
     "@types/node": "^22.0.0",
     "@typescript-eslint/eslint-plugin": "^8.57.2",
     "@typescript-eslint/parser": "^8.57.2",
-    "@vitest/coverage-v8": "^4.1.1",
+    "@vitest/coverage-v8": "^4.1.11",
     "audit-ci": "^7.1.0",
     "eslint": "^10.8.0",
     "husky": "^9.1.7",
@@ -125,7 +126,7 @@
     "tsup": "^8.5.1",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3",
-    "vitest": "^4.1.1"
+    "vitest": "^4.1.11"
   },
   "engines": {
     "node": "^22.22.2 || ^24.15.0 || >=26.0.0"

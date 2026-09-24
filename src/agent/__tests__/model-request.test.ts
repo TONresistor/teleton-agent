@@ -1,8 +1,85 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+import { complete } from "@earendil-works/pi-ai/compat";
 import { AgentConfigSchema } from "../../config/schema.js";
 import { prepareModelRequest } from "../model-request.js";
 
 describe("model request preparation", () => {
+  it("forwards custom OpenRouter IDs and tools without optional sampling parameters", async () => {
+    const request = prepareModelRequest(
+      AgentConfigSchema.parse({
+        provider: "openrouter",
+        model: "example/brand-new",
+        api_key: "test-key",
+      }),
+      {
+        context: { messages: [{ role: "user", content: "test", timestamp: 1 }] },
+        tools: [
+          {
+            name: "read_info",
+            description: "Read info",
+            parameters: { type: "object", properties: {} },
+          },
+        ],
+      }
+    );
+    const fetch = vi.fn().mockRejectedValue(new Error("Network disabled in test"));
+    let payload: unknown;
+    await complete(request.model, request.context, {
+      ...request.options,
+      fetch,
+      onPayload(value) {
+        payload = value;
+        throw new Error("Stop after payload capture");
+      },
+    });
+    expect(fetch).not.toHaveBeenCalled();
+    expect(payload).toMatchObject({
+      model: "example/brand-new",
+      tools: [
+        expect.objectContaining({ function: expect.objectContaining({ name: "read_info" }) }),
+      ],
+    });
+    expect(payload).not.toHaveProperty("temperature");
+    expect(payload).not.toHaveProperty("reasoning_effort");
+    expect(payload).not.toHaveProperty("reasoning");
+  });
+
+  it.each([
+    ["openai", "gpt-6-sol"],
+    ["anthropic", "claude-fable-5-1"],
+    ["anthropic", "claude-opus-5-5"],
+  ])("sends compatible cache and thinking parameters for %s/%s", async (provider, model) => {
+    const config = AgentConfigSchema.parse({
+      provider,
+      model,
+      api_key: "test-key",
+      temperature: 0.4,
+    });
+    const request = prepareModelRequest(config, {
+      context: { messages: [{ role: "user", content: "test", timestamp: 1 }] },
+      sessionId: "payload-test",
+    });
+    const fetch = vi.fn().mockRejectedValue(new Error("Network disabled in test"));
+    let payload: unknown;
+    await complete(request.model, request.context, {
+      ...request.options,
+      fetch,
+      onPayload(value) {
+        payload = value;
+        throw new Error("Stop after payload capture");
+      },
+    });
+    expect(fetch).not.toHaveBeenCalled();
+    expect(payload).toBeDefined();
+    expect(payload).not.toHaveProperty("temperature");
+    if (provider === "openai") {
+      expect(payload).toHaveProperty("prompt_cache_options.ttl", "30m");
+      expect(payload).not.toHaveProperty("prompt_cache_retention", "24h");
+    } else {
+      expect(payload).toHaveProperty("thinking.type", "adaptive");
+    }
+  });
+
   it("builds one canonical request shape for all completion modes", () => {
     const config = AgentConfigSchema.parse({
       provider: "anthropic",
@@ -64,6 +141,11 @@ describe("model request preparation", () => {
 
   it.each([
     ["openai", "gpt-6-astra"],
+    ["openai", "gpt-6-sol"],
+    ["openai", "gpt-6-luna"],
+    ["openrouter", "openai/gpt-6-sol"],
+    ["openrouter", "openai/gpt-6-luna"],
+    ["openrouter", "anthropic/claude-opus-5.5"],
     ["openrouter", "anthropic/claude-fable-5.1"],
     ["openrouter", "openai/gpt-6-astra"],
     ["openrouter", "google/gemini-3.8-flash"],
@@ -80,20 +162,22 @@ describe("model request preparation", () => {
     expect(request.options).not.toHaveProperty("temperature");
   });
 
-  it("enables mandatory adaptive thinking for Claude Fable 5.1", () => {
-    const config = AgentConfigSchema.parse({
-      provider: "anthropic",
-      model: "claude-fable-5-1",
-      api_key: "test-key",
-    });
-    const request = prepareModelRequest(config, { context: { messages: [] } });
+  it.each(["claude-fable-5-1", "claude-opus-5-5"])(
+    "enables mandatory adaptive thinking for %s",
+    (model) => {
+      const config = AgentConfigSchema.parse({
+        provider: "anthropic",
+        model,
+        api_key: "test-key",
+      });
+      const request = prepareModelRequest(config, { context: { messages: [] } });
 
-    expect(request.options.thinkingEnabled).toBe(true);
-    expect(request.model.compat).toMatchObject({
-      forceAdaptiveThinking: true,
-      supportsTemperature: false,
-    });
-  });
+      expect(request.options.thinkingEnabled).toBe(true);
+      expect(request.model.compat).toMatchObject({
+        forceAdaptiveThinking: true,
+      });
+    }
+  );
 
   it("passes the configured reasoning effort to Codex", () => {
     const config = AgentConfigSchema.parse({

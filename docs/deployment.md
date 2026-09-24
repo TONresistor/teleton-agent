@@ -78,8 +78,8 @@ docker run -d \
 
 The Docker image uses a multi-stage build:
 
-- **Build stage**: Node.js 22.22.2-slim with build tools (`python3`, `make`, `g++`), compiles the full project (SDK, backend via tsup, frontend via Vite)
-- **Runtime stage**: Node.js 22.22.2-slim with production dependencies only. Build tools are purged after native module compilation
+- **Build stage**: Node.js 22.23.2-slim with build tools (`python3`, `make`, `g++`), compiles the full project (SDK, backend via tsup, frontend via Vite)
+- **Runtime stage**: Node.js 22.23.2-slim with production dependencies only. Build tools are purged after native module compilation
 - **Data volume**: Mounted at `/data` (set via `TELETON_HOME=/data` in the image)
 - **Entrypoint**: `node dist/cli/index.js`
 - **Default command**: `start`

@@ -10,10 +10,24 @@ export interface StatusResponse {
   uptime: number;
   model: string;
   provider: string;
+  agentIdentity?: { firstName: string; username?: string };
+  agentActivity?: {
+    processing: boolean;
+    lastProcessedAt?: number;
+    lastChatId?: string;
+    lastChatName?: string;
+  };
   sessionCount: number;
   toolCount: number;
-  tokenUsage: { totalTokens: number; totalCost: number };
+  tokenUsage: { totalTokens: number; totalCost: number; costIncomplete?: boolean };
   platform: string;
+}
+
+export type TokenActivityPeriod = "day" | "week" | "month";
+
+export interface TokenActivityBucket {
+  label: string;
+  tokens: number;
 }
 
 export type ToolAccessLevel = "all" | "allowlist" | "admin" | "off";

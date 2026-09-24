@@ -1,7 +1,8 @@
+import { writePrivateFileAtomic } from "../utils/atomic-file.js";
 // src/memory/core-blocks.ts
 // Structured core memory: named blocks with character limits
 
-import { readFileSync, writeFileSync, existsSync } from "fs";
+import { readFileSync, existsSync } from "fs";
 import { join } from "path";
 import { WORKSPACE_ROOT } from "../workspace/index.js";
 import { createLogger } from "../utils/logger.js";
@@ -126,10 +127,7 @@ export function loadCoreMemory(): Record<BlockName, string> {
 
 function saveCoreMemory(blocks: Record<BlockName, string>): void {
   const data: CoreMemoryData = { blocks };
-  writeFileSync(CORE_MEMORY_FILE, JSON.stringify(data, null, 2), {
-    encoding: "utf-8",
-    mode: 0o600,
-  });
+  writePrivateFileAtomic(CORE_MEMORY_FILE, JSON.stringify(data, null, 2));
   _cache = blocks;
 }
 
@@ -146,7 +144,7 @@ export function updateBlock(blockName: string, content: string): void {
     throw new Error(`Content exceeds block limit (${content.length}/${limit} chars)`);
   }
 
-  const blocks = loadCoreMemory();
+  const blocks = { ...loadCoreMemory() };
   blocks[name] = content;
   saveCoreMemory(blocks);
   log.info(`Core memory block '${name}' updated (${content.length} chars)`);
@@ -160,7 +158,7 @@ export function appendToBlock(blockName: string, content: string): void {
     throw new Error(`Unknown block: ${blockName}. Valid: ${BLOCK_NAMES.join(", ")}`);
   }
   const name = blockName as BlockName;
-  const blocks = loadCoreMemory();
+  const blocks = { ...loadCoreMemory() };
   const separator = blocks[name].length > 0 ? "\n" : "";
   const newContent = blocks[name] + separator + content;
   const limit = getLimit(name);
@@ -183,7 +181,7 @@ export function deleteFromBlock(blockName: string, key: string): void {
     throw new Error(`Unknown block: ${blockName}. Valid: ${BLOCK_NAMES.join(", ")}`);
   }
   const name = blockName as BlockName;
-  const blocks = loadCoreMemory();
+  const blocks = { ...loadCoreMemory() };
   const lines = blocks[name].split("\n");
   const idx = lines.findIndex((l) => l.includes(key));
   if (idx === -1) {
