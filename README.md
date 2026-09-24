@@ -303,14 +303,14 @@ Optional web dashboard, localhost only, token auth. Start with `teleton start --
 
 <table>
 <tr>
-<td align="center" width="25%"><br><b>Dashboard</b><br>Status, model, tokens, config<br><br></td>
+<td align="center" width="25%"><br><b>Dashboard</b><br>Live agent activity, model, token usage, access policy<br><br></td>
 <td align="center" width="25%"><br><b>Tools</b><br>Toggle, scope, per-module<br><br></td>
 <td align="center" width="25%"><br><b>Plugins</b><br>Marketplace, install, secrets<br><br></td>
-<td align="center" width="25%"><br><b>Soul Editor</b><br>SOUL, SECURITY, STRATEGY, MEMORY<br><br></td>
+<td align="center" width="25%"><br><b>System Prompt</b><br>SOUL, SECURITY, STRATEGY, MEMORY, HEARTBEAT<br><br></td>
 </tr>
 <tr>
-<td align="center"><br><b>Memory Search</b><br>Vector + keyword hybrid<br><br></td>
-<td align="center"><br><b>Live Logs (in Dashboard)</b><br>Real-time SSE streaming<br><br></td>
+<td align="center"><br><b>Memory</b><br>Search and read full Markdown files, expandable metadata<br><br></td>
+<td align="center"><br><b>Logs</b><br>Dedicated page with real-time SSE streaming<br><br></td>
 <td align="center"><br><b>Workspace</b><br>File browser + editor<br><br></td>
 <td align="center"><br><b>MCP Servers</b><br>Add, remove, configure<br><br></td>
 </tr>
@@ -322,8 +322,12 @@ Optional web dashboard, localhost only, token auth. Start with `teleton start --
 </tr>
 <tr>
 <td align="center"><br><b>Hooks</b><br>Plugin hook registrations<br><br></td>
+<td align="center"><br><b>Chats</b><br>Conversation history and Telegram profile photos<br><br></td>
+<td align="center"><br><b>Wallet</b><br>GRAM balance, address, transaction history<br><br></td>
 </tr>
 </table>
+
+The dashboard shows daily, weekly, and 30-day token activity, alongside recent conversations with Telegram names and profile photos.
 
 The full authenticated URL is printed at startup. `teleton start --webui` also opens it in the default browser. The token is exchanged for an HttpOnly cookie valid for 7 days. For remote access:
 
