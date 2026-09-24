@@ -7,9 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.3] - 2026-09-24
+
+### Added
+
+- Custom OpenRouter model selection and current OpenAI, Claude, and Grok models.
+- Dashboard token activity, Telegram agent identity, and live processing status.
+- Telegram names and profile photos for recent conversations in the dashboard and Chats page.
+- Complete Markdown file viewing in Memory, with collapsible metadata sections.
+
 ### Changed
 
+- Refreshed the model catalog and compatibility aliases for older model IDs.
+- Simplified the WebUI dashboard, Wallet, Workspace, System Prompt, and sidebar layouts and icons.
+- Updated `@earendil-works/pi-ai` to 0.87.1, Hono, Sharp, and Vitest, and used Node.js 22.23.2 for builds.
 - Documented `dev` as the only PR target, aligned supported security versions with 0.11.x, and corrected README tool counts.
+
+### Fixed
+
+- Prevented duplicate agent messages and scheduled task execution.
+- Corrected RAG query prioritization and vector weighting, and resolved local models by endpoint.
+- Wrote configuration and core memory atomically, and ignored unknown commands in Telegram groups.
+- Displayed the actual agent status in the WebUI and restored the authenticated launch link when starting with `--webui`.
 
 ## [0.11.2] - 2026-09-06
 
@@ -614,7 +633,8 @@ Git history rewritten to fix commit attribution (email update from `tonresistor@
 - Professional distribution (npm, Docker, CI/CD)
 - Pre-commit hooks and linting infrastructure
 
-[Unreleased]: https://github.com/TONresistor/teleton-agent/compare/v0.11.2...HEAD
+[Unreleased]: https://github.com/TONresistor/teleton-agent/compare/v0.11.3...HEAD
+[0.11.3]: https://github.com/TONresistor/teleton-agent/compare/v0.11.2...v0.11.3
 [0.11.2]: https://github.com/TONresistor/teleton-agent/compare/v0.11.1...v0.11.2
 [0.11.1]: https://github.com/TONresistor/teleton-agent/compare/v0.11.0...v0.11.1
 [0.11.0]: https://github.com/TONresistor/teleton-agent/compare/v0.10.1...v0.11.0
