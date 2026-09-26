@@ -4,7 +4,6 @@ const mocks = vi.hoisted(() => ({
   startQrSession: vi.fn(),
   refreshQrToken: vi.fn(),
   cleanup: vi.fn(),
-  generate: vi.fn(),
 }));
 
 vi.mock("../../../../webui/setup-auth.js", () => ({
@@ -14,7 +13,6 @@ vi.mock("../../../../webui/setup-auth.js", () => ({
     cleanup = mocks.cleanup;
   },
 }));
-vi.mock("qrcode-terminal", () => ({ generate: mocks.generate }));
 
 import { authenticateWithQr } from "../qr-auth.js";
 
@@ -41,11 +39,7 @@ describe("CLI QR authentication", () => {
 
     await expect(authentication).resolves.toMatchObject({ id: 123, phone: "+123456789" });
     expect(mocks.startQrSession).toHaveBeenCalledWith(123, "hash");
-    expect(mocks.generate).toHaveBeenCalledWith(
-      "tg://login?token=token",
-      { small: true },
-      expect.any(Function)
-    );
+    expect(console.log).toHaveBeenCalledWith(expect.stringMatching(/[█▀▄].*\n/));
     expect(mocks.cleanup).toHaveBeenCalledOnce();
   });
 });

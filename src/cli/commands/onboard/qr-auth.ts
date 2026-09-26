@@ -1,4 +1,4 @@
-import * as qrcode from "qrcode-terminal";
+import qrcode from "qrcode-terminal";
 import { password, inquirerTheme } from "../../prompts.js";
 import { TelegramAuthManager } from "../../../webui/setup-auth.js";
 
