@@ -52,6 +52,8 @@ type AuthSession = PhoneAuthSession | QrAuthSession;
 export class TelegramAuthManager {
   private session: AuthSession | null = null;
 
+  constructor(private readonly persistConfig = true) {}
+
   /**
    * Send verification code to phone number
    */
@@ -145,7 +147,7 @@ export class TelegramAuthManager {
     code: string
   ): Promise<{
     status: "authenticated" | "2fa_required" | "invalid_code" | "expired" | "too_many_attempts";
-    user?: { id: number; firstName: string; username?: string };
+    user?: { id: number; firstName: string; username?: string; phone?: string };
     passwordHint?: string;
   }> {
     const session = this.getSession(authSessionId);
@@ -208,7 +210,7 @@ export class TelegramAuthManager {
     password: string
   ): Promise<{
     status: "authenticated" | "invalid_password" | "expired" | "too_many_attempts";
-    user?: { id: number; firstName: string; username?: string };
+    user?: { id: number; firstName: string; username?: string; phone?: string };
   }> {
     const session = this.getSession(authSessionId);
     if (!session) return { status: "expired" };
@@ -358,7 +360,7 @@ export class TelegramAuthManager {
     status: "waiting" | "authenticated" | "2fa_required" | "expired";
     token?: string;
     expires?: number;
-    user?: { id: number; firstName: string; username?: string };
+    user?: { id: number; firstName: string; username?: string; phone?: string };
     passwordHint?: string;
   }> {
     const session = this.getSession(authSessionId);
@@ -471,12 +473,13 @@ export class TelegramAuthManager {
 
   private extractUser(
     result: Api.auth.TypeAuthorization
-  ): { id: number; firstName: string; username?: string } | undefined {
+  ): { id: number; firstName: string; username?: string; phone?: string } | undefined {
     if (result instanceof Api.auth.Authorization && result.user instanceof Api.User) {
       return {
         id: Number(result.user.id),
         firstName: result.user.firstName ?? "",
         username: result.user.username ?? undefined,
+        phone: result.user.phone ?? undefined,
       };
     }
     return undefined;
@@ -492,6 +495,11 @@ export class TelegramAuthManager {
     }
 
     writeFileSync(sessionPath, sessionString, { mode: 0o600 });
+
+    if (!this.persistConfig) {
+      log.info("Telegram session saved");
+      return;
+    }
 
     // Persist telegram credentials to config.yaml
     const configPath = join(TELETON_ROOT, "config.yaml");
