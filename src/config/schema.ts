@@ -46,7 +46,7 @@ export const AgentConfigSchema = z
       .optional()
       .describe("Base URL for local LLM server (e.g. http://localhost:11434/v1)"),
     model: z.string().default("claude-haiku-4-5-20251001"),
-    reasoning_effort: ReasoningEffort.default("medium"),
+    reasoning_effort: ReasoningEffort.default("low"),
     utility_model: z
       .string()
       .optional()

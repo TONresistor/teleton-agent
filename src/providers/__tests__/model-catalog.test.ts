@@ -65,6 +65,13 @@ describe("provider model catalog", () => {
     }
   });
 
+  it("resolves GPT-6.1 Sol through OpenAI Responses", () => {
+    const model = getProviderModel("openai", "gpt-6.1-sol");
+    expect(model.api).toBe("openai-responses");
+    expect(model.contextWindow).toBe(1_050_000);
+    expect(model.maxTokens).toBe(128_000);
+  });
+
   it("contains unique model IDs with registry-backed context labels", () => {
     for (const provider of getSupportedProviders()) {
       const options = getModelsForProvider(provider.id);

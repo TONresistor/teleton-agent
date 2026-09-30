@@ -79,6 +79,11 @@ const MODEL_OPTIONS: Record<string, CatalogModelOption[]> = {
   ],
   openai: [
     {
+      value: "gpt-6.1-sol",
+      name: "GPT-6.1 Sol",
+      description: "Agentic coding, reasoning, vision, 1.05M context",
+    },
+    {
       value: "gpt-6-sol",
       name: "GPT-6 Sol",
       description: "Agentic coding, reasoning, vision, 272K effective context",
@@ -151,6 +156,11 @@ const MODEL_OPTIONS: Record<string, CatalogModelOption[]> = {
       value: "gpt-5.6-terra",
       name: "GPT-5.6 Terra",
       description: "Balanced agentic coding model, 272K context",
+    },
+    {
+      value: "gpt-6.1-sol",
+      name: "GPT-6.1 Sol",
+      description: "Agentic coding, reasoning, vision",
     },
     {
       value: "gpt-6-sol",

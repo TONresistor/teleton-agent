@@ -50,7 +50,10 @@ const GOOGLE_MODELS_WITHOUT_SAMPLING_PARAMS = new Set([
 
 function modelSupportsTemperature(provider: SupportedProvider, modelId: string): boolean {
   if (provider === "codex" || provider === "grok-build") return false;
-  if (provider === "openai" && ["gpt-6-astra", "gpt-6-sol", "gpt-6-luna"].includes(modelId))
+  if (
+    provider === "openai" &&
+    ["gpt-6-astra", "gpt-6.1-sol", "gpt-6-sol", "gpt-6-luna"].includes(modelId)
+  )
     return false;
   if (
     provider === "openrouter" &&
@@ -74,9 +77,15 @@ function getCacheRetention(provider: SupportedProvider): "none" | "long" {
 
 function getReasoningOptions(
   provider: SupportedProvider,
+  modelId: string,
   reasoningEffort: AgentConfig["reasoning_effort"]
 ): Record<string, unknown> {
-  return provider === "codex" ? { reasoningEffort } : {};
+  if (provider !== "codex" && !(provider === "openai" && modelId === "gpt-6.1-sol")) return {};
+  const effort =
+    modelId === "gpt-6.1-sol" && ["none", "minimal"].includes(reasoningEffort)
+      ? "low"
+      : reasoningEffort;
+  return { reasoningEffort: effort };
 }
 
 function prepareTools(tools: Tool[] | undefined): Tool[] | undefined {
@@ -151,7 +160,7 @@ export function prepareModelRequest(
       cacheRetention: getCacheRetention(provider),
       signal: request.signal,
       timeoutMs: request.timeoutMs,
-      ...getReasoningOptions(provider, config.reasoning_effort),
+      ...getReasoningOptions(provider, model.id, config.reasoning_effort),
       ...(provider === "anthropic" &&
         ["claude-fable-5-1", "claude-opus-5-5"].includes(model.id) && { thinkingEnabled: true }),
       ...getProviderPayloadOptions(provider),

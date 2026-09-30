@@ -141,6 +141,7 @@ describe("model request preparation", () => {
 
   it.each([
     ["openai", "gpt-6-astra"],
+    ["openai", "gpt-6.1-sol"],
     ["openai", "gpt-6-sol"],
     ["openai", "gpt-6-luna"],
     ["openrouter", "openai/gpt-6-sol"],
@@ -193,5 +194,49 @@ describe("model request preparation", () => {
 
     expect(request.options.reasoningEffort).toBe("medium");
     expect(request.options).not.toHaveProperty("temperature");
+  });
+
+  it.each(["codex", "openai"])("maps unsupported GPT-6.1 Sol efforts to low for %s", (provider) => {
+    for (const configuredEffort of ["none", "minimal", "high"] as const) {
+      const request = prepareModelRequest(
+        AgentConfigSchema.parse({
+          provider,
+          model: "gpt-6.1-sol",
+          api_key: "test-key",
+          reasoning_effort: configuredEffort,
+          temperature: 0.4,
+        }),
+        { context: { messages: [] } }
+      );
+
+      expect(request.options.reasoningEffort).toBe(configuredEffort === "high" ? "high" : "low");
+      expect(request.options).not.toHaveProperty("temperature");
+    }
+  });
+
+  it.each(["codex", "openai"])("sends low effort for GPT-6.1 Sol through %s", async (provider) => {
+    const request = prepareModelRequest(
+      AgentConfigSchema.parse({
+        provider,
+        model: "gpt-6.1-sol",
+        api_key: "test-key",
+        reasoning_effort: "none",
+      }),
+      { context: { messages: [{ role: "user", content: "test", timestamp: 1 }] } }
+    );
+    const fetch = vi.fn().mockRejectedValue(new Error("Network disabled in test"));
+    let payload: unknown;
+    await complete(request.model, request.context, {
+      ...request.options,
+      fetch,
+      onPayload(value) {
+        payload = value;
+        throw new Error("Stop after payload capture");
+      },
+    });
+
+    expect(fetch).not.toHaveBeenCalled();
+    expect(payload).toHaveProperty("reasoning.effort", "low");
+    expect(payload).not.toHaveProperty("temperature");
   });
 });

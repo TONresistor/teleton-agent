@@ -40,7 +40,7 @@ LLM provider and agentic loop configuration.
 | `agent.provider` | `enum` | `"anthropic"` | LLM provider. One of: `anthropic`, `codex`, `grok-build`, `openai`, `google`, `xai`, `groq`, `openrouter`, `moonshot`, `mistral`, `cerebras`, `zai`, `minimax`, `huggingface`, `gocoon`, `local`. |
 | `agent.api_key` | `string` | `""` | API key for the chosen provider. Can be overridden with `TELETON_API_KEY` env var. |
 | `agent.model` | `string` | `"claude-haiku-4-5-20251001"` | Primary model ID. Auto-detected from provider if not set (only for non-Anthropic providers). |
-| `agent.reasoning_effort` | `enum` | `"medium"` | Codex reasoning effort: `none`, `minimal`, `low`, `medium`, `high`, `xhigh`, or `max`. |
+| `agent.reasoning_effort` | `enum` | `"low"` | Sent to Codex models and OpenAI `gpt-6.1-sol`. The global choices are `none`, `minimal`, `low`, `medium`, `high`, `xhigh`, and `max`; for `gpt-6.1-sol`, `none` and `minimal` are raised to `low` because the model does not support them. Other providers do not currently use this setting. |
 | `agent.utility_model` | `string` | *auto-detected* | Cheap/fast model used for summarization and compaction. If omitted, the platform selects one based on the provider (e.g., `claude-haiku-4-5-20251001` for Anthropic, `gpt-5.4-nano` for OpenAI). |
 | `agent.base_url` | `string` | *optional* | Base URL for local LLM server (e.g., `http://localhost:11434/v1`). Must be a valid URL. |
 | `agent.max_tokens` | `number` | `4096` | Maximum tokens in each LLM response. |
@@ -78,7 +78,7 @@ agent:
   provider: "anthropic"
   api_key: "sk-ant-..."
   model: "claude-haiku-4-5-20251001"
-  reasoning_effort: "medium"
+  reasoning_effort: "low"
   utility_model: "claude-haiku-4-5-20251001"
   max_tokens: 4096
   temperature: 0.7

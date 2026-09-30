@@ -1,7 +1,75 @@
 import type { Api, Model } from "@earendil-works/pi-ai/compat";
 
-/** Legacy models retained for existing configurations after upstream catalog removal. */
+/** Models missing from the bundled pi-ai catalog, including retained legacy models. */
 export const ADDITIONAL_MODELS: Record<string, Model<Api>> = {
+  "codex:gpt-6.1-sol": {
+    id: "gpt-6.1-sol",
+    name: "GPT-6.1 Sol",
+    api: "openai-codex-responses",
+    provider: "openai-codex",
+    baseUrl: "https://chatgpt.com/backend-api",
+    reasoning: true,
+    input: ["text", "image"],
+    cost: {
+      input: 2,
+      output: 10,
+      cacheRead: 0.1,
+      cacheWrite: 2.5,
+      tiers: [{ inputTokensAbove: 272000, input: 4, output: 15, cacheRead: 0.2, cacheWrite: 5 }],
+    },
+    contextWindow: 272000,
+    maxTokens: 128000,
+    thinkingLevelMap: {
+      off: "low",
+      minimal: "low",
+      low: "low",
+      medium: "medium",
+      high: "high",
+      xhigh: "xhigh",
+      max: "max",
+    },
+    compat: {
+      supportsOpenAIGrammarTools: true,
+      supportsAdditionalTools: true,
+      supportsToolSearch: true,
+      supportsMidConvoSystemMessages: true,
+    },
+  },
+  "openai:gpt-6.1-sol": {
+    id: "gpt-6.1-sol",
+    name: "GPT-6.1 Sol",
+    api: "openai-responses",
+    provider: "openai",
+    baseUrl: "https://api.openai.com/v1",
+    reasoning: true,
+    input: ["text", "image"],
+    cost: {
+      input: 2,
+      output: 10,
+      cacheRead: 0.1,
+      cacheWrite: 2.5,
+      tiers: [{ inputTokensAbove: 272000, input: 4, output: 15, cacheRead: 0.2, cacheWrite: 5 }],
+    },
+    contextWindow: 1_050_000,
+    maxTokens: 128000,
+    thinkingLevelMap: {
+      off: null,
+      minimal: null,
+      low: "low",
+      medium: "medium",
+      high: "high",
+      xhigh: "xhigh",
+      max: "max",
+    },
+    compat: {
+      supportsStrictMode: true,
+      supportsOpenAIGrammarTools: true,
+      supportsAdditionalTools: true,
+      supportsToolSearch: true,
+      supportsMidConvoSystemMessages: true,
+      supportsExplicitPromptCacheMode: true,
+    },
+  },
   "zai:glm-5.1": {
     id: "glm-5.1",
     name: "GLM-5.1",
