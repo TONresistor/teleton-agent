@@ -226,8 +226,12 @@ describe("model request preparation", () => {
     );
     const fetch = vi.fn().mockRejectedValue(new Error("Network disabled in test"));
     let payload: unknown;
+    const mockCodexToken = `header.${Buffer.from(
+      JSON.stringify({ "https://api.openai.com/auth": { chatgpt_account_id: "test-account" } })
+    ).toString("base64")}.signature`;
     await complete(request.model, request.context, {
       ...request.options,
+      apiKey: provider === "codex" ? mockCodexToken : request.options.apiKey,
       fetch,
       onPayload(value) {
         payload = value;
