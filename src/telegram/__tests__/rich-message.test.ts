@@ -29,6 +29,19 @@ function emptyCaption(): Api.PageCaption {
 }
 
 describe("Rich Message text extraction", () => {
+  it("preserves TON address text in Layer 230 rich messages", () => {
+    const rich = new Api.RichMessage({
+      blocks: [
+        new Api.PageBlockParagraph({
+          text: new Api.TextTonAddress({ text: plain("EQ-address") }),
+        }),
+      ],
+      photos: [],
+      documents: [],
+    });
+    expect(renderTelegramMessageText(message("", rich))).toBe("EQ-address");
+  });
+
   it("returns classic Telegram text unchanged", () => {
     const text = "Plain _text_ that must stay byte-for-byte identical.";
 
