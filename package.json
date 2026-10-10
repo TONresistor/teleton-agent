@@ -72,7 +72,7 @@
     "@hono/node-server": "^2.0.11",
     "@huggingface/transformers": "^3.8.1",
     "@inquirer/prompts": "^8.3.2",
-    "@modelcontextprotocol/sdk": "^1.30.0",
+    "@modelcontextprotocol/sdk": "^1.31.0",
     "@sinclair/typebox": "^0.34.48",
     "@tavily/core": "^0.7.2",
     "@ton/core": "^0.63.1",
@@ -100,13 +100,13 @@
   "overrides": {
     "@aws-sdk/xml-builder": "3.972.19",
     "fast-xml-parser": "5.7.1",
-    "axios": ">=1.18.1",
-    "brace-expansion": "5.0.9",
+    "axios": "1.20.0",
+    "brace-expansion": "5.0.12",
     "esbuild": "0.28.1",
-    "fast-uri": "3.1.7",
-    "ip-address": "10.3.1",
+    "fast-uri": "3.1.8",
+    "ip-address": "10.7.1",
     "nanoid": "3.3.18",
-    "sharp": "0.35.4"
+    "sharp": "0.35.5"
   },
   "devDependencies": {
     "@ston-fi/api": "^0.32.0",
@@ -120,7 +120,7 @@
     "audit-ci": "^7.1.0",
     "eslint": "^10.8.0",
     "husky": "^9.1.7",
-    "jscpd": "^4.0.8",
+    "jscpd": "^5.4.1",
     "knip": "^6.14.2",
     "lint-staged": "^16.4.0",
     "madge": "^8.0.0",
