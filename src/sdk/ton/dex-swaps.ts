@@ -1,8 +1,9 @@
+import { createWalletContract } from "../../ton/wallet-service.js";
 import type { DexSwapParams, DexSwapResult } from "@teleton-agent/sdk";
 import { PluginSDKError } from "@teleton-agent/sdk";
 import { Address } from "@ton/core";
 import type { OpenedContract } from "@ton/ton";
-import { internal, toNano, WalletContractV5R1 } from "@ton/ton";
+import { internal, toNano } from "@ton/ton";
 import { JettonRoot, VaultJetton } from "@dedust/sdk";
 import { dexFactory } from "@ston-fi/sdk";
 import { confirmWalletTx, sendWalletTx, walletTxLt } from "../../ton/confirm.js";
@@ -12,7 +13,7 @@ import { withTxLock } from "../../ton/tx-lock.js";
 import { fromUnits } from "../../ton/units.js";
 import { getCachedTonClient, getKeyPair, loadWallet } from "../../ton/wallet-service.js";
 
-type SwapWallet = ReturnType<typeof WalletContractV5R1.create>;
+type SwapWallet = ReturnType<typeof createWalletContract>;
 
 async function withSwapWallet<T>(
   tonClient: Awaited<ReturnType<typeof getCachedTonClient>>,
@@ -27,7 +28,7 @@ async function withSwapWallet<T>(
       throw new PluginSDKError("Wallet key derivation failed", "OPERATION_FAILED");
     }
 
-    const wallet = WalletContractV5R1.create({ workchain: 0, publicKey: keyPair.publicKey });
+    const wallet = createWalletContract(keyPair);
     const walletContract = tonClient.open(wallet);
     return fn({ keyPair, walletContract });
   });

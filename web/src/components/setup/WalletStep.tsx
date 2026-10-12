@@ -23,6 +23,7 @@ export function WalletStep({ data, onChange }: StepProps) {
   const [walletStatus, setWalletStatus] = useState<WalletStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
+  const [walletType, setWalletType] = useState<"tg" | "w5r1">("tg");
   const [error, setError] = useState('');
   const [mnemonicWords, setMnemonicWords] = useState<string[]>([]);
 
@@ -44,16 +45,16 @@ export function WalletStep({ data, onChange }: StepProps) {
     try {
       if (data.walletAction === 'import') {
         const words = data.mnemonic.trim().split(/\s+/);
-        if (words.length !== 24) {
-          setError('Mnemonic must be exactly 24 words.');
+        if (words.length !== 24 && !(walletType === "tg" && words.length === 12)) {
+          setError(walletType === 'tg' ? 'Use a native Telegram recovery phrase of 12 or 24 words.' : 'Mnemonic must be exactly 24 words.');
           setActionLoading(false);
           return;
         }
-        const result = await setup.importWallet(data.mnemonic.trim());
+        const result = await setup.importWallet(data.mnemonic.trim(), walletType);
         onChange({ ...data, walletAddress: result.address });
         setMnemonicWords(words);
       } else {
-        const result = await setup.generateWallet();
+        const result = await setup.generateWallet(walletType);
         onChange({ ...data, walletAddress: result.address });
         setMnemonicWords(result.mnemonic);
       }
@@ -97,6 +98,7 @@ export function WalletStep({ data, onChange }: StepProps) {
                 value={action}
                 checked={data.walletAction === action}
                 onChange={() => {
+                  setWalletType(action === 'import' ? 'w5r1' : 'tg');
                   onChange({ ...data, walletAction: action as 'keep' | 'generate' | 'import', mnemonic: '', mnemonicSaved: false });
                 }}
               />
@@ -110,9 +112,16 @@ export function WalletStep({ data, onChange }: StepProps) {
         </div>
       )}
 
+      {data.walletAction !== 'keep' && !showMnemonic && (
+        <div className="form-group"><label>Wallet type</label>
+          <select value={walletType} onChange={(event) => setWalletType(event.target.value as 'tg' | 'w5r1')}>
+            <option value="tg">TgWallet (Telegram compatible)</option><option value="w5r1">V5R1</option>
+          </select>
+        </div>
+      )}
       {data.walletAction === 'import' && !showMnemonic && (
         <div className="form-group">
-          <label>Recovery Phrase (24 words)</label>
+          <label>Recovery Phrase ({walletType === 'tg' ? '12 or 24' : '24'} words)</label>
           <textarea
             value={data.mnemonic}
             onChange={(e) => onChange({ ...data, mnemonic: e.target.value })}
@@ -123,8 +132,11 @@ export function WalletStep({ data, onChange }: StepProps) {
         </div>
       )}
 
+      {walletType === 'tg' && data.walletAction !== 'keep' && (
+        <p className="helper-text">When the agent connects to Telegram, the backend associates this wallet automatically if the account has no existing wallet. Any different existing Telegram wallet is kept unchanged.</p>
+      )}
       {actionNeeded && data.walletAction !== 'keep' && (
-        <button onClick={handleAction} disabled={actionLoading || (data.walletAction === 'import' && data.mnemonic.trim().split(/\s+/).length !== 24)} type="button">
+        <button onClick={handleAction} disabled={actionLoading || (data.walletAction === 'import' && ![24, ...(walletType === 'tg' ? [12] : [])].includes(data.mnemonic.trim().split(/\s+/).length))} type="button">
           {actionLoading ? <><span className="spinner sm" /> Working...</> : data.walletAction === 'generate' ? 'Generate Wallet' : 'Import Wallet'}
         </button>
       )}

@@ -1040,7 +1040,10 @@ export class GramJSUserBridge implements ITelegramBridge {
       action instanceof Api.MessageActionStarGiftPurchaseOffer ||
       action instanceof Api.MessageActionStarGiftPurchaseOfferDeclined ||
       action instanceof Api.MessageActionStarGift;
-    if (!isGiftAction) return null;
+    const isWalletAction =
+      action instanceof Api.MessageActionGramTransfer ||
+      action instanceof Api.MessageActionWalletTonConnectRequest;
+    if (!isGiftAction && !isWalletAction) return null;
 
     if (msg.out) return null;
 
@@ -1052,7 +1055,32 @@ export class GramJSUserBridge implements ITelegramBridge {
 
     let text = "";
 
-    if (action instanceof Api.MessageActionStarGiftPurchaseOffer) {
+    if (action instanceof Api.MessageActionGramTransfer) {
+      text = `[Wallet Transfer Received]\n`;
+      text += `Amount (protocol units): ${action.amount.toString()}\n`;
+      text += `Peer address: ${action.peerAddress}\n`;
+      text += `Transaction ID: ${action.transactionId}\n`;
+      if (action.commentEncrypted) {
+        text += `Comment: [encrypted]\n`;
+      } else if (action.comment) {
+        text += `Comment: ${action.comment}\n`;
+      }
+    } else if (action instanceof Api.MessageActionWalletTonConnectRequest) {
+      const expires = new Date(action.expires * 1000).toISOString();
+      const status = action.accepted
+        ? "accepted"
+        : action.declined
+          ? "declined"
+          : action.expires * 1000 <= Date.now()
+            ? "expired"
+            : "pending";
+      text = `[Wallet TON Connect Request]\n`;
+      text += `Session ID: ${action.sessionId.toString()}\n`;
+      text += `Message ID: ${msg.id}\nStatus: ${status}\nExpires: ${expires}\n`;
+      if (action.dappName) text += `DApp: ${action.dappName}\n`;
+      if (action.topic) text += `Topic: ${action.topic}\n`;
+      if (action.traceId) text += `Trace ID: ${action.traceId}\n`;
+    } else if (action instanceof Api.MessageActionStarGiftPurchaseOffer) {
       const gift = action.gift;
       const isUnique = gift instanceof Api.StarGiftUnique;
       const title = gift.title || "Unknown Gift";
@@ -1121,8 +1149,8 @@ export class GramJSUserBridge implements ITelegramBridge {
       senderUsername,
       senderFirstName,
       text: text.trim(),
-      isGroup: false,
-      isChannel: false,
+      isGroup: !(msg.post ?? false) && chatId.startsWith("-"),
+      isChannel: msg.post ?? false,
       isBot,
       mentionsMe: true,
       timestamp: new Date(msg.date * 1000),

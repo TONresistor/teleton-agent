@@ -24,6 +24,7 @@ const OWNER_PRIVATE_DATA = new Set([
   "telegram_get_stars_balance",
   "telegram_get_stars_transactions",
   "telegram_get_user_info",
+  "telegram_get_wallet_address",
   "telegram_search_global",
   "telegram_search_messages",
   "telegram_search_posts",

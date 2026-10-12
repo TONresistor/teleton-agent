@@ -1,3 +1,4 @@
+import { createWalletContract } from "../ton/wallet-service.js";
 import type Database from "better-sqlite3";
 import type {
   TonSDK,
@@ -37,12 +38,7 @@ import { withBlockchainRetry } from "../utils/retry.js";
 import { tonapiFetch } from "../constants/api-endpoints.js";
 import { createDexSDK } from "./ton-dex.js";
 import { createDnsSDK } from "./ton-dns.js";
-import {
-  toNano as tonToNano,
-  fromNano as tonFromNano,
-  WalletContractV5R1,
-  internal,
-} from "@ton/ton";
+import { toNano as tonToNano, fromNano as tonFromNano, internal } from "@ton/ton";
 import type { OpenedContract } from "@ton/ton";
 import { Address as TonAddress, beginCell, SendMode, storeMessage } from "@ton/core";
 import type { TupleItem, Cell as TonCell } from "@ton/core";
@@ -76,21 +72,14 @@ const CLEANUP_PROBABILITY = 0.1;
 const TX_VALID_UNTIL_SECONDS = 120;
 
 type WalletKeyPair = NonNullable<Awaited<ReturnType<typeof getKeyPair>>>;
-type WalletV5R1 = ReturnType<typeof WalletContractV5R1.create>;
+type WalletV5R1 = ReturnType<typeof createWalletContract>;
 
-/**
- * Build the V5R1 wallet, opened contract and current seqno for `keyPair`.
- * Single source for the create → getCachedTonClient → open → getSeqno sequence.
- */
 async function buildWalletContext(keyPair: WalletKeyPair): Promise<{
   wallet: WalletV5R1;
   contract: OpenedContract<WalletV5R1>;
   seqno: number;
 }> {
-  const wallet = WalletContractV5R1.create({
-    workchain: 0,
-    publicKey: keyPair.publicKey,
-  });
+  const wallet = createWalletContract(keyPair);
   const client = await getCachedTonClient();
   const contract = client.open(wallet);
   const seqno = await contract.getSeqno();
@@ -667,7 +656,7 @@ export function createTonSDK(
           // backward compat (deprecated)
           boc: txResult.boc,
           publicKey: walletData.publicKey,
-          walletVersion: "v5r1",
+          walletVersion: walletData.version === "tg" ? "tg" : "v5r1",
         };
       } catch (error) {
         if (error instanceof PluginSDKError) throw error;
@@ -722,7 +711,7 @@ export function createTonSDK(
           // backward compat (deprecated)
           boc: txResult.boc,
           publicKey: walletData.publicKey,
-          walletVersion: "v5r1",
+          walletVersion: walletData.version === "tg" ? "tg" : "v5r1",
         };
       } catch (error) {
         if (error instanceof PluginSDKError) throw error;
@@ -744,7 +733,7 @@ export function createTonSDK(
     },
 
     getWalletVersion(): string {
-      return "v5r1";
+      return loadWallet()?.version === "tg" ? "tg" : "v5r1";
     },
 
     // ─── NFT ─────────────────────────────────────────────────────
@@ -965,10 +954,7 @@ export function createTonSDK(
         throw new PluginSDKError("Wallet key derivation failed", "OPERATION_FAILED");
       }
 
-      const wallet = WalletContractV5R1.create({
-        workchain: 0,
-        publicKey: keyPair.publicKey,
-      });
+      const wallet = createWalletContract(keyPair);
 
       return {
         address: wallet.address,

@@ -1,3 +1,4 @@
+import { loadWallet } from "../../ton/wallet-service.js";
 /**
  * Setup WebUI API Routes
  *
@@ -200,13 +201,27 @@ export function createSetupRoutes(options?: { keyHash?: string }): Hono {
   app.get("/wallet/status", (c) => {
     const exists = walletExists();
     const address = exists ? getWalletAddress() : undefined;
-    return c.json({ success: true, data: { exists, address } });
+    const wallet = exists ? loadWallet() : null;
+    return c.json({
+      success: true,
+      data: {
+        exists,
+        address,
+        version: wallet?.version,
+        telegramAssociation: wallet?.telegramAssociation,
+      },
+    });
   });
 
   // ── POST /wallet/generate ─────────────────────────────────────────
   app.post("/wallet/generate", async (c) => {
     try {
-      const wallet = await generateWallet();
+      const body = await c.req
+        .json<{ version?: "tg" | "w5r1" }>()
+        .catch(() => ({}) as { version?: "tg" | "w5r1" });
+      if (body.version && !["tg", "w5r1"].includes(body.version))
+        return c.json({ success: false, error: "Unsupported wallet type" }, 400);
+      const wallet = await generateWallet(body.version);
       saveWallet(wallet);
       log.info("New TON wallet generated via setup UI");
       return c.json({
@@ -221,13 +236,15 @@ export function createSetupRoutes(options?: { keyHash?: string }): Hono {
   // ── POST /wallet/import ───────────────────────────────────────────
   app.post("/wallet/import", async (c) => {
     try {
-      const body = await c.req.json<{ mnemonic: string }>();
+      const body = await c.req.json<{ mnemonic: string; version?: "tg" | "w5r1" }>();
       const words = body.mnemonic.trim().split(/\s+/);
-      if (words.length !== 24) {
+      if (words.length !== 24 && !(body.version === "tg" && words.length === 12)) {
         return c.json({ success: false, error: `Expected 24 words, got ${words.length}` }, 400);
       }
 
-      const wallet = await importWallet(words);
+      if (body.version && !["tg", "w5r1"].includes(body.version))
+        return c.json({ success: false, error: "Unsupported wallet type" }, 400);
+      const wallet = await importWallet(words, body.version);
       saveWallet(wallet);
       log.info("TON wallet imported via setup UI");
       return c.json({ success: true, data: { address: wallet.address } });

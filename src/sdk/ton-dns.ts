@@ -1,3 +1,4 @@
+import { createWalletContract } from "../ton/wallet-service.js";
 import type {
   DnsSDK,
   DnsCheckResult,
@@ -10,7 +11,7 @@ import type {
 import { PluginSDKError } from "@teleton-agent/sdk";
 import { tonapiFetch } from "../constants/api-endpoints.js";
 import { loadWallet, getKeyPair, getCachedTonClient } from "../ton/wallet-service.js";
-import { WalletContractV5R1, toNano, internal } from "@ton/ton";
+import { toNano, internal } from "@ton/ton";
 import { Address, beginCell } from "@ton/core";
 import { withTxLock } from "../ton/tx-lock.js";
 import { sendWalletTx, type SentTx } from "../ton/confirm.js";
@@ -50,7 +51,7 @@ async function sendWalletMessage(
 
   const tonClient = await getCachedTonClient();
   const sent = await withTxLock(async () => {
-    const wallet = WalletContractV5R1.create({ workchain: 0, publicKey: keyPair.publicKey });
+    const wallet = createWalletContract(keyPair);
     const walletContract = tonClient.open(wallet);
     return sendWalletTx(tonClient, walletContract, {
       secretKey: keyPair.secretKey,

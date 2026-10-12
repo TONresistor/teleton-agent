@@ -1,3 +1,4 @@
+import * as WalletTestTON from "@ton/ton";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { Cell } from "@ton/core";
 
@@ -19,6 +20,8 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("../../constants/api-endpoints.js", () => ({ tonapiFetch: mocks.tonapiFetch }));
 vi.mock("../wallet-service.js", () => ({
+  createWalletContract: (keys: { publicKey: Buffer }) =>
+    WalletTestTON.WalletContractV5R1.create({ workchain: 0, publicKey: keys.publicKey }),
   loadWallet: mocks.loadWallet,
   getCachedTonClient: mocks.getCachedTonClient,
 }));

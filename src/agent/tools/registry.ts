@@ -1,3 +1,4 @@
+import { isTelegramWalletEnabled } from "../../ton/wallet-service.js";
 import { validateToolCall } from "@earendil-works/pi-ai";
 import type { Tool as PiAiTool, ToolCall } from "@earendil-works/pi-ai";
 import type { TSchema } from "@sinclair/typebox";
@@ -493,6 +494,11 @@ export class ToolRegistry {
   }
 
   private getEffectiveLevel(toolName: string): ToolAccessLevel {
+    if (
+      (toolName.startsWith("telegram_wallet_") || toolName === "telegram_get_wallet_address") &&
+      !isTelegramWalletEnabled()
+    )
+      return "off";
     const config = this.toolConfigs.get(toolName);
     return enforceMinimumAccess(config?.level ?? "all", this.getMinimumAccess(toolName));
   }

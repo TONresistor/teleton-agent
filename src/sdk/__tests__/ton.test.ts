@@ -1,3 +1,4 @@
+import * as WalletTestTON from "@ton/ton";
 import { describe, it, expect, vi, beforeEach, afterEach, type Mock } from "vitest";
 import { PluginSDKError } from "@teleton-agent/sdk";
 import Database from "better-sqlite3";
@@ -5,6 +6,8 @@ import Database from "better-sqlite3";
 // ─── Mocks ────────────────────────────────────────────────────────
 
 vi.mock("../../ton/wallet-service.js", () => ({
+  createWalletContract: (keys: { publicKey: Buffer }) =>
+    WalletTestTON.WalletContractV5R1.create({ workchain: 0, publicKey: keys.publicKey }),
   getWalletAddress: vi.fn(),
   getWalletBalance: vi.fn(),
   getTonPrice: vi.fn(),
@@ -1274,8 +1277,15 @@ describe("createTonSDK", () => {
     });
 
     describe("getWalletVersion()", () => {
+      beforeEach(() => {
+        (loadWallet as Mock).mockReturnValue(mockWalletData);
+      });
       it("returns v5r1", () => {
         expect(sdk.getWalletVersion()).toBe("v5r1");
+      });
+      it("reports the active native wallet", () => {
+        (loadWallet as Mock).mockReturnValue({ ...mockWalletData, version: "tg" });
+        expect(sdk.getWalletVersion()).toBe("tg");
       });
     });
 

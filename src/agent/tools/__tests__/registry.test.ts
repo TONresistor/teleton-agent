@@ -14,6 +14,8 @@ vi.mock("../module-permissions.js", () => ({
   ModulePermissions: vi.fn(),
 }));
 
+vi.mock("../../../ton/wallet-service.js", () => ({ isTelegramWalletEnabled: () => false }));
+
 vi.mock("../../../constants/timeouts.js", () => ({
   TOOL_EXECUTION_TIMEOUT_MS: 90_000,
 }));

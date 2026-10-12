@@ -3,9 +3,19 @@ import { telegramGetBlockedTool, telegramGetBlockedExecutor } from "./get-blocke
 import { telegramGetCommonChatsTool, telegramGetCommonChatsExecutor } from "./get-common-chats.js";
 import { telegramGetUserInfoTool, telegramGetUserInfoExecutor } from "./get-user-info.js";
 import { telegramCheckUsernameTool, telegramCheckUsernameExecutor } from "./check-username.js";
+import {
+  telegramGetWalletAddressTool,
+  telegramGetWalletAddressExecutor,
+} from "./get-wallet-address.js";
 import type { ToolEntry } from "../../types.js";
 
 export const tools: ToolEntry[] = [
+  {
+    tool: telegramGetWalletAddressTool,
+    executor: telegramGetWalletAddressExecutor,
+    mode: "user",
+    tags: ["social", "finance"],
+  },
   {
     tool: telegramBlockUserTool,
     executor: telegramBlockUserExecutor,

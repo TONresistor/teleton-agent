@@ -25,7 +25,7 @@ import {
 import { sign } from "@ton/crypto";
 import type { HighloadSDK, PluginLogger, TonMessage, TonTransferResult } from "@teleton-agent/sdk";
 import { PluginSDKError } from "@teleton-agent/sdk";
-import { getCachedTonClient, getKeyPair } from "../ton/wallet-service.js";
+import { getCachedTonClient, getHighloadKeyPair } from "../ton/wallet-service.js";
 import { withTxLock } from "../ton/tx-lock.js";
 import { getErrorMessage } from "../utils/errors.js";
 import { getDatabase } from "../memory/database.js";
@@ -244,7 +244,7 @@ export function createHighloadSDK(
   }
 
   async function context() {
-    const keyPair = await getKeyPair();
+    const keyPair = await getHighloadKeyPair();
     if (!keyPair) {
       throw new PluginSDKError("Wallet not initialized", "WALLET_NOT_INITIALIZED");
     }
