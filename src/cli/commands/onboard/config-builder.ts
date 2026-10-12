@@ -47,7 +47,7 @@ export function buildConfig(input: BuildConfigInput): Config {
       api_key: input.apiKey,
       ...(input.baseUrl ? { base_url: input.baseUrl } : {}),
       model: input.model,
-      reasoning_effort: "medium",
+      reasoning_effort: "low",
       max_tokens: 4096,
       temperature: 0.7,
       system_prompt: null,

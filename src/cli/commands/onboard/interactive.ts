@@ -54,6 +54,7 @@ import {
 import type { OnboardOptions } from "../onboard.js";
 import { buildConfig, type Policy } from "./config-builder.js";
 import { validateAndFetchBot, validateBotTokenFormat } from "./telegram-validation.js";
+import { authenticateWithQr } from "./qr-auth.js";
 
 // ── Progress steps ────────────────────────────────────────────────────
 
@@ -206,6 +207,7 @@ interface OnboardState {
   apiId: number;
   apiHash: string;
   phone: string;
+  authMethod: "phone" | "qr";
   userId: number;
   telegramMode: "user" | "bot";
   botToken: string | undefined;
@@ -869,7 +871,7 @@ async function stepWallet(spinner: ReturnType<typeof ora>): Promise<WalletData> 
 }
 
 /**
- * Step 5: Telegram — bot token (bot mode) or API id/hash/phone (user mode).
+ * Step 5: Telegram — bot token (bot mode) or API credentials and auth method (user mode).
  * In bot mode it returns the resolved bot token/username; in user mode it
  * returns the captured credentials. Unset fields keep their incoming values.
  */
@@ -883,6 +885,7 @@ async function stepTelegram(
   apiId?: number;
   apiHash?: string;
   phone?: string;
+  authMethod?: "phone" | "qr";
 }> {
   redraw(5);
 
@@ -963,20 +966,32 @@ async function stepTelegram(
         },
       });
 
-  const phone = options.phone
-    ? options.phone
-    : await input({
-        message: envPhone ? "Phone number (from env)" : "Phone number (international format)",
-        default: envPhone,
-        theme,
-        validate: (value) => {
-          if (!value || !value.startsWith("+")) return "Must start with +";
-          return true;
-        },
-      });
+  const authMethod = await select({
+    message: "Telegram login method",
+    default: "phone",
+    theme,
+    choices: [
+      { value: "qr" as const, name: "Scan QR code in this terminal" },
+      { value: "phone" as const, name: "Enter phone number and verification code" },
+    ],
+  });
 
-  STEPS[5].value = phone;
-  return { apiId, apiHash, phone };
+  const phone =
+    authMethod === "phone"
+      ? options.phone ||
+        (await input({
+          message: envPhone ? "Phone number (from env)" : "Phone number (international format)",
+          default: envPhone,
+          theme,
+          validate: (value) => {
+            if (!value || !value.startsWith("+")) return "Must start with +";
+            return true;
+          },
+        }))
+      : "";
+
+  STEPS[5].value = authMethod === "qr" ? "QR code" : phone;
+  return { apiId, apiHash, phone, authMethod };
 }
 
 /** Step 6: Connect — build+save config, optionally authenticate with Telegram. */
@@ -1014,11 +1029,13 @@ async function stepConnect(
     workspaceRoot: workspace.root,
   });
 
-  // Save config
-  spinner.start(DIM("Saving configuration..."));
-  const configYaml = YAML.stringify(config);
-  writeFileSync(workspace.configPath, configYaml, { encoding: "utf-8", mode: 0o600 });
-  spinner.succeed(DIM(`Configuration saved: ${workspace.configPath}`));
+  // Phone and bot setups already have all required fields. QR setup receives
+  // the account phone only after Telegram authorizes the scan.
+  if (state.authMethod !== "qr" || state.telegramMode === "bot") {
+    spinner.start(DIM("Saving configuration..."));
+    writeFileSync(workspace.configPath, YAML.stringify(config), { encoding: "utf-8", mode: 0o600 });
+    spinner.succeed(DIM(`Configuration saved: ${workspace.configPath}`));
+  }
 
   // Telegram authentication
   let telegramConnected = false;
@@ -1028,26 +1045,37 @@ async function stepConnect(
     telegramConnected = true;
   } else {
     const connectNow = await confirm({
-      message: `Connect to Telegram now? ${DIM("(verification code will be sent to your phone)")}`,
+      message:
+        state.authMethod === "qr"
+          ? "Connect to Telegram now with a QR code?"
+          : `Connect to Telegram now? ${DIM("(verification code will be sent to your phone)")}`,
       default: true,
       theme,
     });
 
     if (connectNow) {
-      console.log(
-        `\n  ${DIM("Connecting to Telegram... Check your phone for the verification code.")}`
-      );
+      if (state.authMethod === "phone") {
+        console.log(
+          `\n  ${DIM("Connecting to Telegram... Check your phone for the verification code.")}`
+        );
+      }
       try {
-        const sessionPath = join(TELETON_ROOT, "telegram_session.txt");
-        const client = new TelegramUserClient({
-          apiId: state.apiId,
-          apiHash: state.apiHash,
-          phone: state.phone,
-          sessionPath,
-        });
-        await client.connect();
-        const me = client.getMe();
-        await client.disconnect();
+        let me: { firstName?: string; username?: string; phone?: string } | undefined;
+        if (state.authMethod === "qr") {
+          me = await authenticateWithQr(state.apiId, state.apiHash);
+          state.phone = me.phone ? (me.phone.startsWith("+") ? me.phone : `+${me.phone}`) : "";
+        } else {
+          const sessionPath = join(TELETON_ROOT, "telegram_session.txt");
+          const client = new TelegramUserClient({
+            apiId: state.apiId,
+            apiHash: state.apiHash,
+            phone: state.phone,
+            sessionPath,
+          });
+          await client.connect();
+          me = client.getMe();
+          await client.disconnect();
+        }
         telegramConnected = true;
         const displayName = `${me?.firstName || ""}${me?.username ? ` (@${me.username})` : ""}`;
         console.log(`  ${GREEN("✓")} ${DIM("Telegram connected as")} ${CYAN(displayName)}\n`);
@@ -1063,6 +1091,23 @@ async function stepConnect(
       console.log(`\n  ${DIM("You can authenticate later when running: teleton start")}\n`);
       STEPS[6].value = "Auth on first start";
     }
+  }
+
+  // QR auth normally supplies the account phone. Collect it only when Telegram
+  // omitted it or QR auth was skipped, so the saved user config remains valid.
+  if (state.telegramMode === "user" && !state.phone) {
+    state.phone = await input({
+      message: "Account phone number (international format, required by config)",
+      theme,
+      validate: (value) => (value?.startsWith("+") ? true : "Must start with +"),
+    });
+  }
+  if (
+    state.telegramMode === "user" &&
+    (state.authMethod === "qr" || config.telegram.phone !== state.phone)
+  ) {
+    config.telegram.phone = state.phone;
+    writeFileSync(workspace.configPath, YAML.stringify(config), { encoding: "utf-8", mode: 0o600 });
   }
 
   return telegramConnected;
@@ -1082,6 +1127,7 @@ export async function runInteractiveOnboarding(
     apiId: 0,
     apiHash: "",
     phone: "",
+    authMethod: "phone",
     userId: 0,
     telegramMode: "user",
     botToken: undefined,
@@ -1144,6 +1190,7 @@ export async function runInteractiveOnboarding(
   if (telegram.apiId !== undefined) state.apiId = telegram.apiId;
   if (telegram.apiHash !== undefined) state.apiHash = telegram.apiHash;
   if (telegram.phone !== undefined) state.phone = telegram.phone;
+  if (telegram.authMethod !== undefined) state.authMethod = telegram.authMethod;
 
   // Step 6: Connect
   const telegramConnected = await stepConnect(state, workspace, spinner, prompter);

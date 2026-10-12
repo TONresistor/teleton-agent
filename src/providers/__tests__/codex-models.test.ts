@@ -5,6 +5,7 @@ import { AgentConfigSchema } from "../../config/schema.js";
 import { getProviderModel } from "../model-resolver.js";
 
 const CODEX_MODELS = [
+  "gpt-6.1-sol",
   "gpt-6-sol",
   "gpt-6-luna",
   "gpt-6-astra",

@@ -117,6 +117,7 @@ function renderRichText(text: Api.TypeRichText): string {
     text instanceof Api.TextAutoEmail ||
     text instanceof Api.TextAutoPhone ||
     text instanceof Api.TextBankCard ||
+    text instanceof Api.TextTonAddress ||
     text instanceof Api.TextMentionName ||
     text instanceof Api.TextDate
   ) {
