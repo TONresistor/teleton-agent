@@ -72,7 +72,7 @@ function modelSupportsTemperature(provider: SupportedProvider, modelId: string):
 }
 
 function getCacheRetention(provider: SupportedProvider): "none" | "long" {
-  return provider === "grok-build" ? "none" : "long";
+  return provider === "grok-build" || provider === "groq" ? "none" : "long";
 }
 
 function getReasoningOptions(

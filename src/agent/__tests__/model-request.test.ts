@@ -80,6 +80,36 @@ describe("model request preparation", () => {
     }
   });
 
+  it("omits unsupported prompt cache fields for Groq", async () => {
+    const request = prepareModelRequest(
+      AgentConfigSchema.parse({
+        provider: "groq",
+        model: "openai/gpt-oss-120b",
+        api_key: "test-key",
+      }),
+      {
+        context: { messages: [{ role: "user", content: "test", timestamp: 1 }] },
+        sessionId: "payload-test",
+      }
+    );
+    const fetch = vi.fn().mockRejectedValue(new Error("Network disabled in test"));
+    let payload: unknown;
+    await complete(request.model, request.context, {
+      ...request.options,
+      fetch,
+      onPayload(value) {
+        payload = value;
+        throw new Error("Stop after payload capture");
+      },
+    });
+
+    expect(fetch).not.toHaveBeenCalled();
+    expect(request.options.cacheRetention).toBe("none");
+    const wirePayload = JSON.parse(JSON.stringify(payload)) as Record<string, unknown>;
+    expect(wirePayload).not.toHaveProperty("prompt_cache_key");
+    expect(wirePayload).not.toHaveProperty("prompt_cache_retention");
+  });
+
   it("builds one canonical request shape for all completion modes", () => {
     const config = AgentConfigSchema.parse({
       provider: "anthropic",
