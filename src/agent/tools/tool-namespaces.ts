@@ -110,6 +110,13 @@ const BUILTIN_NAMESPACE_RULES: NamespaceRule[] = [
       /telegram_(search_stickers|search_gifs|get_my_stickers|add_sticker_set)/.test(name),
   },
   {
+    name: "telegram.wallet",
+    description:
+      "Read the Telegram wallet state, transactions, NFTs and gasless status, resolve user wallet addresses, or send a signed transfer.",
+    matches: (name) =>
+      name.startsWith("telegram_wallet_") || name === "telegram_get_wallet_address",
+  },
+  {
     name: "telegram.contacts",
     description:
       "Inspect Telegram users, usernames, common chats, blocked users, and blocking controls.",

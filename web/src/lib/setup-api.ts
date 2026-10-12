@@ -41,12 +41,12 @@ export const setup = {
 
   getWalletStatus: () => fetchSetupAPI<WalletStatus>("/setup/wallet/status"),
 
-  generateWallet: () => fetchSetupAPI<WalletResult>("/setup/wallet/generate", { method: "POST" }),
+  generateWallet: (version: "tg" | "w5r1" = "tg") => fetchSetupAPI<WalletResult>("/setup/wallet/generate", { method: "POST", body: JSON.stringify({version}) }),
 
-  importWallet: (mnemonic: string) =>
+  importWallet: (mnemonic: string, version: "tg" | "w5r1" = "w5r1") =>
     fetchSetupAPI<{ address: string }>("/setup/wallet/import", {
       method: "POST",
-      body: JSON.stringify({ mnemonic }),
+      body: JSON.stringify({ mnemonic, version }),
     }),
 
   sendCode: (apiId: number, apiHash: string, phone: string) =>

@@ -1,3 +1,4 @@
+import { shouldInitializeTelegramWallet } from "../ton/wallet-service.js";
 import type { Config } from "../config/schema.js";
 import { getDatabase } from "../memory/index.js";
 import type { PluginModule } from "../agent/tools/types.js";
@@ -17,6 +18,7 @@ import {
   dispatchPluginMessage,
 } from "./plugin-events.js";
 import { createLogger } from "../utils/logger.js";
+import { TelegramWalletBootstrap } from "../telegram/wallet-bootstrap.js";
 
 const log = createLogger("App");
 
@@ -38,6 +40,7 @@ export class MessagePipeline {
   private callbackHandlerRegistered = false;
   private acceptingMessages = false;
   private messagesProcessed = 0;
+  private walletBootstrap?: TelegramWalletBootstrap;
 
   constructor(deps: MessagePipelineDependencies) {
     this.deps = deps;
@@ -56,6 +59,7 @@ export class MessagePipeline {
 
   setAcceptingMessages(accepting: boolean): void {
     this.acceptingMessages = accepting;
+    if (!accepting) this.walletBootstrap?.stop();
   }
 
   resetMetrics(): void {
@@ -189,7 +193,21 @@ export class MessagePipeline {
 
   private wireUserMode(firstStart: boolean): void {
     const bridge = this.deps.bridge;
-    if (!firstStart || !isUserBridge(bridge)) return;
+    if (!isUserBridge(bridge)) return;
+    if (
+      shouldInitializeTelegramWallet() &&
+      (!this.walletBootstrap || this.walletBootstrap.isStopped)
+    ) {
+      const userClient = bridge.getClient();
+      const bootstrap = new TelegramWalletBootstrap(
+        userClient.getClient(),
+        this.deps.config.telegram.admin_ids[0]
+      );
+      this.walletBootstrap = bootstrap;
+      userClient.setPrivateMessageInterceptor((message) => bootstrap.consume(message));
+      void bootstrap.start();
+    }
+    if (!firstStart) return;
     bridge.onServiceMessage(async (message) => {
       if (!this.acceptingMessages) return;
       try {

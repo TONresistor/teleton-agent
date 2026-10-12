@@ -3,13 +3,13 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { createHighloadSDK, HighloadQueryIdSequence } from "../ton-highload.js";
 
 const mocks = vi.hoisted(() => ({
-  getKeyPair: vi.fn(),
+  getHighloadKeyPair: vi.fn(),
   getCachedTonClient: vi.fn(),
   withTxLock: vi.fn((fn: () => unknown) => fn()),
 }));
 
 vi.mock("../../ton/wallet-service.js", () => ({
-  getKeyPair: mocks.getKeyPair,
+  getHighloadKeyPair: mocks.getHighloadKeyPair,
   getCachedTonClient: mocks.getCachedTonClient,
 }));
 vi.mock("../../ton/tx-lock.js", () => ({ withTxLock: mocks.withTxLock }));
@@ -56,7 +56,7 @@ describe("createHighloadSDK", () => {
       getContractState: vi.fn().mockResolvedValue({ state: "active" }),
       open: vi.fn().mockReturnValue(opened),
     };
-    mocks.getKeyPair.mockResolvedValue({
+    mocks.getHighloadKeyPair.mockResolvedValue({
       publicKey: Buffer.alloc(32, 1),
       secretKey: Buffer.alloc(64, 2),
     });

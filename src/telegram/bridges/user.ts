@@ -1049,7 +1049,10 @@ export class GramJSUserBridge implements ITelegramBridge {
       action instanceof Api.MessageActionStarGiftPurchaseOffer ||
       action instanceof Api.MessageActionStarGiftPurchaseOfferDeclined ||
       action instanceof Api.MessageActionStarGift;
-    if (!isGiftAction) return null;
+    const isWalletAction =
+      action instanceof Api.MessageActionGramTransfer ||
+      action instanceof Api.MessageActionWalletTonConnectRequest;
+    if (!isGiftAction && !isWalletAction) return null;
 
     if (msg.out) return null;
 
@@ -1079,6 +1082,31 @@ export class GramJSUserBridge implements ITelegramBridge {
       text = `[On-chain Gift Offer]\n`;
       text += `Gift: "${gift.title || "Unknown Gift"}"${slug ? ` (slug: ${slug})` : ""}\n`;
       text += `Offer: ${price} TON\nExpires: ${expires}\nStatus: ${status}`;
+    } else if (action instanceof Api.MessageActionGramTransfer) {
+      text = `[Wallet Transfer Received]\n`;
+      text += `Amount (protocol units): ${action.amount.toString()}\n`;
+      text += `Peer address: ${action.peerAddress}\n`;
+      text += `Transaction ID: ${action.transactionId}\n`;
+      if (action.commentEncrypted) {
+        text += `Comment: [encrypted]\n`;
+      } else if (action.comment) {
+        text += `Comment: ${action.comment}\n`;
+      }
+    } else if (action instanceof Api.MessageActionWalletTonConnectRequest) {
+      const expires = new Date(action.expires * 1000).toISOString();
+      const status = action.accepted
+        ? "accepted"
+        : action.declined
+          ? "declined"
+          : action.expires * 1000 <= Date.now()
+            ? "expired"
+            : "pending";
+      text = `[Wallet TON Connect Request]\n`;
+      text += `Session ID: ${action.sessionId.toString()}\n`;
+      text += `Message ID: ${msg.id}\nStatus: ${status}\nExpires: ${expires}\n`;
+      if (action.dappName) text += `DApp: ${action.dappName}\n`;
+      if (action.topic) text += `Topic: ${action.topic}\n`;
+      if (action.traceId) text += `Trace ID: ${action.traceId}\n`;
     } else if (action instanceof Api.MessageActionStarGiftPurchaseOffer) {
       const gift = action.gift;
       const isUnique = gift instanceof Api.StarGiftUnique;
@@ -1139,9 +1167,9 @@ export class GramJSUserBridge implements ITelegramBridge {
 
     if (msg.peerId) this.cachePeer(chatId, msg.peerId);
 
-    const isChannel = isOnchainOffer && (msg.post ?? false);
+    const isChannel = (isOnchainOffer || isWalletAction) && (msg.post ?? false);
     const isGroup =
-      isOnchainOffer &&
+      (isOnchainOffer || isWalletAction) &&
       !isChannel &&
       (msg.peerId instanceof Api.PeerChat || msg.peerId instanceof Api.PeerChannel);
 

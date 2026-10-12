@@ -75,6 +75,8 @@ export interface BotValidation {
 }
 
 export interface WalletStatus {
+  version?: "tg" | "w5r1";
+  telegramAssociation?: "pending" | "linked";
   exists: boolean;
   address?: string;
 }

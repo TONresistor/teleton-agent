@@ -1,4 +1,5 @@
-import type { WalletContractV5R1, TonClient, OpenedContract } from "@ton/ton";
+import type { createWalletContract } from "./wallet-service.js";
+import type { TonClient, OpenedContract } from "@ton/ton";
 import { SendMode, type Address, type MessageRelaxed } from "@ton/core";
 import { invalidateTonClientCache } from "./wallet-service.js";
 import { createLogger } from "../utils/logger.js";
@@ -7,7 +8,7 @@ import { TON_CONFIRM_TIMEOUT_MS, TON_CONFIRM_POLL_INTERVAL_MS } from "../constan
 
 const log = createLogger("TON");
 
-type WalletV5R1 = WalletContractV5R1;
+type WalletV5R1 = ReturnType<typeof createWalletContract>;
 
 export interface ConfirmedTx {
   /** Real on-chain account-transaction hash (hex) — verifiable on TON explorers. */

@@ -3,6 +3,7 @@ import { Logger, LogLevel } from "telegram/extensions/Logger.js";
 import { StringSession } from "telegram/sessions/index.js";
 import { NewMessage } from "telegram/events/index.js";
 import type { NewMessageEvent } from "telegram/events/NewMessage.js";
+import { StopPropagation } from "telegram/client/updates.js";
 import { existsSync, readFileSync, writeFileSync, mkdirSync } from "fs";
 import { dirname } from "path";
 import { createInterface } from "readline";
@@ -48,6 +49,7 @@ export class TelegramUserClient {
   private config: TelegramClientConfig;
   private connected = false;
   private me?: TelegramUser;
+  private privateMessageInterceptor?: (message: Api.Message) => Promise<boolean>;
 
   constructor(config: TelegramClientConfig) {
     this.config = config;
@@ -63,6 +65,17 @@ export class TelegramUserClient {
       floodSleepThreshold: config.floodSleepThreshold ?? 60,
       baseLogger: logger,
     });
+    const interceptMessage = async (event: NewMessageEvent) => {
+      if (await this.privateMessageInterceptor?.(event.message)) throw new StopPropagation();
+    };
+    this.client.addEventHandler(
+      interceptMessage as (event: NewMessageEvent) => void,
+      new NewMessage({ incoming: true })
+    );
+  }
+
+  setPrivateMessageInterceptor(interceptor: (message: Api.Message) => Promise<boolean>): void {
+    this.privateMessageInterceptor = interceptor;
   }
 
   private loadSession(): string {

@@ -180,16 +180,30 @@ async function promptOptionalKey(opts: {
 
 /** Prompt for a 24-word mnemonic and import+save the wallet, with spinner feedback. */
 async function importWalletFlow(spinner: ReturnType<typeof ora>): Promise<WalletData> {
+  const version = await select<"tg" | "w5r1">({
+    message: "Wallet type",
+    default: "w5r1",
+    theme,
+    choices: [
+      { value: "w5r1", name: "Existing TON wallet (V5R1)" },
+      { value: "tg", name: "Telegram native wallet (TgWallet)" },
+    ],
+  });
   const mnemonicInput = await input({
-    message: "Enter your 24-word mnemonic (space-separated)",
+    message:
+      version === "tg"
+        ? "Enter your native Telegram recovery phrase (12 or 24 words)"
+        : "Enter your 24-word TON mnemonic (space-separated)",
     theme,
     validate: (value = "") => {
       const words = value.trim().split(/\s+/);
-      return words.length === 24 ? true : `Expected 24 words, got ${words.length}`;
+      return words.length === 24 || (version === "tg" && words.length === 12)
+        ? true
+        : `Expected ${version === "tg" ? "12 or 24" : "24"} words, got ${words.length}`;
     },
   });
   spinner.start(DIM("Importing wallet..."));
-  const wallet = await importWallet(mnemonicInput.trim().split(/\s+/));
+  const wallet = await importWallet(mnemonicInput.trim().split(/\s+/), version);
   saveWallet(wallet);
   spinner.succeed(DIM(`Wallet imported: ${wallet.address}`));
   return wallet;
@@ -776,7 +790,7 @@ async function stepWallet(spinner: ReturnType<typeof ora>): Promise<WalletData> 
           name: "Generate new",
           description: "WARNING: old wallet will be lost",
         },
-        { value: "import", name: "Import mnemonic", description: "Restore from 24-word seed" },
+        { value: "import", name: "Import mnemonic", description: "Restore from a recovery phrase" },
       ],
     });
 
@@ -786,7 +800,16 @@ async function stepWallet(spinner: ReturnType<typeof ora>): Promise<WalletData> 
       wallet = await importWalletFlow(spinner);
     } else {
       spinner.start(DIM("Generating new TON wallet..."));
-      wallet = await generateWallet();
+      const version = await select<"tg" | "w5r1">({
+        message: "Wallet type",
+        default: "tg",
+        theme,
+        choices: [
+          { value: "tg", name: "TgWallet (Telegram compatible)" },
+          { value: "w5r1", name: "V5R1" },
+        ],
+      });
+      wallet = await generateWallet(version);
       saveWallet(wallet);
       spinner.succeed(DIM("New TON wallet generated"));
     }
@@ -801,7 +824,11 @@ async function stepWallet(spinner: ReturnType<typeof ora>): Promise<WalletData> 
           name: "Generate new wallet",
           description: "Create a fresh TON wallet",
         },
-        { value: "import", name: "Import from mnemonic", description: "Restore from 24-word seed" },
+        {
+          value: "import",
+          name: "Import from mnemonic",
+          description: "Restore from a recovery phrase",
+        },
       ],
     });
 
@@ -809,7 +836,16 @@ async function stepWallet(spinner: ReturnType<typeof ora>): Promise<WalletData> 
       wallet = await importWalletFlow(spinner);
     } else {
       spinner.start(DIM("Generating TON wallet..."));
-      wallet = await generateWallet();
+      const version = await select<"tg" | "w5r1">({
+        message: "Wallet type",
+        default: "tg",
+        theme,
+        choices: [
+          { value: "tg", name: "TgWallet (Telegram compatible)" },
+          { value: "w5r1", name: "V5R1" },
+        ],
+      });
+      wallet = await generateWallet(version);
       saveWallet(wallet);
       spinner.succeed(DIM("TON wallet generated"));
     }
@@ -818,7 +854,7 @@ async function stepWallet(spinner: ReturnType<typeof ora>): Promise<WalletData> 
   // Display mnemonic for new/regenerated wallets
   if (!existingWallet || wallet !== existingWallet) {
     const W = FRAME_WIDTH;
-    const mnTitle = "  ⚠  BACKUP REQUIRED — WRITE DOWN THESE 24 WORDS";
+    const mnTitle = `  ⚠  BACKUP REQUIRED — WRITE DOWN THESE ${wallet.mnemonic.length} WORDS`;
 
     console.log();
     console.log(RED(`  ┌${"─".repeat(W)}┐`));
@@ -829,10 +865,11 @@ async function stepWallet(spinner: ReturnType<typeof ora>): Promise<WalletData> 
     const cols = 4;
     const wordWidth = Math.max(10, Math.floor((W - 8) / cols) - 5);
     const words = wallet.mnemonic;
-    for (let r = 0; r < 6; r++) {
+    for (let r = 0; r < Math.ceil(words.length / cols); r++) {
       const parts: string[] = [];
       for (let c = 0; c < cols; c++) {
         const idx = r * cols + c;
+        if (idx >= words.length) break;
         const num = String(idx + 1).padStart(2, " ");
         parts.push(`${DIM(num + ".")} ${WHITE(padRight(words[idx], wordWidth))}`);
       }

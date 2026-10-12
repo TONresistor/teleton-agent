@@ -7,6 +7,7 @@ import { tools as stickersTools } from "./stickers/index.js";
 import { tools as foldersTools } from "./folders/index.js";
 import { tools as profileTools } from "./profile/index.js";
 import { tools as starsTools } from "./stars/index.js";
+import { tools as walletTools } from "./wallet/index.js";
 import { tools as giftsTools } from "./gifts/index.js";
 import { tools as contactsTools } from "./contacts/index.js";
 import { tools as storiesTools } from "./stories/index.js";
@@ -25,6 +26,7 @@ export const tools: ToolEntry[] = [
   ...foldersTools,
   ...profileTools,
   ...starsTools,
+  ...walletTools,
   ...giftsTools,
   ...contactsTools,
   ...storiesTools,

@@ -1,4 +1,5 @@
-import { WalletContractV5R1, toNano, internal } from "@ton/ton";
+import { createWalletContract } from "./wallet-service.js";
+import { toNano, internal } from "@ton/ton";
 import { Address } from "@ton/core";
 import { getKeyPair, getCachedTonClient } from "./wallet-service.js";
 import { createLogger } from "../utils/logger.js";
@@ -45,7 +46,7 @@ export async function sendTon(params: SendTonParams): Promise<SendTonResult | nu
       return null;
     }
 
-    const wallet = WalletContractV5R1.create({ workchain: 0, publicKey: keyPair.publicKey });
+    const wallet = createWalletContract(keyPair);
     const client = await getCachedTonClient();
     const contract = client.open(wallet);
 

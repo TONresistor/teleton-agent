@@ -26,6 +26,8 @@ const mocks = vi.hoisted(() => ({
 
 vi.mock("../../constants/api-endpoints.js", () => ({ tonapiFetch: mocks.tonapiFetch }));
 vi.mock("../../ton/wallet-service.js", () => ({
+  createWalletContract: (keys: { publicKey: Buffer }) =>
+    WalletContractV5R1.create({ workchain: 0, publicKey: keys.publicKey }),
   loadWallet: mocks.loadWallet,
   getKeyPair: mocks.getKeyPair,
   getCachedTonClient: mocks.getCachedTonClient,
