@@ -8,8 +8,7 @@ export interface RpcRequest {
 }
 
 export type RpcResponse =
-  | { id: number; ok: true; result: unknown }
-  | { id: number; ok: false; error: string };
+  { id: number; ok: true; result: unknown } | { id: number; ok: false; error: string };
 
 export interface EmbeddingWorkerData {
   config: EmbeddingProviderConfig;
@@ -52,9 +51,7 @@ export interface VectorToolSearchPayload {
 }
 
 export type VectorSearchPayload =
-  | VectorContextSearchPayload
-  | VectorKnowledgeSearchPayload
-  | VectorToolSearchPayload;
+  VectorContextSearchPayload | VectorKnowledgeSearchPayload | VectorToolSearchPayload;
 
 export interface VectorSearchResult {
   knowledge: HybridSearchResult[];

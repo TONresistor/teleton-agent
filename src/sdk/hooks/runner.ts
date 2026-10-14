@@ -107,8 +107,7 @@ export function createHookRunner(registry: HookRegistry, opts: HookRunnerOptions
       // When catchErrors=false, re-throw the first rejection that allSettled absorbed
       if (!catchErrors) {
         const firstRejected = results.find((r) => r.status === "rejected") as
-          | PromiseRejectedResult
-          | undefined;
+          PromiseRejectedResult | undefined;
         if (firstRejected) throw firstRejected.reason;
       }
     } finally {

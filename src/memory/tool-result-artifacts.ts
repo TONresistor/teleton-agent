@@ -62,8 +62,7 @@ export function readToolResultArtifact(
        FROM tool_result_artifacts WHERE id = ? AND chat_id = ?`
     )
     .get(artifactId, chatId) as
-    | { content: string; sizeBytes: number; expiresAt: number }
-    | undefined;
+    { content: string; sizeBytes: number; expiresAt: number } | undefined;
   if (!row || row.expiresAt < Date.now()) return null;
 
   const safeOffset = Math.min(Math.max(0, offset), row.content.length);

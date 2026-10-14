@@ -40,13 +40,13 @@
   },
   "dependencies": {
     "@types/better-sqlite3": "^7.6.13",
-    "@types/node": "^22.0.0"
+    "@types/node": "^22.20.5"
   },
   "devDependencies": {
     "@ton/core": "^0.63.1",
-    "better-sqlite3": "^12.0.0",
+    "better-sqlite3": "^12.11.1",
     "tsup": "^8.5.0",
-    "typescript": "^5.8.0"
+    "typescript": "^5.9.3"
   },
   "peerDependencies": {
     "@ton/core": ">=0.63.0 <1.0.0",

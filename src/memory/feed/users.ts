@@ -36,8 +36,7 @@ export class UserStore {
     const now = Math.floor(Date.now() / 1000);
 
     const existing = this.db.prepare(`SELECT id FROM tg_users WHERE id = ?`).get(user.id) as
-      | { id: string }
-      | undefined;
+      { id: string } | undefined;
 
     if (existing) {
       this.db
@@ -81,8 +80,7 @@ export class UserStore {
 
   getUser(id: string): TelegramUser | undefined {
     const row = this.db.prepare(`SELECT * FROM tg_users WHERE id = ?`).get(id) as
-      | TgUserRow
-      | undefined;
+      TgUserRow | undefined;
 
     return row ? rowToUser(row) : undefined;
   }

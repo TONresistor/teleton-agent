@@ -66,13 +66,7 @@ export type ToolAccessLevel = "all" | "allowlist" | "admin" | "off";
  * - "disabled": tool completely hidden from all contexts
  */
 export type ToolScope =
-  | "open"
-  | "always"
-  | "dm-only"
-  | "group-only"
-  | "admin-only"
-  | "allowlist"
-  | "disabled";
+  "open" | "always" | "dm-only" | "group-only" | "admin-only" | "allowlist" | "disabled";
 
 /**
  * Telegram execution mode a tool supports.

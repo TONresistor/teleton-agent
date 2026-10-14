@@ -32,13 +32,7 @@ export interface TokenActivityBucket {
 
 export type ToolAccessLevel = "all" | "allowlist" | "admin" | "off";
 export type ToolScope =
-  | "always"
-  | "dm-only"
-  | "group-only"
-  | "admin-only"
-  | "open"
-  | "allowlist"
-  | "disabled";
+  "always" | "dm-only" | "group-only" | "admin-only" | "open" | "allowlist" | "disabled";
 
 export interface ToolInfo {
   name: string;

@@ -10,11 +10,7 @@ import { getErrorMessage } from "../../../../utils/errors.js";
 import { toLong } from "../../../../utils/gramjs-bigint.js";
 
 export type TelegramSearchSort =
-  | "telegram"
-  | "date_desc"
-  | "date_asc"
-  | "views_desc"
-  | "forwards_desc";
+  "telegram" | "date_desc" | "date_asc" | "views_desc" | "forwards_desc";
 
 export type TelegramSearchPeerType = "all" | "channels" | "groups" | "users";
 

@@ -97,8 +97,7 @@ export function getOrCreateSession(chatId: string): SessionEntry {
   const sessionKey = sessionKeyFor(chatId);
 
   const row = db.prepare("SELECT * FROM sessions WHERE chat_id = ?").get(sessionKey) as
-    | SessionRow
-    | undefined;
+    SessionRow | undefined;
 
   if (row) {
     return rowToSession(row);
@@ -143,8 +142,7 @@ export function updateSession(
   const sessionKey = sessionKeyFor(chatId);
 
   const existing = db.prepare("SELECT * FROM sessions WHERE chat_id = ?").get(sessionKey) as
-    | SessionRow
-    | undefined;
+    SessionRow | undefined;
 
   if (!existing) {
     return getOrCreateSession(chatId);
@@ -186,8 +184,7 @@ export function getSession(chatId: string): SessionEntry | null {
   const db = getDb();
   const sessionKey = sessionKeyFor(chatId);
   const row = db.prepare("SELECT * FROM sessions WHERE chat_id = ?").get(sessionKey) as
-    | SessionRow
-    | undefined;
+    SessionRow | undefined;
 
   return row ? rowToSession(row) : null;
 }

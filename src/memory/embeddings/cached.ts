@@ -51,8 +51,7 @@ export class CachedEmbeddingProvider implements EmbeddingProvider {
 
   private cacheGet(hash: string): { embedding: Buffer | string; dims: number } | undefined {
     return this.stmtCacheGet.get(hash, this.model, this.id) as
-      | { embedding: Buffer | string; dims: number }
-      | undefined;
+      { embedding: Buffer | string; dims: number } | undefined;
   }
 
   private getValidCachedEmbedding(hash: string): number[] | undefined {
