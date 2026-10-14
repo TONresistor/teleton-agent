@@ -79,7 +79,7 @@
     "@ton/crypto": "^3.3.0",
     "@ton/ton": "^16.3.0",
     "better-sqlite3": "^13.0.3",
-    "chalk": "^5.6.2",
+    "chalk": "^6.0.1",
     "chokidar": "^5.0.0",
     "commander": "^14.0.3",
     "grammy": "^1.46.0",
