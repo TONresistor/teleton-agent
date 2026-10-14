@@ -222,8 +222,9 @@ const LEGACY_MODEL_ALIASES: Partial<Record<SupportedProvider, Readonly<Record<st
     "llama-3.1-8b-instant": "openai/gpt-oss-20b",
   },
   openrouter: {
-    "nvidia/nemotron-nano-9b-v2": "qwen/qwen3.8-27b:free",
-    "nvidia/nemotron-nano-9b-v2:free": "qwen/qwen3.8-27b:free",
+    "nvidia/nemotron-nano-9b-v2": "google/gemma-4-31b-it:free",
+    "nvidia/nemotron-nano-9b-v2:free": "google/gemma-4-31b-it:free",
+    "qwen/qwen3.8-27b:free": "google/gemma-4-31b-it:free",
   },
   moonshot: {
     "kimi-k2.5": "kimi-for-coding",

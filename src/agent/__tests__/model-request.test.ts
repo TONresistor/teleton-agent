@@ -9,7 +9,7 @@ describe("model request preparation", () => {
       AgentConfigSchema.parse({
         provider: "openrouter",
         model: "example/brand-new",
-        api_key: "test-key",
+        api_key: "sk-test-key",
       }),
       {
         context: { messages: [{ role: "user", content: "test", timestamp: 1 }] },
@@ -52,7 +52,7 @@ describe("model request preparation", () => {
     const config = AgentConfigSchema.parse({
       provider,
       model,
-      api_key: "test-key",
+      api_key: "sk-test-key",
       temperature: 0.4,
     });
     const request = prepareModelRequest(config, {
@@ -85,7 +85,7 @@ describe("model request preparation", () => {
       AgentConfigSchema.parse({
         provider: "groq",
         model: "openai/gpt-oss-120b",
-        api_key: "test-key",
+        api_key: "sk-test-key",
       }),
       {
         context: { messages: [{ role: "user", content: "test", timestamp: 1 }] },
@@ -114,7 +114,7 @@ describe("model request preparation", () => {
     const config = AgentConfigSchema.parse({
       provider: "anthropic",
       model: "claude-haiku-4-5-20251001",
-      api_key: "test-key",
+      api_key: "sk-test-key",
       max_tokens: 8192,
       temperature: 0.4,
     });
@@ -128,7 +128,7 @@ describe("model request preparation", () => {
     expect(request.provider).toBe("anthropic");
     expect(request.context.systemPrompt).toBe("override prompt");
     expect(request.options).toMatchObject({
-      apiKey: "test-key",
+      apiKey: "sk-test-key",
       maxTokens: 8192,
       temperature: 0.4,
       sessionId: "session-1",
@@ -142,7 +142,7 @@ describe("model request preparation", () => {
       const config = AgentConfigSchema.parse({
         provider: "google",
         model,
-        api_key: "test-key",
+        api_key: "sk-test-key",
         temperature: 0.4,
       });
 
@@ -158,7 +158,7 @@ describe("model request preparation", () => {
     const config = AgentConfigSchema.parse({
       provider: "google",
       model: "gemini-3.5-flash",
-      api_key: "test-key",
+      api_key: "sk-test-key",
       temperature: 0.4,
     });
 
@@ -184,7 +184,7 @@ describe("model request preparation", () => {
     const config = AgentConfigSchema.parse({
       provider,
       model,
-      api_key: "test-key",
+      api_key: "sk-test-key",
       temperature: 0.4,
     });
     const request = prepareModelRequest(config, { context: { messages: [] } });
@@ -199,7 +199,7 @@ describe("model request preparation", () => {
       const config = AgentConfigSchema.parse({
         provider: "anthropic",
         model,
-        api_key: "test-key",
+        api_key: "sk-test-key",
       });
       const request = prepareModelRequest(config, { context: { messages: [] } });
 
@@ -214,7 +214,7 @@ describe("model request preparation", () => {
     const config = AgentConfigSchema.parse({
       provider: "codex",
       model: "gpt-5.6-terra",
-      api_key: "test-key",
+      api_key: "sk-test-key",
       reasoning_effort: "medium",
     });
 
@@ -232,7 +232,7 @@ describe("model request preparation", () => {
         AgentConfigSchema.parse({
           provider,
           model: "gpt-6.1-sol",
-          api_key: "test-key",
+          api_key: "sk-test-key",
           reasoning_effort: configuredEffort,
           temperature: 0.4,
         }),
@@ -244,12 +244,57 @@ describe("model request preparation", () => {
     }
   });
 
+  it.each([
+    ["openai", "gpt-5.4-pro", "none", "medium"],
+    ["openai", "gpt-5.4", "minimal", "low"],
+    ["openai", "gpt-5", "max", "high"],
+    ["codex", "gpt-5.5", "minimal", "low"],
+  ] as const)(
+    "clamps %s/%s reasoning %s using catalog capabilities",
+    (provider, model, reasoning_effort, expected) => {
+      const request = prepareModelRequest(
+        AgentConfigSchema.parse({ provider, model, api_key: "sk-test-key", reasoning_effort }),
+        { context: { messages: [] } }
+      );
+      expect(request.options.reasoningEffort).toBe(expected);
+      expect(request.options).not.toHaveProperty("temperature");
+    }
+  );
+
+  it("uses adaptive thinking metadata for a newly cataloged Claude model", () => {
+    const request = prepareModelRequest(
+      AgentConfigSchema.parse({
+        provider: "anthropic",
+        model: "claude-sonnet-5-5",
+        api_key: "sk-test-key",
+      }),
+      { context: { messages: [] } }
+    );
+    expect(request.options.thinkingEnabled).toBe(true);
+    expect(request.options).not.toHaveProperty("temperature");
+  });
+
+  it("keeps standard sampling and omits reasoning for non-reasoning OpenAI models", () => {
+    const request = prepareModelRequest(
+      AgentConfigSchema.parse({
+        provider: "openai",
+        model: "gpt-4.1",
+        api_key: "sk-test-key",
+        temperature: 0.4,
+        reasoning_effort: "high",
+      }),
+      { context: { messages: [] } }
+    );
+    expect(request.options.temperature).toBe(0.4);
+    expect(request.options).not.toHaveProperty("reasoningEffort");
+  });
+
   it.each(["codex", "openai"])("sends low effort for GPT-6.1 Sol through %s", async (provider) => {
     const request = prepareModelRequest(
       AgentConfigSchema.parse({
         provider,
         model: "gpt-6.1-sol",
-        api_key: "test-key",
+        api_key: "sk-test-key",
         reasoning_effort: "none",
       }),
       { context: { messages: [{ role: "user", content: "test", timestamp: 1 }] } }
