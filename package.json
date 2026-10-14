@@ -78,7 +78,7 @@
     "@ton/core": "^0.63.1",
     "@ton/crypto": "^3.3.0",
     "@ton/ton": "^16.3.0",
-    "better-sqlite3": "^12.11.1",
+    "better-sqlite3": "^13.0.3",
     "chalk": "^5.6.2",
     "chokidar": "^5.0.0",
     "commander": "^14.0.3",
@@ -111,7 +111,7 @@
   "devDependencies": {
     "@ston-fi/api": "^0.32.0",
     "@ston-fi/sdk": "^2.7.0",
-    "@types/better-sqlite3": "^7.6.13",
+    "@types/better-sqlite3": "^9.6.0",
     "@types/node": "^22.20.5",
     "@types/qrcode-terminal": "^0.12.2",
     "@typescript-eslint/eslint-plugin": "^8.71.2",
