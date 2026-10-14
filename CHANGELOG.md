@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.5] - 2026-10-14
+
+### Added
+
+- Dedicated Voyage embedding credentials and configurable vector dimensions, with the legacy `anthropic` embedding provider retained as an alias.
+- WebUI hook checks and regression tests for memory recovery, plugin revisions, MCP pagination, and release workflows.
+- Release checks requiring the tagged commit to match verified `main` CI and preserving published npm and Docker versions.
+
+### Changed
+
+- Updated pi-ai to 1.2, Transformers.js to 4.3, better-sqlite3 to 13, Vite to 8, Vitest to 5, and the CLI and supporting dependencies.
+- Refreshed model capabilities and compatibility aliases, including the free OpenRouter model option.
+- Raised coverage thresholds and isolated backend, SDK, and WebUI test caches.
+- Run retention maintenance daily and mark interrupted scheduled tasks failed without replaying their actions.
+
+### Fixed
+
+- Reindex all memory, including archived documents, when the embedding model changes; purge message vectors with their source messages.
+- Keep the agent responsive when embeddings are disabled or unavailable, preserve FTS search, and recover vector indexing after a successful warmup.
+- Validate local embedding shapes before saving vectors and restore inference on the same provider after a failed warmup.
+- Prevent duplicate WebUI refresh requests, stale responses, and setup state updates overwriting newer input.
+- Enforce concurrent TonAPI quotas, discover all MCP tool pages, and download plugins from one immutable Git revision with size and timeout limits.
+- Save wallets atomically with private permissions and keep download deadlines active with caller cancellation.
+- Load SQLite 13 production binaries correctly in Docker and verify native addons and the CLI in the runtime image.
+- Handle multi-line npm version lists correctly in SDK release outputs.
+
 ## [0.11.4] - 2026-10-12
 
 ### Added
@@ -647,7 +673,9 @@ Git history rewritten to fix commit attribution (email update from `tonresistor@
 - Professional distribution (npm, Docker, CI/CD)
 - Pre-commit hooks and linting infrastructure
 
-[Unreleased]: https://github.com/TONresistor/teleton-agent/compare/v0.11.3...HEAD
+[Unreleased]: https://github.com/TONresistor/teleton-agent/compare/v0.11.5...HEAD
+[0.11.5]: https://github.com/TONresistor/teleton-agent/compare/v0.11.4...v0.11.5
+[0.11.4]: https://github.com/TONresistor/teleton-agent/compare/v0.11.3...v0.11.4
 [0.11.3]: https://github.com/TONresistor/teleton-agent/compare/v0.11.2...v0.11.3
 [0.11.2]: https://github.com/TONresistor/teleton-agent/compare/v0.11.1...v0.11.2
 [0.11.1]: https://github.com/TONresistor/teleton-agent/compare/v0.11.0...v0.11.1
