@@ -60,6 +60,7 @@ export interface WebUIServerDeps {
 // ── Marketplace types ───────────────────────────────────────────────
 
 export interface RegistryEntry {
+  sourceRef?: string;
   id: string;
   name: string;
   description: string;

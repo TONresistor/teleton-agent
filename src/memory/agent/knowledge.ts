@@ -3,7 +3,7 @@ import { readFileSync, existsSync, readdirSync, statSync } from "fs";
 import { join } from "path";
 import { KNOWLEDGE_CHUNK_SIZE } from "../../constants/limits.js";
 import type { EmbeddingProvider } from "../embeddings/provider.js";
-import { hashText, serializeEmbedding } from "../embeddings/index.js";
+import { assertValidEmbedding, hashText, serializeEmbedding } from "../embeddings/index.js";
 import { HybridSearch, type HybridSearchResult } from "../search/hybrid.js";
 import type { VectorSearchWorkerClient } from "../workers/vector-search-client.js";
 import { createLogger } from "../../utils/logger.js";
@@ -67,6 +67,40 @@ export class KnowledgeIndexer {
     return search.searchKnowledge(query, queryEmbedding, { limit });
   }
 
+  async reembedPending(): Promise<number> {
+    if (!this.vectorEnabled || this.embedder.dimensions === 0) return 0;
+    let cursor = "";
+    let indexed = 0;
+    while (true) {
+      const rows = this.db
+        .prepare(
+          `SELECT id, text FROM knowledge
+        WHERE id > ? AND (embedding IS NULL OR NOT EXISTS (
+          SELECT 1 FROM knowledge_vec kv WHERE kv.id = knowledge.id
+        )) ORDER BY id LIMIT 16`
+        )
+        .all(cursor) as Array<{ id: string; text: string }>;
+      if (!rows.length) return indexed;
+      const embeddings = await this.embedder.embedBatch(rows.map((row) => row.text));
+      if (!embeddings.length) return indexed;
+      for (const embedding of embeddings) assertValidEmbedding(embedding, this.embedder.dimensions);
+      if (embeddings.length !== rows.length)
+        throw new Error("Knowledge embedding batch has an unexpected size");
+      this.db.transaction(() => {
+        for (let i = 0; i < rows.length; i++) {
+          const blob = serializeEmbedding(embeddings[i]);
+          this.db.prepare("DELETE FROM knowledge_vec WHERE id = ?").run(rows[i].id);
+          this.db.prepare("UPDATE knowledge SET embedding = ? WHERE id = ?").run(blob, rows[i].id);
+          this.db
+            .prepare("INSERT INTO knowledge_vec (id, embedding) VALUES (?, ?)")
+            .run(rows[i].id, blob);
+        }
+      })();
+      indexed += rows.length;
+      cursor = rows[rows.length - 1].id;
+    }
+  }
+
   async indexAll(options?: { force?: boolean }): Promise<{ indexed: number; skipped: number }> {
     const files = this.listMemoryFiles();
     let indexed = 0;
@@ -98,7 +132,15 @@ export class KnowledgeIndexer {
         .prepare(`SELECT hash FROM knowledge WHERE path = ? AND source = 'memory' LIMIT 1`)
         .get(relPath) as { hash: string } | undefined;
 
-      if (existing?.hash === fileHash) {
+      const missingVectors =
+        this.vectorEnabled &&
+        this.db
+          .prepare(
+            `SELECT 1 FROM knowledge
+        WHERE path = ? AND source = 'memory' AND (embedding IS NULL OR length(embedding) != ?) LIMIT 1`
+          )
+          .get(relPath, this.embedder.dimensions * Float32Array.BYTES_PER_ELEMENT);
+      if (existing?.hash === fileHash && !missingVectors) {
         return false;
       }
     }

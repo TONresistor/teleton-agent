@@ -192,7 +192,16 @@ export async function registerMcpTools(
 
   for (const conn of connections) {
     try {
-      const { tools: mcpTools } = await conn.client.listTools();
+      const mcpTools = [];
+      const cursors = new Set<string>();
+      let cursor: string | undefined;
+      do {
+        const page = await conn.client.listTools(cursor ? { cursor } : undefined);
+        mcpTools.push(...page.tools);
+        cursor = page.nextCursor;
+        if (cursor && cursors.has(cursor)) throw new Error("MCP server repeated a tool cursor");
+        if (cursor) cursors.add(cursor);
+      } while (cursor);
 
       if (!mcpTools || mcpTools.length === 0) continue;
 

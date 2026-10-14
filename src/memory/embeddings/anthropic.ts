@@ -4,17 +4,24 @@ import { VOYAGE_API_URL } from "../../constants/api-endpoints.js";
 import { VOYAGE_BATCH_SIZE } from "../../constants/limits.js";
 
 export class AnthropicEmbeddingProvider implements EmbeddingProvider {
-  readonly id = "anthropic";
+  readonly id = "voyage";
   readonly model: string;
   readonly dimensions: number;
   private apiKey: string;
   private baseUrl = VOYAGE_API_URL;
 
-  constructor(config: { apiKey: string; model?: string }) {
+  constructor(config: { apiKey: string; model?: string; dimensions?: number }) {
     this.apiKey = config.apiKey;
-    this.model = config.model ?? "voyage-3-lite";
+    this.model = config.model ?? "voyage-4-lite";
 
     const dims: Record<string, number> = {
+      "voyage-4": 1024,
+      "voyage-4-lite": 1024,
+      "voyage-4-large": 1024,
+      "voyage-code-4": 1024,
+      "voyage-3.5": 1024,
+      "voyage-3.5-lite": 1024,
+      "voyage-3-large": 1024,
       "voyage-3": 1024,
       "voyage-3-lite": 512,
       "voyage-code-3": 1024,
@@ -23,7 +30,7 @@ export class AnthropicEmbeddingProvider implements EmbeddingProvider {
       "voyage-law-2": 1024,
     };
 
-    this.dimensions = dims[this.model] ?? 512;
+    this.dimensions = config.dimensions ?? dims[this.model] ?? 1024;
   }
 
   async embedQuery(text: string): Promise<number[]> {
@@ -60,6 +67,13 @@ export class AnthropicEmbeddingProvider implements EmbeddingProvider {
         input: texts,
         model: this.model,
         input_type: inputType,
+        ...(this.model.startsWith("voyage-4") ||
+        this.model.startsWith("voyage-code-4") ||
+        this.model.startsWith("voyage-3.5") ||
+        this.model === "voyage-3-large" ||
+        this.model === "voyage-code-3"
+          ? { output_dimension: this.dimensions }
+          : {}),
       }),
     });
 

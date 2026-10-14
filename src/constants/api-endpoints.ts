@@ -28,7 +28,7 @@ async function waitForTonapiSlot(): Promise<void> {
   };
 
   clean();
-  if (_tonapiTimestamps.length >= maxRps) {
+  while (_tonapiTimestamps.length >= maxRps) {
     const waitMs = _tonapiTimestamps[0] + 1000 - Date.now() + 50;
     if (waitMs > 0) await new Promise((r) => setTimeout(r, waitMs));
     clean();

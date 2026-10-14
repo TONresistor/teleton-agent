@@ -50,6 +50,8 @@ export class AgentLifecycleController {
   private hookRegistry = new HookRegistry();
   private disposeToolIndexSubscription: (() => void) | null = null;
   private startTime = 0;
+  private retentionTimer: ReturnType<typeof setInterval> | null = null;
+  private retentionRun: Promise<void> | null = null;
 
   getMcpConnections(): McpConnection[] {
     return this.mcpConnections;
@@ -151,6 +153,21 @@ export class AgentLifecycleController {
       deps.heartbeatRunner.start(adminChatId, deps.config.heartbeat.interval_ms);
     }
 
+    this.retentionTimer = setInterval(
+      () => {
+        if (this.retentionRun) return;
+        this.retentionRun = maintenance
+          .runRetention()
+          .catch((error: unknown) => {
+            log.warn({ err: error }, "Periodic retention failed");
+          })
+          .finally(() => {
+            this.retentionRun = null;
+          });
+      },
+      24 * 60 * 60 * 1000
+    );
+    this.retentionTimer.unref();
     void deps.memory.messages.startPendingEmbeddingBackfill();
   }
 
@@ -158,6 +175,9 @@ export class AgentLifecycleController {
     const deps = this.deps;
     if (!deps) return;
 
+    if (this.retentionTimer) clearInterval(this.retentionTimer);
+    this.retentionTimer = null;
+    await this.retentionRun;
     deps.messagePipeline.setAcceptingMessages(false);
     await deps.heartbeatRunner.stopAndDrain();
     await this.stopPluginWatcher();

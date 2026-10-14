@@ -207,9 +207,13 @@ export const WebUIConfigSchema = _WebUIObject.default(_WebUIObject.parse({}));
 
 const _EmbeddingObject = z.object({
   provider: z
-    .enum(["local", "anthropic", "none"])
+    .enum(["local", "voyage", "anthropic", "none"])
     .default("local")
-    .describe("Embedding provider: local (ONNX), anthropic (API), or none (FTS5-only)"),
+    .describe(
+      "Embedding provider: local (ONNX), voyage (API), or none (FTS5-only); anthropic is a legacy alias"
+    ),
+  api_key: z.string().optional(),
+  dimensions: z.number().int().min(1).max(4096).optional(),
   model: z
     .string()
     .optional()

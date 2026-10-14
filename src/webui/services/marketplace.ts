@@ -16,13 +16,14 @@ import type { ToolRegistry } from "../../agent/tools/registry.js";
 import type { PluginModule } from "../../agent/tools/types.js";
 import { HookRegistry } from "../../sdk/hooks/registry.js";
 import type { MarketplaceDeps, RegistryEntry, MarketplacePlugin } from "../types.js";
+import { fetchWithTimeout } from "../../utils/fetch.js";
+import { readResponseBuffer } from "../../utils/response-body.js";
 import { createLogger } from "../../utils/logger.js";
 
 const log = createLogger("WebUI");
 
-const REGISTRY_URL =
-  "https://raw.githubusercontent.com/TONresistor/teleton-plugins/main/registry.json";
-const PLUGIN_BASE_URL = "https://raw.githubusercontent.com/TONresistor/teleton-plugins/main";
+const REPO_API = "https://api.github.com/repos/TONresistor/teleton-plugins";
+const PLUGIN_BASE_URL = "https://raw.githubusercontent.com/TONresistor/teleton-plugins";
 const GITHUB_API_BASE = "https://api.github.com/repos/TONresistor/teleton-plugins/contents";
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 const PLUGINS_DIR = WORKSPACE_PATHS.PLUGINS_DIR;
@@ -83,9 +84,16 @@ export class MarketplaceService {
   }
 
   private async fetchRegistry(): Promise<RegistryEntry[]> {
-    const res = await fetch(REGISTRY_URL);
+    const commitResponse = await fetchWithTimeout(`${REPO_API}/commits/main`);
+    if (!commitResponse.ok)
+      throw new Error(`Failed to resolve plugin revision: ${commitResponse.status}`);
+    const commit = JSON.parse((await readResponseBuffer(commitResponse, 1_000_000)).toString()) as {
+      sha: string;
+    };
+    if (!/^[a-f0-9]{40}$/.test(commit.sha)) throw new Error("Invalid plugin revision");
+    const res = await fetchWithTimeout(`${PLUGIN_BASE_URL}/${commit.sha}/registry.json`);
     if (!res.ok) throw new Error(`Registry fetch failed: ${res.status} ${res.statusText}`);
-    const data = await res.json();
+    const data = JSON.parse((await readResponseBuffer(res, 1_000_000)).toString());
     // Registry format: { version: "1.0.0", plugins: [...] }
     const plugins = Array.isArray(data) ? data : data?.plugins;
     if (!Array.isArray(plugins)) throw new Error("Registry has no plugins array");
@@ -101,19 +109,22 @@ export class MarketplaceService {
       }
     }
 
-    return plugins as RegistryEntry[];
+    return plugins.map((entry: RegistryEntry) => ({
+      ...entry,
+      sourceRef: commit.sha,
+    })) as RegistryEntry[];
   }
 
   // ── Remote manifest ─────────────────────────────────────────────────
 
   private async fetchRemoteManifest(entry: RegistryEntry): Promise<ManifestData> {
-    const cached = this.manifestCache.get(entry.id);
+    const cached = this.manifestCache.get(`${entry.id}:${entry.sourceRef}`);
     if (cached && Date.now() - cached.fetchedAt < CACHE_TTL) {
       return cached.data;
     }
 
-    const url = `${PLUGIN_BASE_URL}/${entry.path}/manifest.json`;
-    const res = await fetch(url);
+    const url = `${PLUGIN_BASE_URL}/${entry.sourceRef}/${entry.path}/manifest.json`;
+    const res = await fetchWithTimeout(url);
     if (!res.ok) {
       // Fallback: construct from registry entry
       return {
@@ -123,13 +134,13 @@ export class MarketplaceService {
         author: entry.author,
       };
     }
-    const raw = await res.json();
+    const raw = JSON.parse((await readResponseBuffer(res, 1_000_000)).toString());
     // Normalize author: manifest may have { name, url } object or a plain string
     const data: ManifestData = {
       ...raw,
       author: normalizeAuthor(raw.author),
     };
-    this.manifestCache.set(entry.id, { data, fetchedAt: Date.now() });
+    this.manifestCache.set(`${entry.id}:${entry.sourceRef}`, { data, fetchedAt: Date.now() });
     return data;
   }
 
@@ -237,7 +248,8 @@ export class MarketplaceService {
       mkdirSync(pluginDir, { recursive: true });
 
       // Download the entire plugin directory from GitHub
-      await this.downloadDir(entry.path, pluginDir);
+      if (!entry.sourceRef) throw new Error("Plugin revision is missing");
+      await this.downloadDir(entry.path, pluginDir, entry.sourceRef);
 
       // Install npm deps if package.json exists
       await ensurePluginDeps(pluginDir, pluginId);
@@ -458,17 +470,23 @@ export class MarketplaceService {
    * Recursively download a GitHub directory to a local path.
    * Uses the GitHub Contents API to list files, then fetches each via raw.githubusercontent.
    */
-  private async downloadDir(remotePath: string, localDir: string, depth = 0): Promise<void> {
+  private async downloadDir(
+    remotePath: string,
+    localDir: string,
+    revision: string,
+    depth = 0,
+    budget = { remaining: 50 * 1024 * 1024 }
+  ): Promise<void> {
     if (depth > 5) throw new Error("Plugin directory too deeply nested");
 
-    const res = await fetch(`${GITHUB_API_BASE}/${remotePath}`);
+    const res = await fetchWithTimeout(`${GITHUB_API_BASE}/${remotePath}?ref=${revision}`);
     if (!res.ok) throw new Error(`Failed to list directory "${remotePath}": ${res.status}`);
     const entries: Array<{
       name: string;
       type: string;
       download_url: string | null;
       path: string;
-    }> = await res.json();
+    }> = JSON.parse((await readResponseBuffer(res, 1_000_000)).toString());
 
     for (const item of entries) {
       // Validate name — block path traversal
@@ -483,20 +501,24 @@ export class MarketplaceService {
 
       if (item.type === "dir") {
         mkdirSync(target, { recursive: true });
-        await this.downloadDir(item.path, target, depth + 1);
+        await this.downloadDir(item.path, target, revision, depth + 1, budget);
       } else if (item.type === "file" && item.download_url) {
         // Validate download URL is from GitHub
         const url = new URL(item.download_url);
         if (
-          !url.hostname.endsWith("githubusercontent.com") &&
-          !url.hostname.endsWith("github.com")
+          url.protocol !== "https:" ||
+          !["raw.githubusercontent.com", "github.com"].includes(url.hostname)
         ) {
           throw new Error(`Untrusted download host: ${url.hostname}`);
         }
-        const fileRes = await fetch(item.download_url);
+        const fileRes = await fetchWithTimeout(`${PLUGIN_BASE_URL}/${revision}/${item.path}`);
         if (!fileRes.ok) throw new Error(`Failed to download ${item.name}: ${fileRes.status}`);
-        const content = await fileRes.text();
-        writeFileSync(target, content, { encoding: "utf-8", mode: 0o600 });
+        const content = await readResponseBuffer(
+          fileRes,
+          Math.min(10 * 1024 * 1024, budget.remaining)
+        );
+        budget.remaining -= content.byteLength;
+        writeFileSync(target, content, { mode: 0o600 });
       }
     }
   }

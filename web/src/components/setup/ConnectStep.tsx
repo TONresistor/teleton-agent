@@ -12,7 +12,11 @@ const codeAnimation = () => import('../../assets/login-telegram.json').then((m) 
 
 function LottiePlayer({ loader, size }: { loader: () => Promise<object>; size: number }) {
   const [data, setData] = useState<object | null>(null);
-  useEffect(() => { loader().then(setData); }, []);
+  useEffect(() => {
+    let cancelled = false;
+    void loader().then((animation) => { if (!cancelled) setData(animation); });
+    return () => { cancelled = true; };
+  }, [loader]);
   if (!data) return <div style={{ width: size, height: size, margin: '0 auto 16px' }} />;
   return (
     <Suspense fallback={<div style={{ width: size, height: size, margin: '0 auto 16px' }} />}>
@@ -36,10 +40,11 @@ export function ConnectStep({ data, onChange }: StepProps) {
   const qrPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const isQr = data.authMode === 'qr';
+  const hasFloodWait = floodWait > 0;
 
   // Countdown for flood wait
   useEffect(() => {
-    if (floodWait <= 0) return;
+    if (!hasFloodWait) return;
     timerRef.current = setInterval(() => {
       setFloodWait((t) => {
         if (t <= 1) {
@@ -50,7 +55,7 @@ export function ConnectStep({ data, onChange }: StepProps) {
       });
     }, 1000);
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
-  }, [floodWait > 0]);
+  }, [hasFloodWait]);
 
   // Show resend after 30s (phone flow only)
   useEffect(() => {
@@ -62,7 +67,7 @@ export function ConnectStep({ data, onChange }: StepProps) {
   // If already connected from previous visit
   useEffect(() => {
     if (data.telegramUser) setPhase('done');
-  }, []);
+  }, [data.telegramUser]);
 
   // Cleanup QR polling on unmount
   useEffect(() => {

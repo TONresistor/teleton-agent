@@ -26,10 +26,25 @@ export interface TelegramMessage {
   timestamp: number;
 }
 
-export function pruneOldMessages(db: Database.Database, maxAgeDays = 90): number {
+export function pruneOldMessages(
+  db: Database.Database,
+  maxAgeDays = 90,
+  clearVectors = true
+): number {
   const cutoffSec = Math.floor(Date.now() / 1000) - maxAgeDays * 86_400;
-  const result = db.prepare("DELETE FROM tg_messages WHERE timestamp < ?").run(cutoffSec);
-  return result.changes;
+  return db.transaction(() => {
+    const hasVectors = db
+      .prepare("SELECT 1 FROM sqlite_master WHERE name = 'tg_messages_vec'")
+      .get();
+    if (hasVectors && clearVectors) {
+      db.prepare(
+        `DELETE FROM tg_messages_vec WHERE id IN (
+        SELECT chat_id || char(31) || id FROM tg_messages WHERE timestamp < ?
+      )`
+      ).run(cutoffSec);
+    }
+    return db.prepare("DELETE FROM tg_messages WHERE timestamp < ?").run(cutoffSec).changes;
+  })();
 }
 
 export class MessageStore {

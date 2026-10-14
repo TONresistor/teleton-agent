@@ -12,12 +12,10 @@ export function fetchWithTimeout(
 ): Promise<Response> {
   const { timeoutMs = DEFAULT_TIMEOUT_MS, ...fetchInit } = init ?? {};
 
-  if (fetchInit.signal) {
-    return fetch(url, fetchInit);
-  }
-
   return fetch(url, {
     ...fetchInit,
-    signal: AbortSignal.timeout(timeoutMs),
+    signal: fetchInit.signal
+      ? AbortSignal.any([fetchInit.signal, AbortSignal.timeout(timeoutMs)])
+      : AbortSignal.timeout(timeoutMs),
   });
 }

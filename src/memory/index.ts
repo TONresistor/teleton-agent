@@ -14,6 +14,7 @@ import {
   type EmbeddingProvider,
   type EmbeddingProviderConfig,
 } from "./embeddings/index.js";
+import { synchronizeEmbeddingIdentity } from "./embedding-identity.js";
 import { KnowledgeIndexer } from "./agent/knowledge.js";
 import { MessageStore } from "./feed/messages.js";
 import { ContextBuilder } from "./search/context.js";
@@ -35,12 +36,14 @@ export function initializeMemory(config: {
   embeddings: EmbeddingProviderConfig;
   workspaceDir: string;
 }): MemorySystem {
-  const db = getDatabase(config.database);
-  db.configureVectorSearch(config.database.enableVectorSearch, config.database.vectorDimensions);
   const rawEmbedder =
     config.embeddings.provider === "none"
       ? createEmbeddingProvider(config.embeddings)
       : new EmbeddingWorkerProvider(config.embeddings);
+  const dimensions = rawEmbedder.dimensions;
+  const db = getDatabase({ ...config.database, vectorDimensions: dimensions || undefined });
+  db.configureVectorSearch(config.database.enableVectorSearch, dimensions || undefined);
+  synchronizeEmbeddingIdentity(db, rawEmbedder);
   const vectorEnabled = db.isVectorSearchReady();
   const database: Database.Database = db.getDb();
   const embedder =

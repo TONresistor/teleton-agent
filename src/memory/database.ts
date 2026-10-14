@@ -191,7 +191,7 @@ export class MemoryDatabase {
     if (!this.vectorReady || dimensionsChanged) this.loadVectorExtension();
   }
 
-  invalidateTelegramMessageEmbeddings(): void {
+  invalidateTelegramMessageEmbeddings(clearVectors = true): void {
     const hasVectorTable = this.db
       .prepare("SELECT 1 FROM sqlite_master WHERE name = 'tg_messages_vec'")
       .get();
@@ -208,7 +208,7 @@ export class MemoryDatabase {
            WHERE text IS NOT NULL`
         )
         .run();
-      if (hasVectorTable) this.db.exec("DELETE FROM tg_messages_vec");
+      if (hasVectorTable && clearVectors) this.db.exec("DELETE FROM tg_messages_vec");
       this.db.prepare("DELETE FROM meta WHERE key = 'tg_messages_vector_rebuild_required'").run();
     })();
   }

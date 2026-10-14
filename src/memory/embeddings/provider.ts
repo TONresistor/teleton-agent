@@ -11,7 +11,7 @@ export interface EmbeddingProvider {
 }
 
 export interface EmbeddingProviderConfig {
-  provider: "anthropic" | "local" | "none";
+  provider: "anthropic" | "voyage" | "local" | "none";
   model?: string;
   apiKey?: string;
   dimensions?: number;

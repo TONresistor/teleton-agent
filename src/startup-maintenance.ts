@@ -22,14 +22,7 @@ export class StartupMaintenance {
     }
   ) {}
 
-  async run(): Promise<{
-    indexResult: { indexed: number };
-    ftsResult: { knowledge: number; messages: number };
-  }> {
-    // Migrate sessions from JSON to SQLite (one-time)
-    const { migrateSessionsToDb } = await import("./session/migrate.js");
-    migrateSessionsToDb();
-
+  async runRetention(): Promise<void> {
     // Cleanup old transcript files (>30 days)
     const { cleanupOldTranscripts } = await import("./session/transcript.js");
     cleanupOldTranscripts(30);
@@ -40,7 +33,7 @@ export class StartupMaintenance {
 
     // Prune old tg_messages (>90 days)
     const { pruneOldMessages } = await import("./memory/feed/messages.js");
-    const prunedMessages = pruneOldMessages(this.db, 90);
+    const prunedMessages = pruneOldMessages(this.db, 90, getDatabase().isVectorSearchReady());
     if (prunedMessages > 0) {
       log.info(`Pruned ${prunedMessages} old tg_messages`);
     }
@@ -48,6 +41,24 @@ export class StartupMaintenance {
     // Cleanup old daily log files (>60 days)
     const { cleanupOldDailyLogs } = await import("./memory/daily-logs.js");
     cleanupOldDailyLogs(60);
+  }
+
+  async run(): Promise<{
+    indexResult: { indexed: number };
+    ftsResult: { knowledge: number; messages: number };
+  }> {
+    // Migrate sessions from JSON to SQLite (one-time)
+    const { migrateSessionsToDb } = await import("./session/migrate.js");
+    migrateSessionsToDb();
+
+    const { getTaskStore } = await import("./memory/agent/tasks.js");
+    const interrupted = getTaskStore(this.db).recoverInterruptedTasks();
+    if (interrupted)
+      log.warn(
+        { interrupted },
+        "Interrupted tasks marked failed; review their outcome before retrying"
+      );
+    await this.runRetention();
 
     // Harden permissions on existing files (one-shot, idempotent)
     const { hardenExistingPermissions } = await import("./workspace/harden-permissions.js");
@@ -82,6 +93,7 @@ export class StartupMaintenance {
     // Index knowledge base (MEMORY.md, memory/*.md)
     const db = getDatabase();
     const forceReindex = db.didDimensionsChange();
+    await this.memory.knowledge.reembedPending();
     const indexResult = await this.memory.knowledge.indexAll({ force: forceReindex });
     let ftsResult = { knowledge: 0, messages: 0 };
     if (indexResult.indexed > 0) {

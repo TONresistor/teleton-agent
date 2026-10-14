@@ -110,8 +110,7 @@ export class ScheduledTaskHandler {
       // Get tool registry from agent runtime
       const toolRegistry = this.agent.getToolRegistry();
       if (!toolRegistry) {
-        log.warn(`Skipping scheduled task ${task.id}: tool registry not available`);
-        return;
+        throw new Error("Tool registry not available");
       }
 
       // Execute task and get prompt for agent (with parent context)

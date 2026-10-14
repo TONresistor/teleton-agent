@@ -24,45 +24,38 @@ export function useResource<T>(
   const [data, setData] = useState<T | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  // Increment to trigger a manual reload without changing external deps.
-  const [tick, setTick] = useState(0);
-
-  // Keep fetcher stable across renders via ref so the effect dep array stays clean.
   const fetcherRef = useRef(fetcher);
   fetcherRef.current = fetcher;
+  const generation = useRef(0);
+  const mounted = useRef(false);
 
-  // Cancellation token: each fetch cycle gets a unique object; stale fetches are ignored.
-  const cancelRef = useRef<object>({});
+  const reload = useCallback(async (): Promise<void> => {
+    if (!mounted.current) return;
+    const token = ++generation.current;
+    setLoading(true);
+    setError(null);
+    try {
+      const result = await fetcherRef.current();
+      if (mounted.current && generation.current === token) setData(result);
+    } catch (err: unknown) {
+      if (mounted.current && generation.current === token) setError(errMsg(err));
+    } finally {
+      if (mounted.current && generation.current === token) setLoading(false);
+    }
+  }, []);
+
+  const invalidate = useCallback(() => {
+    mounted.current = false;
+    generation.current++;
+  }, []);
 
   useEffect(() => {
-    const token = {};
-    cancelRef.current = token;
-    setLoading(true);
-    setError(null);
-    fetcherRef.current()
-      .then((result) => {
-        if (cancelRef.current === token) { setData(result); setLoading(false); }
-      })
-      .catch((err: unknown) => {
-        if (cancelRef.current === token) { setError(errMsg(err)); setLoading(false); }
-      });
-    return () => { cancelRef.current = {}; };
+    mounted.current = true;
+    void reload();
+    return invalidate;
+    // Callers supply the dependency list for their fetcher.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [tick, ...deps]);
-
-  /**
-   * Imperatively re-fetch and return a Promise that settles when done.
-   * Safe to use as a `useToolManager` reload callback.
-   */
-  const reload = useCallback((): Promise<void> => {
-    setTick((n) => n + 1);
-    // Run the fetcher directly so callers that await reload() get fresh data.
-    setLoading(true);
-    setError(null);
-    return fetcherRef.current()
-      .then((result) => { setData(result); setLoading(false); })
-      .catch((err: unknown) => { setError(errMsg(err)); setLoading(false); });
-  }, []);
+  }, [reload, invalidate, ...deps]);
 
   return { data, loading, error, reload, setError };
 }

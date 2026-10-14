@@ -12,17 +12,20 @@ export * from "./utils.js";
 export function createEmbeddingProvider(config: EmbeddingProviderConfig): EmbeddingProvider {
   switch (config.provider) {
     case "anthropic":
+    case "voyage":
       if (!config.apiKey) {
-        throw new Error("API key required for Anthropic embedding provider");
+        throw new Error("Set embedding.api_key or TELETON_EMBEDDING_API_KEY for Voyage embeddings");
       }
       return new AnthropicEmbeddingProvider({
         apiKey: config.apiKey,
         model: config.model,
+        dimensions: config.dimensions,
       });
 
     case "local":
       return new LocalEmbeddingProvider({
         model: config.model,
+        dimensions: config.dimensions,
       });
 
     case "none":

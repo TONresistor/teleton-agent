@@ -91,7 +91,7 @@ export function TokenActivity() {
             </div>
             <div className="dash-token-axis">
               <span>{period === 'day' ? '00:00' : cells[0]?.label.slice(5) || '30 days ago'}</span>
-              <span>{period === 'day' ? '23:00' : cells.at(-1)?.label.slice(5) || 'Today'}</span>
+              <span>{period === 'day' ? '23:00' : cells[cells.length - 1]?.label.slice(5) || 'Today'}</span>
             </div>
           </div>
         )}

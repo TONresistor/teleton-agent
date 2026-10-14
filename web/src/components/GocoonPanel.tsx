@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
+import { useCallback, useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { api } from '../lib/api';
 import { errMsg } from '../lib/utils';
 import { toast } from '../lib/toast';
@@ -75,16 +75,16 @@ export function GocoonPanel() {
   const [events, setEvents] = useState<WEvent[]>([]);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const refresh = async (): Promise<void> => {
+  const refresh = useCallback(async (): Promise<void> => {
     try {
       const r = await api.gocoonStatus();
       if (r.success) setStatus(r.data);
     } catch {
       /* keep last known status */
     }
-  };
+  }, []);
 
-  const startWithdrawPoll = (): void => {
+  const startWithdrawPoll = useCallback((): void => {
     if (pollRef.current) clearInterval(pollRef.current);
     pollRef.current = setInterval(async () => {
       const s = await api.gocoonWithdrawStatus();
@@ -100,7 +100,7 @@ export function GocoonPanel() {
         void refresh();
       }
     }, 1500);
-  };
+  }, [refresh]);
 
   useEffect(() => {
     void refresh();
@@ -122,7 +122,7 @@ export function GocoonPanel() {
     return () => {
       if (pollRef.current) clearInterval(pollRef.current);
     };
-  }, []);
+  }, [refresh, startWithdrawPoll]);
 
   const w = status?.wallet ?? null;
   const running = !!status?.runner;
@@ -136,7 +136,7 @@ export function GocoonPanel() {
     if (!awaitingDeposit) return;
     const t = setInterval(() => void refresh(), 5000);
     return () => clearInterval(t);
-  }, [awaitingDeposit]);
+  }, [awaitingDeposit, refresh]);
 
   const run = async (label: string, fn: () => Promise<void>): Promise<void> => {
     setBusy(label);
