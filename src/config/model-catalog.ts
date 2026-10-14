@@ -81,7 +81,7 @@ const MODEL_OPTIONS: Record<string, CatalogModelOption[]> = {
     {
       value: "gpt-6.1-sol",
       name: "GPT-6.1 Sol",
-      description: "Agentic coding, reasoning, vision, 1.05M context",
+      description: "Agentic coding, reasoning, vision, 272K effective context",
     },
     {
       value: "gpt-6-sol",
@@ -290,8 +290,8 @@ const MODEL_OPTIONS: Record<string, CatalogModelOption[]> = {
       description: "Reasoning and vision via OpenRouter",
     },
     {
-      value: "qwen/qwen3.8-27b:free",
-      name: "Qwen3.8 27B (free)",
+      value: "google/gemma-4-31b-it:free",
+      name: "Gemma 4 31B (free)",
       description: "Free reasoning and vision via OpenRouter",
     },
     {
@@ -520,7 +520,7 @@ const MODEL_OPTIONS: Record<string, CatalogModelOption[]> = {
     {
       value: "qwen-3.8-27b",
       name: "Qwen3.8 27B",
-      description: "Fast multimodal reasoning, 65K context",
+      description: "Fast multimodal reasoning, 131K context",
     },
   ],
   zai: [

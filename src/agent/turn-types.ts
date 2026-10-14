@@ -54,8 +54,7 @@ export interface TurnContext {
 }
 
 export type TurnContextResult =
-  | { kind: "ready"; turn: TurnContext }
-  | { kind: "early"; response: AgentResponse };
+  { kind: "ready"; turn: TurnContext } | { kind: "early"; response: AgentResponse };
 
 export interface LoopResult {
   finalResponse: ChatResponse | null;

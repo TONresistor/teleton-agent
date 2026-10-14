@@ -35,8 +35,7 @@ FROM node:22.23.2-slim
 WORKDIR /app
 
 # Copy package files and install production deps only.
-# better-sqlite3 has no usable prebuilt for this image and compiles from source, so the
-# build toolchain is installed, used, then purged in the same layer to keep the image slim.
+# Keep a toolchain available during installation for native addons, then purge it.
 COPY package.json package-lock.json ./
 RUN apt-get update \
     && apt-get install -y --no-install-recommends python3 make g++ \
@@ -46,9 +45,6 @@ RUN apt-get update \
     && apt-get purge -y python3 make g++ \
     && apt-get autoremove -y \
     && rm -rf /var/lib/apt/lists/*
-
-# Copy pre-built native module from build stage
-COPY --from=build /app/node_modules/better-sqlite3/build/Release/better_sqlite3.node /app/node_modules/better-sqlite3/build/Release/better_sqlite3.node
 
 # Copy compiled code, bin wrapper, and templates
 COPY --from=build /app/dist/ dist/
@@ -62,6 +58,10 @@ VOLUME /data
 # Run as non-root
 RUN chown -R node:node /app
 USER node
+
+# Verify the installed production addons and CLI as the runtime user.
+RUN node --input-type=module -e "import Database from 'better-sqlite3'; import * as vec from 'sqlite-vec'; const db = new Database(':memory:'); vec.load(db); if (!db.prepare('SELECT vec_version() AS version').get().version) throw new Error('sqlite-vec unavailable'); db.exec('CREATE TABLE smoke(value INTEGER)'); db.prepare('INSERT INTO smoke VALUES (?)').run(1); if (db.prepare('SELECT value FROM smoke').get().value !== 1) throw new Error('SQLite query failed'); db.close();" \
+    && node dist/cli/index.js --help
 
 # WebUI port (when enabled)
 EXPOSE 7777

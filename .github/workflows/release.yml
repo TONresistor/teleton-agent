@@ -7,6 +7,7 @@ on:
 # Least privilege by default; jobs opt into the extra scopes they need.
 permissions:
   contents: read
+  actions: read
 
 jobs:
   # ---- Build & Verify ----
@@ -23,6 +24,11 @@ jobs:
           cache-dependency-path: |
             package-lock.json
             web/package-lock.json
+
+      - name: Verify main release commit and required CI
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node scripts/check-release-target.mjs
 
       - name: Verify release metadata
         run: |
@@ -81,9 +87,9 @@ jobs:
         id: check
         run: |
           LOCAL=$(node -p "require('./package.json').version")
-          REMOTE=$(npm view teleton version 2>/dev/null || echo "0.0.0")
+          REMOTE=$(npm view teleton versions --json)
           echo "local=$LOCAL remote=$REMOTE"
-          if [ "$LOCAL" != "$REMOTE" ]; then
+          if printf '%s' "$REMOTE" | node -e 'const fs = require("node:fs"); const versions = JSON.parse(fs.readFileSync(0, "utf8")); process.exit((Array.isArray(versions) ? versions : [versions]).includes(process.argv[1]) ? 1 : 0)' "$LOCAL"; then
             echo "publish=true" >> "$GITHUB_OUTPUT"
           else
             echo "publish=false" >> "$GITHUB_OUTPUT"
@@ -120,10 +126,9 @@ jobs:
         id: check
         run: |
           LOCAL=$(node -p "require('./packages/sdk/package.json').version")
-          REMOTE=$(npm view @teleton-agent/sdk version 2>/dev/null || echo "0.0.0")
+          REMOTE=$(npm view @teleton-agent/sdk versions --json)
           echo "local=$LOCAL" >> "$GITHUB_OUTPUT"
-          echo "remote=$REMOTE" >> "$GITHUB_OUTPUT"
-          if [ "$LOCAL" != "$REMOTE" ]; then
+          if printf '%s' "$REMOTE" | node -e 'const fs = require("node:fs"); const versions = JSON.parse(fs.readFileSync(0, "utf8")); process.exit((Array.isArray(versions) ? versions : [versions]).includes(process.argv[1]) ? 1 : 0)' "$LOCAL"; then
             echo "publish=true" >> "$GITHUB_OUTPUT"
           else
             echo "publish=false" >> "$GITHUB_OUTPUT"
@@ -166,7 +171,22 @@ jobs:
           echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
           echo "repo=$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_OUTPUT"
 
+      - name: Check immutable Docker version
+        id: image
+        env:
+          IMAGE: ghcr.io/${{ steps.meta.outputs.repo }}:${{ steps.meta.outputs.version }}
+        run: |
+          if docker buildx imagetools inspect "$IMAGE" > /tmp/image-inspect.log 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          elif grep -Eqi 'manifest unknown|manifest_unknown|not found|404' /tmp/image-inspect.log; then
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          else
+            cat /tmp/image-inspect.log
+            exit 1
+          fi
+
       - name: Build and push Docker image
+        if: steps.image.outputs.exists == 'false'
         uses: docker/build-push-action@v7
         with:
           context: .

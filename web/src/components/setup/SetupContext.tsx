@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useCallback, useEffect, useRef, type ReactNode } from 'react';
+import { createContext, useContext, useState, useCallback, useEffect, useRef, type ReactNode, type Dispatch, type SetStateAction } from 'react';
 import { setup, SetupConfig } from '../../lib/api';
 import { errMsg } from '../../lib/utils';
 
@@ -60,7 +60,7 @@ export interface WizardData {
 
 export interface StepProps {
   data: WizardData;
-  onChange: (data: WizardData) => void;
+  onChange: Dispatch<SetStateAction<WizardData>>;
 }
 
 const DEFAULTS: WizardData = {
@@ -153,7 +153,7 @@ interface SetupContextValue {
   launching: boolean;
   launchError: string;
   canAdvance: boolean;
-  setData: (data: WizardData) => void;
+  setData: Dispatch<SetStateAction<WizardData>>;
   next: () => void;
   prev: () => void;
   handleSave: () => Promise<void>;

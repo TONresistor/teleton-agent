@@ -508,10 +508,35 @@ export const CONFIGURABLE_KEYS: Record<string, ConfigKeyMeta> = {
     description: "Embedding provider for RAG",
     sensitive: false,
     hotReload: "restart",
-    options: ["local", "anthropic", "none"],
-    validate: enumValidator(["local", "anthropic", "none"]),
+    options: ["local", "voyage", "anthropic", "none"],
+    validate: enumValidator(["local", "voyage", "anthropic", "none"]),
     mask: identity,
     parse: identity,
+  },
+  "embedding.api_key": {
+    type: "string",
+    category: "Embedding",
+    label: "Embedding API Key",
+    description: "Dedicated Voyage API key",
+    sensitive: true,
+    hotReload: "restart",
+    validate: noValidation,
+    mask: (v) => (v ? "****" : ""),
+    parse: identity,
+  },
+  "embedding.dimensions": {
+    type: "number",
+    category: "Embedding",
+    label: "Embedding Dimensions",
+    description: "Vector width for the embedding model",
+    sensitive: false,
+    hotReload: "restart",
+    validate: (v) =>
+      Number.isInteger(Number(v)) && Number(v) >= 1 && Number(v) <= 4096
+        ? undefined
+        : "Must be an integer between 1 and 4096",
+    mask: identity,
+    parse: Number,
   },
   "embedding.model": {
     type: "string",

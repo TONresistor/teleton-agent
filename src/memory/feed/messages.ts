@@ -26,13 +26,29 @@ export interface TelegramMessage {
   timestamp: number;
 }
 
-export function pruneOldMessages(db: Database.Database, maxAgeDays = 90): number {
+export function pruneOldMessages(
+  db: Database.Database,
+  maxAgeDays = 90,
+  clearVectors = true
+): number {
   const cutoffSec = Math.floor(Date.now() / 1000) - maxAgeDays * 86_400;
-  const result = db.prepare("DELETE FROM tg_messages WHERE timestamp < ?").run(cutoffSec);
-  return result.changes;
+  return db.transaction(() => {
+    const hasVectors = db
+      .prepare("SELECT 1 FROM sqlite_master WHERE name = 'tg_messages_vec'")
+      .get();
+    if (hasVectors && clearVectors) {
+      db.prepare(
+        `DELETE FROM tg_messages_vec WHERE id IN (
+        SELECT chat_id || char(31) || id FROM tg_messages WHERE timestamp < ?
+      )`
+      ).run(cutoffSec);
+    }
+    return db.prepare("DELETE FROM tg_messages WHERE timestamp < ?").run(cutoffSec).changes;
+  })();
 }
 
 export class MessageStore {
+  private embeddingAvailable = true;
   private pendingBackfill: Promise<void> | null = null;
   private pendingBackfillAbort: AbortController | null = null;
   private pendingBackfillStart: ReturnType<typeof setTimeout> | null = null;
@@ -42,6 +58,24 @@ export class MessageStore {
     private embedder: EmbeddingProvider,
     private vectorEnabled: boolean
   ) {}
+
+  setEmbeddingAvailability(available: boolean): void {
+    this.embeddingAvailable = available;
+    if (!this.canEmbed()) {
+      if (this.pendingBackfillStart) clearTimeout(this.pendingBackfillStart);
+      this.pendingBackfillStart = null;
+      this.pendingBackfillAbort?.abort();
+    }
+  }
+
+  private canEmbed(): boolean {
+    return (
+      this.vectorEnabled &&
+      this.embeddingAvailable &&
+      this.embedder.id !== "noop" &&
+      this.embedder.dimensions > 0
+    );
+  }
 
   private ensureChat(chatId: string, isGroup: boolean = false): void {
     const existing = this.db.prepare(`SELECT id FROM tg_chats WHERE id = ?`).get(chatId);
@@ -141,7 +175,7 @@ export class MessageStore {
     limit = 100,
     includeFailed = true
   ): Promise<{ indexed: number; failed: number; skipped: number }> {
-    if (!this.vectorEnabled) return { indexed: 0, failed: 0, skipped: 0 };
+    if (!this.canEmbed()) return { indexed: 0, failed: 0, skipped: 0 };
     const statusFilter = includeFailed
       ? "embedding_status IN ('pending', 'failed')"
       : "embedding_status = 'pending'";
@@ -207,6 +241,7 @@ export class MessageStore {
       clearTimeout(this.pendingBackfillStart);
       this.pendingBackfillStart = null;
     }
+    if (!this.canEmbed()) return Promise.resolve();
     if (this.pendingBackfill) return this.pendingBackfill;
 
     const controller = new AbortController();
@@ -218,7 +253,7 @@ export class MessageStore {
         if (this.pendingBackfill === promise) {
           this.pendingBackfill = null;
           this.pendingBackfillAbort = null;
-          if (!controller.signal.aborted && this.hasPendingEmbeddings()) {
+          if (!controller.signal.aborted && this.canEmbed() && this.hasPendingEmbeddings()) {
             void this.startPendingEmbeddingBackfill(batchSize, delayMs);
           }
         }
@@ -238,7 +273,7 @@ export class MessageStore {
   }
 
   private schedulePendingEmbeddingBackfill(): void {
-    if (this.pendingBackfill || this.pendingBackfillStart) return;
+    if (!this.canEmbed() || this.pendingBackfill || this.pendingBackfillStart) return;
     this.pendingBackfillStart = setTimeout(() => {
       this.pendingBackfillStart = null;
       void this.startPendingEmbeddingBackfill();
@@ -255,7 +290,7 @@ export class MessageStore {
     let failed = 0;
 
     try {
-      while (!signal.aborted) {
+      while (!signal.aborted && this.canEmbed()) {
         const batch = await this.backfillPendingEmbeddings(batchSize, false);
         indexed += batch.indexed;
         failed += batch.failed;

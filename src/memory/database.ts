@@ -191,7 +191,10 @@ export class MemoryDatabase {
     if (!this.vectorReady || dimensionsChanged) this.loadVectorExtension();
   }
 
-  invalidateTelegramMessageEmbeddings(): void {
+  invalidateTelegramMessageEmbeddings(
+    clearVectors = true,
+    status: "pending" | "disabled" = "pending"
+  ): void {
     const hasVectorTable = this.db
       .prepare("SELECT 1 FROM sqlite_master WHERE name = 'tg_messages_vec'")
       .get();
@@ -202,13 +205,13 @@ export class MemoryDatabase {
            SET embedding = NULL,
                embedding_status = CASE
                  WHEN length(trim(text)) = 0 THEN 'disabled'
-                 ELSE 'pending'
+                 ELSE ?
                END,
                indexed_at = unixepoch()
            WHERE text IS NOT NULL`
         )
-        .run();
-      if (hasVectorTable) this.db.exec("DELETE FROM tg_messages_vec");
+        .run(status);
+      if (hasVectorTable && clearVectors) this.db.exec("DELETE FROM tg_messages_vec");
       this.db.prepare("DELETE FROM meta WHERE key = 'tg_messages_vector_rebuild_required'").run();
     })();
   }

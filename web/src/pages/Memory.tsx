@@ -53,7 +53,7 @@ export function Memory() {
       cancelled = true;
       clearTimeout(timer);
     };
-  }, [query]);
+  }, [query, setError]);
 
   const toggleSource = async (sourceKey: string) => {
     if (openedFile?.source === sourceKey) {

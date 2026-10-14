@@ -583,8 +583,7 @@ export function normalizeInvalidTelegramMessageEmbeddings(
 
 export function getSchemaVersion(db: Database.Database): string | null {
   const row = db.prepare(`SELECT value FROM meta WHERE key = 'schema_version'`).get() as
-    | { value: string }
-    | undefined;
+    { value: string } | undefined;
   return row?.value ?? null;
 }
 

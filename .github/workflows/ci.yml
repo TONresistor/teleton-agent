@@ -4,7 +4,7 @@ on:
   push:
     branches: [main, dev]
   pull_request:
-    branches: [dev]
+    branches: [main, dev]
 
 # Cancel superseded runs on the same ref (rapid pushes / PR force-pushes).
 concurrency:
@@ -52,6 +52,9 @@ jobs:
 
       - name: Lint
         run: npm run lint
+
+      - name: WebUI lint and tests
+        run: npm --prefix web run lint && npm --prefix web test
 
       - name: Format check
         run: npm run format:check

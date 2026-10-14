@@ -27,6 +27,34 @@ export interface Task {
 export class TaskStore {
   constructor(private db: Database.Database) {}
 
+  recoverInterruptedTasks(): number {
+    return this.db.transaction(() => {
+      const interrupted = this.db
+        .prepare(
+          `UPDATE tasks SET status = 'failed', completed_at = unixepoch(),
+        error = 'Execution interrupted; outcome unknown. Review previous actions before recreating this task.'
+        WHERE status = 'in_progress'`
+        )
+        .run().changes;
+      if (interrupted > 0) {
+        let changed: number;
+        do {
+          changed = this.db
+            .prepare(
+              `UPDATE tasks SET status = 'failed', completed_at = unixepoch(),
+            error = 'Parent task failed; recreate after reviewing the interrupted execution.'
+            WHERE status = 'pending' AND EXISTS (
+              SELECT 1 FROM task_dependencies d JOIN tasks p ON p.id = d.depends_on_task_id
+              WHERE d.task_id = tasks.id AND p.status = 'failed'
+            )`
+            )
+            .run().changes;
+        } while (changed > 0);
+      }
+      return interrupted;
+    })();
+  }
+
   createTask(task: {
     description: string;
     priority?: number;

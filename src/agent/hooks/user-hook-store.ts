@@ -20,8 +20,7 @@ export interface BlocklistConfig {
 
 export function getUserHookConfig(db: Database.Database, key: string): string | null {
   const row = db.prepare("SELECT value FROM user_hook_config WHERE key = ?").get(key) as
-    | { value: string }
-    | undefined;
+    { value: string } | undefined;
   return row?.value ?? null;
 }
 

@@ -27,21 +27,25 @@ export function ProviderStep({ data, onChange }: StepProps) {
 
   // Load models when provider changes
   useEffect(() => {
+    let cancelled = false;
     if (!data.provider || data.provider === 'gocoon' || data.provider === 'local') {
       setModels([]);
+      setLoadingModels(false);
       return;
     }
     setLoadingModels(true);
     setup.getModels(data.provider)
       .then((m) => {
+        if (cancelled) return;
         setModels(m);
-        if (!data.model && m.length > 0) {
-          onChange({ ...data, model: m[0].value });
+        if (m.length > 0) {
+          onChange((current) => current.model ? current : { ...current, model: m[0].value });
         }
       })
-      .catch(() => setModels([]))
-      .finally(() => setLoadingModels(false));
-  }, [data.provider]);
+      .catch(() => { if (!cancelled) setModels([]); })
+      .finally(() => { if (!cancelled) setLoadingModels(false); });
+    return () => { cancelled = true; };
+  }, [data.provider, onChange]);
 
   const handleSelect = (id: string) => {
     onChange({ ...data, provider: id, apiKey: '', model: '', customModel: '' });

@@ -1,10 +1,12 @@
-import type {
-  Api,
-  AssistantMessage,
-  Context,
-  Model,
-  ProviderStreamOptions,
-  Tool,
+import {
+  clampThinkingLevel,
+  hasApi,
+  type Api,
+  type AssistantMessage,
+  type Context,
+  type Model,
+  type ProviderStreamOptions,
+  type Tool,
 } from "@earendil-works/pi-ai/compat";
 import type { AgentConfig } from "../config/schema.js";
 import type { SupportedProvider } from "../config/providers.js";
@@ -48,26 +50,29 @@ const GOOGLE_MODELS_WITHOUT_SAMPLING_PARAMS = new Set([
   "gemini-3.5-flash-lite",
 ]);
 
-function modelSupportsTemperature(provider: SupportedProvider, modelId: string): boolean {
+function modelSupportsTemperature(provider: SupportedProvider, model: Model<Api>): boolean {
   if (provider === "codex" || provider === "grok-build") return false;
-  if (
-    provider === "openai" &&
-    ["gpt-6-astra", "gpt-6.1-sol", "gpt-6-sol", "gpt-6-luna"].includes(modelId)
-  )
-    return false;
-  if (
-    provider === "openrouter" &&
-    [
+  // Responses reasoning models reject sampling controls. Their capabilities come
+  // from the catalog, including models introduced after this release.
+  if (provider === "openai" && model.reasoning) return false;
+  if (hasApi(model, "anthropic-messages")) {
+    return (
+      model.compat?.supportsTemperature !== false &&
+      model.compat?.forceAdaptiveThinking !== true &&
+      model.compat?.supportsMidConvoEffort !== true
+    );
+  }
+  if (provider === "openrouter") {
+    if (model.id.startsWith("openai/") && model.reasoning) return false;
+    // The OpenRouter catalog does not yet expose sampling compatibility for
+    // these models, so retain the verified gateway exceptions.
+    return ![
       "anthropic/claude-fable-5.1",
       "anthropic/claude-opus-5.5",
-      "openai/gpt-6-astra",
-      "openai/gpt-6-sol",
-      "openai/gpt-6-luna",
       "google/gemini-3.8-flash",
-    ].includes(modelId)
-  )
-    return false;
-  if (provider === "google" && GOOGLE_MODELS_WITHOUT_SAMPLING_PARAMS.has(modelId)) return false;
+    ].includes(model.id);
+  }
+  if (provider === "google" && GOOGLE_MODELS_WITHOUT_SAMPLING_PARAMS.has(model.id)) return false;
   return true;
 }
 
@@ -77,15 +82,13 @@ function getCacheRetention(provider: SupportedProvider): "none" | "long" {
 
 function getReasoningOptions(
   provider: SupportedProvider,
-  modelId: string,
+  model: Model<Api>,
   reasoningEffort: AgentConfig["reasoning_effort"]
 ): Record<string, unknown> {
-  if (provider !== "codex" && !(provider === "openai" && modelId === "gpt-6.1-sol")) return {};
-  const effort =
-    modelId === "gpt-6.1-sol" && ["none", "minimal"].includes(reasoningEffort)
-      ? "low"
-      : reasoningEffort;
-  return { reasoningEffort: effort };
+  if ((provider !== "codex" && provider !== "openai") || !model.reasoning) return {};
+  const level = clampThinkingLevel(model, reasoningEffort === "none" ? "off" : reasoningEffort);
+  const mapped = model.thinkingLevelMap?.[level];
+  return { reasoningEffort: mapped ?? (level === "off" ? "none" : level) };
 }
 
 function prepareTools(tools: Tool[] | undefined): Tool[] | undefined {
@@ -155,14 +158,14 @@ export function prepareModelRequest(
       apiKey: getEffectiveApiKey(provider, config.api_key),
       maxTokens: request.maxTokens ?? config.max_tokens,
       ...(!isCustomOpenRouterModel(model) &&
-        modelSupportsTemperature(provider, model.id) && { temperature }),
+        modelSupportsTemperature(provider, model) && { temperature }),
       sessionId: request.sessionId,
       cacheRetention: getCacheRetention(provider),
       signal: request.signal,
       timeoutMs: request.timeoutMs,
-      ...getReasoningOptions(provider, model.id, config.reasoning_effort),
-      ...(provider === "anthropic" &&
-        ["claude-fable-5-1", "claude-opus-5-5"].includes(model.id) && { thinkingEnabled: true }),
+      ...getReasoningOptions(provider, model, config.reasoning_effort),
+      ...(hasApi(model, "anthropic-messages") &&
+        model.compat?.forceAdaptiveThinking === true && { thinkingEnabled: true }),
       ...getProviderPayloadOptions(provider),
     } as ProviderStreamOptions,
   };

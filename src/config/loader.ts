@@ -86,6 +86,18 @@ export function loadConfig(configPath: string = DEFAULT_CONFIG_PATH): Config {
   }
 
   const config = result.data;
+  if (config.embedding.provider === "anthropic") {
+    log.warn(
+      "embedding.provider 'anthropic' is deprecated; use 'voyage' with a dedicated embedding.api_key"
+    );
+    config.embedding.provider = "voyage";
+  }
+  const legacyStorage = (raw as { storage?: Record<string, unknown> }).storage;
+  for (const key of ["sessions_file", "memory_file", "history_limit"]) {
+    if (legacyStorage?.[key] !== undefined)
+      log.warn(`storage.${key} is deprecated and ignored; storage uses TELETON_HOME`);
+  }
+  if (env.TELETON_EMBEDDING_API_KEY) config.embedding.api_key = env.TELETON_EMBEDDING_API_KEY;
   const provider = config.agent.provider as SupportedProvider;
   if (provider !== "anthropic" && !(raw as Record<string, Record<string, unknown>>).agent?.model) {
     const meta = getProviderMetadata(provider);

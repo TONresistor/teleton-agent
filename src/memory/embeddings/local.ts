@@ -3,6 +3,9 @@ import { join, dirname } from "node:path";
 import { mkdirSync, writeFileSync, renameSync, statSync, unlinkSync } from "node:fs";
 import type { EmbeddingProvider } from "./provider.js";
 import { TELETON_ROOT } from "../../workspace/paths.js";
+import { readResponseBuffer } from "../../utils/response-body.js";
+import { fetchWithTimeout } from "../../utils/fetch.js";
+import { randomUUID } from "node:crypto";
 import { createLogger } from "../../utils/logger.js";
 
 const log = createLogger("Memory");
@@ -57,16 +60,27 @@ async function ensureModelCached(model: string): Promise<void> {
     log.info(`Downloading ${model}/${file}...`);
     mkdirSync(dirname(localPath), { recursive: true });
 
-    const res = await fetch(`${baseUrl}/${file}`, { redirect: "follow" });
+    const res = await fetchWithTimeout(`${baseUrl}/${file}`, {
+      redirect: "follow",
+      timeoutMs: 120_000,
+    });
     if (!res.ok) {
       throw new Error(`Failed to download ${model}/${file}: ${res.status} ${res.statusText}`);
     }
-    const buffer = Buffer.from(await res.arrayBuffer());
+    const buffer = await readResponseBuffer(res, 512 * 1024 * 1024);
 
     // Atomic write: tmp → rename (crash-safe, no partial files)
-    const tmpPath = localPath + ".tmp";
-    writeFileSync(tmpPath, buffer, { mode: 0o600 });
-    renameSync(tmpPath, localPath);
+    const tmpPath = localPath + `.${randomUUID()}.tmp`;
+    try {
+      writeFileSync(tmpPath, buffer, { mode: 0o600 });
+      renameSync(tmpPath, localPath);
+    } finally {
+      try {
+        unlinkSync(tmpPath);
+      } catch {
+        /* already renamed */
+      }
+    }
   }
 }
 
@@ -106,9 +120,9 @@ export class LocalEmbeddingProvider implements EmbeddingProvider {
   readonly dimensions: number;
   private _disabled = false;
 
-  constructor(config: { model?: string }) {
+  constructor(config: { model?: string; dimensions?: number }) {
     this.model = config.model || "Xenova/all-MiniLM-L6-v2";
-    this.dimensions = 384;
+    this.dimensions = config.dimensions ?? 384;
   }
 
   /**
@@ -120,9 +134,13 @@ export class LocalEmbeddingProvider implements EmbeddingProvider {
     for (let attempt = 1; attempt <= 2; attempt++) {
       try {
         await ensureModelCached(this.model);
-        await getExtractor(this.model);
+        const extractor = await getExtractor(this.model);
+        const sample = await extractor("warmup", { pooling: "mean", normalize: true });
+        this.validateDimensions(sample.dims);
+        this._disabled = false;
         return true;
-      } catch {
+      } catch (error) {
+        log.warn({ err: error }, "Embedding warmup failed");
         if (attempt === 1) {
           log.warn(`Embedding model load failed (attempt 1), retrying...`);
           await new Promise((r) => setTimeout(r, 1000));
@@ -138,10 +156,18 @@ export class LocalEmbeddingProvider implements EmbeddingProvider {
     return false;
   }
 
+  private validateDimensions(shape: number[]): void {
+    const width = shape[shape.length - 1];
+    if (width !== this.dimensions) {
+      throw new Error(`Local model produces ${width} dimensions; configured ${this.dimensions}`);
+    }
+  }
+
   async embedQuery(text: string): Promise<number[]> {
     if (this._disabled) return [];
     const extractor = await getExtractor(this.model);
     const output = await extractor(text, { pooling: "mean", normalize: true });
+    this.validateDimensions(output.dims);
     return Array.from(output.data as Float32Array);
   }
 
@@ -151,7 +177,10 @@ export class LocalEmbeddingProvider implements EmbeddingProvider {
 
     const extractor = await getExtractor(this.model);
     const output = await extractor(texts, { pooling: "mean", normalize: true });
+    this.validateDimensions(output.dims);
     const data = output.data as Float32Array;
+    if (data.length !== texts.length * this.dimensions)
+      throw new Error("Embedding batch shape does not match the input count");
     const dims = this.dimensions;
 
     const results: number[][] = [];

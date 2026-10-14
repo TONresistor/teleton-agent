@@ -15,7 +15,7 @@ import { randomUUID } from "node:crypto";
 import { dirname, join, basename } from "node:path";
 
 /** Replace a private file without exposing a partially written document. Follows existing symlinks. */
-export function writePrivateFileAtomic(path: string, content: string): void {
+export function writePrivateFileAtomic(path: string, content: string, mode?: number): void {
   const target = existsSync(path) ? realpathSync(path) : path;
   const prior = existsSync(target) ? statSync(target) : undefined;
   const temporary = join(dirname(target), `.${basename(target)}.${randomUUID()}.tmp`);
@@ -25,7 +25,7 @@ export function writePrivateFileAtomic(path: string, content: string): void {
     if (prior && (prior.uid !== process.getuid?.() || prior.gid !== process.getgid?.())) {
       fchownSync(fd, prior.uid, prior.gid);
     }
-    if (prior) fchmodSync(fd, prior.mode & 0o777);
+    if (prior || mode !== undefined) fchmodSync(fd, mode ?? (prior?.mode ?? 0o600) & 0o777);
     writeFileSync(fd, content, "utf8");
     fsyncSync(fd);
     closeSync(fd);

@@ -21,6 +21,7 @@ const envSchema = z.object({
   // Core
   TELETON_HOME: optionalString,
   TELETON_API_KEY: optionalString,
+  TELETON_EMBEDDING_API_KEY: optionalString,
   TELETON_BASE_URL: optionalString,
 
   // Telegram

@@ -33,8 +33,9 @@ const LEGACY_MODEL_CASES: ReadonlyArray<
   ["groq", "qwen/qwen3-32b", "openai/gpt-oss-120b"],
   ["groq", "llama-3.3-70b-versatile", "openai/gpt-oss-120b"],
   ["groq", "llama-3.1-8b-instant", "openai/gpt-oss-20b"],
-  ["openrouter", "nvidia/nemotron-nano-9b-v2", "qwen/qwen3.8-27b:free"],
-  ["openrouter", "nvidia/nemotron-nano-9b-v2:free", "qwen/qwen3.8-27b:free"],
+  ["openrouter", "nvidia/nemotron-nano-9b-v2", "google/gemma-4-31b-it:free"],
+  ["openrouter", "nvidia/nemotron-nano-9b-v2:free", "google/gemma-4-31b-it:free"],
+  ["openrouter", "qwen/qwen3.8-27b:free", "google/gemma-4-31b-it:free"],
   ["moonshot", "kimi-k2.5", "kimi-for-coding"],
   ["moonshot", "k2p6", "kimi-for-coding"],
   ["moonshot", "kimi-k2-thinking", "kimi-for-coding"],
@@ -68,7 +69,7 @@ describe("provider model catalog", () => {
   it("resolves GPT-6.1 Sol through OpenAI Responses", () => {
     const model = getProviderModel("openai", "gpt-6.1-sol");
     expect(model.api).toBe("openai-responses");
-    expect(model.contextWindow).toBe(1_050_000);
+    expect(model.contextWindow).toBe(272_000);
     expect(model.maxTokens).toBe(128_000);
   });
 

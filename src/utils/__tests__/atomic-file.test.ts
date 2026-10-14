@@ -35,3 +35,13 @@ it("preserves old data on failed rename, cleans temporary files, and follows sym
   writePrivateFileAtomic(join(dir, "fresh"), "new");
   expect(fs.statSync(join(dir, "fresh")).mode & 0o777).toBe(0o600);
 });
+
+it("enforces the requested private mode when replacing a permissive file", () => {
+  const dir = fs.mkdtempSync(join(tmpdir(), "teleton-private-"));
+  dirs.push(dir);
+  const path = join(dir, "wallet.json");
+  fs.writeFileSync(path, "old", { mode: 0o644 });
+  writePrivateFileAtomic(path, "replacement", 0o600);
+  expect(fs.readFileSync(path, "utf8")).toBe("replacement");
+  expect(fs.statSync(path).mode & 0o777).toBe(0o600);
+});

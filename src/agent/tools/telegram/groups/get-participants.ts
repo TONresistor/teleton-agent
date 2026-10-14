@@ -96,8 +96,7 @@ export const telegramGetParticipantsExecutor: ToolExecutor<GetParticipantsParams
       const participantUserId = "userId" in p ? p.userId : undefined;
       const user = participantUserId
         ? (resultData.users.find((u) => u.id?.toString() === participantUserId?.toString()) as
-            | Api.User
-            | undefined)
+            Api.User | undefined)
         : undefined;
 
       return {

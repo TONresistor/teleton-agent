@@ -2,6 +2,14 @@
   "$schema": "https://unpkg.com/knip@6/schema.json",
   "workspaces": {
     ".": {
+      "entry": [
+        "src/sdk/index.ts",
+        "src/telegram/bridge.ts",
+        "src/agent/runtime.ts",
+        "src/gocoon/index.ts",
+        "src/workspace/index.ts"
+      ],
+      "ignoreBinaries": ["edge-tts"],
       "project": ["src/**/*.ts"]
     },
     "packages/sdk": {
@@ -10,6 +18,14 @@
     "web": {
       "project": ["src/**/*.{ts,tsx}"]
     }
+  },
+  "ignoreIssues": {
+    "src/agent/tools/dedust/constants.ts": ["exports"],
+    "src/agent/tools/journal/index.ts": ["types"],
+    "src/sdk/hooks/types.ts": ["types"],
+    "src/telegram/bridges/user.ts": ["types"],
+    "src/ton/dedust-assets.ts": ["exports"],
+    "src/webui/types.ts": ["types"]
   },
   "ignoreDependencies": ["@grammyjs/types"],
   "ignoreExportsUsedInFile": true

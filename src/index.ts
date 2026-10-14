@@ -149,20 +149,7 @@ export class TeletonApp {
     this.heartbeatRunner = new HeartbeatRunner(this.agent, this.bridge, this.config);
     this.scheduledTaskHandler = new ScheduledTaskHandler(this.agent, this.bridge, this.config);
 
-    const embeddingProvider = this.config.embedding.provider;
-    this.memory = initializeMemory({
-      database: {
-        path: join(TELETON_ROOT, "memory.db"),
-        enableVectorSearch: embeddingProvider !== "none",
-        vectorDimensions: 384,
-      },
-      embeddings: {
-        provider: embeddingProvider,
-        model: this.config.embedding.model,
-        apiKey: embeddingProvider === "anthropic" ? this.config.agent.api_key : undefined,
-      },
-      workspaceDir: join(TELETON_ROOT),
-    });
+    this.memory = this.createMemorySystem();
 
     setKnowledgeIndexer(this.memory.knowledge);
 
@@ -343,11 +330,15 @@ ${blue}  ┌──────────────────────�
     const previousMode = this.config.telegram.mode;
     const previousEmbeddingProvider = this.config.embedding.provider;
     const previousEmbeddingModel = this.config.embedding.model;
+    const previousEmbeddingDimensions = this.config.embedding.dimensions;
+    const previousEmbeddingKey = this.config.embedding.api_key;
     const freshConfig = loadConfig(this.configPath);
     const modeChanged = freshConfig.telegram.mode !== previousMode;
     const embeddingChanged =
       freshConfig.embedding.provider !== previousEmbeddingProvider ||
-      freshConfig.embedding.model !== previousEmbeddingModel;
+      freshConfig.embedding.model !== previousEmbeddingModel ||
+      freshConfig.embedding.dimensions !== previousEmbeddingDimensions ||
+      freshConfig.embedding.api_key !== previousEmbeddingKey;
     const stableConfig = this.config as unknown as Record<string, unknown>;
     for (const key of Object.keys(stableConfig)) delete stableConfig[key];
     Object.assign(stableConfig, freshConfig);
@@ -363,9 +354,6 @@ ${blue}  ┌──────────────────────�
     if (embeddingChanged) {
       await this.memory.dispose();
       Object.assign(this.memory, this.createMemorySystem());
-      if (this.config.embedding.provider !== "none") {
-        getDatabase().invalidateTelegramMessageEmbeddings();
-      }
       setKnowledgeIndexer(this.memory.knowledge);
     }
 
@@ -394,12 +382,12 @@ ${blue}  ┌──────────────────────�
       database: {
         path: join(TELETON_ROOT, "memory.db"),
         enableVectorSearch: embeddingProvider !== "none",
-        vectorDimensions: 384,
       },
       embeddings: {
         provider: embeddingProvider,
         model: this.config.embedding.model,
-        apiKey: embeddingProvider === "anthropic" ? this.config.agent.api_key : undefined,
+        apiKey: this.config.embedding.api_key,
+        dimensions: this.config.embedding.dimensions,
       },
       workspaceDir: join(TELETON_ROOT),
     });

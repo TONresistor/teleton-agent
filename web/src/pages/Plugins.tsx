@@ -1,4 +1,4 @@
-import { useEffect, useState, Fragment } from 'react';
+import { useCallback, useEffect, useState, Fragment } from 'react';
 import { api, ToolInfo, ModuleInfo, PluginManifest, MarketplacePlugin, PluginSecretsInfo, SecretDeclaration } from '../lib/api';
 import { ToolRow, LEVEL_OPTIONS } from '../components/ToolRow';
 import { PillTabs } from '../components/PillTabs';
@@ -68,7 +68,7 @@ export function Plugins() {
 
   const { updating, updateLevel, bulkLevel } = useToolManager(reload);
 
-  const loadMarketplace = (refresh = false) => {
+  const loadMarketplace = useCallback((refresh = false) => {
     setMarketLoading(true);
     return api.getMarketplace(refresh)
       .then((res) => {
@@ -79,11 +79,11 @@ export function Plugins() {
         setError(errMsg(err));
         setMarketLoading(false);
       });
-  };
+  }, [setError]);
 
   useEffect(() => {
     loadMarketplace();
-  }, []);
+  }, [loadMarketplace]);
 
   const handleInstall = async (id: string) => {
     const plugin = marketplace.find(p => p.id === id);

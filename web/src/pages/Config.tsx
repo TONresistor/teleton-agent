@@ -26,9 +26,9 @@ const TABS = [
   { id: 'tool-rag', label: 'Tool RAG' },
 ];
 
-const API_KEY_KEYS = ['agent.api_key', 'telegram.bot_token', 'tavily_api_key', 'tonapi_key', 'toncenter_api_key'];
+const API_KEY_KEYS = ['agent.api_key', 'embedding.api_key', 'telegram.bot_token', 'tavily_api_key', 'tonapi_key', 'toncenter_api_key'];
 const ADVANCED_KEYS = [
-  'embedding.provider', 'embedding.model', 'webui.port', 'webui.log_requests',
+  'embedding.provider', 'embedding.model', 'embedding.dimensions', 'webui.port', 'webui.log_requests',
   'agent.base_url', 'dev.hot_reload',
 ];
 const SESSION_KEYS = [

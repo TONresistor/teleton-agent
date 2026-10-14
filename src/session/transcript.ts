@@ -105,8 +105,7 @@ export function sanitizeTranscriptMessages(
 ): (Message | AssistantMessage)[] {
   const sanitized: (Message | AssistantMessage)[] = [];
   let pendingBatch:
-    | { messages: (Message | AssistantMessage)[]; toolCallIds: Set<string> }
-    | undefined;
+    { messages: (Message | AssistantMessage)[]; toolCallIds: Set<string> } | undefined;
   let removedCount = 0;
 
   const discardPendingBatch = (): void => {

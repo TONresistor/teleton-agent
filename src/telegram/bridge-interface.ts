@@ -70,8 +70,7 @@ export interface RichMessageButton {
 }
 
 export type RichMessageInlineItem =
-  | { type: "text"; text: string }
-  | ({ type: "button" } & RichMessageButton);
+  { type: "text"; text: string } | ({ type: "button" } & RichMessageButton);
 
 export interface RichMessageButtonRow {
   align?: RichMessageButtonAlignment;

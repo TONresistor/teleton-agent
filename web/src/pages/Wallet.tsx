@@ -98,10 +98,9 @@ export function Wallet() {
     }
   };
 
-  const all = transactions ?? [];
   const filtered = useMemo(
-    () => (filter === 'all' ? all : all.filter((tx) => getDirection(tx.type) === filter)),
-    [all, filter],
+    () => (transactions ?? []).filter((tx) => filter === 'all' || getDirection(tx.type) === filter),
+    [transactions, filter],
   );
 
   return (
@@ -178,9 +177,9 @@ export function Wallet() {
       ) : filtered.length === 0 ? (
         <div className="card" style={{ padding: 0 }}>
           <EmptyState
-            title={all.length === 0 ? 'No transactions yet' : 'No matching transactions'}
+            title={!transactions?.length ? 'No transactions yet' : 'No matching transactions'}
             description={
-              all.length === 0
+              !transactions?.length
                 ? 'Wallet activity will show up here once transactions occur.'
                 : 'Try a different filter.'
             }

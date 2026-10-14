@@ -1,6 +1,7 @@
 import { mnemonicNew, mnemonicToPrivateKey, mnemonicValidate } from "@ton/crypto";
 import { WalletContractV5R1, TonClient, fromNano } from "@ton/ton";
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from "fs";
+import { readFileSync, existsSync, mkdirSync } from "fs";
+import { writePrivateFileAtomic } from "../utils/atomic-file.js";
 import { join, dirname } from "path";
 import { getCachedHttpEndpoint, invalidateEndpointCache, getToncenterApiKey } from "./endpoint.js";
 import { fetchWithTimeout } from "../utils/fetch.js";
@@ -63,7 +64,7 @@ export function saveWallet(wallet: WalletData): void {
     mkdirSync(dir, { recursive: true });
   }
 
-  writeFileSync(WALLET_FILE, JSON.stringify(wallet, null, 2), { encoding: "utf-8", mode: 0o600 });
+  writePrivateFileAtomic(WALLET_FILE, JSON.stringify(wallet, null, 2), 0o600);
 
   // Invalidate caches so next loadWallet()/getKeyPair() re-reads
   _walletCache = undefined;

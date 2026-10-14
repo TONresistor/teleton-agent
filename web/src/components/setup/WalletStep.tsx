@@ -27,16 +27,19 @@ export function WalletStep({ data, onChange }: StepProps) {
   const [mnemonicWords, setMnemonicWords] = useState<string[]>([]);
 
   useEffect(() => {
+    let cancelled = false;
     setup.getWalletStatus()
       .then((s) => {
+        if (cancelled) return;
         setWalletStatus(s);
         if (s.exists && s.address) {
-          onChange({ ...data, walletAddress: s.address, walletAction: 'keep' });
+          onChange((current) => ({ ...current, walletAddress: s.address ?? '', walletAction: 'keep' }));
         }
       })
-      .catch((err) => setError(errMsg(err)))
-      .finally(() => setLoading(false));
-  }, []);
+      .catch((err) => { if (!cancelled) setError(errMsg(err)); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [onChange]);
 
   const handleAction = async () => {
     setActionLoading(true);
