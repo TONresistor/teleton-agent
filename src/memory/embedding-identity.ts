@@ -15,10 +15,21 @@ export function synchronizeEmbeddingIdentity(
   if (
     previous?.value === identity &&
     !(pendingReset?.value === "1" && memory.isVectorSearchReady())
-  )
+  ) {
+    if (provider.id === "noop") {
+      db.prepare(
+        `UPDATE tg_messages SET embedding = NULL, embedding_status = 'disabled',
+        indexed_at = unixepoch() WHERE text IS NOT NULL
+        AND (embedding_status != 'disabled' OR embedding IS NOT NULL)`
+      ).run();
+    }
     return;
+  }
   db.transaction(() => {
-    memory.invalidateTelegramMessageEmbeddings(memory.isVectorSearchReady());
+    memory.invalidateTelegramMessageEmbeddings(
+      memory.isVectorSearchReady(),
+      provider.id === "noop" ? "disabled" : "pending"
+    );
     const hasKnowledgeVectors = db
       .prepare("SELECT 1 FROM sqlite_master WHERE name = 'knowledge_vec'")
       .get();

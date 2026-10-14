@@ -22,6 +22,7 @@ export class CachedEmbeddingProvider implements EmbeddingProvider {
   private hits = 0;
   private misses = 0;
   private ops = 0;
+  private available = true;
   private readonly stmtCacheGet: Database.Statement;
   private readonly stmtCachePut: Database.Statement;
   private readonly stmtCacheTouch: Database.Statement;
@@ -76,10 +77,20 @@ export class CachedEmbeddingProvider implements EmbeddingProvider {
   }
 
   async warmup(): Promise<boolean> {
-    return this.inner.warmup?.() ?? true;
+    try {
+      this.available = (await this.inner.warmup?.()) ?? true;
+    } catch (error) {
+      this.available = false;
+      CachedEmbeddingProvider.log.warn(
+        { err: error },
+        "Embedding warmup failed; using FTS-only search"
+      );
+    }
+    return this.available;
   }
 
   async embedQuery(text: string): Promise<number[]> {
+    if (!this.available) return [];
     const hash = hashText(`query\u0000${text}`);
 
     const cached = this.getValidCachedEmbedding(hash);
@@ -100,6 +111,7 @@ export class CachedEmbeddingProvider implements EmbeddingProvider {
   }
 
   async embedBatch(texts: string[]): Promise<number[][]> {
+    if (!this.available) return [];
     if (texts.length === 0) return [];
 
     const hashes = texts.map((text) => hashText(`document\u0000${text}`));

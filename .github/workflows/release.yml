@@ -128,7 +128,6 @@ jobs:
           LOCAL=$(node -p "require('./packages/sdk/package.json').version")
           REMOTE=$(npm view @teleton-agent/sdk versions --json)
           echo "local=$LOCAL" >> "$GITHUB_OUTPUT"
-          echo "remote=$REMOTE" >> "$GITHUB_OUTPUT"
           if printf '%s' "$REMOTE" | node -e 'const fs = require("node:fs"); const versions = JSON.parse(fs.readFileSync(0, "utf8")); process.exit((Array.isArray(versions) ? versions : [versions]).includes(process.argv[1]) ? 1 : 0)' "$LOCAL"; then
             echo "publish=true" >> "$GITHUB_OUTPUT"
           else

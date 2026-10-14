@@ -79,11 +79,13 @@ export class StartupMaintenance {
     }
 
     // Warmup embedding model (pre-download at startup, not on first message)
-    if (this.memory.embedder.warmup) {
-      await this.memory.embedder.warmup();
-    }
+    const embeddingReady = (await this.memory.embedder.warmup?.()) ?? true;
+    this.memory.messages.setEmbeddingAvailability(embeddingReady);
+    this.memory.knowledge.setEmbeddingAvailability(embeddingReady);
 
-    const messageBackfill = await this.memory.messages.backfillPendingEmbeddings();
+    const messageBackfill = embeddingReady
+      ? await this.memory.messages.backfillPendingEmbeddings()
+      : { indexed: 0, failed: 0, skipped: 0 };
     if (messageBackfill.indexed > 0 || messageBackfill.failed > 0) {
       log.info(
         `Message embedding backfill: ${messageBackfill.indexed} indexed, ${messageBackfill.failed} failed`
@@ -93,7 +95,7 @@ export class StartupMaintenance {
     // Index knowledge base (MEMORY.md, memory/*.md)
     const db = getDatabase();
     const forceReindex = db.didDimensionsChange();
-    await this.memory.knowledge.reembedPending();
+    if (embeddingReady) await this.memory.knowledge.reembedPending();
     const indexResult = await this.memory.knowledge.indexAll({ force: forceReindex });
     let ftsResult = { knowledge: 0, messages: 0 };
     if (indexResult.indexed > 0) {

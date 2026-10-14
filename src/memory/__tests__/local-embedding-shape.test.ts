@@ -75,6 +75,25 @@ describe("local model output shape", () => {
     expect(state.calls).toBe(2);
   });
 
+  it("recovers inference on the same provider after a failed warmup", async () => {
+    vi.useFakeTimers();
+    state.width = 256;
+    const { LocalEmbeddingProvider } = await import("../embeddings/local.js");
+    const provider = new LocalEmbeddingProvider({ dimensions: 384 });
+    const failedWarmup = provider.warmup();
+    await vi.runAllTimersAsync();
+    expect(await failedWarmup).toBe(false);
+    expect(await provider.embedQuery("query")).toEqual([]);
+
+    state.width = 384;
+    expect(await provider.warmup()).toBe(true);
+    expect(await provider.embedQuery("query")).toEqual(Array(384).fill(1));
+    expect(await provider.embedBatch(["first", "second"])).toEqual([
+      Array(384).fill(1),
+      Array(384).fill(2),
+    ]);
+  });
+
   it("accepts warmup when the model width matches configuration", async () => {
     const { LocalEmbeddingProvider } = await import("../embeddings/local.js");
     const provider = new LocalEmbeddingProvider({ dimensions: 384 });

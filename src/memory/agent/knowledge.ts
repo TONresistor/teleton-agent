@@ -31,6 +31,7 @@ export function getKnowledgeIndexer(): KnowledgeIndexer | null {
 }
 
 export class KnowledgeIndexer {
+  private embeddingAvailable = true;
   constructor(
     private db: Database.Database,
     private workspaceDir: string,
@@ -38,6 +39,10 @@ export class KnowledgeIndexer {
     private vectorEnabled: boolean,
     private vectorSearchWorker?: VectorSearchWorkerClient
   ) {}
+
+  setEmbeddingAvailability(available: boolean): void {
+    this.embeddingAvailable = available;
+  }
 
   getEmbedder(): EmbeddingProvider {
     return this.embedder;
@@ -48,7 +53,7 @@ export class KnowledgeIndexer {
     queryEmbedding: number[],
     limit: number
   ): Promise<HybridSearchResult[]> {
-    if (this.vectorSearchWorker && queryEmbedding.length > 0) {
+    if (this.embeddingAvailable && this.vectorSearchWorker && queryEmbedding.length > 0) {
       try {
         const results = await this.vectorSearchWorker.searchKnowledge({
           type: "searchKnowledge",
@@ -63,12 +68,15 @@ export class KnowledgeIndexer {
       }
     }
 
-    const search = new HybridSearch(this.db, this.vectorSearchWorker ? false : this.vectorEnabled);
+    const search = new HybridSearch(
+      this.db,
+      this.embeddingAvailable && !this.vectorSearchWorker && this.vectorEnabled
+    );
     return search.searchKnowledge(query, queryEmbedding, { limit });
   }
 
   async reembedPending(): Promise<number> {
-    if (!this.vectorEnabled || this.embedder.dimensions === 0) return 0;
+    if (!this.vectorEnabled || !this.embeddingAvailable || this.embedder.dimensions === 0) return 0;
     let cursor = "";
     let indexed = 0;
     while (true) {
@@ -134,6 +142,7 @@ export class KnowledgeIndexer {
 
       const missingVectors =
         this.vectorEnabled &&
+        this.embeddingAvailable &&
         this.db
           .prepare(
             `SELECT 1 FROM knowledge
@@ -147,14 +156,14 @@ export class KnowledgeIndexer {
 
     const chunks = this.chunkMarkdown(content, relPath);
     const texts = chunks.map((c) => c.text);
-    const embeddings = await this.embedder.embedBatch(texts);
+    const embeddings = this.embeddingAvailable ? await this.embedder.embedBatch(texts) : [];
 
     // Semantic dedup: check new chunks against existing chunks from OTHER paths.
     // All embeddings are already computed above (batch) — no extra embed calls here.
     const chunksToInsert: Array<{ chunk: KnowledgeChunk; embedding: number[] }> = [];
     const idsToSupersede: string[] = [];
 
-    if (this.vectorEnabled) {
+    if (this.vectorEnabled && this.embeddingAvailable) {
       const vecQuery = this.db.prepare(`
         SELECT kv.id, kv.distance
         FROM (
@@ -235,9 +244,10 @@ export class KnowledgeIndexer {
         VALUES (?, 'memory', ?, ?, ?, ?, ?, ?, 'active', ?)
       `);
 
-      const insertVec = this.vectorEnabled
-        ? this.db.prepare(`INSERT INTO knowledge_vec (id, embedding) VALUES (?, ?)`)
-        : null;
+      const insertVec =
+        this.vectorEnabled && this.embeddingAvailable
+          ? this.db.prepare(`INSERT INTO knowledge_vec (id, embedding) VALUES (?, ?)`)
+          : null;
 
       const memoryType = this.getMemoryType(relPath);
 
@@ -246,7 +256,7 @@ export class KnowledgeIndexer {
           chunk.id,
           chunk.path,
           chunk.text,
-          serializeEmbedding(embedding),
+          embedding.length > 0 ? serializeEmbedding(embedding) : null,
           chunk.startLine,
           chunk.endLine,
           fileHash,

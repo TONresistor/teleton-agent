@@ -137,6 +137,7 @@ export class LocalEmbeddingProvider implements EmbeddingProvider {
         const extractor = await getExtractor(this.model);
         const sample = await extractor("warmup", { pooling: "mean", normalize: true });
         this.validateDimensions(sample.dims);
+        this._disabled = false;
         return true;
       } catch (error) {
         log.warn({ err: error }, "Embedding warmup failed");
