@@ -2,6 +2,7 @@ import { defineConfig } from "vitest/config";
 
 export default defineConfig({
   test: {
+    fsModuleCachePath: "node_modules/.vitest-sdk-cache",
     globals: true,
     environment: "node",
     include: ["src/sdk/**/__tests__/**/*.test.ts", "packages/sdk/src/**/__tests__/**/*.test.ts"],
