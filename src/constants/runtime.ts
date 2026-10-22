@@ -1,5 +1,5 @@
-export const MINIMUM_NODE_VERSION = "22.22.2";
-export const SUPPORTED_NODE_RANGE = "^22.22.2 || ^24.15.0 || >=26.0.0";
+export const MINIMUM_NODE_VERSION = "22.23.4";
+export const SUPPORTED_NODE_RANGE = "^22.23.4 || ^24.22.1 || >=26.12.1";
 
 type Version = readonly [major: number, minor: number, patch: number];
 
@@ -25,7 +25,7 @@ export function isNodeVersionSupported(value: string): boolean {
   const version = parseVersion(value);
   if (!version) return false;
 
-  if (version[0] === 22) return isAtLeast(version, [22, 22, 2]);
-  if (version[0] === 24) return isAtLeast(version, [24, 15, 0]);
-  return version[0] >= 26;
+  if (version[0] === 22) return isAtLeast(version, [22, 23, 4]);
+  if (version[0] === 24) return isAtLeast(version, [24, 22, 1]);
+  return isAtLeast(version, [26, 12, 1]);
 }

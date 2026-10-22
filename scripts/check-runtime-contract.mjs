@@ -7,7 +7,7 @@ const read = (path) => readFileSync(join(root, path), "utf8");
 const buildVersion = read(".nvmrc").trim();
 const runtimeConstants = read("src/constants/runtime.ts");
 const minimum = runtimeConstants.match(/MINIMUM_NODE_VERSION = "([^"]+)"/)?.[1];
-const supportedRange = `^${minimum} || ^24.15.0 || >=26.0.0`;
+const supportedRange = `^${minimum} || ^24.22.1 || >=26.12.1`;
 const failures = [];
 
 function check(condition, message) {
@@ -68,7 +68,7 @@ check(
 const ci = read(".github/workflows/ci.yml");
 check(ci.includes("node-version-file: .nvmrc"), "CI checks must use .nvmrc");
 check(
-  ci.includes(`node-version: ["${buildVersion}", "24.15.0", "26.0.0"]`),
+  ci.includes(`node-version: ["${buildVersion}", "24.22.1", "26.12.1"]`),
   "CI test matrix must cover each supported Node release line"
 );
 
