@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.6] - 2026-10-22
+
+### Security
+
+- Require Node.js 22.23.4, 24.22.1, or 26.12.1 and newer supported versions to address CVE-2026-111497.
+- Update Docker images and CI to the patched Node.js versions.
+
 ## [0.11.5] - 2026-10-14
 
 ### Added
