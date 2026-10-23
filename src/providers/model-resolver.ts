@@ -11,8 +11,12 @@ const log = createLogger("LLM");
 const modelCache = new Map<string, Model<Api>>();
 
 export function isCustomOpenRouterModel(model: Model<Api>): boolean {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- user-entered IDs are not catalog literal unions
-  return model.provider === "openrouter" && !getModel("openrouter", model.id as any);
+  return (
+    model.provider === "openrouter" &&
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- user-entered IDs are not catalog literal unions
+    !getModel("openrouter", model.id as any) &&
+    !ADDITIONAL_MODELS[`openrouter:${model.id}`]
+  );
 }
 
 function createCustomOpenRouterModel(modelId: string): Model<"openai-completions"> {

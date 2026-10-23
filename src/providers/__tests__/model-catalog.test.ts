@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { getModelsForProvider } from "../../config/model-catalog.js";
 import { getSupportedProviders, type SupportedProvider } from "../../config/providers.js";
-import { getProviderModel } from "../model-resolver.js";
+import { getProviderModel, isCustomOpenRouterModel } from "../model-resolver.js";
 
 const PROVIDERS_WITHOUT_PI_REGISTRY_MODELS = new Set<SupportedProvider>([
   "gocoon",
@@ -133,6 +133,56 @@ describe("provider model catalog", () => {
         expect(getProviderModel(provider.id, option.value).id).toBe(option.value);
       }
     }
+  });
+
+  it.each([
+    ["anthropic", "claude-sonnet-5-5"],
+    ["anthropic", "claude-haiku-5-5"],
+    ["google", "gemini-4-argon"],
+    ["google", "gemini-3.8-flash"],
+    ["google", "gemini-3.7-flash"],
+    ["zai", "glm-5.3"],
+    ["zai", "glm-5.3-flash"],
+    ["zai", "glm-5.3-highspeed"],
+    ["zai", "glm-5.2-highspeed"],
+    ["minimax", "MiniMax-M3.1-Flash"],
+    ["groq", "qwen/qwen3.8-27b"],
+    ["xai", "grok-4.6"],
+    ["mistral", "mistral-large-4"],
+    ["huggingface", "deepseek-ai/DeepSeek-V4.1-Flash"],
+    ["huggingface", "moonshotai/Kimi-K3"],
+    ["huggingface", "zai-org/GLM-5.3"],
+    ["huggingface", "zai-org/GLM-5.3-Flash"],
+    ["huggingface", "Qwen/Qwen3.8-27B"],
+    ["openrouter", "openai/gpt-6.1-sol"],
+    ["openrouter", "openai/gpt-6.1-sol-pro"],
+    ["openrouter", "anthropic/claude-sonnet-5.5"],
+    ["openrouter", "anthropic/claude-haiku-5.5"],
+    ["openrouter", "google/gemini-4-argon"],
+    ["openrouter", "minimax/minimax-m3.1-flash"],
+  ])("offers and resolves %s/%s with its model capabilities", (provider, modelId) => {
+    expect(getModelsForProvider(provider).map((option) => option.value)).toContain(modelId);
+    const model = getProviderModel(provider as SupportedProvider, modelId);
+    expect(model.id).toBe(modelId);
+    expect(model.reasoning).toBe(true);
+    expect(model.contextWindow).toBeGreaterThanOrEqual(131_000);
+  });
+
+  it("omits Qwen3 Coder Next from the HuggingFace picker", () => {
+    expect(getModelsForProvider("huggingface").map((option) => option.value)).not.toContain(
+      "Qwen/Qwen3-Coder-Next"
+    );
+  });
+
+  it("keeps paid MiniMax OpenRouter limits, capabilities and pricing", () => {
+    const model = getProviderModel("openrouter", "minimax/minimax-m3.1-flash");
+    expect(isCustomOpenRouterModel(model)).toBe(false);
+    expect(model.contextWindow).toBe(1_048_576);
+    expect(model.maxTokens).toBe(524_288);
+    expect(model.input).toContain("image");
+    expect(model.cost).toEqual({ input: 0.15, output: 0.6, cacheRead: 0.015, cacheWrite: 0 });
+    expect(model.thinkingLevelMap?.off).toBeNull();
+    expect(model.compat).toMatchObject({ thinkingFormat: "openrouter", supportsStrictMode: true });
   });
 
   it("uses Mistral's documented rolling alias instead of the unofficial dotted ID", () => {

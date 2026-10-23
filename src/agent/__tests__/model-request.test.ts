@@ -261,6 +261,39 @@ describe("model request preparation", () => {
     }
   );
 
+  it.each(["glm-5.3", "glm-5.3-flash", "glm-5.3-highspeed"])(
+    "keeps required thinking enabled for %s",
+    async (model) => {
+      for (const reasoning_effort of ["none", "low", "high", "max"] as const) {
+        const request = prepareModelRequest(
+          AgentConfigSchema.parse({
+            provider: "zai",
+            model,
+            api_key: "test-key",
+            reasoning_effort,
+          }),
+          { context: { messages: [{ role: "user", content: "test", timestamp: 1 }] } }
+        );
+        const fetch = vi.fn().mockRejectedValue(new Error("Network disabled in test"));
+        let payload: unknown;
+        await complete(request.model, request.context, {
+          ...request.options,
+          fetch,
+          onPayload(value) {
+            payload = value;
+            throw new Error("Stop after payload capture");
+          },
+        });
+        expect(fetch).not.toHaveBeenCalled();
+        expect(payload).toHaveProperty("thinking.type", "enabled");
+        expect(payload).toHaveProperty(
+          "reasoning_effort",
+          reasoning_effort === "none" ? "low" : reasoning_effort
+        );
+      }
+    }
+  );
+
   it("uses adaptive thinking metadata for a newly cataloged Claude model", () => {
     const request = prepareModelRequest(
       AgentConfigSchema.parse({

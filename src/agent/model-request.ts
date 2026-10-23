@@ -85,7 +85,10 @@ function getReasoningOptions(
   model: Model<Api>,
   reasoningEffort: AgentConfig["reasoning_effort"]
 ): Record<string, unknown> {
-  if ((provider !== "codex" && provider !== "openai") || !model.reasoning) return {};
+  const requiresZaiThinking = provider === "zai" && model.thinkingLevelMap?.off === null;
+  if ((provider !== "codex" && provider !== "openai" && !requiresZaiThinking) || !model.reasoning) {
+    return {};
+  }
   const level = clampThinkingLevel(model, reasoningEffort === "none" ? "off" : reasoningEffort);
   const mapped = model.thinkingLevelMap?.[level];
   return { reasoningEffort: mapped ?? (level === "off" ? "none" : level) };

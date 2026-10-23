@@ -22,6 +22,16 @@ interface CatalogModelOption extends ModelOption {
 const MODEL_OPTIONS: Record<string, CatalogModelOption[]> = {
   anthropic: [
     {
+      value: "claude-sonnet-5-5",
+      name: "Claude Sonnet 5.5",
+      description: "Balanced agentic coding, reasoning, vision, 1M context",
+    },
+    {
+      value: "claude-haiku-5-5",
+      name: "Claude Haiku 5.5",
+      description: "Fast reasoning and vision, 1M context",
+    },
+    {
       value: "claude-opus-5-5",
       name: "Claude Opus 5.5",
       description: "Agentic coding, reasoning, vision, 1M context",
@@ -203,6 +213,21 @@ const MODEL_OPTIONS: Record<string, CatalogModelOption[]> = {
   ],
   google: [
     {
+      value: "gemini-4-argon",
+      name: "Gemini 4 Argon",
+      description: "Agentic reasoning and vision, 1M context",
+    },
+    {
+      value: "gemini-3.8-flash",
+      name: "Gemini 3.8 Flash",
+      description: "Fast multimodal reasoning, 1M context",
+    },
+    {
+      value: "gemini-3.7-flash",
+      name: "Gemini 3.7 Flash",
+      description: "Multimodal reasoning, 1M context",
+    },
+    {
       value: "gemini-3.6-flash",
       name: "Gemini 3.6 Flash",
       description: "Agentic and multimodal, reasoning, 1M context",
@@ -230,6 +255,11 @@ const MODEL_OPTIONS: Record<string, CatalogModelOption[]> = {
   ],
   xai: [
     {
+      value: "grok-4.6",
+      name: "Grok 4.6",
+      description: "Agentic reasoning and vision, 500K context",
+    },
+    {
       value: "grok-4.7",
       name: "Grok 4.7",
       description: "Coding and agentic work, reasoning, vision, 500K context",
@@ -247,6 +277,11 @@ const MODEL_OPTIONS: Record<string, CatalogModelOption[]> = {
   ],
   groq: [
     {
+      value: "qwen/qwen3.8-27b",
+      name: "Qwen3.8 27B (Preview)",
+      description: "Fast reasoning and vision, 131K context",
+    },
+    {
       value: "openai/gpt-oss-120b",
       name: "GPT OSS 120B",
       description: "Large reasoning model, 131K context",
@@ -258,6 +293,36 @@ const MODEL_OPTIONS: Record<string, CatalogModelOption[]> = {
     },
   ],
   openrouter: [
+    {
+      value: "openai/gpt-6.1-sol",
+      name: "GPT-6.1 Sol",
+      description: "Agentic reasoning and vision via OpenRouter, 1M context",
+    },
+    {
+      value: "openai/gpt-6.1-sol-pro",
+      name: "GPT-6.1 Sol Pro",
+      description: "Advanced reasoning and vision via OpenRouter, 1M context",
+    },
+    {
+      value: "anthropic/claude-sonnet-5.5",
+      name: "Claude Sonnet 5.5",
+      description: "Balanced reasoning and vision via OpenRouter, 1M context",
+    },
+    {
+      value: "anthropic/claude-haiku-5.5",
+      name: "Claude Haiku 5.5",
+      description: "Fast reasoning and vision via OpenRouter, 1M context",
+    },
+    {
+      value: "google/gemini-4-argon",
+      name: "Gemini 4 Argon",
+      description: "Agentic reasoning and vision via OpenRouter, 1M context",
+    },
+    {
+      value: "minimax/minimax-m3.1-flash",
+      name: "MiniMax M3.1 Flash",
+      description: "Fast reasoning and vision via OpenRouter, 1M context",
+    },
     {
       value: "deepseek/deepseek-v4.1-flash",
       name: "DeepSeek V4.1 Flash",
@@ -484,6 +549,11 @@ const MODEL_OPTIONS: Record<string, CatalogModelOption[]> = {
   ],
   mistral: [
     {
+      value: "mistral-large-4",
+      name: "Mistral Large 4 (Preview)",
+      description: "Agentic reasoning and vision, 1M context",
+    },
+    {
       value: "mistral-medium-latest",
       name: "Mistral Medium (Latest)",
       description: "Agentic coding and multimodal reasoning, 262K context",
@@ -518,11 +588,32 @@ const MODEL_OPTIONS: Record<string, CatalogModelOption[]> = {
     },
   ],
   zai: [
+    { value: "glm-5.3", name: "GLM-5.3", description: "Agentic coding and reasoning, 1M context" },
+    {
+      value: "glm-5.3-flash",
+      name: "GLM-5.3 Flash",
+      description: "Fast reasoning and vision, 1M context",
+    },
+    {
+      value: "glm-5.3-highspeed",
+      name: "GLM-5.3 Highspeed",
+      description: "Fast agentic reasoning, 1M context",
+    },
+    {
+      value: "glm-5.2-highspeed",
+      name: "GLM-5.2 Highspeed",
+      description: "Fast reasoning, 1M context",
+    },
     { value: "glm-5.2", name: "GLM-5.2", description: "Long-horizon reasoning, 1M context" },
     { value: "glm-5.1", name: "GLM-5.1", description: "Reasoning, 200K context" },
     { value: "glm-5-turbo", name: "GLM-5 Turbo", description: "Fast reasoning, 200K context" },
   ],
   minimax: [
+    {
+      value: "MiniMax-M3.1-Flash",
+      name: "MiniMax M3.1 Flash",
+      description: "Fast agentic coding, reasoning, vision, 1M context",
+    },
     {
       value: "MiniMax-M3",
       name: "MiniMax M3",
@@ -536,6 +627,27 @@ const MODEL_OPTIONS: Record<string, CatalogModelOption[]> = {
     },
   ],
   huggingface: [
+    {
+      value: "deepseek-ai/DeepSeek-V4.1-Flash",
+      name: "DeepSeek V4.1 Flash",
+      description: "Fast reasoning and vision, 1M context",
+    },
+    {
+      value: "moonshotai/Kimi-K3",
+      name: "Kimi K3",
+      description: "Agentic reasoning and vision, 1M context",
+    },
+    { value: "zai-org/GLM-5.3", name: "GLM-5.3", description: "Agentic reasoning, 1M context" },
+    {
+      value: "zai-org/GLM-5.3-Flash",
+      name: "GLM-5.3 Flash",
+      description: "Fast reasoning and vision, 1M context",
+    },
+    {
+      value: "Qwen/Qwen3.8-27B",
+      name: "Qwen3.8 27B",
+      description: "Efficient reasoning and vision, 262K context",
+    },
     {
       value: "deepseek-ai/DeepSeek-V4-Flash",
       name: "DeepSeek V4 Flash",
@@ -590,11 +702,6 @@ const MODEL_OPTIONS: Record<string, CatalogModelOption[]> = {
       value: "Qwen/Qwen3.5-397B-A17B",
       name: "Qwen3.5 397B",
       description: "Reasoning, 262K context",
-    },
-    {
-      value: "Qwen/Qwen3-Coder-Next",
-      name: "Qwen3 Coder Next",
-      description: "Coding, 262K context",
     },
     {
       value: "moonshotai/Kimi-K2.6",
