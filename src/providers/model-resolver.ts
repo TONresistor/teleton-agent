@@ -191,6 +191,8 @@ export async function registerLocalModels(baseUrl: string, makeDefault = true): 
 const LEGACY_MODEL_ALIASES: Partial<Record<SupportedProvider, Readonly<Record<string, string>>>> = {
   codex: {
     "gpt-5.3-codex": "gpt-5.6-terra",
+    "gpt-5.5": "gpt-5.6-terra",
+    "gpt-5.3-codex-spark": "gpt-6-luna",
     "gpt-5.1-codex-mini": "gpt-6-luna",
     "gpt-5.4": "gpt-5.6-terra",
     "gpt-5.4-mini": "gpt-6-luna",

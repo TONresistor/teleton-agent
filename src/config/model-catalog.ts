@@ -187,12 +187,6 @@ const MODEL_OPTIONS: Record<string, CatalogModelOption[]> = {
       name: "GPT-5.6 Luna",
       description: "Fast and affordable agentic coding model, 272K context",
     },
-    { value: "gpt-5.5", name: "GPT-5.5", description: "Reasoning, 272K context" },
-    {
-      value: "gpt-5.3-codex-spark",
-      name: "GPT-5.3 Codex Spark",
-      description: "Coding, preview, free",
-    },
   ],
   "grok-build": [
     { value: "grok-4.7", name: "Grok 4.7", description: "Grok Build model, vision, 500K context" },

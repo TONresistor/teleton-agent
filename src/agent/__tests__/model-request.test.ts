@@ -289,33 +289,46 @@ describe("model request preparation", () => {
     expect(request.options).not.toHaveProperty("reasoningEffort");
   });
 
-  it.each(["codex", "openai"])("sends low effort for GPT-6.1 Sol through %s", async (provider) => {
-    const request = prepareModelRequest(
-      AgentConfigSchema.parse({
-        provider,
-        model: "gpt-6.1-sol",
-        api_key: "sk-test-key",
-        reasoning_effort: "none",
-      }),
-      { context: { messages: [{ role: "user", content: "test", timestamp: 1 }] } }
-    );
-    const fetch = vi.fn().mockRejectedValue(new Error("Network disabled in test"));
-    let payload: unknown;
-    const mockCodexToken = `header.${Buffer.from(
-      JSON.stringify({ "https://api.openai.com/auth": { chatgpt_account_id: "test-account" } })
-    ).toString("base64")}.signature`;
-    await complete(request.model, request.context, {
-      ...request.options,
-      apiKey: provider === "codex" ? mockCodexToken : request.options.apiKey,
-      fetch,
-      onPayload(value) {
-        payload = value;
-        throw new Error("Stop after payload capture");
-      },
-    });
+  it.each(["codex", "openai"])(
+    "preserves low effort in the GPT-6.1 Sol payload through %s",
+    async (provider) => {
+      const request = prepareModelRequest(
+        AgentConfigSchema.parse({
+          provider,
+          model: "gpt-6.1-sol",
+          api_key: "sk-test-key",
+          reasoning_effort: "none",
+        }),
+        { context: { messages: [{ role: "user", content: "test", timestamp: 1 }] } }
+      );
+      const fetch = vi.fn().mockRejectedValue(new Error("Network disabled in test"));
+      let payload: unknown;
+      const mockCodexToken = `header.${Buffer.from(
+        JSON.stringify({ "https://api.openai.com/auth": { chatgpt_account_id: "test-account" } })
+      ).toString("base64")}.signature`;
+      await complete(request.model, request.context, {
+        ...request.options,
+        apiKey: provider === "codex" ? mockCodexToken : request.options.apiKey,
+        fetch,
+        onPayload(value) {
+          payload = value;
+          throw new Error("Stop after payload capture");
+        },
+      });
 
-    expect(fetch).not.toHaveBeenCalled();
-    expect(payload).toHaveProperty("reasoning.effort", "low");
-    expect(payload).not.toHaveProperty("temperature");
-  });
+      expect(fetch).not.toHaveBeenCalled();
+      if (provider === "openai") {
+        expect(payload).toHaveProperty("reasoning.effort", "medium");
+        expect(payload).toHaveProperty(
+          "input",
+          expect.arrayContaining([
+            expect.objectContaining({ type: "configuration_update", reasoning: { effort: "low" } }),
+          ])
+        );
+      } else {
+        expect(payload).toHaveProperty("reasoning.effort", "low");
+      }
+      expect(payload).not.toHaveProperty("temperature");
+    }
+  );
 });

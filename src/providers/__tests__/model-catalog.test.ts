@@ -13,6 +13,8 @@ const LEGACY_MODEL_CASES: ReadonlyArray<
   readonly [provider: SupportedProvider, legacyId: string, replacementId: string]
 > = [
   ["codex", "gpt-5.3-codex", "gpt-5.6-terra"],
+  ["codex", "gpt-5.5", "gpt-5.6-terra"],
+  ["codex", "gpt-5.3-codex-spark", "gpt-6-luna"],
   ["codex", "gpt-5.1-codex-mini", "gpt-6-luna"],
   ["codex", "gpt-5.4", "gpt-5.6-terra"],
   ["codex", "gpt-5.4-mini", "gpt-6-luna"],
@@ -51,6 +53,8 @@ const LEGACY_MODEL_CASES: ReadonlyArray<
 
 describe("provider model catalog", () => {
   it.each([
+    ["codex", "gpt-5.5"],
+    ["codex", "gpt-5.3-codex-spark"],
     ["codex", "gpt-5.4"],
     ["codex", "gpt-5.4-mini"],
     ["cerebras", "gemma-4-31b"],

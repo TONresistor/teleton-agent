@@ -22,7 +22,7 @@ describe("Codex models", () => {
     expect(model.provider).toBe("openai-codex");
     expect(model.api).toBe("openai-codex-responses");
     expect(model.input).toContain("image");
-    expect(model.contextWindow).toBe(272_000);
+    expect(model.contextWindow).toBe(modelId === "gpt-6.1-sol" ? 500_000 : 272_000);
     expect(model.maxTokens).toBe(128_000);
   });
 
