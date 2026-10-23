@@ -136,23 +136,36 @@ describe("model request preparation", () => {
     });
   });
 
-  it.each(["gemini-3.6-flash", "gemini-3.5-flash-lite"])(
-    "omits deprecated sampling parameters for %s",
-    (model) => {
-      const config = AgentConfigSchema.parse({
-        provider: "google",
-        model,
-        api_key: "sk-test-key",
-        temperature: 0.4,
-      });
+  it.each([
+    "gemini-4-argon",
+    "gemini-3.8-flash",
+    "gemini-3.7-flash",
+    "gemini-3.6-flash",
+    "gemini-3.5-flash-lite",
+  ])("omits deprecated sampling parameters from the %s payload", async (model) => {
+    const config = AgentConfigSchema.parse({
+      provider: "google",
+      model,
+      api_key: "sk-test-key",
+      temperature: 0.4,
+    });
+    const request = prepareModelRequest(config, {
+      context: { messages: [{ role: "user", content: "test", timestamp: 1 }] },
+    });
+    let payload: unknown;
+    const response = await complete(request.model, request.context, {
+      ...request.options,
+      onPayload(value) {
+        payload = value;
+        throw new Error("Stop before network request");
+      },
+    });
 
-      const request = prepareModelRequest(config, {
-        context: { messages: [] },
-      });
-
-      expect(request.options).not.toHaveProperty("temperature");
-    }
-  );
+    expect(request.options).not.toHaveProperty("temperature");
+    expect(payload).toHaveProperty("config.maxOutputTokens", config.max_tokens);
+    expect(payload).not.toHaveProperty("config.temperature");
+    expect(response.errorMessage).toContain("Stop before network request");
+  });
 
   it("keeps temperature for Gemini 3.5 Flash", () => {
     const config = AgentConfigSchema.parse({
@@ -261,6 +274,39 @@ describe("model request preparation", () => {
     }
   );
 
+  it.each(["glm-5.3", "glm-5.3-flash", "glm-5.3-highspeed"])(
+    "keeps required thinking enabled for %s",
+    async (model) => {
+      for (const reasoning_effort of ["none", "low", "high", "max"] as const) {
+        const request = prepareModelRequest(
+          AgentConfigSchema.parse({
+            provider: "zai",
+            model,
+            api_key: "test-key",
+            reasoning_effort,
+          }),
+          { context: { messages: [{ role: "user", content: "test", timestamp: 1 }] } }
+        );
+        const fetch = vi.fn().mockRejectedValue(new Error("Network disabled in test"));
+        let payload: unknown;
+        await complete(request.model, request.context, {
+          ...request.options,
+          fetch,
+          onPayload(value) {
+            payload = value;
+            throw new Error("Stop after payload capture");
+          },
+        });
+        expect(fetch).not.toHaveBeenCalled();
+        expect(payload).toHaveProperty("thinking.type", "enabled");
+        expect(payload).toHaveProperty(
+          "reasoning_effort",
+          reasoning_effort === "none" ? "low" : reasoning_effort
+        );
+      }
+    }
+  );
+
   it("uses adaptive thinking metadata for a newly cataloged Claude model", () => {
     const request = prepareModelRequest(
       AgentConfigSchema.parse({
@@ -289,33 +335,46 @@ describe("model request preparation", () => {
     expect(request.options).not.toHaveProperty("reasoningEffort");
   });
 
-  it.each(["codex", "openai"])("sends low effort for GPT-6.1 Sol through %s", async (provider) => {
-    const request = prepareModelRequest(
-      AgentConfigSchema.parse({
-        provider,
-        model: "gpt-6.1-sol",
-        api_key: "sk-test-key",
-        reasoning_effort: "none",
-      }),
-      { context: { messages: [{ role: "user", content: "test", timestamp: 1 }] } }
-    );
-    const fetch = vi.fn().mockRejectedValue(new Error("Network disabled in test"));
-    let payload: unknown;
-    const mockCodexToken = `header.${Buffer.from(
-      JSON.stringify({ "https://api.openai.com/auth": { chatgpt_account_id: "test-account" } })
-    ).toString("base64")}.signature`;
-    await complete(request.model, request.context, {
-      ...request.options,
-      apiKey: provider === "codex" ? mockCodexToken : request.options.apiKey,
-      fetch,
-      onPayload(value) {
-        payload = value;
-        throw new Error("Stop after payload capture");
-      },
-    });
+  it.each(["codex", "openai"])(
+    "preserves low effort in the GPT-6.1 Sol payload through %s",
+    async (provider) => {
+      const request = prepareModelRequest(
+        AgentConfigSchema.parse({
+          provider,
+          model: "gpt-6.1-sol",
+          api_key: "sk-test-key",
+          reasoning_effort: "none",
+        }),
+        { context: { messages: [{ role: "user", content: "test", timestamp: 1 }] } }
+      );
+      const fetch = vi.fn().mockRejectedValue(new Error("Network disabled in test"));
+      let payload: unknown;
+      const mockCodexToken = `header.${Buffer.from(
+        JSON.stringify({ "https://api.openai.com/auth": { chatgpt_account_id: "test-account" } })
+      ).toString("base64")}.signature`;
+      await complete(request.model, request.context, {
+        ...request.options,
+        apiKey: provider === "codex" ? mockCodexToken : request.options.apiKey,
+        fetch,
+        onPayload(value) {
+          payload = value;
+          throw new Error("Stop after payload capture");
+        },
+      });
 
-    expect(fetch).not.toHaveBeenCalled();
-    expect(payload).toHaveProperty("reasoning.effort", "low");
-    expect(payload).not.toHaveProperty("temperature");
-  });
+      expect(fetch).not.toHaveBeenCalled();
+      if (provider === "openai") {
+        expect(payload).toHaveProperty("reasoning.effort", "medium");
+        expect(payload).toHaveProperty(
+          "input",
+          expect.arrayContaining([
+            expect.objectContaining({ type: "configuration_update", reasoning: { effort: "low" } }),
+          ])
+        );
+      } else {
+        expect(payload).toHaveProperty("reasoning.effort", "low");
+      }
+      expect(payload).not.toHaveProperty("temperature");
+    }
+  );
 });

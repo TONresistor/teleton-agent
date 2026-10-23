@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.7] - 2026-10-23
+
+### Added
+
+- Expand supported provider catalogs with recent Claude, Gemini, GLM, MiniMax, Groq, Mistral, HuggingFace, and OpenRouter models.
+
+### Changed
+
+- Update pi-ai to 1.4.0 and refresh compatible CLI, WebUI, build, test, and static analysis dependencies.
+- Remove unavailable Codex models and HuggingFace Qwen3 Coder Next from model pickers while retaining Codex compatibility aliases.
+
+### Fixed
+
+- Preserve required reasoning for GLM 5.3 and known pricing and limits for MiniMax M3.1 Flash on OpenRouter.
+- Omit deprecated temperature parameters for newer Gemini models.
+
 ## [0.11.6] - 2026-10-22
 
 ### Security

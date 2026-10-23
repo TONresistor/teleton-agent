@@ -11,8 +11,12 @@ const log = createLogger("LLM");
 const modelCache = new Map<string, Model<Api>>();
 
 export function isCustomOpenRouterModel(model: Model<Api>): boolean {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- user-entered IDs are not catalog literal unions
-  return model.provider === "openrouter" && !getModel("openrouter", model.id as any);
+  return (
+    model.provider === "openrouter" &&
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- user-entered IDs are not catalog literal unions
+    !getModel("openrouter", model.id as any) &&
+    !ADDITIONAL_MODELS[`openrouter:${model.id}`]
+  );
 }
 
 function createCustomOpenRouterModel(modelId: string): Model<"openai-completions"> {
@@ -191,6 +195,8 @@ export async function registerLocalModels(baseUrl: string, makeDefault = true): 
 const LEGACY_MODEL_ALIASES: Partial<Record<SupportedProvider, Readonly<Record<string, string>>>> = {
   codex: {
     "gpt-5.3-codex": "gpt-5.6-terra",
+    "gpt-5.5": "gpt-5.6-terra",
+    "gpt-5.3-codex-spark": "gpt-6-luna",
     "gpt-5.1-codex-mini": "gpt-6-luna",
     "gpt-5.4": "gpt-5.6-terra",
     "gpt-5.4-mini": "gpt-6-luna",
