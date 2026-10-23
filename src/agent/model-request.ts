@@ -46,6 +46,9 @@ export function getEffectiveApiKey(provider: string, rawKey: string): string {
 }
 
 const GOOGLE_MODELS_WITHOUT_SAMPLING_PARAMS = new Set([
+  "gemini-4-argon",
+  "gemini-3.8-flash",
+  "gemini-3.7-flash",
   "gemini-3.6-flash",
   "gemini-3.5-flash-lite",
 ]);

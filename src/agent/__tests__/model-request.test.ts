@@ -136,23 +136,36 @@ describe("model request preparation", () => {
     });
   });
 
-  it.each(["gemini-3.6-flash", "gemini-3.5-flash-lite"])(
-    "omits deprecated sampling parameters for %s",
-    (model) => {
-      const config = AgentConfigSchema.parse({
-        provider: "google",
-        model,
-        api_key: "sk-test-key",
-        temperature: 0.4,
-      });
+  it.each([
+    "gemini-4-argon",
+    "gemini-3.8-flash",
+    "gemini-3.7-flash",
+    "gemini-3.6-flash",
+    "gemini-3.5-flash-lite",
+  ])("omits deprecated sampling parameters from the %s payload", async (model) => {
+    const config = AgentConfigSchema.parse({
+      provider: "google",
+      model,
+      api_key: "sk-test-key",
+      temperature: 0.4,
+    });
+    const request = prepareModelRequest(config, {
+      context: { messages: [{ role: "user", content: "test", timestamp: 1 }] },
+    });
+    let payload: unknown;
+    const response = await complete(request.model, request.context, {
+      ...request.options,
+      onPayload(value) {
+        payload = value;
+        throw new Error("Stop before network request");
+      },
+    });
 
-      const request = prepareModelRequest(config, {
-        context: { messages: [] },
-      });
-
-      expect(request.options).not.toHaveProperty("temperature");
-    }
-  );
+    expect(request.options).not.toHaveProperty("temperature");
+    expect(payload).toHaveProperty("config.maxOutputTokens", config.max_tokens);
+    expect(payload).not.toHaveProperty("config.temperature");
+    expect(response.errorMessage).toContain("Stop before network request");
+  });
 
   it("keeps temperature for Gemini 3.5 Flash", () => {
     const config = AgentConfigSchema.parse({
