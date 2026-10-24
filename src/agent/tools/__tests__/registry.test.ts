@@ -1,3 +1,4 @@
+import { ensureSchema } from "../../../memory/schema.js";
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import Database from "better-sqlite3";
 import { ToolRegistry } from "../registry.js";
@@ -52,18 +53,7 @@ describe("ToolRegistry", () => {
         updated_by INTEGER
       )
     `);
-    db.exec(`
-      CREATE TABLE action_executions (
-        turn_id TEXT NOT NULL,
-        tool_name TEXT NOT NULL,
-        args_hash TEXT NOT NULL,
-        status TEXT NOT NULL,
-        result_json TEXT,
-        started_at INTEGER NOT NULL,
-        completed_at INTEGER,
-        PRIMARY KEY (turn_id, tool_name, args_hash)
-      )
-    `);
+    ensureSchema(db);
 
     mockContext = {
       bridge: { getMode: () => "user" } as any,
@@ -520,7 +510,7 @@ describe("ToolRegistry", () => {
         mockContext
       );
 
-      expect(result).toEqual({ success: true, data: { tx: "abc" } });
+      expect(result).toMatchObject({ success: true, data: { tx: "abc" } });
       expect(executor).toHaveBeenCalledOnce();
       expect(executor).toHaveBeenCalledWith({ message: "send exactly 1 TON" }, mockContext);
       expect(sendMessage).not.toHaveBeenCalled();
@@ -565,7 +555,7 @@ describe("ToolRegistry", () => {
 
       const result = await registry.execute(toolCall, mockContext);
 
-      expect(result).toEqual(mockResult);
+      expect(result).toMatchObject(mockResult);
       expect(executor).toHaveBeenCalledWith({ message: "hello" }, mockContext);
     });
 
@@ -710,9 +700,112 @@ describe("ToolRegistry", () => {
       const first = await registry.execute(toolCall, context);
       const replay = await registry.execute({ ...toolCall, id: "call-2" }, context);
 
-      expect(first).toEqual({ success: true, data: { remoteId: "one" } });
+      expect(first).toMatchObject({
+        success: true,
+        data: { remoteId: "one" },
+        execution: {
+          outcome: "succeeded",
+          persistence: "persisted",
+          operationId: expect.any(String),
+        },
+      });
       expect(replay).toEqual(first);
       expect(executor).toHaveBeenCalledTimes(1);
+    });
+
+    it("preserves confirmed success if the receipt write fails, and replays without another invocation", async () => {
+      const executor = createMockExecutor({ success: true, data: { remoteId: "receipt" } });
+      registry.register(createMockTool("confirmed_action", "action"), executor);
+      db.exec(
+        `CREATE TRIGGER reject_action_receipt BEFORE UPDATE ON action_executions BEGIN SELECT RAISE(ABORT, 'disk failure'); END;`
+      );
+      const call: ToolCall = {
+        type: "toolCall",
+        id: "one",
+        name: "confirmed_action",
+        arguments: { message: "send" },
+      };
+      const context = {
+        ...mockContext,
+        turnId: "receipt-failure",
+        logicalSessionKey: "logical-session",
+      };
+      const result = await registry.execute(call, context);
+      expect(result).toMatchObject({
+        success: true,
+        data: { remoteId: "receipt" },
+        execution: { outcome: "succeeded", persistence: "persistence_failed" },
+      });
+      expect(await registry.execute(call, context)).toEqual(result);
+      expect(await registry.execute(call, { ...context, turnId: "later-turn" })).toMatchObject({
+        success: false,
+        execution: { outcome: "unknown" },
+      });
+      expect(db.prepare("SELECT status FROM action_executions").get()).toEqual({
+        status: "running",
+      });
+      expect(executor).toHaveBeenCalledTimes(1);
+    });
+
+    it.each(["legacy failure", "throw", "explicit unknown"])(
+      "does not repeat an ambiguous %s across turns",
+      async (mode) => {
+        const executor = vi.fn(async () => {
+          if (mode === "throw") throw new Error("transport lost after send");
+          return {
+            success: false,
+            ...(mode === "explicit unknown" ? { data: { outcome: "unknown" } } : {}),
+          };
+        });
+        registry.register(createMockTool("ambiguous_action", "action"), executor);
+        const call: ToolCall = {
+          type: "toolCall",
+          id: "one",
+          name: "ambiguous_action",
+          arguments: { message: "send" },
+        };
+        const result = await registry.execute(call, { ...mockContext, turnId: "one" });
+        expect(result.execution?.outcome).toBe("unknown");
+        expect(await registry.execute(call, { ...mockContext, turnId: "one" })).toEqual(result);
+        expect(
+          (await registry.execute(call, { ...mockContext, turnId: "two" })).execution?.outcome
+        ).toBe("unknown");
+        expect(executor).toHaveBeenCalledTimes(1);
+      }
+    );
+
+    it("checks the deadline again after reservation before starting an external effect", async () => {
+      vi.useFakeTimers();
+      try {
+        vi.setSystemTime(1000);
+        const executor = createMockExecutor();
+        registry.register(createMockTool("deadline_action", "action"), executor);
+        db.function("expire_turn", () => {
+          vi.setSystemTime(2000);
+          return 1;
+        });
+        db.exec(
+          "CREATE TRIGGER expire_reservation AFTER INSERT ON action_executions BEGIN SELECT expire_turn(); END;"
+        );
+        const call: ToolCall = {
+          type: "toolCall",
+          id: "deadline",
+          name: "deadline_action",
+          arguments: { message: "send" },
+        };
+        const result = await registry.execute(call, {
+          ...mockContext,
+          turnId: "deadline",
+          deadlineAt: 1500,
+        });
+        expect(result.execution?.outcome).toBe("not_attempted");
+        expect(executor).not.toHaveBeenCalled();
+        expect(db.prepare("SELECT status FROM action_executions").get()).toEqual({
+          status: "not_attempted",
+        });
+      } finally {
+        vi.useRealTimers();
+      }
     });
 
     it("should timeout long-running data-bearing tools", async () => {
@@ -777,7 +870,7 @@ describe("ToolRegistry", () => {
         expect(sideEffectCompleted).toBe(false);
 
         await vi.advanceTimersByTimeAsync(10_000);
-        await expect(resultPromise).resolves.toEqual({ success: true });
+        await expect(resultPromise).resolves.toMatchObject({ success: true });
         expect(sideEffectCompleted).toBe(true);
       } finally {
         vi.useRealTimers();

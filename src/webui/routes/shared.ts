@@ -9,6 +9,7 @@ import { createSoulRoutes } from "./soul.js";
 import { createPluginsRoutes } from "./plugins.js";
 import { createMcpRoutes } from "./mcp.js";
 import { createWorkspaceRoutes } from "./workspace.js";
+import { createOperationsRoutes } from "./operations.js";
 import { createTasksRoutes } from "./tasks.js";
 import { createConfigRoutes } from "./config.js";
 import { createMarketplaceRoutes } from "./marketplace.js";
@@ -39,6 +40,7 @@ export const SHARED_ROUTE_FACTORIES: ReadonlyArray<[string, RouteFactory]> = [
   ["mcp", createMcpRoutes],
   ["workspace", createWorkspaceRoutes],
   ["tasks", createTasksRoutes],
+  ["operations", createOperationsRoutes],
   ["config", createConfigRoutes],
   ["marketplace", createMarketplaceRoutes],
   ["hooks", createHooksRoutes],

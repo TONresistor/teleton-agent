@@ -197,7 +197,15 @@ export interface PluginManifest {
 export interface TaskData {
   id: string;
   description: string;
-  status: "pending" | "in_progress" | "done" | "failed" | "cancelled";
+  status: "pending" | "in_progress" | "done" | "failed" | "cancelled" | "incomplete" | "blocked" | "unknown";
+  runId?: string;
+  revision: number;
+  legacyOutcome: boolean;
+  resolvedFromStatus?: string;
+  replacesTaskId?: string;
+  runs?: Array<{ run_id: string; status: string; started_at: number; completed_at: number | null; turn_id: string | null; outcome_reason: string | null; result: string | null; error: string | null; resolution_status: string | null; resolution_note: string | null }>;
+  notificationError?: string;
+  resolutionNote?: string;
   priority: number;
   createdBy?: string;
   createdAt: string;
@@ -244,4 +252,31 @@ export interface PluginSecretsInfo {
 export interface APIResponse<T> {
   success: boolean;
   data: T;
+}
+
+export interface OperationData {
+  operation_id: string; legacy_outcome: number; turn_id: string; tool_name: string;
+  status: "not_attempted" | "running" | "succeeded" | "failed" | "unknown"; revision: number;
+  logical_session_key: string | null; chat_id: string | null; sender_id: number | null;
+  requested_args_json: string | null; effective_args_json: string | null;
+  result_json: string | null; remote_reference: string | null;
+  persistence_error: string | null; resolution_note: string | null;
+  started_at: number; completed_at: number | null;
+}
+export interface DeliveryData {
+  delivery_id: string; turn_id: string; chat_id: string; target_kind: string;
+  status: "prepared" | "sending" | "delivered" | "partial" | "failed" | "unknown";
+  revision: number; reason: string | null; resolution_note: string | null;
+  created_at: number; updated_at: number;
+  attempts?: unknown[];
+  fragments?: Array<{ fragment_index: number; text: string; status: string; message_id: number | null; error: string | null }>;
+}
+
+export interface TurnData {
+  turnId: string; ingressKey: string; chatId: string; messageId: number | null; senderId: number | null;
+  receivedAt: number; ingressStatus: string;
+  outcome: { status: "completed" | "incomplete" | "blocked" | "failed" | "interrupted" | "unknown"; reason: string };
+  delivery: { deliveryId?: string; state: string; reason?: string | null };
+  deliveries: unknown[];
+  modelAttempts: Array<{ id: string; provider: string; model: string; purpose: string; stop_reason: string | null; duration_ms: number; usage: unknown; incomplete: boolean }>;
 }

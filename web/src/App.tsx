@@ -13,6 +13,7 @@ const Plugins = React.lazy(() => import('./pages/Plugins').then(m => ({ default:
 const Soul = React.lazy(() => import('./pages/Soul').then(m => ({ default: m.Soul })));
 const Memory = React.lazy(() => import('./pages/Memory').then(m => ({ default: m.Memory })));
 const Workspace = React.lazy(() => import('./pages/Workspace').then(m => ({ default: m.Workspace })));
+const Operations = React.lazy(() => import('./pages/Operations').then(m => ({ default: m.Operations })));
 const Tasks = React.lazy(() => import('./pages/Tasks').then(m => ({ default: m.Tasks })));
 const Mcp = React.lazy(() => import('./pages/Mcp').then(m => ({ default: m.Mcp })));
 const Config = React.lazy(() => import('./pages/Config').then(m => ({ default: m.Config })));
@@ -155,6 +156,7 @@ function RoutedContent() {
             <Route path="gocoon" element={<Gocoon />} />
             <Route path="workspace" element={<Workspace />} />
             <Route path="tasks" element={<Tasks />} />
+            <Route path="operations" element={<Operations />} />
             <Route path="mcp" element={<Mcp />} />
             <Route path="config" element={<Config />} />
             <Route path="hooks" element={<Hooks />} />

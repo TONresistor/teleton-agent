@@ -1,3 +1,7 @@
+import type { TaskStatus } from "./memory/agent/tasks.js";
+import { assertTurnBudget, TurnBudgetError } from "./agent/turn-budget.js";
+import type { TurnAdmission } from "./agent/execution-types.js";
+import { authorizeTurn } from "./agent/turn-authorization.js";
 import type { AgentRuntime } from "./agent/runtime.js";
 import type { ITelegramBridge } from "./telegram/bridge-interface.js";
 import type { Config } from "./config/schema.js";
@@ -23,6 +27,31 @@ export class ScheduledTaskHandler {
   }
 
   async execute(message: TelegramMessage): Promise<void> {
+    const receivedAt = message.receivedAt ?? Date.now();
+    message.receivedAt = receivedAt;
+    const executionDeadline = Date.now() + this.config.agent.max_turn_duration_ms;
+    const controller = new AbortController();
+    const deadlineTimer = setTimeout(
+      () => controller.abort(),
+      Math.max(0, executionDeadline - Date.now())
+    );
+    deadlineTimer.unref?.();
+    try {
+      await this.executeAccepted(message, {
+        receivedAt,
+        queueDeadline: receivedAt + 60_000,
+        executionDeadline,
+        signal: controller.signal,
+      });
+    } finally {
+      clearTimeout(deadlineTimer);
+    }
+  }
+
+  private async executeAccepted(
+    message: TelegramMessage,
+    admission: TurnAdmission & { executionDeadline: number }
+  ): Promise<void> {
     // Hoist all dynamic imports to top of function
     const { getTaskStore } = await import("./memory/agent/tasks.js");
     const { executeScheduledTask } = await import("./telegram/task-executor.js");
@@ -44,6 +73,8 @@ export class ScheduledTaskHandler {
 
     const taskId = match[1];
 
+    let claimed: ReturnType<typeof taskStore.startTask>;
+    let invoked = false;
     try {
       const task = taskStore.getTask(taskId);
 
@@ -71,12 +102,24 @@ export class ScheduledTaskHandler {
         task.originIsGroup === undefined
       ) {
         const reason = "Scheduled task is missing creator authority; recreate it before execution";
-        taskStore.failTask(taskId, reason);
+        taskStore.updateTask(taskId, { status: "blocked", error: reason });
+        taskStore.blockUnfinishedDependents();
         await this.bridge.sendMessage({
           chatId: message.chatId,
           text: `⚠️ Task "${task.description}" was blocked: missing creator authority. Recreate the task.`,
           replyToId: message.id,
         });
+        return;
+      }
+
+      const authority = authorizeTurn(this.config, {
+        chatId: task.originChatId,
+        isGroup: task.originIsGroup,
+        toolContext: { senderId: task.originSenderId },
+      });
+      if (!authority.allowed) {
+        taskStore.updateTask(taskId, { status: "blocked", error: authority.reason });
+        taskStore.blockUnfinishedDependents();
         return;
       }
 
@@ -92,8 +135,13 @@ export class ScheduledTaskHandler {
       }
 
       // Mark task as in_progress
-      if (!taskStore.startTask(taskId)) return;
+      claimed = taskStore.startTask(taskId);
+      if (!claimed?.runId) return;
 
+      assertTurnBudget(
+        Math.min(admission.executionDeadline, admission.queueDeadline),
+        admission.signal
+      );
       // Get parent task results for context
       const parentResults = taskStore.getParentResults(taskId);
 
@@ -105,7 +153,12 @@ export class ScheduledTaskHandler {
         isGroup: task.originIsGroup,
         senderId: task.originSenderId,
         config: this.config,
+        deadlineAt: admission.executionDeadline,
+        signal: admission.signal,
       };
+      const requiresDelivery = task.payload
+        ? (JSON.parse(task.payload) as { requiresDelivery?: boolean }).requiresDelivery === true
+        : false;
 
       // Get tool registry from agent runtime
       const toolRegistry = this.agent.getToolRegistry();
@@ -122,54 +175,107 @@ export class ScheduledTaskHandler {
         parentResults
       );
 
+      assertTurnBudget(
+        Math.min(admission.executionDeadline, admission.queueDeadline),
+        admission.signal
+      );
       // Feed prompt to agent (agent loop with full context)
+      invoked = true;
       const response = await this.agent.processMessage({
         chatId: task.originChatId,
         userMessage: agentPrompt,
         userName: "self-scheduled-task",
         timestamp: message.timestamp.getTime(),
         isGroup: task.originIsGroup,
-        toolContext,
+        toolContext: { ...toolContext, signal: undefined },
         messageId: message.id,
+        admission: {
+          receivedAt: admission.receivedAt,
+          queueDeadline: admission.queueDeadline,
+          executionDeadline: admission.executionDeadline,
+        },
+        ingressKey: `task:${taskId}:${claimed.runId}`,
+        turnId: `task:${taskId}:${claimed.runId}`,
+        delivery: {
+          kind: "telegram",
+          bridge: this.bridge,
+          chatId: message.chatId,
+          replyToId: message.id,
+        },
       });
 
-      // Send agent response
-      if (response.content && response.content.trim().length > 0) {
-        await this.bridge.sendMessage({
-          chatId: message.chatId,
-          text: response.content,
-          replyToId: message.id,
-        });
+      let status: Exclude<TaskStatus, "pending" | "in_progress"> =
+        response.outcome.status === "completed"
+          ? "done"
+          : response.outcome.status === "interrupted"
+            ? "incomplete"
+            : response.outcome.status;
+      let outcomeReason = response.outcome.reason;
+      let outcomeError = status === "done" ? undefined : response.outcome.reason;
+      if (status === "done" && requiresDelivery && response.delivery.state !== "delivered") {
+        status = ["unknown", "sending"].includes(response.delivery.state)
+          ? "unknown"
+          : "incomplete";
+        outcomeReason = "required_delivery";
+        outcomeError = `Required delivery was not confirmed (${response.delivery.state})`;
+      }
+      const finished = taskStore.finishTask(
+        taskId,
+        claimed.runId,
+        claimed.revision,
+        status,
+        response.content,
+        outcomeError,
+        { turnId: response.turnId, outcomeReason }
+      );
+      if (!finished) return; // A stale run may never overwrite an operator decision.
+
+      if (["failed", "partial", "unknown"].includes(response.delivery.state)) {
+        taskStore.recordNotificationError(
+          taskId,
+          response.delivery.reason ?? `Delivery ${response.delivery.state}`
+        );
+      }
+      try {
+        if (
+          !requiresDelivery &&
+          response.delivery.state === "not_requested" &&
+          response.content &&
+          response.content.trim().length > 0
+        ) {
+          await this.bridge.sendMessage({
+            chatId: message.chatId,
+            text: response.content,
+            replyToId: message.id,
+          });
+        }
+      } catch (error) {
+        taskStore.recordNotificationError(taskId, getErrorMessage(error));
+        log.error({ err: error, taskId }, "Task result notification failed");
       }
 
-      // Mark task as done if agent responded successfully
-      taskStore.completeTask(taskId, response.content);
-
-      log.info({ taskId }, "Executed scheduled task");
-
-      // Initialize dependency resolver if needed
-      if (!this.dependencyResolver) {
-        this.dependencyResolver = new TaskDependencyResolver(taskStore, this.bridge, this.config);
+      if (finished.status === "done") {
+        if (!this.dependencyResolver)
+          this.dependencyResolver = new TaskDependencyResolver(taskStore, this.bridge, this.config);
+        await this.dependencyResolver.onTaskComplete(taskId);
       }
-
-      // Trigger any dependent tasks
-      await this.dependencyResolver.onTaskComplete(taskId);
     } catch (error) {
       log.error({ err: error }, "Error handling scheduled task");
 
-      // Try to mark task as failed and cascade to dependents
-      try {
-        taskStore.failTask(taskId, getErrorMessage(error));
-
-        // Initialize resolver if needed
-        if (!this.dependencyResolver) {
-          this.dependencyResolver = new TaskDependencyResolver(taskStore, this.bridge, this.config);
+      if (claimed?.runId) {
+        try {
+          taskStore.finishTask(
+            taskId,
+            claimed.runId,
+            claimed.revision,
+            error instanceof TurnBudgetError ? "incomplete" : invoked ? "unknown" : "failed",
+            undefined,
+            getErrorMessage(error),
+            error instanceof TurnBudgetError ? { outcomeReason: error.reason } : undefined
+          );
+        } catch (innerError) {
+          log.debug({ error: getErrorMessage(innerError) }, "Failed to update task status");
         }
-
-        // Cascade failure to dependents
-        await this.dependencyResolver.onTaskFail(taskId);
-      } catch (innerError) {
-        log.debug({ error: getErrorMessage(innerError) }, "Failed to update task status");
       }
     }
   }

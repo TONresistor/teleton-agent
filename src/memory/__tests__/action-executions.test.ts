@@ -47,6 +47,7 @@ describe("action execution idempotency", () => {
     expect(reserveActionExecution(db, "turn-1", "ton_send", { amount: 1 }).kind).toBe("execute");
     expect(reserveActionExecution(db, "turn-1", "ton_send", { amount: 1 })).toEqual({
       kind: "unknown",
+      operationId: expect.any(String),
     });
   });
 });

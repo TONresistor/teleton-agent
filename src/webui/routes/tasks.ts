@@ -1,9 +1,19 @@
+import { TaskDependencyResolver } from "../../telegram/task-dependency-resolver.js";
 import { Hono } from "hono";
 import type { WebUIServerDeps, APIResponse } from "../types.js";
 import { getTaskStore, type TaskStatus } from "../../memory/agent/tasks.js";
 import { apiError } from "../http.js";
 
-const VALID_STATUSES: TaskStatus[] = ["pending", "in_progress", "done", "failed", "cancelled"];
+const VALID_STATUSES: TaskStatus[] = [
+  "pending",
+  "in_progress",
+  "done",
+  "failed",
+  "cancelled",
+  "incomplete",
+  "blocked",
+  "unknown",
+];
 const TERMINAL_STATUSES: TaskStatus[] = ["done", "failed", "cancelled"];
 
 export function createTasksRoutes(deps: WebUIServerDeps) {
@@ -30,6 +40,7 @@ export function createTasksRoutes(deps: WebUIServerDeps) {
         scheduledFor: t.scheduledFor?.toISOString() ?? null,
         dependencies: store().getDependencies(t.id),
         dependents: store().getDependents(t.id),
+        runs: store().listTaskRuns(t.id),
       }));
 
       const response: APIResponse = { success: true, data: enriched };
@@ -56,6 +67,7 @@ export function createTasksRoutes(deps: WebUIServerDeps) {
         scheduledFor: task.scheduledFor?.toISOString() ?? null,
         dependencies: store().getDependencies(task.id),
         dependents: store().getDependents(task.id),
+        runs: store().listTaskRuns(task.id),
       };
 
       const response: APIResponse = { success: true, data: enriched };
@@ -68,10 +80,18 @@ export function createTasksRoutes(deps: WebUIServerDeps) {
   // Delete task
   app.delete("/:id", (c) => {
     try {
+      const task = store().getTask(c.req.param("id"));
+      if (task && !TERMINAL_STATUSES.includes(task.status))
+        return c.json({ success: false, error: "Resolve or cancel the task before deletion" }, 409);
       const deleted = store().deleteTask(c.req.param("id"));
       if (!deleted) {
-        const response: APIResponse = { success: false, error: "Task not found" };
-        return c.json(response, 404);
+        const response: APIResponse = {
+          success: false,
+          error: task
+            ? "Execution history or dependent tasks still require this task record"
+            : "Task not found",
+        };
+        return c.json(response, task ? 409 : 404);
       }
 
       const response: APIResponse = { success: true, data: { message: "Task deleted" } };
@@ -124,13 +144,95 @@ export function createTasksRoutes(deps: WebUIServerDeps) {
     }
   });
 
+  app.post("/:id/resolve", async (c) => {
+    try {
+      const body = await c.req.json<Record<string, unknown>>();
+      if (
+        !Number.isSafeInteger(body.revision) ||
+        (body.revision as number) < 0 ||
+        !["done", "failed", "cancelled"].includes(String(body.status)) ||
+        typeof body.note !== "string" ||
+        !body.note.trim() ||
+        body.note.length > 4000
+      ) {
+        return c.json(
+          { success: false, error: "Expected revision, resolution status, and review note" },
+          400
+        );
+      }
+      const task = store().resolveTask(
+        c.req.param("id"),
+        body.revision as number,
+        body.status as "done" | "failed" | "cancelled",
+        body.note.trim()
+      );
+      if (task?.status === "done" && deps.bridge && deps.agent) {
+        await new TaskDependencyResolver(
+          store(),
+          deps.bridge,
+          deps.agent.getConfig()
+        ).onTaskComplete(task.id);
+      }
+      return task
+        ? c.json({ success: true, data: task })
+        : c.json(
+            { success: false, error: "Task changed or cannot be resolved; refresh first" },
+            409
+          );
+    } catch (error) {
+      return apiError(c, error, 500);
+    }
+  });
+
+  app.post("/:id/new-attempt", async (c) => {
+    try {
+      const body = await c.req.json<Record<string, unknown>>();
+      if (
+        !Number.isSafeInteger(body.revision) ||
+        (body.revision as number) < 0 ||
+        typeof body.note !== "string" ||
+        !body.note.trim() ||
+        body.note.length > 4000
+      ) {
+        return c.json(
+          { success: false, error: "Expected current revision and a new-attempt review note" },
+          400
+        );
+      }
+      const replacement = store().createNewAttempt(
+        c.req.param("id"),
+        body.revision as number,
+        body.note.trim()
+      );
+      if (!replacement)
+        return c.json(
+          {
+            success: false,
+            error:
+              "Resolve the previous incomplete/unknown task and its operations first, then refresh; a replacement may already exist",
+          },
+          409
+        );
+      if (deps.bridge && deps.agent)
+        await new TaskDependencyResolver(store(), deps.bridge, deps.agent.getConfig()).triggerTask(
+          replacement.id
+        );
+      return c.json({ success: true, data: replacement }, 201);
+    } catch (error) {
+      return apiError(c, error, 500);
+    }
+  });
+
   // Cancel task
   app.post("/:id/cancel", (c) => {
     try {
       const updated = store().cancelTask(c.req.param("id"));
       if (!updated) {
-        const response: APIResponse = { success: false, error: "Task not found" };
-        return c.json(response, 404);
+        const response: APIResponse = {
+          success: false,
+          error: "Task is missing or already started; refresh before cancelling",
+        };
+        return c.json(response, 409);
       }
 
       const response: APIResponse = { success: true, data: updated };

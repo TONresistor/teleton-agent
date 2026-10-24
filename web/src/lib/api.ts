@@ -16,6 +16,9 @@ import type {
   SearchResult,
   StatusData,
   TaskData,
+  OperationData,
+  DeliveryData,
+  TurnData,
   ToolAccessLevel,
   ToolConfigData,
   ToolRagStatus,
@@ -270,6 +273,42 @@ export const api = {
     return `/api/workspace/raw?path=${encodeURIComponent(path)}`;
   },
 
+  async turnsList(outcome?: string) {
+    return fetchAPI<APIResponse<TurnData[]>>(`/operations/turns${outcome ? `?outcome=${encodeURIComponent(outcome)}` : ''}`);
+  },
+  async turnGet(id: string) {
+    return fetchAPI<APIResponse<TurnData>>(`/operations/turns/${encodeURIComponent(id)}`);
+  },
+  async operationsList() {
+    return fetchAPI<APIResponse<OperationData[]>>("/operations");
+  },
+  async operationResolve(id: string, revision: number, outcome: "succeeded" | "failed", note: string, remoteReference?: string) {
+    return fetchAPI<APIResponse<{ resolved: boolean }>>(`/operations/${id}/resolve`, {
+      method: "POST", body: JSON.stringify({ revision, outcome, note, remoteReference }),
+    });
+  },
+  async deliveriesList() {
+    return fetchAPI<APIResponse<DeliveryData[]>>("/operations/deliveries");
+  },
+  async deliveryGet(id: string) {
+    return fetchAPI<APIResponse<DeliveryData>>(`/operations/deliveries/${id}`);
+  },
+  async deliveryResolve(id: string, revision: number, outcome: "delivered" | "not_delivered", note: string) {
+    return fetchAPI<APIResponse<{ resolved: boolean }>>(`/operations/deliveries/${id}/resolve`, {
+      method: "POST", body: JSON.stringify({ revision, outcome, note }),
+    });
+  },
+  async taskNewAttempt(id: string, revision: number, note: string) {
+    return fetchAPI<APIResponse<TaskData>>(`/tasks/${id}/new-attempt`, { method: "POST", body: JSON.stringify({ revision, note }) });
+  },
+  async deliveryRetry(id: string, revision: number, note: string) {
+    return fetchAPI<APIResponse<unknown>>(`/operations/deliveries/${id}/retry`, { method: "POST", body: JSON.stringify({ revision, note }) });
+  },
+  async taskResolve(id: string, revision: number, status: "done" | "failed" | "cancelled", note: string) {
+    return fetchAPI<APIResponse<TaskData>>(`/tasks/${id}/resolve`, {
+      method: "POST", body: JSON.stringify({ revision, status, note }),
+    });
+  },
   async tasksList(_status?: string) {
     const qs = _status ? `?status=${_status}` : "";
     return fetchAPI<APIResponse<TaskData[]>>(`/tasks${qs}`);

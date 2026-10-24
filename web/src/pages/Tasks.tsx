@@ -22,6 +22,9 @@ const STATUS_COLORS: Record<TaskStatus, string> = {
   done: 'var(--green)',
   failed: 'var(--red)',
   cancelled: 'var(--text-secondary)',
+  incomplete: 'var(--warning)',
+  blocked: 'var(--warning)',
+  unknown: 'var(--red)',
 };
 
 const STATUS_LABELS: Record<TaskStatus, string> = {
@@ -30,9 +33,12 @@ const STATUS_LABELS: Record<TaskStatus, string> = {
   done: 'Done',
   failed: 'Failed',
   cancelled: 'Cancelled',
+  incomplete: 'Incomplete',
+  blocked: 'Blocked',
+  unknown: 'Unknown',
 };
 
-const STATUSES: TaskStatus[] = ['pending', 'in_progress', 'done', 'failed', 'cancelled'];
+const STATUSES: TaskStatus[] = ['pending', 'in_progress', 'incomplete', 'blocked', 'unknown', 'done', 'failed', 'cancelled'];
 
 function PriorityDots({ priority }: { priority: number }) {
   if (priority === 0) return null;
@@ -67,6 +73,9 @@ export function Tasks() {
   const [filter, setFilter] = useState<TaskStatus | ''>('');
   const [query, setQuery] = useState('');
   const [openId, setOpenId] = useState<string | null>(null);
+  const [resolutionNote, setResolutionNote] = useState('');
+  const [resolutionStatus, setResolutionStatus] = useState<'done' | 'failed' | 'cancelled'>('cancelled');
+  const [resolving, setResolving] = useState(false);
 
   const [cleanMenuOpen, setCleanMenuOpen] = useState(false);
   const cleanRef = useRef<HTMLDivElement>(null);
@@ -137,6 +146,25 @@ export function Tasks() {
       setError(errMsg(err));
       toast.error(errMsg(err));
     }
+  };
+
+  const resolveTask = async (task: Task) => {
+    setResolving(true);
+    try {
+      await api.taskResolve(task.id, task.revision, resolutionStatus, resolutionNote);
+      setResolutionNote('');
+      reload();
+      toast.success('Task resolution recorded');
+    } catch (err) { setError(errMsg(err)); }
+    finally { setResolving(false); }
+  };
+
+  const createNewAttempt = async (task: Task) => {
+    if (!(await confirm({ message: 'Create and start a new attempt? Previous records remain available. Review all remote effects before continuing.', confirmLabel: 'Create new attempt' }))) return;
+    setResolving(true);
+    try { await api.taskNewAttempt(task.id, task.revision, resolutionNote); setResolutionNote(''); reload(); toast.success('New task attempt created'); }
+    catch (err) { setError(errMsg(err)); }
+    finally { setResolving(false); }
   };
 
   const counts = allTasks.reduce((acc, t) => { acc[t.status] = (acc[t.status] || 0) + 1; return acc; }, {} as Record<string, number>);
@@ -210,7 +238,8 @@ export function Tasks() {
         <List>
           {filteredTasks.map((task) => {
             const isOpen = openId === task.id;
-            const active = task.status === 'pending' || task.status === 'in_progress';
+            const active = task.status === 'pending';
+            const unresolved = ['unknown', 'incomplete', 'blocked'].includes(task.status);
             return (
               <Fragment key={task.id}>
                 <ListRow
@@ -228,12 +257,16 @@ export function Tasks() {
                   trailing={<PriorityDots priority={task.priority} />}
                   disclosure
                   expanded={isOpen}
-                  onClick={() => setOpenId(isOpen ? null : task.id)}
+                  onClick={() => { setOpenId(isOpen ? null : task.id); setResolutionNote(''); setResolutionStatus('cancelled'); }}
                 />
                 {isOpen && (
                   <div className="ios-sublist task-detail">
                     <div className="task-kv">
                       <KV label="ID"><code>{task.id}</code></KV>
+                      <KV label="Revision">{task.revision}</KV>
+                      {task.legacyOutcome && <KV label="Historical outcome">Imported from an older schema; completion was not verified by the current outcome contract.</KV>}
+                      {task.replacesTaskId && <KV label="Replaces task"><code>{task.replacesTaskId}</code></KV>}
+                      {task.runId && <KV label="Run"><code>{task.runId}</code></KV>}
                       <KV label="Priority">{task.priority}/10</KV>
                       <KV label="Description">{task.description}</KV>
                       {task.reason && <KV label="Reason">{task.reason}</KV>}
@@ -256,9 +289,29 @@ export function Tasks() {
                       <CodeBlock header={<span style={{ color: 'var(--red)' }}>Error</span>} maxHeight={150}>{task.error}</CodeBlock>
                     )}
 
+                    {task.notificationError && <CodeBlock header="Notification error">{task.notificationError}</CodeBlock>}
+                    {task.resolutionNote && <CodeBlock header="Review note">{task.resolutionNote}</CodeBlock>}
+                    {unresolved && (
+                      <form onSubmit={(event) => { event.preventDefault(); void resolveTask(task); }} style={{ display: 'grid', gap: 8, marginTop: 12 }}>
+                        <p>Review the task and its operations before recording a final outcome. This records a decision without executing the task.</p>
+                        <label>Outcome <select value={resolutionStatus} onChange={(event) => setResolutionStatus(event.target.value as typeof resolutionStatus)}>
+                          <option value="cancelled">Cancelled</option><option value="done">Completed and verified</option><option value="failed">Failed and verified</option>
+                        </select></label>
+                        <label>Review evidence <textarea required maxLength={4000} value={resolutionNote} onChange={(event) => setResolutionNote(event.target.value)} /></label>
+                        <button className="btn-ghost btn-sm" disabled={resolving || !resolutionNote.trim()}>Record resolution</button>
+                      </form>
+                    )}
+                    {task.runs && task.runs.length > 0 && <CodeBlock header="Execution history" maxHeight={300}>{JSON.stringify(task.runs, null, 2)}</CodeBlock>}
+                    {task.resolutionNote && ['incomplete', 'unknown'].includes(task.resolvedFromStatus ?? '') && (
+                      <form onSubmit={(event) => { event.preventDefault(); void createNewAttempt(task); }} style={{ display: 'grid', gap: 8, marginTop: 12 }}>
+                        <p>Create a separate attempt after reviewing the previous outcome and its operations.</p>
+                        <label>New attempt evidence <textarea required maxLength={4000} value={resolutionNote} onChange={(event) => setResolutionNote(event.target.value)} /></label>
+                        <button className="btn-ghost btn-sm" disabled={resolving || !resolutionNote.trim()}>Create new attempt</button>
+                      </form>
+                    )}
                     <div className="task-detail-actions">
                       {active && <button className="btn-ghost btn-sm" onClick={() => cancelTask(task.id)}>Cancel task</button>}
-                      <button className="btn-danger btn-sm" onClick={() => deleteTask(task.id)}>Delete</button>
+                      {['done', 'failed', 'cancelled'].includes(task.status) && !task.runs?.length && <button className="btn-danger btn-sm" onClick={() => deleteTask(task.id)}>Delete</button>}
                     </div>
                   </div>
                 )}

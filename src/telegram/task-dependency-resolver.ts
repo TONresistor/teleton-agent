@@ -33,6 +33,7 @@ export class TaskDependencyResolver {
    */
   async onTaskComplete(completedTaskId: string): Promise<void> {
     try {
+      if (this.taskStore.getTask(completedTaskId)?.status !== "done") return;
       // Find all tasks that depend on this one
       const allDependentIds = this.taskStore.getDependents(completedTaskId);
 
@@ -164,7 +165,7 @@ export class TaskDependencyResolver {
   /**
    * Trigger a task by sending [TASK:uuid] message to Saved Messages
    */
-  private async triggerTask(taskId: string): Promise<void> {
+  async triggerTask(taskId: string): Promise<void> {
     try {
       const task = this.taskStore.getTask(taskId);
       if (!task) {

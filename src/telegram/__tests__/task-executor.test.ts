@@ -7,6 +7,8 @@ function taskWithTool(tool: string) {
     description: "scheduled tool",
     status: "pending" as const,
     priority: 0,
+    revision: 0,
+    legacyOutcome: false,
     createdAt: new Date(),
     payload: JSON.stringify({ type: "tool_call", tool, params: {} }),
   };

@@ -84,6 +84,10 @@ export const telegramCreateScheduledTaskTool: Tool = {
 3. Skip on parent failure (continues even if parent fails):
    {"type":"agent_task","instructions":"Send daily report","skipOnParentFailure":false}
 
+4. Require confirmed output delivery before completing the task:
+   {"type":"agent_task","instructions":"Send daily report","requiresDelivery":true}
+
+requiresDelivery defaults to false. Set true when sending the final response is part of the task goal.
 If omitted, task is a simple reminder.`,
       })
     ),
@@ -172,6 +176,10 @@ export const telegramCreateScheduledTaskExecutor: ToolExecutor<CreateScheduledTa
             success: false,
             error: 'Payload must have type "tool_call" or "agent_task"',
           };
+        }
+
+        if (parsed.requiresDelivery !== undefined && typeof parsed.requiresDelivery !== "boolean") {
+          return { success: false, error: 'Payload "requiresDelivery" must be a boolean' };
         }
 
         // Validate tool_call payload

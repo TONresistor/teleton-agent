@@ -199,6 +199,7 @@ function DashboardNav() {
     { to: '/gocoon',        icon: <IconGocoon />,        label: 'Gocoon' },
     { to: '/workspace', icon: <IconWorkspace />, label: 'Workspace' },
     { to: '/tasks',     icon: <IconTasks />,     label: 'Tasks' },
+    { to: '/operations', icon: <IconTasks />, label: 'Operations' },
     { to: '/mcp',       icon: <IconMCP />,       label: 'MCP' },
     { to: '/hooks',     icon: <IconHooks />,     label: 'Hooks' },
     { to: '/logs',      icon: <IconLogs />,      label: 'Logs' },

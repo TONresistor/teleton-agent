@@ -27,7 +27,11 @@ import type { ToolIndex } from "./tool-index.js";
 import { getErrorMessage } from "../../utils/errors.js";
 import { createLogger } from "../../utils/logger.js";
 import { TELEGRAM_SEND_TOOLS } from "../../constants/tools.js";
-import { completeActionExecution, reserveActionExecution } from "../../memory/action-executions.js";
+import {
+  completeActionExecution,
+  reserveActionExecution,
+  rememberActionReceipt,
+} from "../../memory/action-executions.js";
 import {
   buildToolNamespaceCatalog,
   formatNamespaceCatalogForPrompt,
@@ -345,63 +349,146 @@ export class ToolRegistry {
     validatedArgs: unknown,
     context: ToolContext
   ): Promise<ToolResult> {
-    let actionArgsHash: string | null = null;
-    try {
-      if (registered.tool.category !== "data-bearing" && context.turnId) {
+    const isAction = registered.tool.category !== "data-bearing";
+    if (
+      context.signal?.aborted ||
+      (context.deadlineAt !== undefined && Date.now() >= context.deadlineAt)
+    ) {
+      return {
+        success: false,
+        error: "Turn interrupted or deadline expired before tool invocation",
+        execution: { outcome: "not_attempted" },
+      };
+    }
+    let actionArgsHash: string | undefined;
+    let operationId: string | undefined;
+    if (isAction && context.turnId) {
+      try {
         const reservation = reserveActionExecution(
           context.db,
           context.turnId,
           toolName,
-          validatedArgs
+          validatedArgs,
+          {
+            logicalSessionKey: context.logicalSessionKey ?? context.chatId,
+            requestedArgs: context.requestedArgs,
+            chatId: context.chatId,
+            senderId: context.senderId,
+          }
         );
         if (reservation.kind === "replay") return reservation.result;
-        if (reservation.kind === "unknown") {
+        if (reservation.kind === "unknown")
           return {
             success: false,
-            error:
-              `Action "${toolName}" already started in this turn and its outcome is unknown. ` +
-              "Do not retry it automatically; inspect the remote state first.",
+            error: `Action "${toolName}" has an unresolved outcome. Inspect the remote state and explicitly reconcile operation ${reservation.operationId}; do not retry automatically.`,
+            execution: {
+              outcome: "unknown",
+              operationId: reservation.operationId,
+              persistence: "persisted",
+            },
           };
-        }
         actionArgsHash = reservation.argsHash;
+        operationId = reservation.operationId;
+      } catch (error) {
+        return {
+          success: false,
+          error: getErrorMessage(error),
+          execution: {
+            outcome: "not_attempted",
+            persistence: "persistence_failed",
+            error: getErrorMessage(error),
+          },
+        };
       }
+    }
 
-      // Do not race external actions against a timeout: the side effect could
-      // continue after a reported failure and invite an unsafe duplicate retry.
-      if (registered.tool.category !== "data-bearing") {
-        const result = await registered.executor(validatedArgs, context);
-        if (actionArgsHash && context.turnId) {
-          completeActionExecution(context.db, context.turnId, toolName, actionArgsHash, result);
-        }
-        return result;
+    let result: ToolResult;
+    try {
+      if (
+        context.signal?.aborted ||
+        (context.deadlineAt !== undefined && Date.now() >= context.deadlineAt)
+      ) {
+        result = {
+          success: false,
+          error: "Turn interrupted or deadline expired before tool invocation",
+          execution: { outcome: "not_attempted" },
+        };
+      } else if (isAction) {
+        // Invocation and receipt persistence have separate failure boundaries.
+        result = await registered.executor(validatedArgs, context);
+      } else {
+        let timeoutHandle: ReturnType<typeof setTimeout>;
+        result = await Promise.race([
+          registered.executor(validatedArgs, context),
+          new Promise<never>((_, reject) => {
+            timeoutHandle = setTimeout(
+              () =>
+                reject(
+                  new Error(
+                    `Tool "${toolName}" timed out after ${TOOL_EXECUTION_TIMEOUT_MS / 1000}s`
+                  )
+                ),
+              TOOL_EXECUTION_TIMEOUT_MS
+            );
+          }),
+        ]).finally(() => clearTimeout(timeoutHandle));
       }
-
-      let timeoutHandle: ReturnType<typeof setTimeout>;
-      const result = await Promise.race([
-        registered.executor(validatedArgs, context),
-        new Promise<never>((_, reject) => {
-          timeoutHandle = setTimeout(
-            () =>
-              reject(
-                new Error(`Tool "${toolName}" timed out after ${TOOL_EXECUTION_TIMEOUT_MS / 1000}s`)
-              ),
-            TOOL_EXECUTION_TIMEOUT_MS
-          );
-        }),
-      ]).finally(() => clearTimeout(timeoutHandle));
-
-      return result;
     } catch (error) {
       log.error({ err: error }, `Error executing tool ${toolName}`);
-      const result = {
+      result = {
         success: false,
         error: getErrorMessage(error),
+        ...(isAction
+          ? { execution: { outcome: "unknown" as const, error: getErrorMessage(error) } }
+          : {}),
       };
-      if (actionArgsHash && context.turnId) {
-        completeActionExecution(context.db, context.turnId, toolName, actionArgsHash, result);
-      }
-      return result;
     }
+    if (!isAction) return result;
+    const legacyOutcome =
+      result.data && typeof result.data === "object" && "outcome" in result.data
+        ? (result.data as { outcome?: unknown }).outcome
+        : undefined;
+    const remoteData =
+      result.data && typeof result.data === "object"
+        ? (result.data as Record<string, unknown>)
+        : undefined;
+    const remoteReference =
+      result.execution?.remoteReference ??
+      [
+        remoteData?.remoteReference,
+        remoteData?.remoteId,
+        remoteData?.txHash,
+        remoteData?.messageId,
+      ].find((value): value is string => typeof value === "string");
+    result = {
+      ...result,
+      execution: {
+        ...result.execution,
+        ...(remoteReference ? { remoteReference } : {}),
+        outcome:
+          result.execution?.outcome ??
+          (legacyOutcome === "unknown" ? "unknown" : result.success ? "succeeded" : "unknown"),
+        ...(operationId ? { operationId, persistence: "persisted" as const } : {}),
+      },
+    };
+    if (actionArgsHash && context.turnId) {
+      try {
+        completeActionExecution(context.db, context.turnId, toolName, actionArgsHash, result);
+      } catch (error) {
+        log.error({ err: error, operationId }, "Action receipt persistence failed");
+        result = {
+          ...result,
+          execution: {
+            ...result.execution,
+            outcome: result.execution?.outcome ?? "unknown",
+            persistence: "persistence_failed",
+            error: getErrorMessage(error),
+          },
+        };
+        rememberActionReceipt(context.db, context.turnId, toolName, actionArgsHash, result);
+      }
+    }
+    return result;
   }
 
   getForContext(

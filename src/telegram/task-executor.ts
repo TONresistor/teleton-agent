@@ -1,3 +1,4 @@
+import { assertTurnBudget, TurnBudgetError } from "../agent/turn-budget.js";
 import type { Task } from "../memory/agent/tasks.js";
 import type { ToolContext } from "../agent/tools/types.js";
 import type { ToolRegistry } from "../agent/tools/registry.js";
@@ -44,12 +45,16 @@ export type TaskPayload =
       params: Record<string, unknown>;
       condition?: string;
       skipOnParentFailure?: boolean;
+      /** Completion requires a confirmed final response delivery. */
+      requiresDelivery?: boolean;
     }
   | {
       type: "agent_task";
       instructions: string;
       context?: Record<string, unknown>;
       skipOnParentFailure?: boolean;
+      /** Completion requires a confirmed final response delivery. */
+      requiresDelivery?: boolean;
     };
 
 /**
@@ -68,6 +73,7 @@ export async function executeScheduledTask(
   toolRegistry: ToolRegistry,
   parentResults?: Array<{ taskId: string; description: string; result: unknown }>
 ): Promise<string> {
+  assertTurnBudget(toolContext.deadlineAt, toolContext.signal);
   if (!task.payload) {
     // No payload = simple reminder, just notify agent
     return buildAgentPrompt(task, null, parentResults);
@@ -98,7 +104,23 @@ export async function executeScheduledTask(
         name: payload.tool,
         arguments: parseToolArguments(payload.params ?? {}),
       };
-      const result = await toolRegistry.execute(toolCall, toolContext);
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      let abort: (() => void) | undefined;
+      const execution = toolRegistry.execute(toolCall, toolContext);
+      const result = await Promise.race([
+        execution,
+        new Promise<never>((_resolve, reject) => {
+          abort = () => reject(new TurnBudgetError());
+          toolContext.signal?.addEventListener("abort", abort, { once: true });
+          if (toolContext.signal?.aborted) abort();
+          if (toolContext.deadlineAt !== undefined)
+            timer = setTimeout(abort, Math.max(0, toolContext.deadlineAt - Date.now()));
+        }),
+      ]).finally(() => {
+        if (timer) clearTimeout(timer);
+        if (abort) toolContext.signal?.removeEventListener("abort", abort);
+      });
+      assertTurnBudget(toolContext.deadlineAt, toolContext.signal);
 
       // Build prompt with task context + tool result
       return buildAgentPrompt(
@@ -112,6 +134,7 @@ export async function executeScheduledTask(
         parentResults
       );
     } catch (error) {
+      if (error instanceof TurnBudgetError) throw error;
       // Tool failed, notify agent
       return buildAgentPrompt(
         task,
