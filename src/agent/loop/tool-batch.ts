@@ -19,7 +19,7 @@ import {
   truncateToolResult,
 } from "../tool-result-truncator.js";
 import type { ToolRegistry } from "../tools/registry.js";
-import type { ToolContext } from "../tools/types.js";
+import type { ToolContext, ToolResult } from "../tools/types.js";
 
 const log = createLogger("Agent");
 type HookRunner = ReturnType<typeof createHookRunner>;
@@ -32,7 +32,7 @@ export interface ToolPlan {
 }
 
 export interface ToolExecResult {
-  result: { success: boolean; data?: unknown; error?: string };
+  result: ToolResult;
   durationMs: number;
   attempted?: boolean;
   execError?: { message: string; stack?: string };
@@ -86,9 +86,16 @@ export async function executeToolBatch(
   const execResults: ToolExecResult[] = new Array(toolPlans.length);
   const runPlan = async (idx: number): Promise<void> => {
     const plan = toolPlans[idx];
-    if (plan.blocked) {
+    const expired =
+      fullContext.signal?.aborted ||
+      (fullContext.deadlineAt !== undefined && Date.now() >= fullContext.deadlineAt);
+    if (plan.blocked || expired) {
       execResults[idx] = {
-        result: { success: false, error: plan.blockReason },
+        result: {
+          success: false,
+          error: expired ? "Turn budget expired before tool execution" : plan.blockReason,
+          execution: { outcome: "not_attempted" },
+        },
         durationMs: 0,
         attempted: false,
       };
@@ -99,9 +106,20 @@ export async function executeToolBatch(
     try {
       const result = await toolRegistry.execute(
         { ...plan.block, arguments: parseToolArguments(plan.params) },
-        fullContext
+        { ...fullContext, requestedArgs: plan.block.arguments }
       );
-      execResults[idx] = { result, durationMs: Date.now() - startTime, attempted: true };
+      if (result.execution) {
+        result.execution = {
+          ...result.execution,
+          requestedArgs: plan.block.arguments,
+          effectiveArgs: plan.params,
+        };
+      }
+      execResults[idx] = {
+        result,
+        durationMs: Date.now() - startTime,
+        attempted: result.execution?.outcome !== "not_attempted",
+      };
     } catch (execErr) {
       const errMsg = getErrorMessage(execErr);
       const errStack = execErr instanceof Error ? execErr.stack : undefined;
@@ -214,11 +232,7 @@ export async function recordToolResults(
       input: plan.params,
       durationMs: exec.durationMs,
       attempted: exec.attempted,
-      result: {
-        success: exec.result.success,
-        data: exec.result.data,
-        error: exec.result.error,
-      },
+      result: exec.result,
     });
 
     const fullResultText = serializeToolResult(exec.result);
@@ -244,7 +258,7 @@ export async function recordToolResults(
       role: "toolResult",
       toolCallId: block.id,
       toolName: block.name,
-      content: [{ type: "text", text: resultText }],
+      content: [{ type: "text", text: resultText }, ...(exec.result.modelContent ?? [])],
       isError: !exec.result.success,
       timestamp: Date.now(),
     };

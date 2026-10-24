@@ -1,6 +1,5 @@
-import type { Context, TextContent, Usage } from "@earendil-works/pi-ai";
+import type { Usage } from "@earendil-works/pi-ai";
 import type { CostAwareUsage } from "../providers/openrouter-usage.js";
-import { extractToolNames, stripEnvelopePrefix, truncate } from "../utils/pi-message.js";
 
 /** Per-turn usage accumulator (input/output/cache + cost), summed across loop iterations. */
 export interface UsageAccumulator {
@@ -100,7 +99,7 @@ export function parseRetryAfterMs(errorMessage?: string): number | null {
   if (!match) return null;
   const seconds = Number(match[1]);
   if (!Number.isFinite(seconds) || seconds <= 0) return null;
-  return Math.min(seconds * 1000, 60_000);
+  return seconds * 1000;
 }
 
 export function isTrivialMessage(text: string): boolean {
@@ -155,36 +154,4 @@ export function enrichRAGQuery(query: string): string {
   }
 
   return tags.length > 0 ? `${query} ${tags.join(" ")}` : query;
-}
-
-export function extractContextSummary(context: Context, maxMessages: number = 10): string {
-  const recentMessages = context.messages.slice(-maxMessages);
-  const summaryParts: string[] = [];
-
-  summaryParts.push("### Session Summary (Auto-saved before overflow reset)\n");
-
-  for (const msg of recentMessages) {
-    if (msg.role === "user") {
-      const content = typeof msg.content === "string" ? msg.content : "[complex]";
-      const body = stripEnvelopePrefix(content);
-      summaryParts.push(`- **User**: ${truncate(body, 150)}`);
-    } else if (msg.role === "assistant") {
-      const textBlocks = msg.content.filter((b): b is TextContent => b.type === "text");
-      const toolNames = extractToolNames(msg);
-
-      if (textBlocks.length > 0) {
-        const text = textBlocks[0].text || "";
-        summaryParts.push(`- **Agent**: ${truncate(text, 150)}`);
-      }
-
-      if (toolNames.length > 0) {
-        summaryParts.push(`  - *Tools used: ${toolNames.join(", ")}*`);
-      }
-    } else if (msg.role === "toolResult") {
-      const status = msg.isError ? "ERROR" : "OK";
-      summaryParts.push(`  - *Tool result: ${msg.toolName} → ${status}*`);
-    }
-  }
-
-  return summaryParts.join("\n");
 }

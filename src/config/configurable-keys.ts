@@ -469,7 +469,8 @@ export const CONFIGURABLE_KEYS: Record<string, ConfigKeyMeta> = {
     itemType: "number",
     category: "Telegram",
     label: "Allowed Users",
-    description: "User IDs allowed for DM access",
+    description:
+      "Verified user IDs authorized to use the agent and global memory in DMs and groups",
     sensitive: false,
     hotReload: "instant",
     validate: positiveInteger,

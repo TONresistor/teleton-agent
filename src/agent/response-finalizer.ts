@@ -13,13 +13,14 @@ import type {
   TurnContext,
 } from "./turn-types.js";
 
+import { outcomeForStopReason } from "./execution-types.js";
 const log = createLogger("Agent");
 type HookRunner = ReturnType<typeof createHookRunner>;
 
 export async function finalizeAgentResponse(
   turn: TurnContext,
   loop: LoopResult,
-  finalResponse: ChatResponse,
+  finalResponse: ChatResponse | null,
   opts: ProcessMessageOptions,
   hookRunner?: HookRunner
 ): Promise<AgentResponse> {
@@ -59,7 +60,8 @@ export async function finalizeAgentResponse(
     accumulateTokenUsage(u);
   }
 
-  let content = loop.forcedContent ?? (accumulatedTexts.join("\n").trim() || finalResponse.text);
+  let content = loop.forcedContent ?? (accumulatedTexts.join("\n").trim() || finalResponse?.text || "");
+  let outcome = outcomeForStopReason(loop.stopReason);
   const sentToCurrentChat = totalToolCalls.some((call) => sentSuccessfullyToChat(call, chatId));
 
   if (!content && totalToolCalls.length > 0 && !sentToCurrentChat) {
@@ -87,6 +89,7 @@ export async function finalizeAgentResponse(
     };
     await hookRunner.runModifyingHook("response:before", responseBeforeEvent);
     if (responseBeforeEvent.block) {
+      if (outcome.status !== "unknown") outcome = { status: "blocked", reason: "hook_blocked" };
       log.info(`🚫 Response blocked by hook: ${responseBeforeEvent.blockReason || "no reason"}`);
       content = responseBeforeEvent.blockReason.startsWith("Hook enforcement failed")
         ? "Response withheld because an enforcement hook failed. Check the agent logs."
@@ -128,5 +131,5 @@ export async function finalizeAgentResponse(
     }
   }
 
-  return { content, toolCalls: totalToolCalls, streamed: wasStreamed };
+  return { turnId: turn.turnId, outcome, delivery: { state: "not_requested" }, content, toolCalls: totalToolCalls, streamed: wasStreamed };
 }

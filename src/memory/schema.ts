@@ -1,3 +1,6 @@
+import { DDL_MODEL_ATTEMPTS } from "./model-attempts.js";
+import { TURN_INGRESS_DDL } from "./turn-ingress.js";
+import { RESPONSE_DELIVERIES_DDL } from "./response-deliveries.js";
 import type Database from "better-sqlite3";
 import { JOURNAL_SCHEMA } from "../utils/module-db.js";
 import { createLogger } from "../utils/logger.js";
@@ -12,6 +15,92 @@ const log = createLogger("Memory");
 // rather than creates (tg_messages FTS triggers: DROP+CREATE vs CREATE IF NOT
 // EXISTS) are deliberately left inline to avoid changing applied-migration
 // semantics on existing databases.
+
+const DDL_ACTION_EXECUTIONS = `
+    CREATE TABLE IF NOT EXISTS action_executions (
+      turn_id TEXT NOT NULL,
+      tool_name TEXT NOT NULL,
+      args_hash TEXT NOT NULL,
+      status TEXT NOT NULL CHECK(status IN ('not_attempted', 'running', 'succeeded', 'failed', 'unknown')),
+      result_json TEXT,
+      legacy_outcome INTEGER NOT NULL DEFAULT 0 CHECK(legacy_outcome IN (0, 1)),
+      legacy_result_json TEXT,
+      operation_id TEXT,
+      logical_session_key TEXT,
+      chat_id TEXT,
+      sender_id INTEGER,
+      requested_args_json TEXT,
+      effective_args_json TEXT,
+      remote_reference TEXT,
+      persistence_error TEXT,
+      revision INTEGER NOT NULL DEFAULT 0,
+      resolution_note TEXT,
+      started_at INTEGER NOT NULL,
+      completed_at INTEGER,
+      PRIMARY KEY (turn_id, tool_name, args_hash)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_action_executions_started
+      ON action_executions(started_at DESC);
+`;
+
+const DDL_ACTION_INDEXES = `
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_action_operation ON action_executions(operation_id);
+  CREATE INDEX IF NOT EXISTS idx_action_session ON action_executions(logical_session_key, status);
+`;
+
+const DDL_TASKS = `
+    CREATE TABLE IF NOT EXISTS tasks (
+      id TEXT PRIMARY KEY,
+      description TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'in_progress', 'done', 'failed', 'cancelled', 'incomplete', 'blocked', 'unknown')),
+      priority INTEGER DEFAULT 0,
+      created_by TEXT,
+      created_at INTEGER NOT NULL DEFAULT (unixepoch()),
+      started_at INTEGER,
+      completed_at INTEGER,
+      result TEXT,
+      error TEXT,
+      scheduled_for INTEGER,
+      payload TEXT,
+      reason TEXT,
+      scheduled_message_id INTEGER,
+      origin_sender_id INTEGER,
+      origin_chat_id TEXT,
+      origin_is_group INTEGER CHECK(origin_is_group IN (0, 1)),
+      run_id TEXT,
+      revision INTEGER NOT NULL DEFAULT 0,
+      notification_error TEXT,
+      resolution_note TEXT,
+      legacy_outcome INTEGER NOT NULL DEFAULT 0 CHECK(legacy_outcome IN (0, 1)),
+      resolved_from_status TEXT,
+      replaces_task_id TEXT REFERENCES tasks(id)
+    );
+
+    CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
+    CREATE INDEX IF NOT EXISTS idx_tasks_priority ON tasks(priority DESC, created_at ASC);
+    CREATE INDEX IF NOT EXISTS idx_tasks_scheduled ON tasks(scheduled_for) WHERE scheduled_for IS NOT NULL;
+    CREATE INDEX IF NOT EXISTS idx_tasks_created_by ON tasks(created_by) WHERE created_by IS NOT NULL;
+`;
+
+const DDL_TASK_RUNS = `
+  CREATE TABLE IF NOT EXISTS task_runs (
+    run_id TEXT PRIMARY KEY,
+    task_id TEXT NOT NULL REFERENCES tasks(id),
+    status TEXT NOT NULL,
+    started_at INTEGER NOT NULL,
+    completed_at INTEGER,
+    turn_id TEXT,
+    outcome_reason TEXT,
+    result TEXT,
+    error TEXT,
+    resolution_status TEXT,
+    resolution_note TEXT,
+    resolved_at INTEGER
+  );
+  CREATE INDEX IF NOT EXISTS idx_task_runs_task ON task_runs(task_id, started_at DESC);
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_task_replacement ON tasks(replaces_task_id) WHERE replaces_task_id IS NOT NULL;
+`;
 
 const DDL_TASK_DEPENDENCIES = `
     CREATE TABLE IF NOT EXISTS task_dependencies (
@@ -102,19 +191,7 @@ const DDL_AGENT_RUNTIME = `
     CREATE INDEX IF NOT EXISTS idx_tool_result_artifacts_expiry
       ON tool_result_artifacts(expires_at);
 
-    CREATE TABLE IF NOT EXISTS action_executions (
-      turn_id TEXT NOT NULL,
-      tool_name TEXT NOT NULL,
-      args_hash TEXT NOT NULL,
-      status TEXT NOT NULL CHECK(status IN ('running', 'succeeded', 'failed', 'unknown')),
-      result_json TEXT,
-      started_at INTEGER NOT NULL,
-      completed_at INTEGER,
-      PRIMARY KEY (turn_id, tool_name, args_hash)
-    );
-
-    CREATE INDEX IF NOT EXISTS idx_action_executions_started
-      ON action_executions(started_at DESC);
+    ${DDL_ACTION_EXECUTIONS}
 `;
 
 /**
@@ -244,36 +321,17 @@ export function ensureSchema(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_sessions_updated ON sessions(updated_at DESC);
 
     -- Tasks
-    CREATE TABLE IF NOT EXISTS tasks (
-      id TEXT PRIMARY KEY,
-      description TEXT NOT NULL,
-      status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending', 'in_progress', 'done', 'failed', 'cancelled')),
-      priority INTEGER DEFAULT 0,
-      created_by TEXT,
-      created_at INTEGER NOT NULL DEFAULT (unixepoch()),
-      started_at INTEGER,
-      completed_at INTEGER,
-      result TEXT,
-      error TEXT,
-      scheduled_for INTEGER,
-      payload TEXT,
-      reason TEXT,
-      scheduled_message_id INTEGER,
-      origin_sender_id INTEGER,
-      origin_chat_id TEXT,
-      origin_is_group INTEGER CHECK(origin_is_group IN (0, 1))
-    );
-
-    CREATE INDEX IF NOT EXISTS idx_tasks_status ON tasks(status);
-    CREATE INDEX IF NOT EXISTS idx_tasks_priority ON tasks(priority DESC, created_at ASC);
-    CREATE INDEX IF NOT EXISTS idx_tasks_scheduled ON tasks(scheduled_for) WHERE scheduled_for IS NOT NULL;
-    CREATE INDEX IF NOT EXISTS idx_tasks_created_by ON tasks(created_by) WHERE created_by IS NOT NULL;
+    ${DDL_TASKS}
 
     -- Agent loop observability, paged tool artifacts, and action idempotency.
     ${DDL_AGENT_RUNTIME}
+    ${TURN_INGRESS_DDL}
+    ${RESPONSE_DELIVERIES_DDL}
+    ${DDL_MODEL_ATTEMPTS}
 
     -- Task Dependencies (for chained tasks)
     ${DDL_TASK_DEPENDENCIES}
+
 
     -- ============================================
     -- TELEGRAM FEED
@@ -419,6 +477,16 @@ export function ensureSchema(db: Database.Database): void {
     -- =====================================================
     ${JOURNAL_SCHEMA}
   `);
+  const actionColumns = db.prepare("PRAGMA table_info(action_executions)").all() as Array<{
+    name: string;
+  }>;
+  if (actionColumns.some((column) => column.name === "operation_id")) db.exec(DDL_ACTION_INDEXES);
+  if (
+    (db.prepare("PRAGMA table_info(tasks)").all() as Array<{ name: string }>).some(
+      (column) => column.name === "replaces_task_id"
+    )
+  )
+    db.exec(DDL_TASK_RUNS);
 }
 
 export function ensureVectorTables(db: Database.Database, dimensions: number): boolean {
@@ -597,7 +665,7 @@ export function setSchemaVersion(db: Database.Database, version: string): void {
   ).run(version);
 }
 
-export const CURRENT_SCHEMA_VERSION = "1.26.0";
+export const CURRENT_SCHEMA_VERSION = "1.27.0";
 
 export function runMigrations(db: Database.Database): void {
   const currentVersion = getSchemaVersion(db);
@@ -1179,6 +1247,82 @@ export function runMigrations(db: Database.Database): void {
 
   if (!currentVersion || versionLessThan(currentVersion, "1.26.0")) {
     addColumnIfNotExists(db, "agent_turn_traces", "cost_incomplete", "INTEGER NOT NULL DEFAULT 0");
+  }
+
+  if (!currentVersion || versionLessThan(currentVersion, "1.27.0")) {
+    // Rebuild the CHECK constraint while retaining dependency references and rows.
+    const foreignKeys = db.pragma("foreign_keys", { simple: true });
+    db.pragma("foreign_keys = OFF");
+    try {
+      db.transaction(() => {
+        db.exec(TURN_INGRESS_DDL + RESPONSE_DELIVERIES_DDL + DDL_MODEL_ATTEMPTS);
+        const columns = db.prepare("PRAGMA table_info(tasks)").all() as Array<{ name: string }>;
+        if (!columns.length) db.exec(DDL_TASKS);
+        if (columns.length && !columns.some((column) => column.name === "revision")) {
+          const oldColumns = columns.map((column) => column.name).join(", ");
+          db.exec(DDL_TASKS.split("CREATE INDEX")[0].replace("tasks (", "tasks_v127 ("));
+          db.exec(
+            `INSERT INTO tasks_v127 (${oldColumns}, legacy_outcome) SELECT ${oldColumns}, 1 FROM tasks`
+          );
+          db.exec("DROP TABLE tasks; ALTER TABLE tasks_v127 RENAME TO tasks;");
+          db.exec(DDL_TASKS);
+        }
+        for (const [name, type] of [
+          ["legacy_outcome", "INTEGER NOT NULL DEFAULT 0"],
+          ["resolved_from_status", "TEXT"],
+          ["replaces_task_id", "TEXT REFERENCES tasks(id)"],
+        ])
+          addColumnIfNotExists(db, "tasks", name, type);
+        db.exec(DDL_TASK_RUNS);
+        const legacyActions = !(
+          db.prepare("PRAGMA table_info(action_executions)").all() as Array<{ name: string }>
+        ).some((column) => column.name === "legacy_outcome");
+        addColumnIfNotExists(
+          db,
+          "action_executions",
+          "legacy_outcome",
+          "INTEGER NOT NULL DEFAULT 0"
+        );
+        addColumnIfNotExists(db, "action_executions", "legacy_result_json", "TEXT");
+        if (legacyActions)
+          db.exec(
+            "UPDATE action_executions SET legacy_outcome = 1, legacy_result_json = result_json"
+          );
+        for (const [name, type] of [
+          ["operation_id", "TEXT"],
+          ["logical_session_key", "TEXT"],
+          ["chat_id", "TEXT"],
+          ["sender_id", "INTEGER"],
+          ["requested_args_json", "TEXT"],
+          ["effective_args_json", "TEXT"],
+          ["remote_reference", "TEXT"],
+          ["persistence_error", "TEXT"],
+          ["revision", "INTEGER NOT NULL DEFAULT 0"],
+          ["resolution_note", "TEXT"],
+        ])
+          addColumnIfNotExists(db, "action_executions", name, type);
+        db.exec(`UPDATE action_executions SET operation_id = lower(hex(randomblob(16)))
+          WHERE operation_id IS NULL;
+          UPDATE action_executions SET status = 'unknown' WHERE status IN ('running', 'failed');`);
+        const actionColumns = (
+          db.prepare("PRAGMA table_info(action_executions)").all() as Array<{ name: string }>
+        )
+          .map((column) => column.name)
+          .join(", ");
+        db.exec(
+          DDL_ACTION_EXECUTIONS.split("CREATE INDEX")[0].replace(
+            "action_executions (",
+            "action_executions_v127 ("
+          )
+        );
+        db.exec(`INSERT INTO action_executions_v127 (${actionColumns}) SELECT ${actionColumns} FROM action_executions;
+          DROP TABLE action_executions; ALTER TABLE action_executions_v127 RENAME TO action_executions;`);
+        db.exec(DDL_ACTION_EXECUTIONS);
+        db.exec(DDL_ACTION_INDEXES);
+      })();
+    } finally {
+      db.pragma(`foreign_keys = ${foreignKeys ? "ON" : "OFF"}`);
+    }
   }
 
   setSchemaVersion(db, CURRENT_SCHEMA_VERSION);

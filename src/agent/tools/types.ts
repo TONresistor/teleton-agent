@@ -1,6 +1,8 @@
+import type { TextContent, ImageContent } from "@earendil-works/pi-ai";
 import type { TSchema } from "@sinclair/typebox";
 import type { ITelegramBridge } from "../../telegram/bridge-interface.js";
 import type Database from "better-sqlite3";
+import type { EffectOutcome } from "../execution-types.js";
 import type { Config } from "../../config/schema.js";
 
 /**
@@ -21,6 +23,12 @@ export interface ToolContext {
   isGuest?: boolean;
   /** Stable ID for one inbound turn; used for action idempotency. */
   turnId?: string;
+  /** Stable logical conversation key across transcript rotation. */
+  logicalSessionKey?: string;
+  /** Arguments requested before tool hooks; validated arguments are recorded separately. */
+  requestedArgs?: unknown;
+  deadlineAt?: number;
+  signal?: AbortSignal;
   /** Stable session ID used to scope persisted tool artifacts. */
   sessionId?: string;
   /** Full config for accessing API key, model, etc. (optional) */
@@ -31,8 +39,18 @@ export interface ToolContext {
  * Result returned by a tool execution
  */
 export interface ToolResult {
+  modelContent?: (TextContent | ImageContent)[];
   /** Whether the execution was successful */
   success: boolean;
+  execution?: {
+    requestedArgs?: unknown;
+    effectiveArgs?: unknown;
+    outcome: EffectOutcome;
+    operationId?: string;
+    persistence?: "persisted" | "persistence_failed";
+    remoteReference?: string;
+    error?: string;
+  };
   /** Result data (will be serialized to JSON for the LLM) */
   data?: unknown;
   /** Error message if failed */

@@ -6,6 +6,8 @@ import type { ChatResponse } from "./client.js";
 import type { UsageAccumulator } from "./runtime-utils.js";
 import type { CompletedToolCall } from "./telegram-send-state.js";
 import type { ToolContext } from "./tools/types.js";
+import type { DeliveryReceipt, TurnAdmission, TurnOutcome } from "./execution-types.js";
+import type { DeliveryTarget } from "./delivery.js";
 
 export interface ProcessMessageOptions {
   chatId: string;
@@ -28,9 +30,17 @@ export interface ProcessMessageOptions {
   turnId?: string;
   /** Optional conversation-state key when delivery chat and session identity differ. */
   sessionKey?: string;
+  policyChatId?: string;
+  admission?: TurnAdmission;
+  delivery?: DeliveryTarget;
+  ingressKey?: string;
+  ingressHash?: string;
 }
 
 export interface AgentResponse {
+  turnId: string;
+  outcome: TurnOutcome;
+  delivery: DeliveryReceipt;
   content: string;
   toolCalls?: CompletedToolCall[];
   streamed?: boolean;

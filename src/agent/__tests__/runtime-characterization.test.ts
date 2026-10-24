@@ -1,4 +1,6 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import Database from "better-sqlite3";
+import { ensureSchema } from "../../memory/schema.js";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AssistantMessage, Context, ToolResultMessage } from "@earendil-works/pi-ai";
 import { Type } from "@sinclair/typebox";
 import { ConfigSchema } from "../../config/schema.js";
@@ -31,13 +33,7 @@ const mocks = vi.hoisted(() => {
   };
 });
 
-const fakeDb = {
-  prepare: vi.fn(() => ({
-    get: vi.fn(() => ({ count: 0 })),
-    all: vi.fn(() => []),
-    run: vi.fn(),
-  })),
-};
+let fakeDb: Database.Database;
 
 vi.mock("../../memory/index.js", () => ({
   getDatabase: () => ({ getDb: () => fakeDb }),
@@ -199,18 +195,24 @@ const registry = {
 
 const toolContext = {
   bridge: { getMode: () => "bot" },
-  db: fakeDb,
+  get db() {
+    return fakeDb;
+  },
   senderId: 1,
 } as unknown as Omit<ToolContext, "chatId" | "isGroup">;
 
 describe("AgentRuntime characterization", () => {
   beforeEach(() => {
+    fakeDb = new Database(":memory:");
+    ensureSchema(fakeDb);
     vi.clearAllMocks();
     mocks.session.messageCount = 0;
     mocks.selectTools.mockResolvedValue(undefined);
     mocks.resolveProviderFallback.mockReturnValue(null);
     mocks.updateSession.mockReturnValue(mocks.session);
   });
+
+  afterEach(() => fakeDb.close());
 
   it("returns and persists a simple model response", async () => {
     const message = assistantMessage([{ type: "text", text: "hello" }]);
@@ -222,7 +224,13 @@ describe("AgentRuntime characterization", () => {
       toolContext,
     });
 
-    expect(result).toEqual({ content: "hello", toolCalls: [], streamed: false });
+    expect(result).toMatchObject({
+      content: "hello",
+      toolCalls: [],
+      streamed: false,
+      outcome: { status: "completed" },
+      delivery: { state: "not_requested" },
+    });
     expect(mocks.runModelIteration).toHaveBeenCalledOnce();
     expect(mocks.updateSession).toHaveBeenCalledWith(
       "chat-1",

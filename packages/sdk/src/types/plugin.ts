@@ -372,8 +372,20 @@ export interface PluginToolContext {
 
 /** Result returned by a tool execution */
 export interface ToolResult {
+  modelContent?: Array<
+    { type: "text"; text: string } | { type: "image"; data: string; mimeType: string }
+  >;
   /** Whether the execution was successful */
   success: boolean;
+  execution?: {
+    requestedArgs?: unknown;
+    effectiveArgs?: unknown;
+    outcome: "not_attempted" | "running" | "succeeded" | "failed" | "unknown";
+    operationId?: string;
+    persistence?: "persisted" | "persistence_failed";
+    remoteReference?: string;
+    error?: string;
+  };
   /** Result data (serialized to JSON for the LLM) */
   data?: unknown;
   /** Error message if failed */

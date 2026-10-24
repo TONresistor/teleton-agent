@@ -49,7 +49,14 @@ export function registerAllTools(registry: ToolRegistry): void {
     }
   }
 
-  registry.register(toolResultReadTool, toolResultReadExecutor, "open", "both", ["core"], "all");
+  registry.register(
+    toolResultReadTool,
+    toolResultReadExecutor,
+    "open",
+    "both",
+    ["core"],
+    "allowlist"
+  );
 
   // Register tool_search LAST so its executor closure captures a fully-populated registry.
   // scope "open" (always available), tags ["core"] so getCoreTools() includes it.

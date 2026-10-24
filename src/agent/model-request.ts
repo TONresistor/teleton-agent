@@ -1,3 +1,4 @@
+import type { ObservationArtifactStore } from "./context-budget.js";
 import {
   clampThinkingLevel,
   hasApi,
@@ -26,6 +27,7 @@ export interface ModelRequestOptions {
   tools?: Tool[];
   signal?: AbortSignal;
   timeoutMs?: number;
+  storeObservation?: ObservationArtifactStore;
 }
 
 export interface PreparedModelRequest {

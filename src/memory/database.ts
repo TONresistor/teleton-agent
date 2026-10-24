@@ -1,5 +1,6 @@
 import Database from "better-sqlite3";
-import { existsSync, mkdirSync, chmodSync } from "fs";
+import { existsSync, mkdirSync, chmodSync, openSync, closeSync, rmSync } from "fs";
+import { randomUUID } from "crypto";
 import { dirname } from "path";
 import * as sqliteVec from "sqlite-vec";
 import { createLogger } from "../utils/logger.js";
@@ -53,7 +54,12 @@ export class MemoryDatabase {
     this.db.pragma(`mmap_size = ${SQLITE_MMAP_SIZE}`);
     this.db.pragma("foreign_keys = ON");
 
-    this.initialize();
+    try {
+      this.initialize();
+    } catch (error) {
+      this.db.close();
+      throw error;
+    }
   }
 
   private initialize(): void {
@@ -163,6 +169,20 @@ export class MemoryDatabase {
 
   private migrate(from: string, to: string): void {
     log.info(`Migrating database from ${from} to ${to}...`);
+    if (this.config.path !== ":memory:" && this.db.name !== "") {
+      const backupPath = `${this.config.path}.pre-${from}-${Date.now()}-${randomUUID()}.bak`;
+      // Reserve an empty private file before SQLite copies a consistent WAL-aware snapshot.
+      const descriptor = openSync(backupPath, "wx", 0o600);
+      closeSync(descriptor);
+      try {
+        this.db.prepare("VACUUM INTO ?").run(backupPath);
+        chmodSync(backupPath, 0o600);
+      } catch (error) {
+        rmSync(backupPath, { force: true });
+        throw error;
+      }
+      log.info({ backupPath }, "Created pre-migration database backup");
+    }
     runMigrations(this.db);
     ensureSchema(this.db);
     log.info("Migration complete");

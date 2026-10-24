@@ -1,12 +1,4 @@
-import {
-  readFileSync,
-  existsSync,
-  mkdirSync,
-  unlinkSync,
-  renameSync,
-  readdirSync,
-  statSync,
-} from "fs";
+import { readFileSync, existsSync, mkdirSync, unlinkSync, readdirSync, statSync } from "fs";
 import { appendFile } from "fs/promises";
 import { join } from "path";
 import type { Message, AssistantMessage } from "@earendil-works/pi-ai";
@@ -19,7 +11,7 @@ const SESSIONS_DIR = join(TELETON_ROOT, "sessions");
 
 // ── In-memory transcript cache ──────────────────────────────────
 // Avoids re-reading + re-parsing JSONL from disk on every message.
-// Invalidated on delete/archive; updated on append.
+// Invalidated on delete; updated on append.
 const transcriptCache = new Map<string, (Message | AssistantMessage)[]>();
 const transcriptWriteQueues = new Map<string, Promise<void>>();
 const transcriptWriteErrors = new Map<string, unknown>();
@@ -212,27 +204,6 @@ export function transcriptExists(sessionId: string): boolean {
     transcriptWriteQueues.has(sessionId) ||
     existsSync(getTranscriptPath(sessionId))
   );
-}
-
-/**
- * Archive a transcript (rename with timestamped .archived suffix).
- */
-export async function archiveTranscript(sessionId: string): Promise<boolean> {
-  const transcriptPath = getTranscriptPath(sessionId);
-  const timestamp = Date.now();
-  const archivePath = `${transcriptPath}.${timestamp}.archived`;
-
-  try {
-    await flushTranscript(sessionId);
-    if (!existsSync(transcriptPath)) return false;
-    renameSync(transcriptPath, archivePath);
-    transcriptCache.delete(sessionId);
-    log.info(`Archived transcript: ${sessionId} → ${timestamp}.archived`);
-    return true;
-  } catch (error) {
-    log.error({ err: error }, `Failed to archive transcript ${sessionId}`);
-    return false;
-  }
 }
 
 /**

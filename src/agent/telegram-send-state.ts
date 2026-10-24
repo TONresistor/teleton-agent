@@ -1,11 +1,12 @@
 import { TELEGRAM_SEND_TOOLS } from "../constants/tools.js";
+import type { ToolResult } from "./tools/types.js";
 
 export interface CompletedToolCall {
   name: string;
   input: Record<string, unknown>;
   durationMs?: number;
   attempted?: boolean;
-  result?: { success: boolean; data?: unknown; error?: string };
+  result?: ToolResult;
 }
 
 function targetChatId(call: CompletedToolCall): string | null {

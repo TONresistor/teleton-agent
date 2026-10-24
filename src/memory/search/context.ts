@@ -49,6 +49,7 @@ export interface Context {
   relevantKnowledge: string[];
   relevantFeed: string[];
   estimatedTokens: number;
+  provenance?: unknown[];
 }
 
 export class ContextBuilder {

@@ -1,4 +1,5 @@
 import type { Api } from "telegram";
+import type { FormattedTelegramText } from "./formatted-text.js";
 
 export interface TelegramMessage {
   id: number;
@@ -13,8 +14,14 @@ export interface TelegramMessage {
   isBot: boolean;
   mentionsMe: boolean;
   timestamp: Date;
+  /** Local ingress time, independent of Telegram timestamps. */
+  receivedAt?: number;
+  /** Hash of the raw event before command rewrites or transcription. */
+  ingressHash?: string;
   _rawPeer?: Api.TypePeer;
   hasMedia: boolean;
+  /** Stable remote media identity for replay conflict detection. */
+  mediaIdentity?: string;
   mediaType?: "photo" | "document" | "video" | "audio" | "voice" | "sticker";
   replyToId?: number;
   _rawMessage?: Api.Message;
@@ -42,11 +49,15 @@ export interface InlineButton {
 }
 
 export interface SendMessageOptions {
+  signal?: AbortSignal;
+  deadline?: number;
   chatId: string;
   text: string;
   replyToId?: number;
   inlineKeyboard?: InlineButton[][];
   rich?: RichMessageContent;
+  /** Already decoded text and UTF-16 entities; bypass Markdown parsing. */
+  formattedText?: FormattedTelegramText;
 }
 
 export type RichMessageMediaType = "photo" | "video" | "audio" | "document";
@@ -114,6 +125,8 @@ export interface SentMessage {
   id: number;
   date: number;
   chatId: string;
+  /** Every confirmed fragment, in send order. */
+  messages?: Array<{ id: number; date: number; chatId: string }>;
 }
 
 export interface SentDiceMessage extends SentMessage {

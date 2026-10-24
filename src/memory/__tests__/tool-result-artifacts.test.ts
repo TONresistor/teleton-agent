@@ -13,7 +13,7 @@ describe("tool result artifacts", () => {
 
   afterEach(() => db.close());
 
-  it("pages large results and isolates them by chat", () => {
+  it("pages global results for authorized callers across chats", () => {
     const artifact = createToolResultArtifact(db, {
       sessionId: "session-1",
       chatId: "chat-1",
@@ -21,7 +21,7 @@ describe("tool result artifacts", () => {
       content: "abcdefghij",
     });
 
-    expect(readToolResultArtifact(db, artifact.id, "chat-2", 0, 4)).toBeNull();
+    expect(readToolResultArtifact(db, artifact.id, "chat-2", 0, 4)?.content).toBe("abcd");
     expect(readToolResultArtifact(db, artifact.id, "chat-1", 0, 4)).toEqual({
       content: "abcd",
       offset: 0,

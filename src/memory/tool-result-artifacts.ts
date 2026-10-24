@@ -52,21 +52,27 @@ export function createToolResultArtifact(
 export function readToolResultArtifact(
   db: Database.Database,
   artifactId: string,
-  chatId: string,
+  _chatId: string,
   offset: number,
   limit: number
 ): { content: string; offset: number; nextOffset: number | null; sizeBytes: number } | null {
   const row = db
     .prepare(
       `SELECT content, size_bytes AS sizeBytes, expires_at AS expiresAt
-       FROM tool_result_artifacts WHERE id = ? AND chat_id = ?`
+       FROM tool_result_artifacts WHERE id = ?`
     )
-    .get(artifactId, chatId) as
-    { content: string; sizeBytes: number; expiresAt: number } | undefined;
+    .get(artifactId) as { content: string; sizeBytes: number; expiresAt: number } | undefined;
   if (!row || row.expiresAt < Date.now()) return null;
 
-  const safeOffset = Math.min(Math.max(0, offset), row.content.length);
-  const content = row.content.slice(safeOffset, safeOffset + limit);
+  const safeOffset = Math.min(
+    Math.max(0, Number.isFinite(offset) ? Math.floor(offset) : 0),
+    row.content.length
+  );
+  const safeLimit = Math.min(
+    20_000,
+    Math.max(1, Number.isFinite(limit) ? Math.floor(limit) : 10_000)
+  );
+  const content = row.content.slice(safeOffset, safeOffset + safeLimit);
   const nextOffset =
     safeOffset + content.length < row.content.length ? safeOffset + content.length : null;
   return { content, offset: safeOffset, nextOffset, sizeBytes: row.sizeBytes };

@@ -21,6 +21,13 @@ export interface TaskRow {
   origin_sender_id: number | null;
   origin_chat_id: string | null;
   origin_is_group: number | null;
+  run_id: string | null;
+  revision: number;
+  notification_error: string | null;
+  resolution_note: string | null;
+  legacy_outcome: number;
+  resolved_from_status: string | null;
+  replaces_task_id: string | null;
 }
 
 export interface TgUserRow {

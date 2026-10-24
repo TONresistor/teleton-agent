@@ -6,22 +6,27 @@ import type {
 } from "@earendil-works/pi-ai";
 import type { Config } from "../../config/schema.js";
 import type { SupportedProvider } from "../../config/providers.js";
-import {
-  CONTEXT_OVERFLOW_SUMMARY_MESSAGES,
-  RATE_LIMIT_MAX_RETRIES,
-  SERVER_ERROR_MAX_RETRIES,
-} from "../../constants/limits.js";
-import { appendToDailyLog } from "../../memory/daily-logs.js";
+import { RATE_LIMIT_MAX_RETRIES, SERVER_ERROR_MAX_RETRIES } from "../../constants/limits.js";
 import type { createHookRunner } from "../../sdk/hooks/runner.js";
 import type { ResponseErrorEvent } from "../../sdk/hooks/types.js";
-import { resetSession } from "../../session/store.js";
 import type { getOrCreateSession } from "../../session/store.js";
-import { appendToTranscript, archiveTranscript } from "../../session/transcript.js";
 import type { ITelegramBridge } from "../../telegram/bridge-interface.js";
 import { isBotBridge } from "../../telegram/bridge-guards.js";
 import { createLogger } from "../../utils/logger.js";
 import { chatWithContext, streamWithContext, type ChatResponse } from "../client.js";
-import { classifyLlmError, extractContextSummary, parseRetryAfterMs } from "../runtime-utils.js";
+import { classifyLlmError, parseRetryAfterMs } from "../runtime-utils.js";
+import { preserveActionReceipts, preserveUserRequirements } from "../../memory/action-receipts.js";
+import { assertTurnBudget, budgetSleep } from "../turn-budget.js";
+import { compactContext } from "../../memory/compaction.js";
+import { getProviderModel } from "../../providers/model-resolver.js";
+import { getEffectiveApiKey, prepareModelRequest } from "../model-request.js";
+import {
+  ContextBudgetError,
+  estimateRequestTokens,
+  CONTEXT_BUDGET_MARGIN,
+  CONTEXT_BUDGET_SAFETY_FACTOR,
+  type ObservationArtifactStore,
+} from "../context-budget.js";
 
 const log = createLogger("Agent");
 type HookRunner = ReturnType<typeof createHookRunner>;
@@ -48,7 +53,9 @@ export async function runModelIteration(
   tools: PiAiTool[] | undefined,
   streamAccumulatedText: string,
   signal?: AbortSignal,
-  timeoutMs?: number
+  timeoutMs?: number,
+  turnId?: string,
+  storeObservation?: ObservationArtifactStore
 ): Promise<{ response: ChatResponse; streamed: boolean; streamAccumulatedText: string }> {
   const streamMode = streamTarget?.mode;
   const shouldStream =
@@ -59,9 +66,11 @@ export async function runModelIteration(
       context: maskedContext,
       sessionId,
       persistTranscript: true,
+      turnId,
       tools,
       signal,
       timeoutMs,
+      storeObservation,
     });
     return { response, streamed: false, streamAccumulatedText };
   }
@@ -73,11 +82,13 @@ export async function runModelIteration(
       context: maskedContext,
       sessionId,
       persistTranscript: true,
+      turnId,
       tools,
       signal,
       timeoutMs,
+      storeObservation,
     });
-    return { response, streamed: true, streamAccumulatedText };
+    return { response, streamed: false, streamAccumulatedText };
   }
 
   if (streamMode === "replace") {
@@ -89,10 +100,13 @@ export async function runModelIteration(
     context: maskedContext,
     sessionId,
     persistTranscript: true,
+    turnId,
     tools,
     signal,
     timeoutMs,
+    storeObservation,
   });
+  void result.catch(() => {});
   const prefix = streamMode === "all" ? streamAccumulatedText : "";
   async function* prefixedStream(): AsyncIterable<string> {
     let first = true;
@@ -125,6 +139,10 @@ export interface LlmErrorContext {
   provider: SupportedProvider;
   processStartTime: number;
   userMsg: UserMessage;
+  deadlineAt?: number;
+  signal?: AbortSignal;
+  systemPrompt?: string;
+  tools?: PiAiTool[];
 }
 
 /** Classify an LLM failure and either recover its context or throw a terminal error. */
@@ -135,7 +153,7 @@ export async function recoverLlmError(
   retry: RetryState,
   ctx: LlmErrorContext
 ): Promise<{ session: ReturnType<typeof getOrCreateSession>; context: Context }> {
-  let session = ctx.session;
+  const session = ctx.session;
   let context = ctx.context;
   const errorMsg = assistantMsg.errorMessage || "";
   const errorClass = classifyLlmError(errorMsg);
@@ -157,23 +175,52 @@ export async function recoverLlmError(
 
   if (errorClass.kind === "context_overflow") {
     retry.overflowResets++;
-    if (retry.overflowResets > 1) {
-      throw new Error(
-        "Context overflow persists after session reset. Message may be too large for the model's context window."
+    const model = getProviderModel(ctx.provider, agentConfig.model, agentConfig.base_url);
+    const overflowError = (input: Context) =>
+      new ContextBudgetError(
+        Math.ceil(estimateRequestTokens(input) * CONTEXT_BUDGET_SAFETY_FACTOR) +
+          CONTEXT_BUDGET_MARGIN,
+        model.contextWindow,
+        model.id
       );
-    }
-    log.error(`Context overflow detected: ${errorMsg}`);
-    log.info("Saving session memory before reset...");
-    appendToDailyLog(extractContextSummary(context, CONTEXT_OVERFLOW_SUMMARY_MESSAGES));
-    log.info("Memory saved to daily log");
-    if (!(await archiveTranscript(session.sessionId))) {
-      log.error(`Failed to archive transcript ${session.sessionId}, proceeding with reset anyway`);
-    }
-    log.info("Resetting session due to context overflow...");
-    session = resetSession(ctx.sessionKey);
-    context = { messages: [ctx.userMsg] };
-    appendToTranscript(session.sessionId, ctx.userMsg);
-    log.info("Retrying with fresh context...");
+    if (retry.overflowResets > 1) throw overflowError(context);
+    assertTurnBudget(ctx.deadlineAt, ctx.signal);
+    const original: Context = {
+      ...context,
+      systemPrompt: ctx.systemPrompt ?? context.systemPrompt,
+      tools: ctx.tools ?? context.tools,
+    };
+    log.warn(
+      "Provider context overflow; compacting without resetting the session or discarding user requirements"
+    );
+    const compacted = await compactContext(
+      original,
+      {
+        enabled: true,
+        maxTokens: model.contextWindow,
+        keepRecentMessages: Math.min(10, Math.max(1, original.messages.length - 1)),
+        memoryFlushEnabled: false,
+      },
+      getEffectiveApiKey(ctx.provider, agentConfig.api_key),
+      ctx.provider,
+      agentConfig.utility_model
+    );
+    assertTurnBudget(ctx.deadlineAt, ctx.signal);
+    const recovered = preserveActionReceipts(
+      preserveUserRequirements(compacted, original.messages),
+      original.messages
+    );
+    // Do not repeat an unchanged payload after the provider has rejected it.
+    if (estimateRequestTokens(recovered) >= estimateRequestTokens(original))
+      throw overflowError(recovered);
+    prepareModelRequest(agentConfig, {
+      context: recovered,
+      systemPrompt: original.systemPrompt,
+      tools: original.tools,
+      maxTokens: agentConfig.max_tokens,
+      signal: ctx.signal,
+    });
+    context = recovered;
     return { session, context };
   }
 
@@ -185,7 +232,11 @@ export async function recoverLlmError(
       log.warn(
         `Rate limited, retrying in ${delay}ms (attempt ${retry.rateLimitRetries}/${RATE_LIMIT_MAX_RETRIES})...`
       );
-      await new Promise((resolve) => setTimeout(resolve, delay));
+      await budgetSleep(
+        delay,
+        ctx.deadlineAt ?? ctx.processStartTime + agentConfig.max_turn_duration_ms,
+        ctx.signal
+      );
       return { session, context };
     }
     log.error(`Rate limited after ${RATE_LIMIT_MAX_RETRIES} retries: ${errorMsg}`);
@@ -201,7 +252,11 @@ export async function recoverLlmError(
       log.warn(
         `Server error, retrying in ${delay}ms (attempt ${retry.serverErrorRetries}/${SERVER_ERROR_MAX_RETRIES})...`
       );
-      await new Promise((resolve) => setTimeout(resolve, delay));
+      await budgetSleep(
+        delay,
+        ctx.deadlineAt ?? ctx.processStartTime + agentConfig.max_turn_duration_ms,
+        ctx.signal
+      );
       return { session, context };
     }
     log.error(`Server error after ${SERVER_ERROR_MAX_RETRIES} retries: ${errorMsg}`);

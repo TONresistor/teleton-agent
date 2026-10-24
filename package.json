@@ -95,7 +95,8 @@
     "sqlite-vec": "^0.1.7",
     "telegram": "github:TONresistor/gramjs#5ad36509a9561cd26ab6acce9511dcdd6ce4c535",
     "yaml": "^2.9.1",
-    "zod": "^4.6.7"
+    "zod": "^4.6.7",
+    "htmlparser2": "6.1.0"
   },
   "overrides": {
     "@aws-sdk/xml-builder": "3.972.19",

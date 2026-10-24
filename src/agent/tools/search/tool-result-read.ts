@@ -26,7 +26,7 @@ export const toolResultReadExecutor: ToolExecutor<ToolResultReadParams> = async 
 ) => {
   const page = readToolResultArtifact(context.db, artifact_id, context.chatId, offset, limit);
   if (!page) {
-    return { success: false, error: "Artifact not found, expired, or belongs to another chat." };
+    return { success: false, error: "Artifact not found or expired." };
   }
   return {
     success: true,

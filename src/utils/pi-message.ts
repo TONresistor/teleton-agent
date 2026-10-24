@@ -1,8 +1,8 @@
-import type { Message, TextContent, ToolCall } from "@earendil-works/pi-ai";
+import type { Message, TextContent } from "@earendil-works/pi-ai";
 
 /**
  * Neutral, pure primitives for reading pi-ai `Message` content. Shared by the
- * agent (runtime-utils) and memory (ai-summarization, compaction) layers so that
+ * agent and memory (ai-summarization, compaction) layers so that
  * message-content access and envelope parsing live in one place. Caller-specific
  * formatting (prefixes, placeholder labels, truncation lengths) stays local.
  */
@@ -30,12 +30,6 @@ export function extractText(msg: Message): string {
   return "";
 }
 
-/** Names of the tool calls in an assistant message, in order. Empty for other roles. */
-export function extractToolNames(msg: Message): string[] {
-  if (msg.role !== "assistant") return [];
-  return msg.content.filter((b): b is ToolCall => b.type === "toolCall").map((b) => b.name);
-}
-
 /**
  * Strip a leading envelope prefix such as "[2026-01-01 user] " by returning the
  * text after the first "] ". Returns the input unchanged when no envelope is present.
@@ -48,4 +42,11 @@ export function stripEnvelopePrefix(content: string): string {
 /** Truncate to `n` characters, appending "..." only when the string was longer. */
 export function truncate(s: string, n: number): string {
   return s.length > n ? s.substring(0, n) + "..." : s;
+}
+
+/** Retained until the summary serializer migrates in context lot 3. */
+export function extractToolNames(message: Message): string[] {
+  return message.role === "assistant"
+    ? message.content.filter((block) => block.type === "toolCall").map((block) => block.name)
+    : [];
 }

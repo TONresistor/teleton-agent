@@ -29,6 +29,9 @@ export type { AgentResponse, ProcessMessageOptions } from "./turn-types.js";
 export { isContextOverflowError, isTrivialMessage } from "./runtime-utils.js";
 export { getTokenUsage } from "./token-usage.js";
 
+import { authorizeTurn } from "./turn-authorization.js";
+import { outcomeForStopReason } from "./execution-types.js";
+
 const log = createLogger("Agent");
 
 export class AgentRuntime {
@@ -120,9 +123,12 @@ export class AgentRuntime {
   }
 
   async processMessage(opts: ProcessMessageOptions): Promise<AgentResponse> {
+    const turnId = opts.turnId ?? `turn:${randomUUID()}`;
+    const denied = (): AgentResponse => ({ turnId, content: "This request requires an authorized sender.",
+      toolCalls: [], outcome: { status: "blocked", reason: "permission_denied" }, delivery: { state: "not_requested" } });
+    if (!authorizeTurn(this.config, opts).allowed) return denied();
     return this.turnCoordinator.run(opts.sessionKey ?? opts.chatId, () =>
-      this.processCoordinatedMessage(opts)
-    );
+      authorizeTurn(this.config, opts).allowed ? this.processCoordinatedMessage({ ...opts, turnId }) : Promise.resolve(denied()));
   }
 
   private async processCoordinatedMessage(opts: ProcessMessageOptions): Promise<AgentResponse> {
@@ -164,24 +170,6 @@ export class AgentRuntime {
         toolRegistry: this.toolRegistry,
         hookRunner: this.hookRunner,
       });
-      if (!loop.finalResponse) {
-        log.error("Agentic loop exited early without final response");
-        trace.finish({
-          status: "error",
-          calls: loop.totalToolCalls,
-          iterations: loop.iterations,
-          usage: loop.accumulatedUsage,
-          stopReason: loop.stopReason,
-          provider: loop.activeProvider,
-          model: loop.activeModel,
-          errorMessage: "Agent loop failed to produce a response",
-        });
-        return {
-          content: "Internal error: Agent loop failed to produce a response.",
-          toolCalls: [],
-        };
-      }
-
       const response = await finalizeAgentResponse(
         built.turn,
         loop,
@@ -190,7 +178,7 @@ export class AgentRuntime {
         this.hookRunner
       );
       trace.finish({
-        status: loop.stopReason.endsWith("budget") ? "budget_exhausted" : "completed",
+        status: loop.stopReason.endsWith("budget") ? "budget_exhausted" : outcomeForStopReason(loop.stopReason).status === "completed" ? "completed" : "error",
         calls: loop.totalToolCalls,
         iterations: loop.iterations,
         usage: loop.accumulatedUsage,

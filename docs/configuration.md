@@ -43,11 +43,11 @@ LLM provider and agentic loop configuration.
 | `agent.reasoning_effort` | `enum` | `"low"` | Sent to Codex models and OpenAI `gpt-6.1-sol`. The global choices are `none`, `minimal`, `low`, `medium`, `high`, `xhigh`, and `max`; for `gpt-6.1-sol`, `none` and `minimal` are raised to `low` because the model does not support them. Other providers do not currently use this setting. |
 | `agent.utility_model` | `string` | *auto-detected* | Cheap/fast model used for summarization and compaction. If omitted, the platform selects one based on the provider (e.g., `claude-haiku-4-5-20251001` for Anthropic, `gpt-5.4-nano` for OpenAI). |
 | `agent.base_url` | `string` | *optional* | Base URL for local LLM server (e.g., `http://localhost:11434/v1`). Must be a valid URL. |
-| `agent.max_tokens` | `number` | `4096` | Maximum tokens in each LLM response. |
+| `agent.max_tokens` | `number` | `4096` | Requested maximum output tokens per model call, clamped to the active model maximum and remaining estimated context space. This is not a whole-turn token or cost limit. |
 | `agent.temperature` | `number` | `0.7` | Sampling temperature (0.0 = deterministic, 1.0 = creative). |
 | `agent.system_prompt` | `string \| null` | `null` | Additional system prompt text appended to the default SOUL.md personality. Set to `null` to use only the built-in soul. |
 | `agent.max_agentic_iterations` | `number` | `5` | Maximum number of agentic loop iterations per message. Each iteration is one tool-call-then-result cycle. Higher values allow more complex multi-step reasoning but increase cost and latency. |
-| `agent.max_turn_duration_ms` | `number` | `300000` | Wall-clock budget checked between safe loop phases. Running external actions are never cut off. |
+| `agent.max_turn_duration_ms` | `number` | `300000` | Execution budget including preparation, utility-model calls, model calls and retries; range 10000–900000 ms. Expiry stops new work and returns an incomplete outcome. An already-started external action may continue. Queue waiting and final delivery have separate deadlines. See [execution and recovery](agent-execution-recovery.md). |
 | `agent.fallbacks` | `array` | `[]` | Ordered provider/model fallbacks used only after quota or transient provider failures and only before any external action has started. |
 
 For OpenRouter, select **Custom...** under Model in the Dashboard or agent settings,
@@ -140,7 +140,7 @@ Telegram client and messaging behavior.
 | `telegram.session_name` | `string` | `"teleton_session"` | Name of the GramJS session file (stored in `session_path`). |
 | `telegram.session_path` | `string` | `"~/.teleton"` | Directory where the Telegram session file is stored. |
 | `telegram.dm_policy` | `enum` | `"allowlist"` | Who can interact via direct messages. See [DM Policies](#dm-policies) below. |
-| `telegram.allow_from` | `number[]` | `[]` | List of Telegram user IDs allowed to DM the agent (used when `dm_policy` is `"allowlist"`). |
+| `telegram.allow_from` | `number[]` | `[]` | Authorized sender IDs for agent requests across DMs, groups, guest requests and scheduled work. Admin IDs are also authorized. Authorized actors can use global agent memory across chats; this is not a DM-only list. Channel policies and tool permissions still apply. |
 | `telegram.group_policy` | `enum` | `"open"` | Who can interact in groups. See [Group Policies](#group-policies) below. |
 | `telegram.group_allow_from` | `number[]` | `[]` | List of group IDs the agent will respond in (used when `group_policy` is `"allowlist"`). |
 | `telegram.require_mention` | `boolean` | `true` | In groups, only respond when the agent is mentioned by name or username. |
@@ -148,7 +148,7 @@ Telegram client and messaging behavior.
 | `telegram.typing_simulation` | `boolean` | `true` | Show "typing..." indicator while the agent processes a message. |
 | `telegram.rate_limit_messages_per_second` | `number` | `1.0` | Maximum outbound messages per second (flood protection). |
 | `telegram.rate_limit_groups_per_minute` | `number` | `20` | Maximum outbound messages to groups per minute. |
-| `telegram.admin_ids` | `number[]` | `[]` | Telegram user IDs with admin privileges (can use `/admin` commands). |
+| `telegram.admin_ids` | `number[]` | `[]` | Authorized admin sender IDs, including access to admin commands and tools. Admins do not need a separate `allow_from` entry. |
 | `telegram.agent_channel` | `string \| null` | `null` | Channel username or ID for the agent's public feed. |
 | `telegram.owner_name` | `string` | *optional* | Owner's first name (used in personality prompts, e.g., `"Alex"`). |
 | `telegram.owner_username` | `string` | *optional* | Owner's Telegram username without `@` (e.g., `"zkproof"`). |
@@ -157,12 +157,14 @@ Telegram client and messaging behavior.
 | `telegram.bot_token` | `string` | *optional in user mode* | Telegram Bot token from @BotFather. Required in bot mode; enables plugin inline cards and callbacks in user mode. |
 | `telegram.bot_username` | `string` | *optional* | Bot username without `@` (e.g., `"teleton_agent_bot"`). Used with `bot_token` for inline queries. |
 
+Agent generation requires a verified sender in `admin_ids` or `allow_from`, regardless of the channel policy. Adding a sender grants access to the shared, global memory used by the agent, including when that sender interacts in an admitted group. Group admission is not a memory isolation boundary. See [execution and recovery](agent-execution-recovery.md) before changing these lists.
+
 ### DM Policies
 
 | Value | Behavior |
 |-------|----------|
-| `"allowlist"` | Only users listed in `allow_from` can interact. Default. |
-| `"open"` | Anyone can DM the agent. Use with caution. |
+| `"allowlist"` | Only authorized senders (`admin_ids` or `allow_from`) can interact. Default. |
+| `"open"` | Allows DM admission, but agent generation still requires a verified sender in `admin_ids` or `allow_from`. It does not grant public access to memory. |
 | `"admin-only"` | Only users in `admin_ids` can interact via DM. |
 | `"disabled"` | DMs are completely ignored. |
 
@@ -170,8 +172,8 @@ Telegram client and messaging behavior.
 
 | Value | Behavior |
 |-------|----------|
-| `"open"` | Agent responds in any group it is a member of. Default. |
-| `"allowlist"` | Only responds in groups listed in `group_allow_from`. |
+| `"open"` | Authorized senders can trigger the agent in any group it has joined, subject to mention rules. Default. |
+| `"allowlist"` | Authorized senders can trigger the agent only in groups listed in `group_allow_from`. This list contains chat IDs, not sender IDs. |
 | `"admin-only"` | Only responds when triggered by users in `admin_ids`. |
 | `"disabled"` | Group messages are completely ignored. |
 
@@ -367,7 +369,7 @@ capabilities:
 
 ## mcp
 
-Model Context Protocol (MCP) server configuration. Supports both stdio (command-based) and SSE/HTTP (URL-based) transports.
+Model Context Protocol (MCP) server configuration. Supports both stdio (command-based) and SSE/HTTP (URL-based) transports. MCP tools are treated as actions even when remote metadata claims they are read-only. A local timeout can leave the remote outcome unknown; inspect it before retrying. Typed results are retained, but audio and unsupported modalities are exposed as descriptors rather than playable model input. Resource URLs are not fetched automatically. See [execution and recovery](agent-execution-recovery.md#mcp-and-large-results).
 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|

@@ -58,7 +58,7 @@ export function getBuiltinMinimumAccess(tool: Tool, scope?: ToolScope): ToolAcce
 
   // Telegram tools operate through the owner's account. Even harmless-looking
   // reads/actions are not offered to arbitrary users when dm_policy is open.
-  if (tool.name.startsWith("telegram_")) return "allowlist";
+  if (tool.name.startsWith("telegram_") || tool.name === "tool_result_read") return "allowlist";
 
   // Uncategorised built-ins are actions by convention. Public read-only tools
   // explicitly declare data-bearing and remain available to open conversations.

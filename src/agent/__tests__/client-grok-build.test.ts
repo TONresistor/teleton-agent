@@ -123,7 +123,10 @@ describe("Grok Build client", () => {
       persistTranscript: true,
     });
 
-    expect(mocks.appendToTranscript).not.toHaveBeenCalled();
+    expect(mocks.appendToTranscript).toHaveBeenCalledWith(
+      "session-1",
+      expect.objectContaining({ _diagnosticOnly: true })
+    );
   });
 
   it("does not persist the silent control token in the conversation transcript", async () => {

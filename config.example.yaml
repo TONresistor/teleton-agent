@@ -6,11 +6,13 @@ agent:
   provider: "anthropic"              # anthropic | codex | grok-build | openai | google | xai | groq | openrouter
   api_key: "YOUR_API_KEY"
   model: "claude-haiku-4-5-20251001" # Model ID (varies by provider)
-  # utility_model: "claude-3-5-haiku-20241022"  # Optional: cheap model for summarization
+  # utility_model: "claude-haiku-4-5-20251001"  # Optional: cheap model for summarization
   max_tokens: 4096
   temperature: 0.7
   # system_prompt: null              # Custom system prompt override (null = use SOUL.md)
   max_agentic_iterations: 5
+  max_turn_duration_ms: 300000        # Preparation + model/retry budget; started actions may continue
+  fallbacks: []                      # Ordered provider/model fallbacks; never after an action is attempted
   session_reset_policy:
     daily_reset_enabled: true
     daily_reset_hour: 4              # 0-23, hour of day to reset sessions
@@ -24,9 +26,11 @@ telegram:
   phone: "+1234567890"               # Phone number linked to Telegram account
   session_name: "teleton_session"    # GramJS session file name
   session_path: "~/.teleton"         # Directory for session files
-  dm_policy: "open"                  # open | allowlist | admin-only | disabled
-  allow_from: []                     # Telegram user IDs (for allowlist policy)
-  group_policy: "open"               # open | allowlist | disabled
+  dm_policy: "allowlist"             # open | allowlist | admin-only | disabled
+  allow_from: []                     # Authorized sender IDs in DMs, groups, guest and scheduled requests
+  # admin_ids and allow_from authorize GLOBAL memory access; open policies do not add senders.
+  # An admitted group is not a memory isolation boundary. See docs/agent-execution-recovery.md.
+  group_policy: "open"               # open | allowlist | admin-only | disabled; authorized senders only
   group_allow_from: []               # Group chat IDs (for allowlist group policy)
   require_mention: true              # In groups, only respond when mentioned
   # max_message_length: 4096         # MTProto limit, rarely needs changing
@@ -92,9 +96,11 @@ webui:
 
 # Developer options
 # dev:
-#   hot_reload: false                # Watch ~/.teleton/plugins/ for changes
+#   hot_reload: false                # Watch plugins; reload waits for actual active work to finish
 
 # MCP (Model Context Protocol) — external tool servers
+# All MCP tools are actions. A timeout can mean UNKNOWN remote outcome; do not retry blindly.
+# See docs/agent-execution-recovery.md for reconciliation and migration guidance.
 # mcp:
 #   servers:
 #     filesystem:

@@ -143,6 +143,7 @@ describe("Minimal harness regressions", () => {
     const result = await new AgentRuntime(config(), "test").processMessage({
       chatId: "1",
       userMessage: "write response",
+      toolContext: { senderId: 1, bridge: b, db: mocks.db },
       streamToChat: { chatId: "1", bridge: b, mode: "replace" },
     });
     expect(result.streamed).toBe(true);
@@ -154,7 +155,7 @@ describe("Minimal harness regressions", () => {
     appendToTranscript(session.sessionId, answer("previous reply") as any);
     mocks.complete.mockResolvedValue(answer("summary"));
     const result = await prepareTurn(
-      { chatId: "compact", userMessage: "CURRENT_ONCE_SENTINEL" },
+      { chatId: "compact", userMessage: "CURRENT_ONCE_SENTINEL", toolContext: { senderId: 1, bridge: bridge(), db: mocks.db } },
       Date.now(),
       {
         config: config(),
