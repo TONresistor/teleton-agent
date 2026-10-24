@@ -112,7 +112,8 @@ function finalizeResponse(
       Object.assign(
         { ...response },
         {
-          _generationOnly: false,
+          _generationOnly:
+            !!options.turnId && !response.content.some((block) => block.type === "toolCall"),
           _turnId: options.turnId,
         }
       )

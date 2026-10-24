@@ -5,6 +5,9 @@ import type { KnowledgeIndexer } from "./memory/agent/knowledge.js";
 import type { MessageStore } from "./memory/feed/messages.js";
 import type { SupportedProvider } from "./config/providers.js";
 import { readRawConfig, writeRawConfig } from "./config/configurable-keys.js";
+import { recoverActionExecutions } from "./memory/action-executions.js";
+import { recoverTurnIngress } from "./memory/turn-ingress.js";
+import { recoverResponseDeliveries } from "./memory/response-deliveries.js";
 import { getDatabase } from "./memory/index.js";
 import { createLogger } from "./utils/logger.js";
 
@@ -47,6 +50,10 @@ export class StartupMaintenance {
     indexResult: { indexed: number };
     ftsResult: { knowledge: number; messages: number };
   }> {
+    recoverActionExecutions(this.db);
+    recoverTurnIngress(this.db);
+    recoverResponseDeliveries(this.db);
+
     // Migrate sessions from JSON to SQLite (one-time)
     const { migrateSessionsToDb } = await import("./session/migrate.js");
     migrateSessionsToDb();

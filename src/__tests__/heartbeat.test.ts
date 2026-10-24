@@ -39,7 +39,7 @@ describe("HeartbeatRunner", () => {
       toolCalls: [
         {
           name: "telegram_send_message",
-          input: { chatId: "123", text: "Alert" },
+          input: { chatId: "123", text: "Delivered" },
           result: { success: true, data: { messageId: 7 } },
         },
       ],

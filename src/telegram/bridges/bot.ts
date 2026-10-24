@@ -1,5 +1,7 @@
 import { Bot, InlineKeyboard, InputFile, type Context, type MiddlewareFn } from "grammy";
 import { markdownToTelegramHtml } from "../formatting.js";
+import { prepareTelegramText, splitFormattedText, guestReplyHtml } from "../formatted-text.js";
+import type { MessageEntity } from "grammy/types";
 import { TELEGRAM_MAX_MESSAGE_LENGTH } from "../../constants/limits.js";
 import { classifyMedia } from "../bridge-interface.js";
 import type {
@@ -124,67 +126,25 @@ export class GrammyBotBridge implements ITelegramBridge {
       ? this.toGrammyKeyboard(options.inlineKeyboard)
       : undefined;
 
-    const html = markdownToTelegramHtml(options.text);
-
-    // Auto-split: if HTML exceeds Telegram limit, send in chunks
-    if (html.length > TELEGRAM_MAX_MESSAGE_LENGTH) {
-      return this.sendLongMessage(options.chatId, html, options.replyToId, replyMarkup);
+    const chunks = options.formattedText
+      ? splitFormattedText(options.formattedText)
+      : prepareTelegramText(options.text);
+    const messages: SentMessage[] = [];
+    for (let index = 0; index < chunks.length; index++) {
+      const chunk = chunks[index];
+      const result = await this.bot.api.sendMessage(
+        this.toChatId(options.chatId),
+        chunk.text,
+        {
+          entities: chunk.entities as MessageEntity[],
+          reply_to_message_id: index === 0 ? options.replyToId : undefined,
+          reply_markup: index === chunks.length - 1 ? replyMarkup : undefined,
+        },
+        options.signal as Parameters<typeof this.bot.api.sendMessage>[3]
+      );
+      messages.push({ id: result.message_id, date: result.date, chatId: options.chatId });
     }
-
-    const result = await this.bot.api.sendMessage(this.toChatId(options.chatId), html, {
-      parse_mode: "HTML",
-      reply_to_message_id: options.replyToId,
-      reply_markup: replyMarkup,
-    });
-
-    return {
-      id: result.message_id,
-      date: result.date,
-      chatId: options.chatId,
-    };
-  }
-
-  /** Split and send HTML that exceeds the Telegram message limit */
-  private async sendLongMessage(
-    chatId: string,
-    html: string,
-    replyToId?: number,
-    replyMarkup?: InlineKeyboard
-  ): Promise<SentMessage> {
-    const chunks: string[] = [];
-    let remaining = html;
-
-    while (remaining.length > TELEGRAM_MAX_MESSAGE_LENGTH) {
-      // Find a split point: prefer double newline, then single newline, then space
-      let splitAt = remaining.lastIndexOf("\n\n", TELEGRAM_MAX_MESSAGE_LENGTH);
-      if (splitAt < TELEGRAM_MAX_MESSAGE_LENGTH * 0.3) {
-        splitAt = remaining.lastIndexOf("\n", TELEGRAM_MAX_MESSAGE_LENGTH);
-      }
-      if (splitAt < TELEGRAM_MAX_MESSAGE_LENGTH * 0.3) {
-        splitAt = remaining.lastIndexOf(" ", TELEGRAM_MAX_MESSAGE_LENGTH);
-      }
-      if (splitAt < TELEGRAM_MAX_MESSAGE_LENGTH * 0.3) {
-        splitAt = TELEGRAM_MAX_MESSAGE_LENGTH; // hard cut as last resort
-      }
-      chunks.push(remaining.slice(0, splitAt));
-      remaining = remaining.slice(splitAt).trimStart();
-    }
-    if (remaining.length > 0) chunks.push(remaining);
-
-    let lastResult: SentMessage = { id: 0, date: Math.floor(Date.now() / 1000), chatId };
-
-    for (let i = 0; i < chunks.length; i++) {
-      const isFirst = i === 0;
-      const isLast = i === chunks.length - 1;
-      const result = await this.bot.api.sendMessage(this.toChatId(chatId), chunks[i], {
-        parse_mode: "HTML",
-        reply_to_message_id: isFirst ? replyToId : undefined,
-        reply_markup: isLast ? replyMarkup : undefined,
-      });
-      lastResult = { id: result.message_id, date: result.date, chatId };
-    }
-
-    return lastResult;
+    return { ...messages[messages.length - 1], messages };
   }
 
   async editMessage(options: EditMessageOptions): Promise<SentMessage> {
@@ -473,6 +433,13 @@ export class GrammyBotBridge implements ITelegramBridge {
       mentionsMe,
       hasMedia,
       mediaType,
+      mediaIdentity:
+        msg.photo?.at(-1)?.file_unique_id ??
+        msg.document?.file_unique_id ??
+        msg.video?.file_unique_id ??
+        msg.audio?.file_unique_id ??
+        msg.voice?.file_unique_id ??
+        msg.sticker?.file_unique_id,
       timestamp: new Date(msg.date * 1000),
       replyToId: msg.reply_to_message?.message_id,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any -- bot mode stores a Grammy message where the interface types a GramJS Api.Message
@@ -538,21 +505,24 @@ export class GrammyBotBridge implements ITelegramBridge {
   }
 
   /** Register a handler for Bot API 10.0 guest queries. Reply text is sent via answerGuestQuery. */
-  onGuestMessage(handler: (msg: TelegramMessage) => Promise<string>): void {
+  onGuestMessage(
+    handler: (msg: TelegramMessage, send: (html: string) => Promise<void>) => Promise<string | void>
+  ): void {
     this.bot.on("guest_message", async (ctx) => {
       const gm = ctx.guestMessage;
       if (!gm) return;
       try {
-        const content = await handler(this.parseMessage(gm));
-        const text = content?.trim();
-        if (!text || text === "__SILENT__") return;
-        const html = markdownToTelegramHtml(text).slice(0, TELEGRAM_MAX_MESSAGE_LENGTH);
-        await ctx.answerGuestQuery({
-          type: "article",
-          id: String(gm.message_id),
-          title: this.botInfo?.firstName ?? "Reply",
-          input_message_content: { message_text: html, parse_mode: "HTML" },
-        });
+        const send = async (html: string): Promise<void> => {
+          await ctx.answerGuestQuery({
+            type: "article",
+            id: String(gm.message_id),
+            title: this.botInfo?.firstName ?? "Reply",
+            input_message_content: { message_text: html, parse_mode: "HTML" },
+          });
+        };
+        const content = await handler(this.parseMessage(gm), send);
+        // Compatibility for callers that have not adopted the shared delivery service.
+        if (content?.trim() && content.trim() !== "__SILENT__") await send(guestReplyHtml(content));
       } catch (err) {
         log.error({ err }, "Error in guest message handler");
       }

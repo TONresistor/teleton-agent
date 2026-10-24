@@ -3,7 +3,10 @@ import type { ITelegramBridge } from "./telegram/bridge-interface.js";
 import type { Config } from "./config/schema.js";
 import { createLogger } from "./utils/logger.js";
 import { isHeartbeatOk, isSilentReply } from "./constants/tokens.js";
-import { sentSuccessfullyToChat } from "./agent/telegram-send-state.js";
+import {
+  deliveredTelegramText,
+  deliveredTelegramStructuredMessage,
+} from "./agent/telegram-send-state.js";
 
 const log = createLogger("HeartbeatRunner");
 
@@ -86,10 +89,14 @@ export class HeartbeatRunner {
         isGroup: false,
         toolContext,
         isHeartbeat: true,
+        ingressKey: `heartbeat:${adminChatId}:${Math.floor(Date.now() / Math.max(1, cfg.interval_ms))}`,
+        delivery: { kind: "telegram", bridge: this.bridge, chatId: deliveryChatId },
       });
+      if (response.delivery && response.delivery.state !== "not_requested") return;
 
       const deliveredByTool =
-        response.toolCalls?.some((call) => sentSuccessfullyToChat(call, deliveryChatId)) ?? false;
+        deliveredTelegramText(response.toolCalls, deliveryChatId, response.content) ||
+        !!deliveredTelegramStructuredMessage(response.toolCalls, deliveryChatId);
       if (
         !deliveredByTool &&
         response.content.trim().length > 0 &&

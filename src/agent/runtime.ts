@@ -23,14 +23,32 @@ import type { AgentResponse, ProcessMessageOptions } from "./turn-types.js";
 import { finalizeAgentResponse } from "./response-finalizer.js";
 import { executeAgentLoop } from "./loop/executor.js";
 import { prepareTurn } from "./turn-preparation.js";
+import { authorizeTurn } from "./turn-authorization.js";
+import { outcomeForStopReason } from "./execution-types.js";
+import {
+  createUsageCollector,
+  runWithUsageCollector,
+  
+  type UsageCollector,
+} from "./attempt-usage.js";
+import { addUsage, type UsageAccumulator } from "./runtime-utils.js";
+import { accumulateTokenUsage } from "./token-usage.js";
+import { persistModelAttempts } from "../memory/model-attempts.js";
+import { completeTurnIngress, reserveTurnIngress } from "../memory/turn-ingress.js";
+import {
+  clearDeliveryDraft,
+  deliverAgentResponse,
+  tryReserveDraft,
+  type DeliveryTarget,
+} from "./delivery.js";
+import { assertTurnBudget, TurnBudgetError } from "./turn-budget.js";
+import { ContextBudgetError } from "./context-budget.js";
+import { getSession, updateSession } from "../session/store.js";
 
 export type { AgentResponse, ProcessMessageOptions } from "./turn-types.js";
 
 export { isContextOverflowError, isTrivialMessage } from "./runtime-utils.js";
 export { getTokenUsage } from "./token-usage.js";
-
-import { authorizeTurn } from "./turn-authorization.js";
-import { outcomeForStopReason } from "./execution-types.js";
 
 const log = createLogger("Agent");
 
@@ -123,23 +141,160 @@ export class AgentRuntime {
   }
 
   async processMessage(opts: ProcessMessageOptions): Promise<AgentResponse> {
-    const turnId = opts.turnId ?? `turn:${randomUUID()}`;
-    const denied = (): AgentResponse => ({ turnId, content: "This request requires an authorized sender.",
-      toolCalls: [], outcome: { status: "blocked", reason: "permission_denied" }, delivery: { state: "not_requested" } });
-    if (!authorizeTurn(this.config, opts).allowed) return denied();
-    return this.turnCoordinator.run(opts.sessionKey ?? opts.chatId, () =>
-      authorizeTurn(this.config, opts).allowed ? this.processCoordinatedMessage({ ...opts, turnId }) : Promise.resolve(denied()));
+    const delivery: DeliveryTarget | undefined =
+      opts.delivery ??
+      (opts.streamToChat
+        ? {
+            kind: "telegram",
+            bridge: opts.streamToChat.bridge,
+            chatId: opts.streamToChat.chatId,
+            isGroup: opts.isGroup,
+          }
+        : undefined);
+    const actor = authorizeTurn(this.config, opts);
+    const accountId = opts.toolContext?.bridge.getOwnUserId?.()?.toString() ?? "local";
+    const turnId =
+      opts.turnId ??
+      (opts.messageId !== undefined
+        ? `telegram:${accountId}:${opts.chatId}:${opts.messageId}`
+        : `turn:${randomUUID()}`);
+    if (!actor.allowed)
+      return {
+        turnId,
+        content: "This request requires an authorized sender.",
+        toolCalls: [],
+        outcome: { status: "blocked", reason: "permission_denied" },
+        delivery: { state: "not_requested" },
+      };
+    const admission = opts.admission ?? {
+      receivedAt: Date.now(),
+      queueDeadline: Date.now() + 60_000,
+    };
+    return this.turnCoordinator.run(
+      opts.sessionKey ?? opts.chatId,
+      async () => {
+        // Recheck revocations after waiting, using live configuration.
+        if (!authorizeTurn(this.config, opts).allowed)
+          return {
+            turnId,
+            content: "This request requires an authorized sender.",
+            toolCalls: [],
+            outcome: { status: "blocked" as const, reason: "permission_denied" },
+            delivery: { state: "not_requested" as const },
+          };
+        const db = getDatabase().getDb();
+        const ingressKey = opts.ingressKey ?? turnId;
+        const reservation = reserveTurnIngress(db, {
+          key: ingressKey,
+          turnId,
+          hash: opts.ingressHash,
+          chatId: opts.chatId,
+          messageId: opts.messageId,
+          senderId: opts.toolContext?.senderId,
+          text: opts.userMessage,
+          receivedAt: admission.receivedAt,
+        });
+        if (reservation.kind === "conflict" || reservation.kind === "busy")
+          return {
+            turnId: reservation.turnId,
+            content:
+              reservation.kind === "conflict"
+                ? "This event identity conflicts with an earlier request."
+                : "This request is already running or requires review after an interrupted execution.",
+            toolCalls: [],
+            outcome: { status: "unknown" as const, reason: "ingress_unsettled" },
+            delivery: { state: "unknown" as const, reason: "ingress_unsettled" },
+          };
+        const executionDeadline =
+          admission.executionDeadline ?? Date.now() + this.config.agent.max_turn_duration_ms;
+        const runOptions = {
+          ...opts,
+          delivery,
+          turnId: reservation.turnId,
+          admission: { ...admission, executionDeadline },
+        };
+        let release: (() => void) | undefined;
+        try {
+          if (delivery) release = tryReserveDraft(delivery);
+          if (delivery && !release) runOptions.streamToChat = undefined;
+          let response: AgentResponse;
+          if (reservation.kind === "resume" && reservation.response)
+            response = reservation.response;
+          else {
+            const collector = Object.assign(createUsageCollector(), {
+              deadlineAt: executionDeadline,
+              signal: admission.signal,
+            });
+            response = await runWithUsageCollector(collector, () =>
+              this.processCoordinatedMessage(runOptions, collector));
+            // Generation is durable before any final response is published.
+            completeTurnIngress(db, ingressKey, response);
+          }
+          if (delivery) {
+            try {
+              response = await deliverAgentResponse(db, response, delivery, {
+                isHeartbeat: opts.isHeartbeat,
+                reservationHeld: !!release,
+                signal: admission.signal,
+              });
+            } catch (error) {
+              log.error({ err: error }, "Delivery could not be confirmed");
+              response.delivery = { state: "unknown", reason: "delivery_persistence_failed" };
+            }
+            try {
+              completeTurnIngress(db, ingressKey, response);
+            } catch (error) {
+              // Confirmed outbox receipts remain authoritative if this projection fails.
+              log.error({ err: error }, "Unable to update ingress delivery projection");
+            }
+          }
+          return response;
+        } finally {
+          if (release && delivery) await clearDeliveryDraft(delivery);
+          release?.();
+        }
+      },
+    );
   }
 
-  private async processCoordinatedMessage(opts: ProcessMessageOptions): Promise<AgentResponse> {
-    const processStartTime = Date.now();
+  private async processCoordinatedMessage(
+    opts: ProcessMessageOptions,
+    collector: UsageCollector
+  ): Promise<AgentResponse> {
+    const processStartTime = opts.admission?.executionDeadline
+      ? opts.admission.executionDeadline - this.config.agent.max_turn_duration_ms
+      : Date.now();
     const turnId =
       opts.turnId ??
       (opts.messageId !== undefined
         ? `telegram:${opts.chatId}:${opts.messageId}`
         : `turn:${randomUUID()}`);
     let trace: AgentTurnTraceRecorder | undefined;
+    let usage: UsageAccumulator = {
+      input: 0,
+      output: 0,
+      cacheRead: 0,
+      cacheWrite: 0,
+      totalCost: 0,
+    };
+    let appliedSessionUsage: UsageAccumulator = { ...usage };
+    const collectUsage = (): UsageAccumulator => {
+      if (!collector.attempts.length) return usage;
+      const total: UsageAccumulator = {
+        input: 0,
+        output: 0,
+        cacheRead: 0,
+        cacheWrite: 0,
+        totalCost: 0,
+      };
+      for (const attempt of collector.attempts) {
+        if (attempt.usage) addUsage(total, attempt.usage);
+        if (attempt.incomplete) total.costIncomplete = true;
+      }
+      return total;
+    };
     try {
+      assertTurnBudget(opts.admission?.executionDeadline, opts.admission?.signal);
       const built = await prepareTurn({ ...opts, turnId }, processStartTime, {
         config: this.config,
         soul: this.soul,
@@ -170,6 +325,9 @@ export class AgentRuntime {
         toolRegistry: this.toolRegistry,
         hookRunner: this.hookRunner,
       });
+      usage = loop.accumulatedUsage;
+      loop.accumulatedUsage = collectUsage();
+
       const response = await finalizeAgentResponse(
         built.turn,
         loop,
@@ -177,8 +335,13 @@ export class AgentRuntime {
         opts,
         this.hookRunner
       );
+      appliedSessionUsage = { ...loop.accumulatedUsage };
       trace.finish({
-        status: loop.stopReason.endsWith("budget") ? "budget_exhausted" : outcomeForStopReason(loop.stopReason).status === "completed" ? "completed" : "error",
+        status: loop.stopReason.endsWith("budget")
+          ? "budget_exhausted"
+          : outcomeForStopReason(loop.stopReason).status === "completed"
+            ? "completed"
+            : "error",
         calls: loop.totalToolCalls,
         iterations: loop.iterations,
         usage: loop.accumulatedUsage,
@@ -189,8 +352,83 @@ export class AgentRuntime {
       return response;
     } catch (error) {
       log.error({ err: error }, "Agent error");
+      usage = collectUsage();
+      trace?.usage(usage);
       trace?.fail(error);
-      throw error;
+      const reason =
+        error instanceof ContextBudgetError
+          ? "context_budget"
+          : error instanceof TurnBudgetError
+            ? "time_budget"
+            : "provider_error";
+      const sessionKey = opts.sessionKey ?? opts.chatId;
+      const session = getSession(sessionKey);
+      if (session)
+        updateSession(sessionKey, {
+          inputTokens:
+            (session.inputTokens ?? 0) + usage.input + usage.cacheRead + usage.cacheWrite,
+          outputTokens: (session.outputTokens ?? 0) + usage.output,
+        });
+      appliedSessionUsage = { ...usage };
+      // A later hook/provider error cannot prove that a reserved external effect failed.
+      let uncertainEffect = false;
+      try {
+        uncertainEffect = !!getDatabase()
+          .getDb()
+          .prepare(
+            "SELECT 1 FROM action_executions WHERE turn_id=? AND status IN ('running','unknown') LIMIT 1"
+          )
+          .get(turnId);
+      } catch {
+        /* Preserve the original error when diagnostics are unavailable. */
+      }
+      return {
+        turnId,
+        content:
+          "I could not finish this request. Any uncertain action must be reviewed before it is retried.",
+        toolCalls: [],
+        outcome: uncertainEffect
+          ? { status: "unknown", reason: "effect_unknown" }
+          : reason === "provider_error"
+            ? { status: "failed", reason }
+            : outcomeForStopReason(reason),
+        delivery: { state: "not_requested" },
+      };
+    } finally {
+      const total = collectUsage();
+      if (
+        (total.input ||
+          total.output ||
+          total.cacheRead ||
+          total.cacheWrite ||
+          total.totalCost ||
+          total.costIncomplete)
+      )
+        accumulateTokenUsage(total);
+      const extraInput =
+        total.input +
+        total.cacheRead +
+        total.cacheWrite -
+        appliedSessionUsage.input -
+        appliedSessionUsage.cacheRead -
+        appliedSessionUsage.cacheWrite;
+      const extraOutput = total.output - appliedSessionUsage.output;
+      if (extraInput || extraOutput) {
+        const key = opts.sessionKey ?? opts.chatId;
+        const current = getSession(key);
+        if (current)
+          updateSession(key, {
+            inputTokens: (current.inputTokens ?? 0) + extraInput,
+            outputTokens: (current.outputTokens ?? 0) + extraOutput,
+          });
+      }
+      if (collector.attempts.length) {
+        try {
+          persistModelAttempts(getDatabase().getDb(), turnId, collector.attempts);
+        } catch (error) {
+          log.error({ err: error }, "Unable to persist model attempt usage");
+        }
+      }
     }
   }
 

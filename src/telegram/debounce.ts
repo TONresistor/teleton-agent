@@ -1,3 +1,4 @@
+import { hashTelegramIngress } from "../memory/turn-ingress.js";
 import type { TelegramMessage } from "./bridge.js";
 import { DEBOUNCE_MAX_MULTIPLIER, DEBOUNCE_MAX_BUFFER_SIZE } from "../constants/limits.js";
 import { createLogger } from "../utils/logger.js";
@@ -37,6 +38,8 @@ export class MessageDebouncer {
   }
 
   async enqueue(message: TelegramMessage): Promise<void> {
+    message.receivedAt ??= Date.now();
+    message.ingressHash ??= hashTelegramIngress(message);
     const isGroup = message.isGroup ? "group" : "dm";
     const shouldDebounce = this.config.debounceMs > 0 && this.shouldDebounce(message);
 
@@ -64,9 +67,8 @@ export class MessageDebouncer {
           `[Debouncer] Buffer full for ${key} (${existing.messages.length}/${this.maxBufferSize}), flushing`
         );
         await this.flushKey(key);
-        const newBuffer: DebounceBuffer = { messages: [message], timer: null };
-        this.buffers.set(key, newBuffer);
-        this.resetTimer(key, newBuffer);
+        // Arrivals during the flush may already have opened a new buffer.
+        await this.enqueue(message);
       } else {
         existing.messages.push(message);
         log.debug(
@@ -90,9 +92,9 @@ export class MessageDebouncer {
     }
 
     // Clamp delay so total wait never exceeds maxDebounceMs
-    const firstMsgTime = buffer.messages[0]?.timestamp?.getTime() ?? Date.now();
+    const firstMsgTime = buffer.messages[0]?.receivedAt ?? Date.now();
     const elapsed = Date.now() - firstMsgTime;
-    const remaining = Math.max(0, this.maxDebounceMs - elapsed);
+    const remaining = Math.max(0, Math.min(this.maxDebounceMs, 60_000) - elapsed);
     const delay = Math.min(this.config.debounceMs, remaining);
 
     buffer.timer = setTimeout(() => {

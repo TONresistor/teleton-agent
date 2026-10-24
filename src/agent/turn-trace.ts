@@ -76,6 +76,27 @@ export class AgentTurnTraceRecorder {
     }
   }
 
+  /** Preserve the last tool/iteration snapshot when a terminal attempt adds usage. */
+  usage(usage: UsageAccumulator): void {
+    if (!this.started || this.finished) return;
+    try {
+      this.db
+        .prepare(
+          `UPDATE agent_turn_traces SET input_tokens=?, output_tokens=?,
+        total_cost=?, cost_incomplete=? WHERE id=? AND status='running'`
+        )
+        .run(
+          usage.input + usage.cacheRead + usage.cacheWrite,
+          usage.output,
+          usage.totalCost,
+          usage.costIncomplete ? 1 : 0,
+          this.turnId
+        );
+    } catch (error) {
+      log.warn({ err: error }, "Unable to update terminal usage");
+    }
+  }
+
   finish(input: {
     status: Exclude<AgentTurnTraceStatus, "running">;
     calls: CompletedToolCall[];

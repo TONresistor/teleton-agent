@@ -16,6 +16,8 @@ import {
   dispatchPluginCallback,
   dispatchPluginMessage,
 } from "./plugin-events.js";
+import { hashTelegramIngress } from "../memory/turn-ingress.js";
+import { authorizeTurn } from "../agent/turn-authorization.js";
 import { createLogger } from "../utils/logger.js";
 
 const log = createLogger("App");
@@ -160,12 +162,34 @@ export class MessagePipeline {
       void this.debouncer?.enqueue(message);
     });
     if (firstStart) {
-      bridge.onGuestMessage(async (message) => {
+      bridge.onGuestMessage(async (message, send) => {
         if (!this.acceptingMessages) return "";
         if (!this.deps.config.telegram.guest_mode) return "";
         if (this.deps.adminHandler.isPaused()) return "";
+        message.receivedAt ??= Date.now();
+        message.ingressHash ??= hashTelegramIngress(message);
+        if (
+          !authorizeTurn(this.deps.config, {
+            chatId: message.chatId,
+            isGroup: true,
+            isGuest: true,
+            toolContext: { senderId: message.senderId },
+          }).allowed
+        )
+          return "";
         const response = await this.deps.agent.processMessage({
           chatId: `telegram:guest:${message.chatId}`,
+          policyChatId: message.chatId,
+          ingressKey: `telegram:guest:${bridge.getOwnUserId()}:${message.chatId}:${message.id}`,
+          ingressHash: message.ingressHash,
+          admission: { receivedAt: message.receivedAt, queueDeadline: message.receivedAt + 60_000 },
+          delivery: {
+            kind: "guest",
+            chatId: message.chatId,
+            accountId: String(bridge.getOwnUserId()),
+            isGroup: true,
+            send,
+          },
           userMessage: message.text,
           userName: message.senderFirstName,
           senderUsername: message.senderUsername,
@@ -180,7 +204,9 @@ export class MessagePipeline {
             config: this.deps.config,
           },
         });
-        return response.content;
+        return response.delivery && response.delivery.state !== "not_requested"
+          ? ""
+          : response.content;
       });
     }
     bridge.startPolling();

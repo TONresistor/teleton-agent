@@ -207,7 +207,7 @@ describe("message retention", () => {
 });
 
 describe("interrupted tasks", () => {
-  it("fails interrupted execution and dependent descendants without replaying them", () => {
+  it("marks interrupted execution unknown and blocks dependent descendants without replaying them", () => {
     const store = new TaskStore(memory(false).getDb());
     const interrupted = store.createTask({ description: "May already have performed an action" });
     const child = store.createTask({ description: "First dependent", dependsOn: [interrupted.id] });
@@ -218,12 +218,12 @@ describe("interrupted tasks", () => {
     store.startTask(interrupted.id);
     expect(store.recoverInterruptedTasks()).toBe(1);
     expect(store.getTask(interrupted.id)).toMatchObject({
-      status: "failed",
+      status: "unknown",
       error: expect.stringContaining("outcome unknown"),
       completedAt: expect.any(Date),
     });
     for (const id of [interrupted.id, child.id, grandchild.id]) {
-      expect(store.getTask(id)?.status).toBe("failed");
+      expect(store.getTask(id)?.status).toBe(id === interrupted.id ? "unknown" : "blocked");
       expect(store.startTask(id)).toBeUndefined();
     }
     expect(store.getTask(independent.id)?.status).toBe("pending");

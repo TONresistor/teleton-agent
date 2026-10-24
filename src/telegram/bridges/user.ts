@@ -5,7 +5,7 @@ import { Api, utils } from "telegram";
 import { CustomFile } from "telegram/client/uploads.js";
 import type { NewMessageEvent } from "telegram/events/NewMessage.js";
 import { createLogger } from "../../utils/logger.js";
-import { withFloodRetry } from "../flood-retry.js";
+import { withFloodRetry, assertFloodBudget } from "../flood-retry.js";
 import { randomLong } from "../../utils/gramjs-bigint.js";
 import { getGramJSErrorMessage } from "../../utils/errors.js";
 import { markdownToTelegramHtml } from "../formatting.js";
@@ -226,6 +226,52 @@ export class GramJSUserBridge implements ITelegramBridge {
       let buttons: Api.ReplyInlineMarkup | undefined;
       if (options.inlineKeyboard && options.inlineKeyboard.length > 0) {
         buttons = this.buildInlineMarkup(options.inlineKeyboard);
+      }
+
+      if (options.formattedText) {
+        const formattedText = options.formattedText;
+        const entities = options.formattedText.entities.map((entity): Api.TypeMessageEntity => {
+          const shape = { offset: entity.offset, length: entity.length };
+          switch (entity.type) {
+            case "bold":
+              return new Api.MessageEntityBold(shape);
+            case "italic":
+              return new Api.MessageEntityItalic(shape);
+            case "underline":
+              return new Api.MessageEntityUnderline(shape);
+            case "strikethrough":
+              return new Api.MessageEntityStrike(shape);
+            case "spoiler":
+              return new Api.MessageEntitySpoiler(shape);
+            case "code":
+              return new Api.MessageEntityCode(shape);
+            case "pre":
+              return new Api.MessageEntityPre({ ...shape, language: entity.language ?? "" });
+            case "text_link":
+              return new Api.MessageEntityTextUrl({ ...shape, url: entity.url ?? "" });
+            case "blockquote":
+              return new Api.MessageEntityBlockquote(shape);
+            case "expandable_blockquote":
+              return new Api.MessageEntityBlockquote({ ...shape, collapsed: true });
+          }
+        });
+        const msg = await withFloodRetry(
+          () => {
+            assertFloodBudget(options);
+            return this.client.getClient().sendMessage(peer, {
+              message: formattedText.text,
+              formattingEntities: entities,
+              parseMode: undefined,
+              replyTo: options.replyToId,
+              buttons,
+            });
+          },
+          undefined,
+          undefined,
+          options.chatId,
+          options
+        );
+        return { id: msg.id, date: msg.date, chatId: options.chatId };
       }
 
       if (options.rich) {
@@ -1027,6 +1073,7 @@ export class GramJSUserBridge implements ITelegramBridge {
       _rawPeer: msg.peerId,
       hasMedia,
       mediaType,
+      mediaIdentity: msg.document?.id.toString() ?? msg.photo?.id.toString(),
       replyToId: replyToMsgId,
       _rawMessage: hasMedia || !!replyToMsgId ? msg : undefined,
     };

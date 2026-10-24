@@ -1,11 +1,10 @@
 import type { createHookRunner } from "../sdk/hooks/runner.js";
 import type { ResponseAfterEvent, ResponseBeforeEvent } from "../sdk/hooks/types.js";
 import { updateSession } from "../session/store.js";
-import { isBotBridge } from "../telegram/bridge-guards.js";
 import { createLogger } from "../utils/logger.js";
 import type { ChatResponse } from "./client.js";
-import { accumulateTokenUsage } from "./token-usage.js";
-import { deliveredTelegramText, sentSuccessfullyToChat } from "./telegram-send-state.js";
+import { sentSuccessfullyToChat } from "./telegram-send-state.js";
+import { outcomeForStopReason } from "./execution-types.js";
 import type {
   AgentResponse,
   LoopResult,
@@ -13,7 +12,6 @@ import type {
   TurnContext,
 } from "./turn-types.js";
 
-import { outcomeForStopReason } from "./execution-types.js";
 const log = createLogger("Agent");
 type HookRunner = ReturnType<typeof createHookRunner>;
 
@@ -57,10 +55,10 @@ export async function finalizeAgentResponse(
     const cacheInfo = cacheParts.length > 0 ? ` (${cacheParts.join(", ")})` : "";
     const cost = u.costIncomplete ? "cost incomplete" : `$${u.totalCost.toFixed(3)}`;
     log.info(`${inK}K in${cacheInfo}, ${u.output} out | ${cost}`);
-    accumulateTokenUsage(u);
   }
 
-  let content = loop.forcedContent ?? (accumulatedTexts.join("\n").trim() || finalResponse?.text || "");
+  let content =
+    loop.forcedContent ?? (accumulatedTexts.join("\n").trim() || finalResponse?.text || "");
   let outcome = outcomeForStopReason(loop.stopReason);
   const sentToCurrentChat = totalToolCalls.some((call) => sentSuccessfullyToChat(call, chatId));
 
@@ -117,19 +115,12 @@ export async function finalizeAgentResponse(
     await hookRunner.runObservingHook("response:after", responseAfterEvent);
   }
 
-  if (wasStreamed && opts.streamToChat) {
-    const bridge = opts.streamToChat.bridge;
-    if (isBotBridge(bridge)) {
-      if (
-        (!content && sentToCurrentChat) ||
-        deliveredTelegramText(totalToolCalls, chatId, content)
-      ) {
-        await bridge.clearDraft(opts.streamToChat.chatId);
-      } else {
-        await bridge.finalizeDraft(opts.streamToChat.chatId, content);
-      }
-    }
-  }
-
-  return { turnId: turn.turnId, outcome, delivery: { state: "not_requested" }, content, toolCalls: totalToolCalls, streamed: wasStreamed };
+  return {
+    turnId: turn.turnId,
+    outcome,
+    delivery: { state: "not_requested" },
+    content,
+    toolCalls: totalToolCalls,
+    streamed: wasStreamed,
+  };
 }

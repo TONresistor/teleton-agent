@@ -28,11 +28,43 @@ interface CooldownEntry {
   decayTimer: NodeJS.Timeout;
 }
 
+export interface FloodRetryBudget {
+  signal?: AbortSignal;
+  deadline?: number;
+}
+export function assertFloodBudget(budget?: FloodRetryBudget): void {
+  if (budget?.signal?.aborted) throw new Error("Telegram send cancelled before RPC");
+  if (budget?.deadline !== undefined && Date.now() >= budget.deadline)
+    throw new Error("Telegram send deadline expired before RPC");
+}
+async function waitWithinBudget(ms: number, budget?: FloodRetryBudget): Promise<void> {
+  assertFloodBudget(budget);
+  if (budget?.deadline !== undefined && Date.now() + ms >= budget.deadline) {
+    throw new Error("Telegram send deadline expires during cooldown");
+  }
+  await new Promise<void>((resolve, reject) => {
+    const finish = () => {
+      budget?.signal?.removeEventListener("abort", abort);
+      resolve();
+    };
+    const timer = setTimeout(finish, ms);
+    const abort = () => {
+      clearTimeout(timer);
+      budget?.signal?.removeEventListener("abort", abort);
+      reject(new Error("Telegram send cancelled during cooldown"));
+    };
+    budget?.signal?.addEventListener("abort", abort, { once: true });
+    if (budget?.signal?.aborted) abort();
+  });
+  assertFloodBudget(budget);
+}
+
 class FloodGate {
   private cooldowns = new Map<string, CooldownEntry>();
 
   /** Wait until the chat's cooldown has elapsed (if any). */
-  async waitFor(chatId: string): Promise<void> {
+  async waitFor(chatId: string, budget?: FloodRetryBudget): Promise<void> {
+    assertFloodBudget(budget);
     const entry = this.cooldowns.get(chatId);
     if (!entry) return;
 
@@ -41,7 +73,7 @@ class FloodGate {
     if (remaining <= 0) return;
 
     log.debug(`[FloodGate] ${chatId}: waiting ${(remaining / 1000).toFixed(1)}s (cooldown)`);
-    await new Promise((r) => setTimeout(r, remaining));
+    await waitWithinBudget(remaining, budget);
   }
 
   /** Record a FLOOD_WAIT penalty for a chat. */
@@ -109,17 +141,19 @@ export async function withFloodRetry<T>(
   fn: () => Promise<T>,
   maxWaitSeconds = DEFAULT_MAX_WAIT_SECONDS,
   maxRetries = DEFAULT_MAX_RETRIES,
-  chatId?: string
+  chatId?: string,
+  budget?: FloodRetryBudget
 ): Promise<T> {
   // Proactive wait: if this chat has an active cooldown, wait first
   if (chatId) {
-    await floodGate.waitFor(chatId);
+    await floodGate.waitFor(chatId, budget);
   }
 
   let lastError: Error | undefined;
 
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
+      assertFloodBudget(budget);
       const result = await fn();
       // Successful send — maintain spacing for this chat
       if (chatId) {
@@ -157,7 +191,7 @@ export async function withFloodRetry<T>(
       if (attempt >= maxRetries) break;
 
       log.warn(`[FLOOD_WAIT] Waiting ${waitSeconds}s before retry ${attempt + 1}/${maxRetries}`);
-      await new Promise((r) => setTimeout(r, waitSeconds * 1000));
+      await waitWithinBudget(waitSeconds * 1000, budget);
     }
   }
 

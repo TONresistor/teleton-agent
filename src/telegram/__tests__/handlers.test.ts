@@ -64,7 +64,7 @@ function makeConfig(overrides: Partial<TelegramConfig> = {}): TelegramConfig {
     admin_ids: [111],
     dm_policy: "open",
     group_policy: "open",
-    allow_from: [],
+    allow_from: [222],
     group_allow_from: [],
     require_mention: false,
     max_message_length: 4096,
@@ -157,6 +157,11 @@ describe("MessageHandler", () => {
   });
 
   describe("analyzeMessage()", () => {
+    it("does not grant agent access to unallowlisted senders under open policy", () => {
+      const { handler } = createHandler({ dm_policy: "open", allow_from: [] });
+      expect(handler.analyzeMessage(makeMessage()).shouldRespond).toBe(false);
+    });
+
     // ── DM policies ──
 
     it('dm_policy="disabled" → shouldRespond=false', () => {
@@ -447,6 +452,40 @@ describe("MessageHandler", () => {
       expect(bridge.sendMessage).toHaveBeenCalled();
     });
 
+    it("drain waits for accepted storage before ChatQueue and then the queued generation", async () => {
+      let releaseStore!: () => void;
+      const stored = new Promise<void>((resolve) => {
+        releaseStore = resolve;
+      });
+      mockStoreMessage.mockImplementationOnce(() => stored);
+      let releaseGeneration!: () => void;
+      const agent = makeAgent();
+      agent.processMessage.mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            releaseGeneration = () => resolve({ content: "done", toolCalls: [] });
+          })
+      );
+      const { handler } = createHandler({ dm_policy: "open" }, { agent });
+      const accepted = handler.handleMessage(makeMessage({ id: 204 }));
+      let drained = false;
+      const draining = handler.drain().then(() => {
+        drained = true;
+      });
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(agent.processMessage).not.toHaveBeenCalled();
+      expect(drained).toBe(false);
+      releaseStore();
+      await vi.waitFor(() => expect(agent.processMessage).toHaveBeenCalledOnce());
+      expect(drained).toBe(false);
+      releaseGeneration();
+      await Promise.all([accepted, draining]);
+      expect(drained).toBe(true);
+      // The completed handler is removed, so another drain never waits on itself.
+      await handler.drain();
+    });
+
     it("drain() resolves after all tasks complete", async () => {
       let resolveTask!: () => void;
       const agent = makeAgent();
@@ -488,8 +527,10 @@ describe("MessageHandler", () => {
       const agent = makeAgent();
       const { handler } = createHandler({ dm_policy: "open" }, { agent });
 
-      await handler.handleMessage(makeMessage({ id: 101, chatId: "chat1" }));
-      await handler.handleMessage(makeMessage({ id: 101, chatId: "chat1" }));
+      await Promise.all([
+        handler.handleMessage(makeMessage({ id: 101, chatId: "chat1" })),
+        handler.handleMessage(makeMessage({ id: 101, chatId: "chat1" })),
+      ]);
 
       // processMessage should only be called once
       expect(agent.processMessage).toHaveBeenCalledTimes(1);
@@ -836,6 +877,33 @@ describe("MessageHandler", () => {
 });
 
 describe("ChatQueue", () => {
+  it("expires a pending same-chat request before the active request finishes", async () => {
+    vi.useFakeTimers();
+    try {
+      const queue = new ChatQueue(1, 2);
+      let release!: () => void;
+      const first = queue.enqueue(
+        "a",
+        () =>
+          new Promise<void>((resolve) => {
+            release = resolve;
+          })
+      );
+      const task = vi.fn(async () => {});
+      const pending = queue.enqueue("a", task, Date.now() + 50);
+      const rejected = expect(pending).rejects.toThrow(/deadline/);
+      await vi.advanceTimersByTimeAsync(50);
+      await rejected;
+      expect(task).not.toHaveBeenCalled();
+      release();
+      await first;
+      await queue.drain();
+      expect(task).not.toHaveBeenCalled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it("rejects excess messages instead of growing without bound", async () => {
     const queue = new ChatQueue(1, 1);
     let release!: () => void;
