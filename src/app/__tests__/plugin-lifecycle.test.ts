@@ -1,6 +1,13 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { startPluginModules } from "../plugin-lifecycle.js";
 import type { PluginModule } from "../../agent/tools/types.js";
+
+// Pino's output worker may schedule its own flush timer under CI stdout load.
+// The timer assertion below belongs to lifecycle admission and cleanup.
+vi.mock("../../utils/logger.js", () => ({
+  createLogger: () => ({ warn: vi.fn(), error: vi.fn() }),
+}));
+
 afterEach(() => vi.useRealTimers());
 describe("startup lifecycle deadline settlement", () => {
   it("never invokes stop concurrently with startup after a local deadline", async () => {
