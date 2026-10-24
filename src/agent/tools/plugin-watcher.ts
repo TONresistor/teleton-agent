@@ -29,6 +29,26 @@ const RELOAD_DEBOUNCE_MS = 300;
 const PLUGIN_START_TIMEOUT_MS = 30_000;
 const PLUGIN_STOP_TIMEOUT_MS = 30_000;
 
+// A timeout is diagnostic, never proof that plugin code has stopped using its
+// resources. Keep the generation unavailable until the actual operation settles.
+async function awaitLifecycle(
+  operation: () => unknown | Promise<unknown>,
+  label: string,
+  timeoutMs: number
+): Promise<void> {
+  let timedOut = false;
+  const timer = setTimeout(() => {
+    timedOut = true;
+    log.warn(`${label} exceeded ${timeoutMs}ms; awaiting actual settlement`);
+  }, timeoutMs);
+  try {
+    await operation();
+    if (timedOut) throw new Error(`${label} exceeded its lifecycle deadline`);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 interface PluginWatcherDeps {
   config: Config;
   registry: ToolRegistry;
@@ -198,7 +218,9 @@ export class PluginWatcher {
     log.info(`Reloading plugin "${pluginName}"${oldModule ? ` (v${oldModule.version})` : ""}...`);
 
     let oldStopped = false;
+    let oldStopAttempted = false;
     let runtimeStaged = false;
+    let candidate: PluginModule | undefined;
     let candidatePluginId = pluginName;
     const oldHookPluginId = oldModule?.name ?? pluginName;
     const oldToolPluginId = oldModule?.name ?? pluginName;
@@ -241,6 +263,7 @@ export class PluginWatcher {
         sdkDeps,
         candidateHooks
       );
+      candidate = adapted;
       const newTools = adapted.tools(config);
       candidatePluginId = adapted.name;
       const conflictingModule = modules.find(
@@ -253,50 +276,30 @@ export class PluginWatcher {
         throw new Error("Plugin produced zero valid tools");
       }
 
-      // 5. Stop old plugin (new one is fully validated at this point)
+      // Adapter stop() first pauses admission and waits for the actual tools,
+      // hooks and events, including work whose caller has already timed out.
       if (oldModule) {
-        try {
-          await Promise.race([
-            oldModule.stop?.(),
-            new Promise<never>((_, reject) =>
-              setTimeout(
-                () => reject(new Error(`Plugin "${pluginName}" stop() timed out after 30s`)),
-                PLUGIN_STOP_TIMEOUT_MS
-              )
-            ),
-          ]);
-        } catch (stopErr: unknown) {
-          log.warn(`Old plugin "${pluginName}" stop() failed: ${getErrorMessage(stopErr)}`);
-        }
+        oldStopAttempted = true;
+        await awaitLifecycle(
+          () => oldModule.stop?.(),
+          `Plugin "${pluginName}" stop()`,
+          PLUGIN_STOP_TIMEOUT_MS
+        );
         oldStopped = true;
       }
-
-      // 6. Run migration if needed
-      adapted.migrate?.(pluginContext.db);
-
-      // 7. Replace tools in registry
-      // Tools are owned by the manifest name, which may differ from the
-      // directory name used by the watcher.
-      if (oldToolPluginId !== adapted.name) {
-        registry.removePluginTools(oldToolPluginId);
-        registry.registerPluginTools(adapted.name, newTools);
-      } else {
-        registry.replacePluginTools(adapted.name, newTools);
-      }
+      registry.removePluginTools(oldToolPluginId);
       hookRegistry.unregister(oldHookPluginId);
-      hookRegistry.replacePlugin(adapted.name, candidateHooks.getRegistrations(adapted.name));
       runtimeStaged = true;
 
-      // 8. Start new plugin
-      await Promise.race([
-        adapted.start?.(pluginContext),
-        new Promise<never>((_, reject) =>
-          setTimeout(
-            () => reject(new Error(`Plugin "${pluginName}" start() timed out after 30s`)),
-            PLUGIN_START_TIMEOUT_MS
-          )
-        ),
-      ]);
+      adapted.migrate?.(pluginContext.db);
+      await awaitLifecycle(
+        () => adapted.start?.(pluginContext),
+        `Plugin "${pluginName}" start()`,
+        PLUGIN_START_TIMEOUT_MS
+      );
+
+      // Publish only after initialization has fully completed.
+      registry.registerPluginTools(adapted.name, newTools);
       hookRegistry.replacePlugin(adapted.name, candidateHooks.getRegistrations(adapted.name));
 
       // 9. Update modules array
@@ -311,6 +314,23 @@ export class PluginWatcher {
     } catch (error: unknown) {
       log.error(`Failed to reload "${pluginName}": ${getErrorMessage(error)}`);
 
+      if (candidate) {
+        try {
+          await awaitLifecycle(
+            () => candidate?.stop?.(),
+            `Candidate "${pluginName}" cleanup`,
+            PLUGIN_STOP_TIMEOUT_MS
+          );
+        } catch (cleanupError) {
+          log.error(`Candidate cleanup failed: ${getErrorMessage(cleanupError)}; plugin disabled`);
+          registry.removePluginTools(candidatePluginId);
+          registry.removePluginTools(oldToolPluginId);
+          hookRegistry.unregister(candidatePluginId);
+          hookRegistry.unregister(oldHookPluginId);
+          return false;
+        }
+      }
+
       // Rollback: only if we actually stopped the old plugin (steps 1-4 errors
       // don't need rollback — old module is still running)
       if (oldModule && oldIndex >= 0 && oldStopped) {
@@ -319,16 +339,13 @@ export class PluginWatcher {
           hookRegistry.unregister(candidatePluginId);
           // Reopen plugin DB (stop() closed it)
           oldModule.migrate?.(pluginContext.db);
-          registry.registerPluginTools(oldToolPluginId, oldModule.tools(config));
-          await Promise.race([
-            oldModule.start?.(pluginContext),
-            new Promise<never>((_, reject) =>
-              setTimeout(
-                () => reject(new Error(`Plugin "${pluginName}" start() timed out after 30s`)),
-                PLUGIN_START_TIMEOUT_MS
-              )
-            ),
-          ]);
+          const oldTools = oldModule.tools(config);
+          await awaitLifecycle(
+            () => oldModule.start?.(pluginContext),
+            `Plugin "${pluginName}" rollback start()`,
+            PLUGIN_START_TIMEOUT_MS
+          );
+          registry.registerPluginTools(oldToolPluginId, oldTools);
           // Replaying tools/start may register hooks again. Restore the exact
           // pre-reload set once the old runtime is active.
           hookRegistry.replacePlugin(oldHookPluginId, oldHooks);
@@ -340,6 +357,10 @@ export class PluginWatcher {
           hookRegistry.unregister(oldHookPluginId);
           modules.splice(oldIndex, 1);
         }
+      } else if (oldModule && oldStopAttempted) {
+        registry.removePluginTools(oldToolPluginId);
+        hookRegistry.unregister(oldHookPluginId);
+        log.error(`Plugin "${pluginName}" disabled after stop failure`);
       } else if (!oldModule && runtimeStaged) {
         // A newly added plugin may fail after its tools/hooks were staged.
         // Leave no partial runtime state behind.

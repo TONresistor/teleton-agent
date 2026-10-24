@@ -54,6 +54,16 @@ describe("withRetry", () => {
     expect(fn).toHaveBeenCalledTimes(2);
   });
 
+  it("clears its timeout immediately after a successful operation", async () => {
+    vi.useFakeTimers();
+    await expect(withRetry(async () => "confirmed", { timeout: 30_000 })).resolves.toBe(
+      "confirmed"
+    );
+    expect(vi.getTimerCount()).toBe(0);
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(vi.getTimerCount()).toBe(0);
+  });
+
   it("rejects with timeout when fn hangs forever", async () => {
     vi.useFakeTimers();
 

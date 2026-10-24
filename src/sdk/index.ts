@@ -39,6 +39,7 @@ export interface SDKDependencies {
 }
 
 export interface CreatePluginSDKOptions {
+  runHandler?: <T>(handler: () => Promise<T>) => Promise<T>;
   pluginName: string;
   db: Database.Database | null;
   sanitizedConfig: Record<string, unknown>;
@@ -147,7 +148,8 @@ export function createPluginSDK(deps: SDKDependencies, opts: CreatePluginSDKOpti
         opts.pluginName,
         opts.botManifest,
         deps.rateLimiter ?? null,
-        frozenLog
+        frozenLog,
+        opts.runHandler
       );
       // Only cache non-null — retry on next access if deps aren't ready yet
       if (result) cachedBot = result;

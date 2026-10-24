@@ -40,6 +40,8 @@ import {
   type SDKDependencies,
 } from "../../sdk/index.js";
 import type { PluginSDK, PluginToolContext, StartContext } from "@teleton-agent/sdk";
+import { PluginExecutionGate, PluginUnavailableError } from "./plugin-execution-gate.js";
+import type { HookRegistration } from "../../sdk/hooks/types.js";
 import { HookRegistry } from "../../sdk/hooks/registry.js";
 import { createSecretsSDK } from "../../sdk/secrets.js";
 import type {
@@ -98,6 +100,7 @@ interface RawPluginExports {
 
 /** Extended PluginModule with event hooks (external plugins only) */
 export interface PluginModuleWithHooks extends PluginModule {
+  readonly executionGate?: PluginExecutionGate;
   onMessage?: (event: PluginMessageEvent) => Promise<void>;
   onCallbackQuery?: (event: PluginCallbackEvent) => Promise<void>;
 }
@@ -208,15 +211,37 @@ export function adaptPlugin(
   const sanitizedConfig = sanitizeConfigForPlugins(config);
   let pluginSdk: PluginSDK | null = null;
   let lifecycleActive = false;
+  let pendingStart: Promise<void> | null = null;
+  let pendingStop: Promise<void> | null = null;
+  let stopping = false;
+  const executionGate = new PluginExecutionGate();
+  // Wrap the handler itself, so a runner timeout cannot release the resource lease.
+  const gatedHooks = hookRegistry
+    ? new Proxy(hookRegistry, {
+        get(target, property) {
+          if (property === "register")
+            return (registration: HookRegistration) => {
+              const handler = registration.handler as (event: unknown) => void | Promise<void>;
+              return target.register({
+                ...registration,
+                handler: (event: never) => executionGate.run(() => handler(event)),
+              } as HookRegistration);
+            };
+          const value = Reflect.get(target, property);
+          return typeof value === "function" ? value.bind(target) : value;
+        },
+      })
+    : undefined;
   const getSdk = (): PluginSDK => {
     pluginSdk ??= createPluginSDK(sdkDeps, {
       pluginName,
+      runHandler: (handler) => executionGate.run(handler),
       db: exposedPluginDb,
       sanitizedConfig,
       pluginConfig,
       botManifest: manifest?.bot,
       secretDeclarations: manifest?.secrets,
-      hookRegistry,
+      hookRegistry: gatedHooks,
       declaredHooks: manifest?.hooks,
       globalPriority,
     });
@@ -225,12 +250,25 @@ export function adaptPlugin(
 
   const module: PluginModuleWithHooks = {
     name: pluginName,
+    executionGate,
     version: pluginVersion,
     sourceId: entryName.replace(/\.js$/, ""),
 
     // Store event hooks from plugin exports
-    onMessage: typeof raw.onMessage === "function" ? raw.onMessage : undefined,
-    onCallbackQuery: typeof raw.onCallbackQuery === "function" ? raw.onCallbackQuery : undefined,
+    onMessage:
+      typeof raw.onMessage === "function"
+        ? async (event) => {
+            if (!executionGate.accepting) return;
+            await executionGate.run(() => raw.onMessage?.(event));
+          }
+        : undefined,
+    onCallbackQuery:
+      typeof raw.onCallbackQuery === "function"
+        ? async (event) => {
+            if (!executionGate.accepting) return;
+            await executionGate.run(() => raw.onCallbackQuery?.(event));
+          }
+        : undefined,
 
     configure() {},
 
@@ -311,7 +349,21 @@ export function adaptPlugin(
             } as Tool,
             // Always replace the agent DB from ToolContext with the plugin's
             // isolated handle. Failing closed also covers DB startup errors.
-            executor: withPluginDb(restrictedContextExecutor),
+            executor: async (params, context) => {
+              try {
+                return await executionGate.run(() =>
+                  withPluginDb(restrictedContextExecutor)(params, context)
+                );
+              } catch (error) {
+                if (error instanceof PluginUnavailableError)
+                  return {
+                    success: false,
+                    error: error.message,
+                    execution: { outcome: "not_attempted" },
+                  };
+                throw error;
+              }
+            },
             scope: def.scope as ToolScope | undefined,
             requiresApproval: def.requiresApproval,
           };
@@ -323,44 +375,69 @@ export function adaptPlugin(
     },
 
     async start(_context) {
+      if (pendingStop) throw new PluginUnavailableError();
+      if (pendingStart) return pendingStart;
+      stopping = false;
       lifecycleActive = true;
-      if (!raw.start) return;
-
+      const operation = (async () => {
+        if (raw.start) {
+          const enhancedContext: StartContext = {
+            sdk: getSdk(),
+            db: exposedPluginDb,
+            config: sanitizedConfig,
+            pluginConfig,
+            log: getSdk().log,
+          };
+          await raw.start(enhancedContext);
+        }
+        if (!stopping) executionGate.activate();
+      })();
+      pendingStart = operation;
       try {
-        const enhancedContext: StartContext = {
-          sdk: getSdk(),
-          db: exposedPluginDb,
-          config: sanitizedConfig,
-          pluginConfig,
-          log: getSdk().log,
-        };
-        await raw.start(enhancedContext);
-      } catch (error: unknown) {
+        await operation;
+      } catch (error) {
         pluginLog.error(`start() failed: ${getErrorMessage(error)}`);
         throw error;
+      } finally {
+        if (pendingStart === operation) pendingStart = null;
       }
     },
 
     async stop() {
-      const shouldRunStopHook = lifecycleActive;
-      lifecycleActive = false;
-      const dbToClose = pluginDb;
-      pluginDb = null;
-      exposedPluginDb = null;
-      pluginSdk = null;
-      try {
-        if (shouldRunStopHook) await raw.stop?.();
-      } catch (error: unknown) {
-        pluginLog.error(`stop() failed: ${getErrorMessage(error)}`);
-        throw error;
-      } finally {
-        if (dbToClose) {
-          try {
-            dbToClose.close();
-          } catch {
-            /* ignore */
+      if (pendingStop) return pendingStop;
+      const operation = (async () => {
+        stopping = true;
+        // start() may still run after an outer lifecycle timeout. Wait for the real
+        // operation before invoking stop() or closing its database.
+        const draining = executionGate.pauseAndDrain();
+        await pendingStart?.catch(() => {});
+        await draining;
+        const shouldRunStopHook = lifecycleActive;
+        lifecycleActive = false;
+        const dbToClose = pluginDb;
+        pluginDb = null;
+        exposedPluginDb = null;
+        pluginSdk = null;
+        try {
+          if (shouldRunStopHook) await raw.stop?.();
+        } catch (error: unknown) {
+          pluginLog.error(`stop() failed: ${getErrorMessage(error)}`);
+          throw error;
+        } finally {
+          if (dbToClose) {
+            try {
+              dbToClose.close();
+            } catch {
+              /* ignore */
+            }
           }
         }
+      })();
+      pendingStop = operation;
+      try {
+        await operation;
+      } finally {
+        if (pendingStop === operation) pendingStop = null;
       }
     },
   };

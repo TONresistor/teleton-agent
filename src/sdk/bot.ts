@@ -25,7 +25,8 @@ export function createBotSDK(
   pluginName: string,
   manifest: BotManifest | undefined,
   rateLimiter: PluginRateLimiter | null,
-  log: PluginLogger
+  log: PluginLogger,
+  runHandler?: <T>(handler: () => Promise<T>) => Promise<T>
 ): BotSDK | null {
   // No router or no manifest with bot features → null
   if (!router || !manifest || (!manifest.inline && !manifest.callbacks)) {
@@ -63,7 +64,7 @@ export function createBotSDK(
         if (rateLimiter) {
           rateLimiter.check(pluginName, "inline", inlineLimit);
         }
-        return handler(ctx);
+        return runHandler ? runHandler(() => handler(ctx)) : handler(ctx);
       };
       syncToRouter();
     },
@@ -79,14 +80,15 @@ export function createBotSDK(
           if (rateLimiter) {
             rateLimiter.check(pluginName, "callback", callbackLimit);
           }
-          return handler(ctx);
+          return runHandler ? runHandler(() => handler(ctx)) : handler(ctx);
         },
       });
       syncToRouter();
     },
 
     onChosenResult(handler) {
-      handlers.onChosenResult = handler;
+      handlers.onChosenResult = (ctx) =>
+        runHandler ? runHandler(() => handler(ctx)) : handler(ctx);
       syncToRouter();
     },
 

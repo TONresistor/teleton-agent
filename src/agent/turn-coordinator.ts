@@ -1,101 +1,133 @@
+import type { TurnAdmission } from "./execution-types.js";
+
 export interface TurnCoordinatorOptions {
   maxConcurrent: number;
   maxPending: number;
   maxQueueWaitMs?: number;
 }
 
-interface SlotWaiter {
-  resolve: (release: () => void) => void;
-  reject: (error: Error) => void;
+interface QueuedTurn {
+  deadline: number;
+  signal?: AbortSignal;
+  sessionKey: string;
+  task: () => Promise<unknown>;
+  resolve: (value: unknown) => void;
+  reject: (error: unknown) => void;
   timer?: ReturnType<typeof setTimeout>;
-  cancelled: boolean;
+  cleanup?: () => void;
 }
 
-/**
- * Single entry point for every agent turn. It serializes conversation state by
- * session while applying a bounded global bulkhead. New messages wait; they do
- * not cancel an active generation.
- */
+/** Process-local admission with bounded, independently expiring session waiters. */
 export class TurnCoordinator {
-  private readonly chains = new Map<string, Promise<unknown>>();
-  private readonly slotWaiters: SlotWaiter[] = [];
+  private readonly queues = new Map<string, QueuedTurn[]>();
+  private readonly activeSessions = new Set<string>();
+  private readonly turns = new Set<Promise<unknown>>();
   private active = 0;
   private pending = 0;
-  private readonly maxQueueWaitMs: number;
+  constructor(private readonly options: TurnCoordinatorOptions) {}
 
-  constructor(private readonly options: TurnCoordinatorOptions) {
-    this.maxQueueWaitMs = options.maxQueueWaitMs ?? 60_000;
-  }
-
-  run<T>(sessionKey: string, task: () => Promise<T>): Promise<T> {
+  run<T>(sessionKey: string, task: () => Promise<T>, admission?: TurnAdmission): Promise<T> {
     if (this.pending >= this.options.maxPending) {
       return Promise.reject(new Error("Agent turn capacity reached; try again shortly"));
     }
-
+    const deadline =
+      admission?.queueDeadline ?? Date.now() + (this.options.maxQueueWaitMs ?? 60_000);
+    if (Date.now() >= deadline || admission?.signal?.aborted) {
+      return Promise.reject(new Error("Agent turn expired while waiting in queue"));
+    }
     this.pending++;
-    const enqueuedAt = Date.now();
-    const previous = this.chains.get(sessionKey) ?? Promise.resolve();
-    const execution = previous
-      .catch(() => undefined)
-      .then(async () => {
-        if (Date.now() - enqueuedAt >= this.maxQueueWaitMs) {
-          throw new Error("Agent turn expired while waiting in queue");
-        }
-        const release = await this.acquireSlot(enqueuedAt);
-        try {
-          return await task();
-        } finally {
-          release();
-        }
-      })
-      .finally(() => {
-        this.pending--;
-        if (this.chains.get(sessionKey) === execution) this.chains.delete(sessionKey);
-      });
+    let resolve!: (value: unknown) => void;
+    let reject!: (error: unknown) => void;
+    const promise = new Promise<T>((yes, no) => {
+      resolve = yes as (value: unknown) => void;
+      reject = no;
+    });
+    const entry: QueuedTurn = {
+      sessionKey,
+      task,
+      resolve,
+      reject,
+      deadline,
+      signal: admission?.signal,
+    };
+    const cancel = () => {
+      const queue = this.queues.get(sessionKey);
+      const index = queue?.indexOf(entry) ?? -1;
+      if (!queue || index < 0) return;
+      queue.splice(index, 1);
+      if (!queue.length) this.queues.delete(sessionKey);
+      this.pending--;
+      entry.cleanup?.();
+      reject(new Error("Agent turn expired while waiting in queue"));
+      this.pump();
+    };
+    entry.timer = setTimeout(cancel, Math.max(1, deadline - Date.now()));
+    entry.timer.unref?.();
+    admission?.signal?.addEventListener("abort", cancel, { once: true });
+    entry.cleanup = () => {
+      clearTimeout(entry.timer);
+      admission?.signal?.removeEventListener("abort", cancel);
+    };
+    const queue = this.queues.get(sessionKey) ?? [];
+    queue.push(entry);
+    this.queues.set(sessionKey, queue);
+    this.turns.add(promise);
+    void promise.then(
+      () => this.turns.delete(promise),
+      () => this.turns.delete(promise)
+    );
+    this.pump();
+    return promise;
+  }
 
-    this.chains.set(sessionKey, execution);
-    return execution;
+  private pump(): void {
+    for (const [sessionKey, queue] of this.queues) {
+      if (this.active >= this.options.maxConcurrent) break;
+      if (this.activeSessions.has(sessionKey)) continue;
+      const entry = queue.shift();
+      if (!queue.length) this.queues.delete(sessionKey);
+      if (!entry) continue;
+      entry.cleanup?.();
+      if (Date.now() >= entry.deadline || entry.signal?.aborted) {
+        this.pending--;
+        entry.reject(new Error("Agent turn expired while waiting in queue"));
+        // Continue pumping this session after removing an expired head.
+        this.pump();
+        continue;
+      }
+      this.active++;
+      this.activeSessions.add(sessionKey);
+      void this.execute(entry);
+    }
+  }
+
+  private async execute(entry: QueuedTurn): Promise<void> {
+    let value: unknown;
+    let error: unknown;
+    let failed = false;
+    try {
+      value = await entry.task();
+    } catch (caught) {
+      failed = true;
+      error = caught;
+    } finally {
+      this.active--;
+      this.pending--;
+      this.activeSessions.delete(entry.sessionKey);
+      this.pump();
+    }
+    if (failed) entry.reject(error);
+    else entry.resolve(value);
   }
 
   get stats(): { active: number; pending: number; sessions: number } {
-    return { active: this.active, pending: this.pending, sessions: this.chains.size };
+    return {
+      active: this.active,
+      pending: this.pending,
+      sessions: new Set([...this.queues.keys(), ...this.activeSessions]).size,
+    };
   }
-
   async drain(): Promise<void> {
-    await Promise.allSettled([...this.chains.values()]);
-  }
-
-  private acquireSlot(enqueuedAt: number): Promise<() => void> {
-    if (this.active < this.options.maxConcurrent) {
-      this.active++;
-      return Promise.resolve(() => this.releaseSlot());
-    }
-
-    const remaining = Math.max(1, this.maxQueueWaitMs - (Date.now() - enqueuedAt));
-    return new Promise<() => void>((resolve, reject) => {
-      const waiter: SlotWaiter = {
-        resolve,
-        reject,
-        cancelled: false,
-      };
-      waiter.timer = setTimeout(() => {
-        waiter.cancelled = true;
-        reject(new Error("Agent turn expired while waiting for capacity"));
-      }, remaining);
-      waiter.timer.unref?.();
-      this.slotWaiters.push(waiter);
-    });
-  }
-
-  private releaseSlot(): void {
-    this.active--;
-    while (this.slotWaiters.length > 0) {
-      const waiter = this.slotWaiters.shift();
-      if (!waiter || waiter.cancelled) continue;
-      if (waiter.timer) clearTimeout(waiter.timer);
-      this.active++;
-      waiter.resolve(() => this.releaseSlot());
-      break;
-    }
+    await Promise.allSettled([...this.turns]);
   }
 }

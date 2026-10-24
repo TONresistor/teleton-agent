@@ -1,3 +1,7 @@
+import {
+  PluginExecutionGate,
+  PluginUnavailableError,
+} from "../../agent/tools/plugin-execution-gate.js";
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { createBotSDK } from "../bot.js";
 import type { InlineRouter, PluginBotHandlers } from "../../bot/inline-router.js";
@@ -180,5 +184,60 @@ describe("createBotSDK", () => {
   it("username returns empty when bot is null", () => {
     const sdk = createBotSDK(router, null, null, "cats", manifest, null, log)!;
     expect(sdk.username).toBe("");
+  });
+  it("drains a verified plugin callback before maintenance and gates all bot handler entry points", async () => {
+    const gate = new PluginExecutionGate();
+    const sdk = createBotSDK(router, null, null, "cats", manifest, null, log, (handler) =>
+      gate.run(handler)
+    )!;
+    let release!: () => void;
+    const callback = vi.fn(async () => {
+      await new Promise<void>((resolve) => {
+        release = resolve;
+      });
+    });
+    const inline = vi.fn(async () => []);
+    const chosen = vi.fn(async () => {});
+    sdk.onCallback("like:*", callback);
+    sdk.onInlineQuery(inline);
+    sdk.onChosenResult(chosen);
+    const registered = router._plugins.get("cats")!;
+    const context = {
+      data: "like:42",
+      match: ["42"],
+      userId: 1,
+      answer: vi.fn(),
+      editMessage: vi.fn(),
+    };
+    await expect(registered.onCallback![0].handler(context)).rejects.toBeInstanceOf(
+      PluginUnavailableError
+    );
+    expect(callback).not.toHaveBeenCalled();
+    gate.activate();
+    const running = registered.onCallback![0].handler(context);
+    expect(callback).toHaveBeenCalledWith(context);
+    expect(gate.inFlight).toBe(1);
+    let drained = false;
+    const maintenance = gate.pauseAndDrain().then(() => {
+      drained = true;
+    });
+    await Promise.resolve();
+    expect(drained).toBe(false);
+    await expect(
+      registered.onInlineQuery!({ query: "cat", queryId: "q", userId: 1, offset: "" })
+    ).rejects.toBeInstanceOf(PluginUnavailableError);
+    expect(inline).not.toHaveBeenCalled();
+    release();
+    await running;
+    await maintenance;
+    expect(drained).toBe(true);
+    expect(gate.inFlight).toBe(0);
+    gate.activate();
+    await registered.onInlineQuery!({ query: "cat", queryId: "q", userId: 1, offset: "" });
+    const selected = { resultId: "cat42", query: "cat", inlineMessageId: "inline-42" };
+    await registered.onChosenResult!(selected);
+    expect(inline).toHaveBeenCalledOnce();
+    expect(chosen).toHaveBeenCalledWith(selected);
+    expect(gate.inFlight).toBe(0);
   });
 });

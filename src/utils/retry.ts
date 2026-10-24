@@ -35,12 +35,15 @@ export async function withRetry<T>(fn: () => Promise<T>, options: RetryOptions =
 
   for (let attempt = 1; attempt <= opts.maxAttempts; attempt++) {
     try {
+      let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
       const result = await Promise.race([
         fn(),
-        new Promise<never>((_, reject) =>
-          setTimeout(() => reject(new Error("Operation timeout")), opts.timeout)
-        ),
-      ]);
+        new Promise<never>((_, reject) => {
+          timeoutHandle = setTimeout(() => reject(new Error("Operation timeout")), opts.timeout);
+        }),
+      ]).finally(() => {
+        if (timeoutHandle) clearTimeout(timeoutHandle);
+      });
       return result;
     } catch (error) {
       lastError = error instanceof Error ? error : new Error(String(error));

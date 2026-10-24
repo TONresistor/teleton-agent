@@ -1,4 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { HookRegistry } from "../../../sdk/hooks/registry.js";
+import { createHookRunner } from "../../../sdk/hooks/runner.js";
 import { adaptPlugin } from "../plugin-loader.js";
 import { sanitizeConfigForPlugins } from "../plugin-validator.js";
 import { SDK_VERSION } from "@teleton-agent/sdk";
@@ -413,6 +415,7 @@ describe("adaptPlugin — database isolation", () => {
 
     const module = adaptPlugin(raw, "db-probe", makeConfig(), [], minimalSdkDeps);
     module.migrate?.(mainDb);
+    await module.start?.({} as never);
     const [tool] = module.tools(makeConfig());
     await tool.executor({}, { db: agentDb, bridge: minimalSdkDeps.bridge } as never);
 
@@ -447,6 +450,7 @@ describe("adaptPlugin — database isolation", () => {
 
     const module = adaptPlugin(raw, "db-probe", makeConfig(), [], minimalSdkDeps);
     module.migrate?.(mainDb);
+    await module.start?.({} as never);
     const [tool] = module.tools(makeConfig());
     await tool.executor({}, { db: agentDb } as never);
     await module.start?.({
@@ -506,4 +510,133 @@ describe("adaptPlugin — database isolation", () => {
     await stopFailure.start?.({} as never);
     await expect(stopFailure.stop?.()).rejects.toThrow("stop failed");
   });
+});
+
+describe("adaptPlugin execution lifetime", () => {
+  beforeEach(() => vi.clearAllMocks());
+  it("waits for an active executor before closing its database and refuses new work", async () => {
+    let release!: () => void;
+    let entered!: () => void;
+    const entry = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const module = adaptPlugin(
+      makeRawPlugin({
+        tools: [
+          {
+            name: "lease_action",
+            description: "test",
+            execute: async () => {
+              entered();
+              await new Promise<void>((resolve) => {
+                release = resolve;
+              });
+              return { success: true };
+            },
+          },
+        ],
+      }),
+      "lease",
+      makeConfig(),
+      [],
+      minimalSdkDeps
+    );
+    module.migrate?.(mainDb);
+    await module.start?.({} as never);
+    const [tool] = module.tools(makeConfig());
+    const active = tool.executor({}, {} as never);
+    await entry;
+    const stopping = module.stop!();
+    expect(moduleDbMocks.pluginDb.close).not.toHaveBeenCalled();
+    await expect(tool.executor({}, {} as never)).resolves.toMatchObject({
+      success: false,
+      execution: { outcome: "not_attempted" },
+    });
+    release();
+    await active;
+    await stopping;
+    expect(moduleDbMocks.pluginDb.close).toHaveBeenCalledOnce();
+  });
+  it("does not close resources or activate admissions while timed-out startup is still running", async () => {
+    let release!: () => void;
+    let entered!: () => void;
+    const entry = new Promise<void>((resolve) => {
+      entered = resolve;
+    });
+    const module = adaptPlugin(
+      makeRawPlugin({
+        start: async () => {
+          entered();
+          await new Promise<void>((resolve) => {
+            release = resolve;
+          });
+        },
+      }),
+      "pending-start",
+      makeConfig(),
+      [],
+      minimalSdkDeps
+    );
+    module.migrate?.(mainDb);
+    const startup = module.start!({} as never);
+    await entry;
+    const stopping = module.stop!();
+    const [tool] = module.tools(makeConfig());
+    await expect(tool.executor({}, {} as never)).resolves.toMatchObject({
+      execution: { outcome: "not_attempted" },
+    });
+    expect(moduleDbMocks.pluginDb.close).not.toHaveBeenCalled();
+    release();
+    await startup;
+    await stopping;
+    expect(moduleDbMocks.pluginDb.close).toHaveBeenCalledOnce();
+  });
+});
+
+it("holds a hook lease after the hook runner timeout until its actual handler settles", async () => {
+  vi.useFakeTimers();
+  try {
+    vi.clearAllMocks();
+    let release!: () => void;
+    const hooks = new HookRegistry();
+    const raw = makeRawPlugin({
+      start: async (context: {
+        sdk: { on: (name: string, handler: () => Promise<void>) => void };
+      }) => {
+        context.sdk.on(
+          "tool:before",
+          () =>
+            new Promise<void>((resolve) => {
+              release = resolve;
+            })
+        );
+      },
+    });
+    const module = adaptPlugin(raw, "hook-lease", makeConfig(), [], minimalSdkDeps, hooks);
+    module.migrate?.(mainDb);
+    await module.start?.({} as never);
+    const runner = createHookRunner(hooks, {
+      timeoutMs: 10,
+      logger: { debug: vi.fn(), error: vi.fn(), warn: vi.fn() },
+    });
+    const event = {
+      block: false,
+      blockReason: "",
+      toolName: "probe",
+      params: {},
+      chatId: "1",
+      isGroup: false,
+    };
+    const timedHook = runner.runModifyingHook("tool:before", event);
+    await vi.advanceTimersByTimeAsync(11);
+    await timedHook;
+    expect(event.block).toBe(true);
+    const stopping = module.stop!();
+    expect(moduleDbMocks.pluginDb.close).not.toHaveBeenCalled();
+    release();
+    await stopping;
+    expect(moduleDbMocks.pluginDb.close).toHaveBeenCalledOnce();
+  } finally {
+    vi.useRealTimers();
+  }
 });
