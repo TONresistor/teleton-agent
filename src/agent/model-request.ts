@@ -1,4 +1,3 @@
-import type { ObservationArtifactStore } from "./context-budget.js";
 import {
   clampThinkingLevel,
   hasApi,
@@ -16,6 +15,11 @@ import { getGrokBuildApiKey } from "../providers/grok-build-credentials.js";
 import { getProviderModel, isCustomOpenRouterModel } from "../providers/model-resolver.js";
 import { createOpenRouterUsageTracker } from "../providers/openrouter-usage.js";
 import { TELEGRAM_SEND_TOOLS } from "../constants/tools.js";
+import {
+  fitPreparedContext,
+  prepareContextBudget,
+  type ObservationArtifactStore,
+} from "./context-budget.js";
 import { sanitizeToolsForGemini } from "./schema-sanitizer.js";
 
 export interface ModelRequestOptions {
@@ -145,11 +149,49 @@ export function prepareModelRequest(
   const preparedTools = prepareTools(request.tools);
   const tools =
     provider === "google" && preparedTools ? sanitizeToolsForGemini(preparedTools) : preparedTools;
-  const context: Context = {
+  const projectedContext: Context = {
     ...request.context,
+    messages: request.context.messages.map((message) => {
+      if (
+        message.role === "assistant" ||
+        typeof message.content === "string" ||
+        model.input.includes("image")
+      )
+        return message;
+      return {
+        ...message,
+        content: message.content.map((block) =>
+          block.type === "image"
+            ? {
+                type: "text" as const,
+                text: `[Image (${block.mimeType}) omitted: active model does not accept images; original preserved in tool result artifact when available.]`,
+              }
+            : block
+        ),
+      };
+    }),
     systemPrompt: request.systemPrompt || request.context.systemPrompt || "",
     tools,
   };
+  const storeObservation: ObservationArtifactStore | undefined = request.storeObservation
+    ? (message) => {
+        const original = request.context.messages.find(
+          (candidate) =>
+            candidate.role === "toolResult" &&
+            candidate.toolCallId === message.toolCallId &&
+            candidate.timestamp === message.timestamp
+        );
+        return request.storeObservation?.(original?.role === "toolResult" ? original : message);
+      }
+    : undefined;
+  if (storeObservation) storeObservation.isObservation = request.storeObservation?.isObservation;
+  const context = fitPreparedContext(
+    model,
+    projectedContext,
+    request.maxTokens ?? config.max_tokens,
+    storeObservation
+  );
+  const budget = prepareContextBudget(model, context, request.maxTokens ?? config.max_tokens);
   const temperature = request.temperature ?? config.temperature;
   const usageTracker =
     provider === "openrouter" && model.api === "openai-completions"
@@ -164,7 +206,7 @@ export function prepareModelRequest(
     options: {
       ...(usageTracker && { fetch: usageTracker.fetch }),
       apiKey: getEffectiveApiKey(provider, config.api_key),
-      maxTokens: request.maxTokens ?? config.max_tokens,
+      maxTokens: budget.maxTokens,
       ...(!isCustomOpenRouterModel(model) &&
         modelSupportsTemperature(provider, model) && { temperature }),
       sessionId: request.sessionId,

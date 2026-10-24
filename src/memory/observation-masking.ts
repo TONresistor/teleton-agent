@@ -1,4 +1,5 @@
 import type { Message, ToolResultMessage, TextContent } from "@earendil-works/pi-ai";
+import { hasStructuredReceipt } from "./action-receipts.js";
 import type { ToolRegistry } from "../agent/tools/registry.js";
 import {
   MASKING_KEEP_RECENT_COUNT,
@@ -32,6 +33,8 @@ function isExempt(
   config: MaskingConfig,
   toolRegistry: ToolRegistry | undefined
 ): boolean {
+  if (hasStructuredReceipt(toolMsg)) return true;
+  if (toolRegistry?.getToolCategory(toolMsg.toolName) === "action") return true;
   if (config.keepErrorResults && toolMsg.isError) return true;
   if (toolRegistry && toolRegistry.getToolCategory(toolMsg.toolName) === "data-bearing")
     return true;

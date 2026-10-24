@@ -43,10 +43,3 @@ export function stripEnvelopePrefix(content: string): string {
 export function truncate(s: string, n: number): string {
   return s.length > n ? s.substring(0, n) + "..." : s;
 }
-
-/** Retained until the summary serializer migrates in context lot 3. */
-export function extractToolNames(message: Message): string[] {
-  return message.role === "assistant"
-    ? message.content.filter((block) => block.type === "toolCall").map((block) => block.name)
-    : [];
-}

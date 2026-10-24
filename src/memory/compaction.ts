@@ -1,5 +1,7 @@
 import type { Context, Message, TextContent } from "@earendil-works/pi-ai";
-import { truncate } from "../utils/pi-message.js";
+import { preserveActionReceipts, preserveUserRequirements } from "./action-receipts.js";
+import { estimateRequestTokens } from "../agent/context-budget.js";
+import { extractText, truncate } from "../utils/pi-message.js";
 import { appendToTranscript, flushTranscript } from "../session/transcript.js";
 import { randomUUID } from "crypto";
 import { writeSummaryToDailyLog } from "./daily-logs.js";
@@ -17,7 +19,6 @@ import {
   DEFAULT_CONTEXT_WINDOW,
   DEFAULT_MAX_SUMMARY_TOKENS,
   MEMORY_FLUSH_RECENT_MESSAGES,
-  CHARS_PER_TOKEN_ESTIMATE,
 } from "../constants/limits.js";
 
 const COMPACTION_PREFIX = "[Auto-compacted";
@@ -51,31 +52,7 @@ export const DEFAULT_COMPACTION_CONFIG: CompactionConfig = {
 const log = createLogger("Memory");
 
 function estimateContextTokens(context: Context): number {
-  let charCount = 0;
-
-  if (context.systemPrompt) {
-    charCount += context.systemPrompt.length;
-  }
-
-  for (const message of context.messages) {
-    if (message.role === "user") {
-      if (typeof message.content === "string") {
-        charCount += message.content.length;
-      } else if (Array.isArray(message.content)) {
-        for (const block of message.content) {
-          if (block.type === "text") charCount += block.text.length;
-        }
-      }
-    } else if (message.role === "assistant") {
-      for (const block of message.content) {
-        if (block.type === "text") {
-          charCount += block.text.length;
-        }
-      }
-    }
-  }
-
-  return Math.ceil(charCount / CHARS_PER_TOKEN_ESTIMATE);
+  return Math.ceil(estimateRequestTokens(context) * 1.2);
 }
 
 export function shouldFlushMemory(
@@ -111,7 +88,7 @@ function flushMemoryToDailyLog(context: Context): void {
     } else if (msg.role === "assistant") {
       const textBlocks = msg.content.filter((b): b is TextContent => b.type === "text");
       if (textBlocks.length > 0) {
-        const text = textBlocks[0].text || "";
+        const text = extractText(msg);
         summary.push(`- Assistant: ${truncate(text, 100)}`);
       }
     }
@@ -266,6 +243,10 @@ Unfinished work, blocked tasks, questions waiting for user response. Most urgent
       utilityModel,
     });
 
+    if (result.chunksProcessed === 0) {
+      log.warn("Compaction summary unavailable; retaining original context");
+      return context;
+    }
     log.info(`AI Summary: ${result.tokensUsed} tokens, ${result.chunksProcessed} chunks processed`);
 
     const summaryText = `${COMPACTION_PREFIX} ${oldMessages.length} messages]\n\n${result.summary}`;
@@ -276,25 +257,20 @@ Unfinished work, blocked tasks, questions waiting for user response. Most urgent
       timestamp: oldMessages[0]?.timestamp ?? Date.now(),
     };
 
-    return {
-      ...context,
-      messages: [summaryMessage, ...recentMessages],
-    };
+    return preserveActionReceipts(
+      preserveUserRequirements(
+        {
+          ...context,
+          messages: [summaryMessage, ...recentMessages],
+        },
+        context.messages
+      ),
+      context.messages
+    );
   } catch (error) {
     log.error({ err: error }, "AI summarization failed, using fallback");
 
-    const summaryText = `${COMPACTION_PREFIX}: ${oldMessages.length} earlier messages from this conversation]`;
-
-    const summaryMessage: Message = {
-      role: "user",
-      content: summaryText,
-      timestamp: oldMessages[0]?.timestamp ?? Date.now(),
-    };
-
-    return {
-      ...context,
-      messages: [summaryMessage, ...recentMessages],
-    };
+    return context;
   }
 }
 

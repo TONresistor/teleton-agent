@@ -1,3 +1,4 @@
+import { estimateTextTokens } from "@earendil-works/pi-ai/utils/estimate";
 import type Database from "better-sqlite3";
 import type { EmbeddingProvider } from "../embeddings/provider.js";
 import { HybridSearch, parseTemporalIntent, type HybridSearchResult } from "./hybrid.js";
@@ -44,12 +45,24 @@ export interface ContextOptions {
   currentMessageId?: string;
 }
 
+export interface ContextProvenance {
+  kind: "recent" | "knowledge" | "feed";
+  index: number;
+  id: string;
+  source: string;
+  chatId?: string;
+  authorId?: string | null;
+  timestamp?: number;
+  reference: string;
+  trust: "untrusted";
+}
+
 export interface Context {
   recentMessages: Array<{ role: string; content: string }>;
   relevantKnowledge: string[];
   relevantFeed: string[];
   estimatedTokens: number;
-  provenance?: unknown[];
+  provenance?: ContextProvenance[];
 }
 
 export class ContextBuilder {
@@ -106,7 +119,29 @@ export class ContextBuilder {
       maxRelevantChunks,
     });
 
-    const relevantKnowledge = reorderForEdges(searchResults.knowledge.map((result) => result.text));
+    const knowledgeResults = reorderForEdges(searchResults.knowledge);
+    const relevantKnowledge = knowledgeResults.map((result) => result.text);
+    const feedProvenance: Omit<ContextProvenance, "index">[] = [];
+    const feedMetadata = (result: HybridSearchResult): Omit<ContextProvenance, "index"> => {
+      const id = result.id.includes("\u001f")
+        ? result.id.split("\u001f").slice(1).join("\u001f")
+        : result.id;
+      const stored = this.db
+        .prepare(
+          "SELECT sender_id AS authorId, timestamp FROM tg_messages WHERE id = ? AND chat_id = ?"
+        )
+        .get(id, result.source) as { authorId?: string | null; timestamp?: number } | undefined;
+      return {
+        kind: "feed",
+        id,
+        source: result.source,
+        chatId: result.source,
+        authorId: stored?.authorId,
+        timestamp: stored?.timestamp ?? result.createdAt,
+        reference: `telegram:${result.source}:${id}`,
+        trust: "untrusted",
+      };
+    };
     const relevantFeed: string[] = [];
     if (includeFeedHistory) {
       const seenIds = new Set<string>();
@@ -120,27 +155,85 @@ export class ContextBuilder {
         relevantFeed.push(
           result.source === chatId ? text : `[From chat ${result.source}]: ${text}`
         );
+        feedProvenance.push(feedMetadata(result));
       }
 
       if (relevantFeed.length === 0 && recentTgMessages.length > 0) {
-        relevantFeed.push(
-          ...recentTgMessages
-            .filter((message) => message.text && message.text.length > 0)
-            .slice(-maxRelevantChunks)
-            .map((message) => `[${message.isFromAgent ? "Agent" : "User"}]: ${message.text}`)
-        );
+        for (const message of recentTgMessages
+          .filter((message) => message.text && message.text.length > 0)
+          .slice(-maxRelevantChunks)) {
+          relevantFeed.push(`[${message.isFromAgent ? "Agent" : "User"}]: ${message.text}`);
+          feedProvenance.push({
+            kind: "feed",
+            id: message.id,
+            source: message.chatId,
+            chatId: message.chatId,
+            authorId: message.senderId,
+            timestamp: message.timestamp,
+            reference: `telegram:${message.chatId}:${message.id}`,
+            trust: "untrusted",
+          });
+        }
       }
     }
 
-    const allText =
-      recentMessages.map((message) => message.content).join(" ") +
-      relevantKnowledge.join(" ") +
-      relevantFeed.join(" ");
+    const recentProvenance: Omit<ContextProvenance, "index">[] = recentTgMessages.map(
+      (message) => ({
+        kind: "recent",
+        id: message.id,
+        source: message.chatId,
+        chatId: message.chatId,
+        authorId: message.senderId,
+        timestamp: message.timestamp,
+        reference: `telegram:${message.chatId}:${message.id}`,
+        trust: "untrusted",
+      })
+    );
+    const knowledgeProvenance: Omit<ContextProvenance, "index">[] = knowledgeResults.map(
+      (result) => ({
+        kind: "knowledge",
+        id: result.id,
+        source: result.source,
+        timestamp: result.createdAt,
+        reference: `knowledge:${result.id}`,
+        trust: "untrusted",
+      })
+    );
+    const provenance = (): ContextProvenance[] => [
+      ...recentProvenance.map((meta, index) => ({ ...meta, index })),
+      ...knowledgeProvenance.map((meta, index) => ({ ...meta, index })),
+      ...feedProvenance.map((meta, index) => ({ ...meta, index })),
+    ];
+    const estimate = () =>
+      estimateTextTokens(
+        recentMessages.map((message) => message.content).join("\n") +
+          relevantKnowledge.join("\n") +
+          relevantFeed.join("\n") +
+          JSON.stringify(provenance())
+      );
+    const budget =
+      options.maxTokens === undefined ? Infinity : Math.max(0, Math.floor(options.maxTokens));
+    while (estimate() > budget) {
+      if (relevantFeed.length) {
+        relevantFeed.pop();
+        feedProvenance.pop();
+      } else if (relevantKnowledge.length) {
+        const oversized = relevantKnowledge.findIndex((text) => estimateTextTokens(text) > budget);
+        const removeIndex = oversized >= 0 ? oversized : relevantKnowledge.length - 1;
+        relevantKnowledge.splice(removeIndex, 1);
+        knowledgeProvenance.splice(removeIndex, 1);
+      } else if (recentMessages.length) {
+        recentMessages.shift();
+        recentProvenance.shift();
+      } else break;
+    }
     return {
       recentMessages,
       relevantKnowledge,
       relevantFeed,
-      estimatedTokens: Math.ceil(allText.length / 4),
+      estimatedTokens:
+        recentMessages.length + relevantKnowledge.length + relevantFeed.length ? estimate() : 0,
+      provenance: provenance(),
     };
   }
 

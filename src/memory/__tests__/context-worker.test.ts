@@ -57,6 +57,27 @@ describe("ContextBuilder worker retrieval", () => {
       maxRelevantChunks: 5,
     });
 
+    expect(context.provenance).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          kind: "recent",
+          chatId: "current",
+          id: "previous",
+          timestamp: 1,
+          trust: "untrusted",
+        }),
+        expect.objectContaining({
+          kind: "feed",
+          chatId: "other",
+          reference: "telegram:other:global",
+        }),
+        expect.objectContaining({
+          kind: "knowledge",
+          source: "memory",
+          reference: "knowledge:knowledge",
+        }),
+      ])
+    );
     expect(context.recentMessages).toEqual([{ role: "user", content: "Recent message" }]);
     expect(context.relevantFeed).toEqual(["Unique local", "[From chat other]: Unique global"]);
     expect(search).toHaveBeenCalledWith(
@@ -92,5 +113,45 @@ describe("ContextBuilder worker retrieval", () => {
     });
 
     expect(context.relevantFeed).toEqual(["historical fallback result"]);
+  });
+});
+
+describe("ContextBuilder retrieval budgets", () => {
+  it("drops oversized retrieved chunks and keeps source metadata inside the limit", async () => {
+    const db = new Database(":memory:");
+    ensureSchema(db);
+    try {
+      const embedder = {
+        id: "noop",
+        model: "noop",
+        dimensions: 0,
+        embedQuery: vi.fn(),
+        embedBatch: vi.fn(),
+      } as unknown as EmbeddingProvider;
+      const worker = {
+        search: vi.fn().mockResolvedValue({
+          knowledge: [
+            { id: "huge", text: "x".repeat(50_000), source: "file.md", score: 1 },
+            { id: "small", text: "fact", source: "other.md", score: 0.9 },
+          ],
+          currentChat: [],
+          otherChats: [],
+          timingsMs: {},
+        }),
+      } as unknown as VectorSearchWorkerClient;
+      const builder = new ContextBuilder(db, embedder, false, worker);
+      const result = await builder.buildContext({
+        query: "fact",
+        chatId: "current",
+        queryEmbedding: [1],
+        maxTokens: 100,
+        includeFeedHistory: false,
+      });
+      expect(result.estimatedTokens).toBeLessThanOrEqual(100);
+      expect(JSON.stringify(result)).not.toContain("x".repeat(100));
+      expect(result.provenance?.length).toBe(result.relevantKnowledge.length);
+    } finally {
+      db.close();
+    }
   });
 });

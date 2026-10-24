@@ -1,10 +1,6 @@
-import {
-  complete,
-  type Context,
-  type Message,
-  type TextContent,
-} from "@earendil-works/pi-ai/compat";
-import { extractText, extractToolNames, stripEnvelopePrefix } from "../utils/pi-message.js";
+import { type Context, type Message, type TextContent } from "@earendil-works/pi-ai/compat";
+import { completeUtility } from "../agent/attempt-usage.js";
+import { extractText, stripEnvelopePrefix } from "../utils/pi-message.js";
 import { getUtilityModel } from "../providers/model-resolver.js";
 import type { SupportedProvider } from "../config/providers.js";
 import {
@@ -74,12 +70,7 @@ export function splitMessagesByTokens(messages: Message[], maxChunkTokens: numbe
 }
 
 function extractMessageContent(message: Message): string {
-  if (message.role === "user") {
-    return typeof message.content === "string" ? message.content : "[complex content]";
-  } else if (message.role === "assistant") {
-    return extractText(message);
-  }
-  return "";
+  return formatMessagesForSummary([message]);
 }
 
 export function formatMessagesForSummary(messages: Message[]): string {
@@ -87,7 +78,7 @@ export function formatMessagesForSummary(messages: Message[]): string {
 
   for (const msg of messages) {
     if (msg.role === "user") {
-      const content = typeof msg.content === "string" ? msg.content : "[complex]";
+      const content = extractText(msg);
       const body = stripEnvelopePrefix(content);
       formatted.push(`User: ${body}`);
     } else if (msg.role === "assistant") {
@@ -95,12 +86,12 @@ export function formatMessagesForSummary(messages: Message[]): string {
       if (textBlocks.length > 0) {
         formatted.push(`Assistant: ${extractText(msg)}`);
       }
-      const toolNames = extractToolNames(msg);
-      if (toolNames.length > 0) {
-        formatted.push(`[Used tools: ${toolNames.join(", ")}]`);
-      }
+      const calls = msg.content.filter((block) => block.type === "toolCall");
+      if (calls.length) formatted.push(`[Tool calls: ${JSON.stringify(calls)}]`);
     } else if (msg.role === "toolResult") {
-      formatted.push(`[Tool result: ${msg.toolName}]`);
+      formatted.push(
+        `[Tool result: ${msg.toolName}, call: ${msg.toolCallId}, error: ${msg.isError}]\n${JSON.stringify(msg.content)}`
+      );
     }
   }
 
@@ -189,13 +180,17 @@ Be specific but concise. Preserve critical information.`;
       ],
     };
 
-    const response = await complete(model, context, {
-      apiKey: params.apiKey,
-      maxTokens,
-    });
+    const response = await completeUtility(
+      model,
+      context,
+      {
+        apiKey: params.apiKey,
+        maxTokens,
+      },
+      "summary"
+    );
 
-    const textContent = response.content.find((block) => block.type === "text");
-    const summary = textContent?.type === "text" ? textContent.text : "";
+    const summary = extractText(response);
     return summary.trim() || "Unable to generate summary.";
   } catch (error) {
     log.error({ err: error }, "Summarization error");
@@ -284,13 +279,17 @@ ${partialSummaries.map((s, i) => `Part ${i + 1}:\n${s}`).join("\n\n---\n\n")}`,
     ],
   };
 
-  const mergeResponse = await complete(model, mergeContext, {
-    apiKey: params.apiKey,
-    maxTokens: params.maxSummaryTokens ?? DEFAULT_SUMMARY_FALLBACK_TOKENS,
-  });
+  const mergeResponse = await completeUtility(
+    model,
+    mergeContext,
+    {
+      apiKey: params.apiKey,
+      maxTokens: params.maxSummaryTokens ?? DEFAULT_SUMMARY_FALLBACK_TOKENS,
+    },
+    "summary-merge"
+  );
 
-  const textContent = mergeResponse.content.find((block) => block.type === "text");
-  const merged = textContent?.type === "text" ? textContent.text : "";
+  const merged = extractText(mergeResponse);
 
   return {
     summary: merged.trim() || "Unable to merge summaries.",

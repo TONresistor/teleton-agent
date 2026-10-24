@@ -1,12 +1,15 @@
 import { writeFile, mkdir, readdir, readFile } from "fs/promises";
 import { mkdirSync, renameSync } from "fs";
 import { join } from "path";
-import { complete, type Context } from "@earendil-works/pi-ai/compat";
+import { type Context } from "@earendil-works/pi-ai/compat";
 import {
   summarizeViaClaude,
   summarizeWithFallback,
   formatMessagesForSummary,
 } from "../memory/ai-summarization.js";
+import { completeUtility } from "../agent/attempt-usage.js";
+import { extractText } from "../utils/pi-message.js";
+import { formatActionReceipts } from "../memory/action-receipts.js";
 import { getUtilityModel } from "../agent/client.js";
 import type { SupportedProvider } from "../config/providers.js";
 import { createLogger } from "../utils/logger.js";
@@ -55,13 +58,17 @@ Slug:`,
       ],
     };
 
-    const response = await complete(model, context, {
-      apiKey: params.apiKey,
-      maxTokens: SESSION_SLUG_MAX_TOKENS,
-    });
+    const response = await completeUtility(
+      model,
+      context,
+      {
+        apiKey: params.apiKey,
+        maxTokens: SESSION_SLUG_MAX_TOKENS,
+      },
+      "session-slug"
+    );
 
-    const textContent = response.content.find((block) => block.type === "text");
-    const slug = textContent?.type === "text" ? textContent.text.trim() : "";
+    const slug = extractText(response).trim();
 
     return (
       slug
@@ -142,6 +149,8 @@ export async function saveSessionMemory(params: {
 ## Session Summary
 
 ${summary}
+
+${formatActionReceipts(params.context.messages)}
 
 ## Context
 
