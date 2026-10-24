@@ -1,52 +1,49 @@
-/**
- * Truncates oversized tool results into a valid JSON summary.
- * Pure function — no side effects, no logging.
- */
-export function truncateToolResult(
-  result: { success: boolean; data?: unknown; error?: string },
-  maxSize: number
-): string {
-  const resultText = serializeToolResult(result);
-  if (resultText.length <= maxSize) return resultText;
-
-  const data = result.data as Record<string, unknown> | undefined;
-  if (data?.summary || data?.message) {
-    return JSON.stringify({
-      success: result.success,
-      data: {
-        summary: data.summary || data.message,
-        _truncated: true,
-        _originalSize: resultText.length,
-        _message: "Full data truncated. Use limit parameter for smaller results.",
-      },
-    });
-  }
-
-  // Build a valid JSON summary instead of raw-slicing (which breaks JSON)
-  const summarized: Record<string, unknown> = {
-    _truncated: true,
-    _originalSize: resultText.length,
-    _message: "Full data truncated. Use limit parameter for smaller results.",
-  };
-  if (data && typeof data === "object") {
-    for (const [key, value] of Object.entries(data)) {
-      if (Array.isArray(value)) {
-        summarized[key] = `[${value.length} items]`;
-      } else if (typeof value === "string" && value.length > 500) {
-        summarized[key] = value.slice(0, 500) + "...[truncated]";
-      } else {
-        summarized[key] = value;
-      }
-    }
-  }
-  return JSON.stringify({ success: result.success, data: summarized });
-}
-
-export function serializeToolResult(result: {
+/** Pure JSON projection. The full result is persisted by the caller before reduction. */
+interface SerializableToolResult {
   success: boolean;
   data?: unknown;
   error?: string;
-}): string {
+  execution?: unknown;
+}
+
+export function truncateToolResult(result: SerializableToolResult, maxSize: number): string {
+  const resultText = serializeToolResult(result);
+  if (resultText.length <= maxSize) return resultText;
+  const data =
+    result.data && typeof result.data === "object"
+      ? (result.data as Record<string, unknown>)
+      : undefined;
+  const receipt = {
+    success: result.success,
+    ...(result.execution !== undefined ? { execution: result.execution } : {}),
+    ...(result.error ? { error: result.error.slice(0, 500) } : {}),
+    data: {
+      _truncated: true,
+      _originalSize: resultText.length,
+      _message: "Full data truncated. Read the full artifact with tool_result_read.",
+      ...(data?.outcome !== undefined ? { outcome: data.outcome } : {}),
+      ...(data?.retryable !== undefined ? { retryable: data.retryable } : {}),
+      ...(data?._artifact ? { _artifact: data._artifact } : {}),
+    },
+  };
+  // The projection is bounded even for huge nested objects or summary fields.
+  // Execution receipts are mandatory and must never be silently discarded.
+  const base = serializeToolResult(receipt);
+  const summary = data?.summary ?? data?.message;
+  if (typeof summary !== "string") return base;
+  let length = Math.min(summary.length, Math.max(0, maxSize - base.length - 32));
+  while (length > 0) {
+    const candidate = serializeToolResult({
+      ...receipt,
+      data: { ...receipt.data, summary: summary.slice(0, length) },
+    });
+    if (candidate.length <= maxSize) return candidate;
+    length = Math.floor(length / 2);
+  }
+  return base;
+}
+
+export function serializeToolResult(result: SerializableToolResult): string {
   return JSON.stringify(result, (_key, value) =>
     typeof value === "bigint" ? value.toString() : value
   );

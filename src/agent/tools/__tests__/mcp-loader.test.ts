@@ -55,6 +55,7 @@ describe("MCP tool execution", () => {
       await vi.advanceTimersByTimeAsync(10_000);
       await expect(resultPromise).resolves.toEqual({
         success: true,
+        modelContent: [{ type: "text", text: "done" }],
         data: {
           _provenance: {
             source: "mcp",
@@ -62,7 +63,7 @@ describe("MCP tool execution", () => {
             trust: "untrusted",
             dataOnly: true,
           },
-          content: "done",
+          content: { isError: false, content: [{ type: "text", text: "done" }] },
         },
       });
       expect(sideEffectCompleted).toBe(true);
@@ -116,4 +117,51 @@ describe("MCP tool execution", () => {
       vi.useRealTimers();
     }
   });
+});
+
+it.each([
+  {
+    content: [{ type: "image", data: "AA==", mimeType: "image/png" }],
+    structuredContent: { receipt: "image-result" },
+  },
+  { content: [], structuredContent: { id: "structured-only", value: 42 } },
+  { content: [{ type: "resource_link", uri: "https://untrusted.invalid/item", name: "item" }] },
+  {
+    content: [{ type: "text", text: "caption" }],
+    structuredContent: { id: "text-plus-structured" },
+  },
+])("keeps typed MCP result content and structured data: %j", async (payload) => {
+  let executor!: (params: unknown) => Promise<unknown>;
+  const registry = {
+    registerPluginTools: vi.fn((_name, entries) => {
+      executor = entries[0].executor;
+      return entries.length;
+    }),
+  };
+  const client = {
+    listTools: vi.fn(async () => ({
+      tools: [{ name: "typed", inputSchema: { type: "object", properties: {} } }],
+    })),
+    callTool: vi.fn(async () => payload),
+  };
+  const fetch = vi
+    .spyOn(globalThis, "fetch")
+    .mockRejectedValue(new Error("No resource fetching allowed"));
+  try {
+    await registerMcpTools(
+      [{ serverName: "typed", client: client as never, scope: "admin-only" }],
+      registry as never
+    );
+    const result = (await executor({})) as {
+      success: boolean;
+      data: { content: unknown };
+      modelContent: unknown[];
+    };
+    expect(result.success).toBe(true);
+    expect(result.data.content).toEqual(payload);
+    if (payload.content.length) expect(result.modelContent).not.toEqual([]);
+    expect(fetch).not.toHaveBeenCalled();
+  } finally {
+    fetch.mockRestore();
+  }
 });

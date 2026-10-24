@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Durable turn admission, action receipts, response delivery fragments, model-attempt usage, and task-run history with reviewed recovery in the Operations and Tasks views.
+- Pre-migration SQLite backups and operator guidance for execution recovery and unresolved outcomes.
+
+### Changed
+
+- Require a verified admin or `allow_from` sender before agent preparation across DMs, groups, guest requests, and scheduled work. Authorized actors share global memory across chats.
+- Preserve action receipts and earlier user requirements during context recovery, and gate outgoing model payloads against the active model's estimated context budget.
+- Drain actual plugin executor, hook, and event work before resource cleanup; publish reloaded tools and hooks after initialization.
+
+### Fixed
+
+- Prevent interrupted or late model generations from starting tools or completing a turn; bound model waits and credential retries while retaining late usage receipts.
+- Keep incomplete or unknown scheduled work from releasing dependents, and preserve confirmed action outcomes when local receipt persistence fails.
+- Resume persisted response delivery without rerunning generation, apply delivery policies consistently, and split Telegram formatting without breaking entities.
+- Preserve all model text blocks, typed MCP results, and group messages arriving during a debounce flush.
+- Clear retry timeout handles after completion and drain accepted Telegram handlers before queue admission.
+
 ## [0.11.7] - 2026-10-23
 
 ### Added

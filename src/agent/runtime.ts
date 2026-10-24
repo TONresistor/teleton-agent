@@ -28,7 +28,7 @@ import { outcomeForStopReason } from "./execution-types.js";
 import {
   createUsageCollector,
   runWithUsageCollector,
-  
+  type ModelAttemptUsage,
   type UsageCollector,
 } from "./attempt-usage.js";
 import { addUsage, type UsageAccumulator } from "./runtime-utils.js";
@@ -225,8 +225,79 @@ export class AgentRuntime {
               deadlineAt: executionDeadline,
               signal: admission.signal,
             });
-            response = await runWithUsageCollector(collector, () =>
-              this.processCoordinatedMessage(runOptions, collector));
+            let generationFinished = false;
+            const accounted = new Map<string, UsageAccumulator>();
+            collector.onAttempt = (attempt: ModelAttemptUsage) => {
+              try {
+                persistModelAttempts(db, reservation.turnId, [attempt]);
+              } catch (error) {
+                log.error({ err: error }, "Unable to persist model attempt");
+              }
+              const total: UsageAccumulator = {
+                input: 0,
+                output: 0,
+                cacheRead: 0,
+                cacheWrite: 0,
+                totalCost: 0,
+              };
+              if (attempt.usage) addUsage(total, attempt.usage);
+              total.costIncomplete = attempt.incomplete;
+              const previous = accounted.get(attempt.attemptId);
+              const delta = {
+                input: total.input - (previous?.input ?? 0),
+                output: total.output - (previous?.output ?? 0),
+                cacheRead: total.cacheRead - (previous?.cacheRead ?? 0),
+                cacheWrite: total.cacheWrite - (previous?.cacheWrite ?? 0),
+                totalCost: total.totalCost - (previous?.totalCost ?? 0),
+                costIncomplete: attempt.incomplete,
+              };
+              accounted.set(attempt.attemptId, total);
+              accumulateTokenUsage(delta);
+              if (generationFinished) {
+                try {
+                  const key = opts.sessionKey ?? opts.chatId;
+                  const current = getSession(key);
+                  if (current)
+                    updateSession(key, {
+                      inputTokens:
+                        (current.inputTokens ?? 0) +
+                        delta.input +
+                        delta.cacheRead +
+                        delta.cacheWrite,
+                      outputTokens: (current.outputTokens ?? 0) + delta.output,
+                    });
+                  const aggregate: UsageAccumulator = {
+                    input: 0,
+                    output: 0,
+                    cacheRead: 0,
+                    cacheWrite: 0,
+                    totalCost: 0,
+                  };
+                  for (const entry of collector.attempts) {
+                    if (entry.usage) addUsage(aggregate, entry.usage);
+                    aggregate.costIncomplete ||= entry.incomplete;
+                  }
+                  db.prepare(
+                    `UPDATE agent_turn_traces SET input_tokens=?,output_tokens=?,total_cost=?,cost_incomplete=? WHERE id=?`
+                  ).run(
+                    aggregate.input + aggregate.cacheRead + aggregate.cacheWrite,
+                    aggregate.output,
+                    aggregate.totalCost,
+                    aggregate.costIncomplete ? 1 : 0,
+                    reservation.turnId
+                  );
+                } catch (error) {
+                  log.warn({ err: error }, "Late model usage could not update its projections");
+                }
+              }
+            };
+            try {
+              response = await runWithUsageCollector(collector, () =>
+                this.processCoordinatedMessage(runOptions, collector)
+              );
+            } finally {
+              generationFinished = true;
+            }
             // Generation is durable before any final response is published.
             completeTurnIngress(db, ingressKey, response);
           }
@@ -254,6 +325,7 @@ export class AgentRuntime {
           release?.();
         }
       },
+      admission
     );
   }
 
@@ -397,6 +469,7 @@ export class AgentRuntime {
     } finally {
       const total = collectUsage();
       if (
+        !collector.attempts.length &&
         (total.input ||
           total.output ||
           total.cacheRead ||

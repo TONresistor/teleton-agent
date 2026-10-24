@@ -10,6 +10,7 @@ import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 import { SSEClientTransport } from "@modelcontextprotocol/sdk/client/sse.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import { sanitizeForContext, sanitizeForPrompt } from "../../utils/sanitize.js";
+import { projectMcpContent, preserveMcpResult, type McpResultPayload } from "../mcp-content.js";
 import { wrapExternalToolData } from "./external-provenance.js";
 import type { Tool, ToolExecutor, ToolResult, ToolScope } from "./types.js";
 import type { ToolRegistry } from "./registry.js";
@@ -236,18 +237,24 @@ export async function registerMcpTools(
               );
               return {
                 success: false,
+                execution: { outcome: "failed" },
+                modelContent: projectMcpContent(result as McpResultPayload, true),
+                data: wrapExternalToolData(
+                  { source: "mcp", origin: conn.serverName, trust: "untrusted" },
+                  preserveMcpResult(result as McpResultPayload)
+                ),
                 error: errorText
                   ? `MCP reported an error (untrusted data): ${sanitizeForContext(errorText).slice(0, 2_000)}`
                   : "MCP tool returned error",
               };
             }
 
-            const text = extractText(result.content as Array<{ type: string; text?: string }>);
             return {
               success: true,
+              modelContent: projectMcpContent(result as McpResultPayload, true),
               data: wrapExternalToolData(
                 { source: "mcp", origin: conn.serverName, trust: "untrusted" },
-                sanitizeForContext(text)
+                preserveMcpResult(result as McpResultPayload)
               ),
             };
           } catch (innerError: unknown) {
@@ -257,11 +264,14 @@ export async function registerMcpTools(
                 error:
                   `MCP tool "${mcpTool.name}" exceeded its execution deadline. ` +
                   "Its remote outcome is unknown; do not retry automatically.",
+                execution: { outcome: "unknown" },
                 data: { outcome: "unknown", retryable: false },
               };
             }
             return {
               success: false,
+              execution: { outcome: "unknown" },
+              data: { outcome: "unknown", retryable: false },
               error: `MCP tool "${mcpTool.name}" failed: ${getErrorMessage(innerError)}`,
             };
           } finally {
