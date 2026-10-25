@@ -32,6 +32,7 @@
   "files": [
     "dist/",
     "bin/",
+    "patches/",
     "src/templates/"
   ],
   "scripts": {
@@ -64,6 +65,7 @@
     "audit:web": "npm --prefix web audit --audit-level=high",
     "check:runtime": "node scripts/check-runtime-contract.mjs",
     "prepublishOnly": "npm run build",
+    "postinstall": "patch-package --error-on-fail",
     "prepare": "husky"
   },
   "dependencies": {
@@ -88,6 +90,7 @@
     "hono-rate-limiter": "^0.5.4",
     "mediainfo.js": "^0.3.8",
     "ora": "^9.4.1",
+    "patch-package": "8.0.1",
     "pino": "^10.4.0",
     "pino-pretty": "^13.2.0",
     "qrcode-terminal": "^0.12.0",
@@ -97,14 +100,23 @@
     "yaml": "^2.9.1",
     "zod": "^4.6.7"
   },
+  "bundleDependencies": [
+    "@ton/core",
+    "@ton/crypto",
+    "@ton/ton"
+  ],
   "overrides": {
     "@aws-sdk/xml-builder": "3.972.19",
+    "@ton/ton": {
+      "zod": "$zod"
+    },
     "fast-xml-parser": "5.7.1",
     "axios": "1.20.0",
+    "body-parser": "2.4.0",
     "brace-expansion": "5.0.12",
     "esbuild": "0.28.1",
-    "fast-uri": "3.1.8",
-    "ip-address": "10.7.1",
+    "fast-uri": "3.1.9",
+    "ip-address": "10.7.4",
     "nanoid": "3.3.18",
     "sharp": "0.35.5"
   },

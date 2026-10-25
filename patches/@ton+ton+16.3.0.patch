@@ -1,0 +1,26 @@
+diff --git a/node_modules/@ton/ton/dist/client/api/HttpApi.js b/node_modules/@ton/ton/dist/client/api/HttpApi.js
+index 1efb591..dca96d9 100644
+--- a/node_modules/@ton/ton/dist/client/api/HttpApi.js
++++ b/node_modules/@ton/ton/dist/client/api/HttpApi.js
+@@ -103,7 +103,7 @@ const transaction = zod_1.z.object({
+     fee: zod_1.z.string(),
+     storage_fee: zod_1.z.string(),
+     other_fee: zod_1.z.string(),
+-    in_msg: zod_1.z.union([zod_1.z.undefined(), message]),
++    in_msg: zod_1.z.union([zod_1.z.undefined(), message]).optional(),
+     out_msgs: zod_1.z.array(message),
+ });
+ const getTransactions = zod_1.z.array(transaction);
+diff --git a/node_modules/@ton/ton/package.json b/node_modules/@ton/ton/package.json
+index b9078fc..7a80eb5 100644
+--- a/node_modules/@ton/ton/package.json
++++ b/node_modules/@ton/ton/package.json
+@@ -41,7 +41,7 @@
+     "dependencies": {
+         "axios": "^1.15.0",
+         "dataloader": "^2.0.0",
+-        "zod": "^3.21.4"
++        "zod": "^4.6.7"
+     },
+     "peerDependencies": {
+         "@ton/core": ">=0.63.0 <1.0.0",
