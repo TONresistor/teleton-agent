@@ -162,3 +162,36 @@ describe("Telegram tool preparation", () => {
     expectPreparedTools(mocks.stream.mock.calls[0][1]);
   });
 });
+
+describe("streamed think filtering", () => {
+  it.each([
+    [["public <thi", "nk>secret</th", "ink> after"], "public  after"],
+    [["<think>one</think>A<think>two</think>B"], "AB"],
+    [["before<think>never closed"], "before"],
+    [["before<thi"], "before"],
+    [["<think>", "secret"], ""],
+  ])("filters split and interrupted tags: %j", async (chunks, expected) => {
+    const message = assistantMessage();
+    message.content = [{ type: "text", text: chunks.join("") }];
+    mocks.stream.mockReturnValue({
+      async *[Symbol.asyncIterator]() {
+        for (const delta of chunks) yield { type: "text_delta", delta };
+      },
+      result: async () => message,
+    });
+    const streamed = streamWithContext(config, { context: { messages: [] } });
+    let text = "";
+    for await (const delta of streamed.textStream) text += delta;
+    expect(text).toBe(expected);
+    expect((await streamed.result).text).toBe(expected);
+  });
+
+  it("keeps filter state isolated between requests", async () => {
+    const { createThinkFilter } = await import("../../utils/pi-message.js");
+    const first = createThinkFilter();
+    const second = createThinkFilter();
+    expect(first.push("<think>secret")).toBe("");
+    expect(second.push("public")).toBe("public");
+    expect(first.push("</think>first")).toBe("first");
+  });
+});

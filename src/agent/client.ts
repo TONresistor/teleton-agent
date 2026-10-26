@@ -17,7 +17,7 @@ import {
   type PreparedModelRequest,
 } from "./model-request.js";
 import { isSilentReply } from "../constants/tokens.js";
-import { extractText } from "../utils/pi-message.js";
+import { createThinkFilter, extractText } from "../utils/pi-message.js";
 
 // Model resolution + provider model registration live in the neutral providers/
 // layer so non-agent consumers (e.g. memory) can resolve models without importing
@@ -54,8 +54,6 @@ export interface ChatResponse {
   context: Context;
 }
 
-const THINK_RE = /<think>[\s\S]*?<\/think>/g;
-
 /**
  * Shared post-processing for both complete() and stream() responses: strip
  * <think> blocks (Mistral, local models, etc.), persist the transcript, extract the
@@ -66,11 +64,11 @@ function finalizeResponse(
   context: Context,
   options: ChatOptions
 ): ChatResponse {
+  const filter = createThinkFilter();
   for (const block of response.content) {
-    if (block.type === "text" && block.text.includes("<think>")) {
-      block.text = block.text.replace(THINK_RE, "").trim();
-    }
+    if (block.type === "text") block.text = filter.push(block.text);
   }
+  filter.end();
 
   const text = extractText(response);
 
@@ -167,15 +165,18 @@ export function streamWithContext(config: AgentConfig, options: ChatOptions): St
 
   // Transform event stream into a simple text delta async iterable
   async function* textDeltas(): AsyncIterable<string> {
+    const filter = createThinkFilter();
     for await (const event of eventStream) {
       if (event.type === "text_delta" && event.delta) {
-        yield event.delta;
+        const visible = filter.push(event.delta);
+        if (visible) yield visible;
       }
       // Stop yielding text when tool calls start — the response needs full processing
       if (event.type === "toolcall_start") {
-        return;
+        break;
       }
     }
+    filter.end();
   }
 
   // Result promise: wait for the stream to complete and build ChatResponse
