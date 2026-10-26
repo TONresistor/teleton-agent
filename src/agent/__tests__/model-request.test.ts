@@ -64,6 +64,29 @@ describe("model request preparation", () => {
     }
   });
 
+  it("identifies teleton-agent in OpenRouter request headers", async () => {
+    const request = prepareModelRequest(
+      AgentConfigSchema.parse({
+        provider: "openrouter",
+        model: "example/brand-new",
+        api_key: "test-key",
+      }),
+      { context: { messages: [{ role: "user", content: "test", timestamp: 1 }] } }
+    );
+    const fetch = vi
+      .fn<typeof globalThis.fetch>()
+      .mockResolvedValue(
+        new Response("data: [DONE]\n\n", { headers: { "Content-Type": "text/event-stream" } })
+      );
+    await complete(request.model, request.context, { ...request.options, fetch });
+
+    expect(fetch).toHaveBeenCalledOnce();
+    const headers = new Headers(fetch.mock.calls[0]?.[1]?.headers);
+    expect(headers.get("User-Agent")).toBe("teleton-agent");
+    expect(headers.get("X-OpenRouter-Title")).toBe("teleton-agent");
+    expect(headers.get("HTTP-Referer")).toBe("https://github.com/TONresistor/teleton-agent");
+  });
+
   it("forwards custom OpenRouter IDs and tools without optional sampling parameters", async () => {
     const request = prepareModelRequest(
       AgentConfigSchema.parse({

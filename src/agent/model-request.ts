@@ -172,6 +172,13 @@ export function prepareModelRequest(
     context,
     finalizeUsage: usageTracker?.apply,
     options: {
+      identity: {
+        userAgent: { custom: "teleton-agent" },
+        attribution: {
+          name: "teleton-agent",
+          url: "https://github.com/TONresistor/teleton-agent",
+        },
+      },
       ...(usageTracker && { fetch: usageTracker.fetch }),
       apiKey: getEffectiveApiKey(provider, config.api_key),
       maxTokens: request.maxTokens ?? config.max_tokens,
