@@ -93,15 +93,17 @@ export function classifyLlmError(errorMessage?: string): {
 
 /**
  * Parse a Retry-After hint (in seconds) from a provider error string, if present.
- * Mirrors the precedent in flood-retry.ts. Returns milliseconds (capped at 60s), or null.
+ * Returns milliseconds; the turn deadline decides whether the full wait fits.
  */
 export function parseRetryAfterMs(errorMessage?: string): number | null {
   if (!errorMessage) return null;
-  const match = errorMessage.match(/retry[-\s]?after[:\s]+(\d+)/i);
+  const match =
+    errorMessage.match(/retry[-\s]?after[:\s]+(\d+(?:\.\d+)?)/i) ??
+    errorMessage.match(/"retryDelay"\s*:\s*"(\d+(?:\.\d+)?)s"/i);
   if (!match) return null;
   const seconds = Number(match[1]);
   if (!Number.isFinite(seconds) || seconds <= 0) return null;
-  return Math.min(seconds * 1000, 60_000);
+  return seconds * 1000;
 }
 
 export function isTrivialMessage(text: string): boolean {

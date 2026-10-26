@@ -1,3 +1,4 @@
+import { waitForRetry } from "../../utils/fetch.js";
 import type {
   AssistantMessage,
   Context,
@@ -126,6 +127,9 @@ export interface LlmErrorContext {
   provider: SupportedProvider;
   processStartTime: number;
   userMsg: UserMessage;
+  retryAfterMs?: number;
+  signal?: AbortSignal;
+  deadline?: number;
 }
 
 /** Classify an LLM failure and either recover its context or throw a terminal error. */
@@ -184,12 +188,13 @@ export async function recoverLlmError(
     }
     retry.rateLimitRetries++;
     if (retry.rateLimitRetries <= RATE_LIMIT_MAX_RETRIES) {
-      const base = parseRetryAfterMs(errorMsg) ?? 1000 * 2 ** (retry.rateLimitRetries - 1);
+      const base =
+        ctx.retryAfterMs ?? parseRetryAfterMs(errorMsg) ?? 1000 * 2 ** (retry.rateLimitRetries - 1);
       const delay = base + Math.floor(Math.random() * 500);
       log.warn(
         `Rate limited, retrying in ${delay}ms (attempt ${retry.rateLimitRetries}/${RATE_LIMIT_MAX_RETRIES})...`
       );
-      await new Promise((resolve) => setTimeout(resolve, delay));
+      await waitForRetry(delay, ctx.signal, ctx.deadline);
       return { session, context };
     }
     log.error(`Rate limited after ${RATE_LIMIT_MAX_RETRIES} retries: ${errorMsg}`);
@@ -201,11 +206,13 @@ export async function recoverLlmError(
   if (errorClass.kind === "server_error") {
     retry.serverErrorRetries++;
     if (retry.serverErrorRetries <= SERVER_ERROR_MAX_RETRIES) {
-      const delay = 2000 * 2 ** (retry.serverErrorRetries - 1) + Math.floor(Math.random() * 500);
+      const delay =
+        (ctx.retryAfterMs ?? 2000 * 2 ** (retry.serverErrorRetries - 1)) +
+        Math.floor(Math.random() * 500);
       log.warn(
         `Server error, retrying in ${delay}ms (attempt ${retry.serverErrorRetries}/${SERVER_ERROR_MAX_RETRIES})...`
       );
-      await new Promise((resolve) => setTimeout(resolve, delay));
+      await waitForRetry(delay, ctx.signal, ctx.deadline);
       return { session, context };
     }
     log.error(`Server error after ${SERVER_ERROR_MAX_RETRIES} retries: ${errorMsg}`);

@@ -52,6 +52,7 @@ export interface ChatResponse {
   message: AssistantMessage;
   text: string;
   context: Context;
+  retryAfterMs?: number;
 }
 
 /**
@@ -143,7 +144,10 @@ export async function chatWithContext(
       : await complete(request.model, request.context, request.options);
   const response = await retryAfterCredentialRefresh(request, initialResponse);
   request.finalizeUsage?.(response);
-  return finalizeResponse(response, request.context, options);
+  return {
+    ...finalizeResponse(response, request.context, options),
+    retryAfterMs: request.retryAfterMs?.(),
+  };
 }
 
 export interface StreamResult {
@@ -184,7 +188,10 @@ export function streamWithContext(config: AgentConfig, options: ChatOptions): St
     const initialResponse = await eventStream.result();
     const response = await retryAfterCredentialRefresh(request, initialResponse);
     request.finalizeUsage?.(response);
-    return finalizeResponse(response, request.context, options);
+    return {
+      ...finalizeResponse(response, request.context, options),
+      retryAfterMs: request.retryAfterMs?.(),
+    };
   })();
 
   return { textStream: textDeltas(), result: resultPromise };

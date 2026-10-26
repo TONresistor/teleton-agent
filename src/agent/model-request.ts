@@ -1,3 +1,4 @@
+import { createRetryAfterTracker } from "../utils/fetch.js";
 import { thinkingBudgetForLevel } from "@earendil-works/pi-ai/api/simple-options";
 import {
   usesGoogleThinkingLevel,
@@ -44,6 +45,7 @@ export interface PreparedModelRequest {
   context: Context;
   options: ProviderStreamOptions;
   finalizeUsage?: (message: AssistantMessage) => void;
+  retryAfterMs?: () => number | undefined;
 }
 
 /** Resolve the effective API key for a provider (local/gocoon need no real key). */
@@ -203,11 +205,17 @@ export function prepareModelRequest(
       ? createOpenRouterUsageTracker(isCustomOpenRouterModel(model))
       : undefined;
 
+  const supportsCustomFetch =
+    !hasApi(model, "google-generative-ai") && !hasApi(model, "google-vertex");
+  const retryTracker = supportsCustomFetch
+    ? createRetryAfterTracker(usageTracker?.fetch)
+    : undefined;
   return {
     provider,
     model,
     context,
     finalizeUsage: usageTracker?.apply,
+    retryAfterMs: retryTracker?.retryAfterMs,
     options: {
       identity: {
         userAgent: { custom: "teleton-agent" },
@@ -216,7 +224,8 @@ export function prepareModelRequest(
           url: "https://github.com/TONresistor/teleton-agent",
         },
       },
-      ...(usageTracker && { fetch: usageTracker.fetch }),
+      ...(retryTracker && { fetch: retryTracker.fetch }),
+      maxRetries: 0,
       apiKey: getEffectiveApiKey(provider, config.api_key),
       maxTokens,
       ...(!isCustomOpenRouterModel(model) &&

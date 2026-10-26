@@ -144,4 +144,24 @@ describe("OpenRouter reported cost", () => {
     expect(text).toBe("Hello");
     expect((await stream.result).message.usage.cost.total).toBe(0.02);
   });
+  it("captures error Retry-After through the billing fetch and clears it on success", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi
+        .fn()
+        .mockResolvedValueOnce(
+          new Response(JSON.stringify({ error: { message: "Too many requests" } }), {
+            status: 429,
+            headers: { "Content-Type": "application/json", "Retry-After": "30" },
+          })
+        )
+        .mockImplementationOnce(async () => response())
+    );
+    const limited = await chatWithContext(config, { context });
+    expect(limited.message.stopReason).toBe("error");
+    expect(limited.retryAfterMs).toBeGreaterThan(29000);
+    const success = await chatWithContext(config, { context });
+    expect(success.retryAfterMs).toBeUndefined();
+    expect(success.message.usage.cost.total).toBe(0.02);
+  });
 });

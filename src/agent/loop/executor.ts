@@ -163,6 +163,9 @@ export async function executeAgentLoop(
             provider: activeProvider,
             processStartTime,
             userMsg,
+            retryAfterMs: response.retryAfterMs,
+            signal: providerSignal,
+            deadline: processStartTime + maxDurationMs,
           }
         );
         session = recovered.session;
@@ -170,6 +173,7 @@ export async function executeAgentLoop(
         iteration--;
         continue;
       } catch (error) {
+        if (providerSignal.aborted || Date.now() - processStartTime >= maxDurationMs) throw error;
         const previousProvider = activeProvider;
         const previousModel = activeAgentConfig.model;
         const fallback = resolveProviderFallback(

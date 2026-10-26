@@ -3,6 +3,11 @@ import { complete } from "@earendil-works/pi-ai/compat";
 import { AgentConfigSchema } from "../../config/schema.js";
 import { prepareModelRequest } from "../model-request.js";
 
+vi.mock("../../providers/codex-credentials.js", () => ({
+  getCodexApiKey: (fallback: string) => fallback,
+  refreshCodexApiKey: async () => null,
+}));
+
 describe("model request preparation", () => {
   it.each([
     ["anthropic", "claude-sonnet-5-5", "low", "low", "messages.1.output_config.effort"],
