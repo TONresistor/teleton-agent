@@ -7,7 +7,8 @@ import {
   summarizeWithFallback,
   formatMessagesForSummary,
 } from "../memory/ai-summarization.js";
-import { getUtilityModel, getOutputTokenBudget } from "../providers/model-resolver.js";
+import { getUtilityModel } from "../agent/client.js";
+import { getOutputTokenBudget } from "../providers/model-resolver.js";
 import type { SupportedProvider } from "../config/providers.js";
 import { createLogger } from "../utils/logger.js";
 import {
