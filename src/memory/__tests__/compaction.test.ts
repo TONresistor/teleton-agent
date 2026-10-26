@@ -1,20 +1,39 @@
-import type { Context, Message } from "@earendil-works/pi-ai";
+import type { Context, Message, AssistantMessage } from "@earendil-works/pi-ai";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const mocks = vi.hoisted(() => ({
   transcripts: new Map<string, Message[]>(),
   summarize: vi.fn(),
+  resetSession: vi.fn(),
+  archiveTranscript: vi.fn(),
+  root: "",
+  persistence: undefined as typeof import("../../session/transcript.js") | undefined,
 }));
 
 vi.mock("../../session/transcript.js", () => ({
   appendToTranscript: (sessionId: string, message: Message) => {
     const transcript = mocks.transcripts.get(sessionId) ?? [];
     transcript.push(message);
+    mocks.persistence?.appendToTranscript(sessionId, message);
     mocks.transcripts.set(sessionId, transcript);
   },
-  readTranscript: (sessionId: string) => [...(mocks.transcripts.get(sessionId) ?? [])],
-  flushTranscript: vi.fn().mockResolvedValue(undefined),
+  readTranscript: (sessionId: string) =>
+    mocks.persistence?.readTranscript(sessionId) ?? [...(mocks.transcripts.get(sessionId) ?? [])],
+  flushTranscript: (sessionId: string) =>
+    mocks.persistence?.flushTranscript(sessionId) ?? Promise.resolve(),
+  archiveTranscript: mocks.archiveTranscript,
 }));
+
+vi.mock("../../workspace/paths.js", async () => {
+  const actual = await vi.importActual<typeof import("../../workspace/paths.js")>(
+    "../../workspace/paths.js"
+  );
+  const { mkdtempSync } = await import("node:fs");
+  const { tmpdir } = await import("node:os");
+  if (!mocks.root) mocks.root = mkdtempSync(`${tmpdir()}/teleton-compaction-`);
+  return { ...actual, TELETON_ROOT: mocks.root };
+});
+vi.mock("../../session/store.js", () => ({ resetSession: mocks.resetSession }));
 
 vi.mock("../ai-summarization.js", () => ({
   summarizeWithFallback: mocks.summarize,
@@ -304,5 +323,146 @@ describe("summary adapter responses", () => {
     expect(urls.slice(0, 3).every((url) => url.startsWith("https://first.test/"))).toBe(true);
     expect(urls.slice(3).every((url) => url.startsWith("https://second.test/"))).toBe(true);
     expect(urls).toHaveLength(6);
+  });
+  it("invalidates only stale context estimates through compaction, disk reload and the agent loop", async () => {
+    const { AgentConfigSchema } = await import("../../config/schema.js");
+    const { compactAndSaveTranscript } = await import("../compaction.js");
+    const actualSummary =
+      await vi.importActual<typeof import("../ai-summarization.js")>("../ai-summarization.js");
+    mocks.summarize.mockReset().mockImplementation(actualSummary.summarizeWithFallback);
+    mocks.resetSession.mockClear();
+    mocks.archiveTranscript.mockClear();
+    mocks.persistence = await vi.importActual<typeof import("../../session/transcript.js")>(
+      "../../session/transcript.js"
+    );
+    const config = AgentConfigSchema.parse({
+      provider: "anthropic",
+      api_key: "test-key",
+      reasoning_effort: "none",
+    });
+    const measured: AssistantMessage = {
+      role: "assistant",
+      content: [{ type: "toolCall", id: "receipt-call", name: "lookup", arguments: {} }],
+      api: "anthropic-messages",
+      provider: "anthropic",
+      model: config.model,
+      timestamp: 2000,
+      stopReason: "toolUse",
+      usage: {
+        input: 195000,
+        output: 1000,
+        cacheRead: 0,
+        cacheWrite: 0,
+        totalTokens: 196000,
+        cost: { input: 0.4, output: 0.1, cacheRead: 0, cacheWrite: 0, total: 0.5 },
+      },
+    };
+    const user = { role: "user" as const, content: "Continue using the receipt", timestamp: 3000 };
+    const original: Context = {
+      messages: [
+        { role: "user", content: "historical decisions ".repeat(10000), timestamp: 1000 },
+        measured,
+        {
+          role: "toolResult",
+          toolCallId: "receipt-call",
+          toolName: "lookup",
+          content: [{ type: "text", text: "RECEIPT_PRESERVED" }],
+          isError: false,
+          timestamp: 2001,
+        },
+        user,
+      ],
+    };
+    const before = JSON.stringify(original);
+    const fetch = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async () => summaryResponse(["DECISIONS_PRESERVED"]));
+    try {
+      const sessionId = await compactAndSaveTranscript(
+        "old-session",
+        original,
+        { enabled: true, keepRecentMessages: 3, maxTokens: 100000 },
+        "test-key"
+      );
+      expect(sessionId).not.toBe("old-session");
+      expect(JSON.stringify(original)).toBe(before);
+      await mocks.persistence.flushTranscript(sessionId);
+      // Reload the real transcript module to bypass its in-memory cache.
+      vi.resetModules();
+      mocks.persistence = await vi.importActual<typeof import("../../session/transcript.js")>(
+        "../../session/transcript.js"
+      );
+      const { loadContextFromTranscript, chatWithContext } = await import("../../agent/client.js");
+      const { getProviderModel, getOutputTokenBudget } =
+        await import("../../providers/model-resolver.js");
+      const { executeAgentLoop } = await import("../../agent/loop/executor.js");
+      const reloaded = loadContextFromTranscript(sessionId);
+      const retained = reloaded.messages.find(
+        (message) => message.role === "assistant"
+      ) as AssistantMessage;
+      expect(retained.usage).toEqual(measured.usage);
+      expect(retained.timestamp).toBe(2000);
+      expect(reloaded.messages[0].timestamp).toBe(1000);
+      expect(retained).toHaveProperty("contextUsageInvalidated", true);
+      expect(JSON.stringify(reloaded)).toContain("RECEIPT_PRESERVED");
+      expect(JSON.stringify(reloaded)).toContain("DECISIONS_PRESERVED");
+      const model = getProviderModel("anthropic", config.model);
+      expect(getOutputTokenBudget(model, reloaded, 4096)).toBe(4096);
+      const session = { sessionId, chatId: "test", createdAt: 1, updatedAt: 1, messageCount: 0 };
+      const loop = await executeAgentLoop(
+        {
+          turnId: "test-turn",
+          chatId: "test",
+          effectiveIsGroup: false,
+          processStartTime: Date.now(),
+          session,
+          context: reloaded,
+          systemPrompt: "system",
+          tools: undefined,
+          userMsg: user,
+          provider: "anthropic",
+          requestedModel: config.model,
+          resolvedModel: config.model,
+          endpointFingerprint: "test",
+          sessionKey: "test",
+        },
+        { chatId: "test", userMessage: user.content },
+        { progress: vi.fn(), updateTarget: vi.fn() } as unknown as Parameters<
+          typeof executeAgentLoop
+        >[2],
+        {
+          config: { agent: config } as Parameters<typeof executeAgentLoop>[3]["config"],
+          toolRegistry: null,
+        }
+      );
+      expect(loop.stopReason).toBe("completed");
+      expect(loop.session.sessionId).toBe(sessionId);
+      expect(JSON.stringify(loop.context)).toContain("RECEIPT_PRESERVED");
+      expect(mocks.resetSession).not.toHaveBeenCalled();
+      expect(mocks.archiveTranscript).not.toHaveBeenCalled();
+      expect(fetch).toHaveBeenCalledTimes(2);
+      // Fresh measurements still bound the budget; genuine oversized input still fails locally.
+      expect(
+        getOutputTokenBudget(
+          model,
+          {
+            messages: [
+              ...reloaded.messages,
+              { ...measured, content: [], stopReason: "stop", timestamp: Date.now() },
+            ],
+          },
+          4096
+        )
+      ).toBe(0);
+      const overflow = await chatWithContext(config, {
+        context: { systemPrompt: "x ".repeat(500000), messages: [] },
+      });
+      expect(overflow.message.stopReason).toBe("error");
+      expect(overflow.message.errorMessage).toContain("Context length exceeded");
+      expect(fetch).toHaveBeenCalledTimes(2);
+      await mocks.persistence.flushAllTranscripts();
+    } finally {
+      mocks.persistence = undefined;
+    }
   });
 });

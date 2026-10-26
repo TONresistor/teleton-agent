@@ -369,7 +369,26 @@ export function getOutputTokenBudget(
     (sum, message) => sum + estimateMessageTokens(message),
     0
   );
-  const contextTokens = Math.max(estimateContextTokens(transcript).tokens, staticTokens);
+  const estimationTranscript = {
+    messages: transcript.messages.map((message) =>
+      message.role === "assistant" &&
+      "contextUsageInvalidated" in message &&
+      message.contextUsageInvalidated === true
+        ? {
+            ...message,
+            usage: {
+              ...message.usage,
+              input: 0,
+              output: 0,
+              cacheRead: 0,
+              cacheWrite: 0,
+              totalTokens: 0,
+            },
+          }
+        : message
+    ),
+  };
+  const contextTokens = Math.max(estimateContextTokens(estimationTranscript.messages).tokens, staticTokens);
   const available =
     model.contextWindow > 0 ? model.contextWindow - contextTokens - 4096 : model.maxTokens;
   return Math.max(0, Math.floor(Math.min(requested, model.maxTokens, available)));

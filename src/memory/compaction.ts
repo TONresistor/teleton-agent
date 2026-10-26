@@ -280,7 +280,15 @@ Unfinished work, blocked tasks, questions waiting for user response. Most urgent
 
     return {
       ...context,
-      messages: [summaryMessage, ...recentMessages],
+      messages: [
+        summaryMessage,
+        ...recentMessages.map((message) =>
+          message.role === "assistant"
+            ? // Billing and timestamps remain intact; this usage covered the removed prefix.
+              { ...message, contextUsageInvalidated: true }
+            : message
+        ),
+      ],
     };
   } catch (error) {
     log.error({ err: error }, "AI summarization failed, keeping original context");
