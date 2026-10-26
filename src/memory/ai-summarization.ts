@@ -201,8 +201,7 @@ Be specific but concise. Preserve critical information.`;
     ) {
       throw new Error(response.errorMessage || `Summary response ${response.stopReason}`);
     }
-    const textContent = response.content.find((block) => block.type === "text");
-    const summary = textContent?.type === "text" ? textContent.text : "";
+    const summary = extractText(response);
     if (!summary.trim()) throw new Error("Model returned an empty summary");
     return summary.trim();
   } catch (error) {
@@ -304,8 +303,7 @@ ${partialSummaries.map((s, i) => `Part ${i + 1}:\n${s}`).join("\n\n---\n\n")}`,
   ) {
     throw new Error(mergeResponse.errorMessage || `Summary merge ${mergeResponse.stopReason}`);
   }
-  const textContent = mergeResponse.content.find((block) => block.type === "text");
-  const merged = textContent?.type === "text" ? textContent.text : "";
+  const merged = extractText(mergeResponse);
   if (!merged.trim()) throw new Error("Model returned an empty merged summary");
 
   return {

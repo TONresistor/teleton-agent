@@ -132,13 +132,27 @@ function summaryResponse(texts: string[], stop = "end_turn"): Response {
       },
     },
   ];
-  texts.forEach((text, index) =>
+  texts.forEach((text, index) => {
+    if (index > 0)
+      events.push(
+        {
+          type: "content_block_start",
+          index: index + 100,
+          content_block: { type: "thinking", thinking: "", signature: "test" },
+        },
+        {
+          type: "content_block_delta",
+          index: index + 100,
+          delta: { type: "thinking_delta", thinking: "private reasoning" },
+        },
+        { type: "content_block_stop", index: index + 100 }
+      );
     events.push(
       { type: "content_block_start", index, content_block: { type: "text", text: "" } },
       { type: "content_block_delta", index, delta: { type: "text_delta", text } },
       { type: "content_block_stop", index }
-    )
-  );
+    );
+  });
   events.push(
     { type: "message_delta", delta: { stop_reason: stop }, usage: { output_tokens: 5 } },
     { type: "message_stop" }
@@ -183,4 +197,19 @@ describe("summary adapter responses", () => {
       })
     ).rejects.toThrow("length");
   });
+  it.each([false, true])(
+    "keeps ordered text blocks but not reasoning (merge: %s)",
+    async (merge) => {
+      const actual =
+        await vi.importActual<typeof import("../ai-summarization.js")>("../ai-summarization.js");
+      vi.spyOn(globalThis, "fetch").mockImplementation(async () =>
+        summaryResponse(["FIRST", "SECOND"])
+      );
+      const params = { messages: context("source").messages, apiKey: "test-key" };
+      const summary = merge
+        ? (await actual.summarizeInChunks({ ...params, maxChunkTokens: 1 })).summary
+        : await actual.summarizeViaClaude(params);
+      expect(summary).toBe("FIRST\nSECOND");
+    }
+  );
 });
