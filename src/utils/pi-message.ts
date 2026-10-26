@@ -51,7 +51,11 @@ export function truncate(s: string, n: number): string {
 }
 
 /** Per-response filter: retain possible tag prefixes across stream chunks. */
-export function createThinkFilter(): { push(text: string): string; end(): string } {
+export function createThinkFilter(): {
+  push(text: string): string;
+  flushPublic(): string;
+  end(completed?: boolean): string;
+} {
   let pending = "";
   let hidden = false;
   return {
@@ -75,10 +79,17 @@ export function createThinkFilter(): { push(text: string): string; end(): string
       }
       return visible;
     },
-    end() {
-      // An unclosed thinking region or tag prefix must never reach the user.
+    flushPublic() {
+      if (hidden) return "";
+      const suffix = pending;
       pending = "";
-      return "";
+      return suffix;
+    },
+    end(completed = true) {
+      // Incomplete responses discard pending prefixes; hidden content is never flushed.
+      const suffix = completed && !hidden ? pending : "";
+      pending = "";
+      return suffix;
     },
   };
 }

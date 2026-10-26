@@ -11,12 +11,12 @@ vi.mock("../../session/transcript.js", () => ({
   readTranscript: () => [],
 }));
 
-function response(cost: unknown = 0.02) {
+function response(cost: unknown = 0.02, fragments = ["Hello"]) {
   const chunks = [
-    {
+    ...fragments.map((content) => ({
       id: "gen-test",
-      choices: [{ index: 0, delta: { role: "assistant", content: "Hello" }, finish_reason: null }],
-    },
+      choices: [{ index: 0, delta: { role: "assistant", content }, finish_reason: null }],
+    })),
     {
       id: "gen-test",
       choices: [{ index: 0, delta: {}, finish_reason: "stop" }],
@@ -164,4 +164,27 @@ describe("OpenRouter reported cost", () => {
     expect(success.retryAfterMs).toBeUndefined();
     expect(success.message.usage.cost.total).toBe(0.02);
   });
+  it.each([false, true])(
+    "preserves public suffixes through the real adapter and transcript (stream: %s)",
+    async (streaming) => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async () => response(0.02, ["public <thi", "nk>secret</th", "ink> operator <"]))
+      );
+      const options = { context, sessionId: "real-suffix", persistTranscript: true };
+      let result;
+      if (streaming) {
+        const stream = streamWithContext(config, options);
+        let draft = "";
+        for await (const delta of stream.textStream) draft += delta;
+        expect(draft).toBe("public  operator <");
+        result = await stream.result;
+      } else result = await chatWithContext(config, options);
+      expect(result.text).toBe("public  operator <");
+      expect(mocks.appendToTranscript).toHaveBeenCalledWith(
+        "real-suffix",
+        expect.objectContaining({ content: [{ type: "text", text: "public  operator <" }] })
+      );
+    }
+  );
 });

@@ -168,7 +168,9 @@ describe("streamed think filtering", () => {
     [["public <thi", "nk>secret</th", "ink> after"], "public  after"],
     [["<think>one</think>A<think>two</think>B"], "AB"],
     [["before<think>never closed"], "before"],
-    [["before<thi"], "before"],
+    [["before<thi"], "before<thi"],
+    [["operator <"], "operator <"],
+    [["literal <th"], "literal <th"],
     [["<think>", "secret"], ""],
   ])("filters split and interrupted tags: %j", async (chunks, expected) => {
     const message = assistantMessage();
@@ -194,4 +196,68 @@ describe("streamed think filtering", () => {
     expect(second.push("public")).toBe("public");
     expect(first.push("</think>first")).toBe("first");
   });
+  it.each([false, true])(
+    "preserves ordered public suffixes in the final reply and transcript (stream: %s)",
+    async (streaming) => {
+      const message = assistantMessage();
+      message.content = [
+        { type: "text", text: "operator <" },
+        { type: "text", text: "literal <th" },
+      ];
+      mocks.appendToTranscript.mockClear();
+      mocks.complete.mockResolvedValue(message);
+      mocks.stream.mockReturnValue({
+        async *[Symbol.asyncIterator]() {
+          for (const [contentIndex, text] of ["operator <", "literal <th"].entries()) {
+            yield { type: "text_start", contentIndex };
+            yield { type: "text_delta", contentIndex, delta: text };
+          }
+        },
+        result: async () => message,
+      });
+      const options = { context: { messages: [] }, sessionId: "suffix", persistTranscript: true };
+      let draft = "";
+      let result;
+      if (streaming) {
+        const stream = streamWithContext(config, options);
+        for await (const delta of stream.textStream) draft += delta;
+        result = await stream.result;
+        expect(draft).toBe("operator <\nliteral <th");
+      } else result = await chatWithContext(config, options);
+      expect(result.text).toBe("operator <\nliteral <th");
+      expect(mocks.appendToTranscript).toHaveBeenCalledWith(
+        "suffix",
+        expect.objectContaining({
+          content: [
+            { type: "text", text: "operator <" },
+            { type: "text", text: "literal <th" },
+          ],
+        })
+      );
+    }
+  );
+
+  it.each(["aborted", "error", "length"] as const)(
+    "never flushes hidden content or pending prefixes after %s",
+    async (stopReason) => {
+      const message = {
+        ...assistantMessage(),
+        stopReason,
+        content: [{ type: "text" as const, text: "public <think>secret</th" }],
+      };
+      mocks.appendToTranscript.mockClear();
+      mocks.stream.mockReturnValue({
+        async *[Symbol.asyncIterator]() {
+          for (const delta of ["public <thi", "nk>secret</th"]) yield { type: "text_delta", delta };
+        },
+        result: async () => message,
+      });
+      const stream = streamWithContext(config, { context: { messages: [] } });
+      let draft = "";
+      for await (const delta of stream.textStream) draft += delta;
+      expect(draft).toBe("public ");
+      expect((await stream.result).text).toBe("public ");
+      expect(mocks.appendToTranscript).not.toHaveBeenCalled();
+    }
+  );
 });

@@ -4,6 +4,7 @@ import {
   type Context,
   type AssistantMessage,
   type Message,
+  type TextContent,
 } from "@earendil-works/pi-ai/compat";
 import type { AgentConfig } from "../config/schema.js";
 import { appendToTranscript, readTranscript } from "../session/transcript.js";
@@ -66,10 +67,16 @@ function finalizeResponse(
   options: ChatOptions
 ): ChatResponse {
   const filter = createThinkFilter();
+  let lastText: TextContent | undefined;
   for (const block of response.content) {
-    if (block.type === "text") block.text = filter.push(block.text);
+    if (block.type === "text") {
+      if (lastText) lastText.text += filter.flushPublic();
+      block.text = filter.push(block.text);
+      lastText = block;
+    }
   }
-  filter.end();
+  const suffix = filter.end(response.stopReason === "stop" || response.stopReason === "toolUse");
+  if (lastText) lastText.text += suffix;
 
   const text = extractText(response);
 
@@ -170,7 +177,13 @@ export function streamWithContext(config: AgentConfig, options: ChatOptions): St
   // Transform event stream into a simple text delta async iterable
   async function* textDeltas(): AsyncIterable<string> {
     const filter = createThinkFilter();
+    let textBlocks = 0;
     for await (const event of eventStream) {
+      if (event.type === "text_start" && textBlocks++ > 0) {
+        const suffix = filter.flushPublic();
+        if (suffix) yield suffix;
+        yield "\n";
+      }
       if (event.type === "text_delta" && event.delta) {
         const visible = filter.push(event.delta);
         if (visible) yield visible;
@@ -180,7 +193,9 @@ export function streamWithContext(config: AgentConfig, options: ChatOptions): St
         break;
       }
     }
-    filter.end();
+    const terminal = await eventStream.result();
+    const suffix = filter.end(terminal.stopReason === "stop" || terminal.stopReason === "toolUse");
+    if (suffix) yield suffix;
   }
 
   // Result promise: wait for the stream to complete and build ChatResponse
