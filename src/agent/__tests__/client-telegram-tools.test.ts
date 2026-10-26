@@ -133,6 +133,20 @@ describe("Telegram tool preparation", () => {
     expect(mocks.appendToTranscript).not.toHaveBeenCalled();
   });
 
+  it.each([false, true])(
+    "returns local overflow without a provider request (stream: %s)",
+    async (streaming) => {
+      const options = { context: { systemPrompt: "system ".repeat(150000), messages: [] } };
+      const response = streaming
+        ? await streamWithContext(config, options).result
+        : await chatWithContext(config, options);
+      expect(response.message.stopReason).toBe("error");
+      expect(response.message.errorMessage).toContain("Context length exceeded");
+      expect(mocks.complete).not.toHaveBeenCalled();
+      expect(mocks.stream).not.toHaveBeenCalled();
+    }
+  );
+
   it("applies the same guard to streaming calls", async () => {
     mocks.stream.mockReturnValue({
       async *[Symbol.asyncIterator]() {},

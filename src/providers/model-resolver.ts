@@ -1,4 +1,11 @@
-import { getModel, type Model, type Api } from "@earendil-works/pi-ai/compat";
+import { estimateContextTokens, estimateMessageTokens } from "@earendil-works/pi-ai/utils/estimate";
+import {
+  getModel,
+  normalizeContext,
+  type Context,
+  type Model,
+  type Api,
+} from "@earendil-works/pi-ai/compat";
 import { getProviderMetadata, type SupportedProvider } from "../config/providers.js";
 import { createLogger } from "../utils/logger.js";
 import { fetchWithTimeout } from "../utils/fetch.js";
@@ -338,4 +345,24 @@ export function getUtilityModel(provider: SupportedProvider, overrideModel?: str
   const modelId =
     provider === "local" && requested === "auto" ? (defaultLocalModel ?? requested) : requested;
   return getProviderModel(provider, modelId);
+}
+
+/** Conservative estimate; measured prefix usage already includes the system and tools. */
+export function getOutputTokenBudget(
+  model: Model<Api>,
+  context: Context,
+  requested: number
+): number {
+  if (!Number.isFinite(requested) || requested < 1)
+    throw new Error("Output token budget must be positive");
+  const transcript = normalizeContext(context);
+  // Current schemas may differ from those covered by a previous usage measurement.
+  const staticTokens = transcript.messages.reduce(
+    (sum, message) => sum + estimateMessageTokens(message),
+    0
+  );
+  const contextTokens = Math.max(estimateContextTokens(transcript).tokens, staticTokens);
+  const available =
+    model.contextWindow > 0 ? model.contextWindow - contextTokens - 4096 : model.maxTokens;
+  return Math.max(0, Math.floor(Math.min(requested, model.maxTokens, available)));
 }

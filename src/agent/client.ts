@@ -113,12 +113,36 @@ async function retryAfterCredentialRefresh(
   return complete(request.model, request.context, request.options);
 }
 
+function contextOverflowResponse(request: PreparedModelRequest): AssistantMessage {
+  return {
+    role: "assistant",
+    content: [],
+    api: request.model.api,
+    provider: request.model.provider,
+    model: request.model.id,
+    timestamp: Date.now(),
+    stopReason: "error",
+    errorMessage: "Context length exceeded: no safe output budget remains",
+    usage: {
+      input: 0,
+      output: 0,
+      cacheRead: 0,
+      cacheWrite: 0,
+      totalTokens: 0,
+      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+    },
+  };
+}
+
 export async function chatWithContext(
   config: AgentConfig,
   options: ChatOptions
 ): Promise<ChatResponse> {
   const request = prepareModelRequest(config, options);
-  const initialResponse = await complete(request.model, request.context, request.options);
+  const initialResponse =
+    request.options.maxTokens === 0
+      ? contextOverflowResponse(request)
+      : await complete(request.model, request.context, request.options);
   const response = await retryAfterCredentialRefresh(request, initialResponse);
   request.finalizeUsage?.(response);
   return finalizeResponse(response, request.context, options);
@@ -131,6 +155,14 @@ export interface StreamResult {
 
 export function streamWithContext(config: AgentConfig, options: ChatOptions): StreamResult {
   const request = prepareModelRequest(config, options);
+  if (request.options.maxTokens === 0) {
+    return {
+      textStream: (async function* () {})(),
+      result: Promise.resolve(
+        finalizeResponse(contextOverflowResponse(request), request.context, options)
+      ),
+    };
+  }
   const eventStream = stream(request.model, request.context, request.options);
 
   // Transform event stream into a simple text delta async iterable

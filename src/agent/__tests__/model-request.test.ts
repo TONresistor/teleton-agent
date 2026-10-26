@@ -519,3 +519,54 @@ describe("model request preparation", () => {
     }
   );
 });
+
+describe("output budget", () => {
+  it("caps output at the model ceiling", () => {
+    const request = prepareModelRequest(
+      AgentConfigSchema.parse({ api_key: "test-key", max_tokens: 100000 }),
+      { context: { messages: [] } }
+    );
+    expect(request.options.maxTokens).toBe(request.model.maxTokens);
+  });
+
+  it("counts the system and tool schemas without double-counting a measured prefix", async () => {
+    const { getOutputTokenBudget } = await import("../../providers/model-resolver.js");
+    const request = prepareModelRequest(AgentConfigSchema.parse({ api_key: "test-key" }), {
+      context: { messages: [] },
+    });
+    const model = { ...request.model, contextWindow: 10000, maxTokens: 10000 };
+    expect(
+      getOutputTokenBudget(model, { systemPrompt: "s".repeat(3500), messages: [] }, 10000)
+    ).toBe(4904);
+    const measured = {
+      role: "assistant" as const,
+      content: [],
+      api: model.api,
+      provider: model.provider,
+      model: model.id,
+      stopReason: "stop" as const,
+      timestamp: 1,
+      usage: {
+        input: 2000,
+        output: 0,
+        cacheRead: 0,
+        cacheWrite: 0,
+        totalTokens: 2000,
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+      },
+    };
+    expect(
+      getOutputTokenBudget(model, { systemPrompt: "s".repeat(3500), messages: [measured] }, 10000)
+    ).toBe(3904);
+    expect(
+      getOutputTokenBudget(
+        model,
+        {
+          messages: [measured],
+          tools: [{ name: "large", description: "x".repeat(35000), parameters: {} }],
+        },
+        10000
+      )
+    ).toBe(0);
+  });
+});

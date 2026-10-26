@@ -7,7 +7,7 @@ import {
   summarizeWithFallback,
   formatMessagesForSummary,
 } from "../memory/ai-summarization.js";
-import { getUtilityModel } from "../agent/client.js";
+import { getUtilityModel, getOutputTokenBudget } from "../providers/model-resolver.js";
 import type { SupportedProvider } from "../config/providers.js";
 import { createLogger } from "../utils/logger.js";
 import {
@@ -55,9 +55,11 @@ Slug:`,
       ],
     };
 
+    const maxTokens = getOutputTokenBudget(model, context, SESSION_SLUG_MAX_TOKENS);
+    if (!maxTokens) throw new Error("Context length exceeded during slug generation");
     const response = await complete(model, context, {
       apiKey: params.apiKey,
-      maxTokens: SESSION_SLUG_MAX_TOKENS,
+      maxTokens,
     });
 
     const textContent = response.content.find((block) => block.type === "text");

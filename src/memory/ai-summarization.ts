@@ -1,6 +1,6 @@
 import { complete, type Context, type Message } from "@earendil-works/pi-ai/compat";
 import { extractText, stripEnvelopePrefix, truncate } from "../utils/pi-message.js";
-import { getUtilityModel } from "../providers/model-resolver.js";
+import { getUtilityModel, getOutputTokenBudget } from "../providers/model-resolver.js";
 import type { SupportedProvider } from "../config/providers.js";
 import {
   CHARS_PER_TOKEN_ESTIMATE,
@@ -211,9 +211,11 @@ Be specific but concise. Preserve critical information.`;
       ],
     };
 
+    if (!getOutputTokenBudget(model, context, maxTokens))
+      throw new Error("Context length exceeded during summarization");
     const response = await complete(model, context, {
       apiKey: params.apiKey,
-      maxTokens,
+      maxTokens: getOutputTokenBudget(model, context, maxTokens),
     });
 
     if (
@@ -313,9 +315,21 @@ ${partialSummaries.map((s, i) => `Part ${i + 1}:\n${s}`).join("\n\n---\n\n")}`,
     ],
   };
 
+  if (
+    !getOutputTokenBudget(
+      model,
+      mergeContext,
+      params.maxSummaryTokens ?? DEFAULT_SUMMARY_FALLBACK_TOKENS
+    )
+  )
+    throw new Error("Context length exceeded during summary merge");
   const mergeResponse = await complete(model, mergeContext, {
     apiKey: params.apiKey,
-    maxTokens: params.maxSummaryTokens ?? DEFAULT_SUMMARY_FALLBACK_TOKENS,
+    maxTokens: getOutputTokenBudget(
+      model,
+      mergeContext,
+      params.maxSummaryTokens ?? DEFAULT_SUMMARY_FALLBACK_TOKENS
+    ),
   });
 
   if (
