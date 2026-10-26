@@ -1,3 +1,9 @@
+import { thinkingBudgetForLevel } from "@earendil-works/pi-ai/api/simple-options";
+import {
+  usesGoogleThinkingLevel,
+  resolveGoogleThinkingLevel,
+  toGoogleThinkingLevel,
+} from "@earendil-works/pi-ai/api/google-shared";
 import {
   clampThinkingLevel,
   hasApi,
@@ -90,7 +96,8 @@ function getCacheRetention(provider: SupportedProvider): "none" | "long" {
 function getReasoningOptions(
   provider: SupportedProvider,
   model: Model<Api>,
-  reasoningEffort: AgentConfig["reasoning_effort"]
+  reasoningEffort: AgentConfig["reasoning_effort"],
+  maxTokens: number
 ): Record<string, unknown> {
   if (!model.reasoning) return {};
   const requiresZaiThinking = provider === "zai" && model.thinkingLevelMap?.off === null;
@@ -101,8 +108,33 @@ function getReasoningOptions(
     hasApi(model, "openai-codex-responses") ||
     (hasApi(model, "openai-completions") &&
       (model.compat?.supportsReasoningEffort !== false || requiresZaiThinking));
-  if (!adaptiveThinking && !openAiThinking) return {};
   const level = clampThinkingLevel(model, reasoningEffort === "none" ? "off" : reasoningEffort);
+  if (hasApi(model, "anthropic-messages") && !adaptiveThinking) {
+    if (level === "off") return { thinkingEnabled: false };
+    const budget = Math.min(thinkingBudgetForLevel(level), Math.max(0, maxTokens - 1024));
+    if (budget < 1024) {
+      if (model.thinkingLevelMap?.off === null)
+        throw new Error("Output budget cannot fit required thinking and an answer");
+      return { thinkingEnabled: false };
+    }
+    return { thinkingEnabled: true, thinkingBudgetTokens: budget };
+  }
+  if (hasApi(model, "google-generative-ai")) {
+    if (level === "off") return { thinking: { enabled: false } };
+    if (usesGoogleThinkingLevel(model))
+      return {
+        thinking: {
+          enabled: true,
+          level: toGoogleThinkingLevel(resolveGoogleThinkingLevel(model, level)),
+        },
+      };
+    const minimum = model.id.includes("flash-lite") ? 512 : 128;
+    const budget = Math.min(thinkingBudgetForLevel(level), Math.max(0, maxTokens - 1024));
+    return {
+      thinking: { enabled: budget >= minimum, ...(budget >= minimum && { budgetTokens: budget }) },
+    };
+  }
+  if (!adaptiveThinking && !openAiThinking) return {};
   const mapped = model.thinkingLevelMap?.[level];
   if (adaptiveThinking) {
     return level === "off"
@@ -164,6 +196,8 @@ export function prepareModelRequest(
     tools,
   };
   const temperature = request.temperature ?? config.temperature;
+  const maxTokens = getOutputTokenBudget(model, context, request.maxTokens ?? config.max_tokens);
+  const reasoningOptions = getReasoningOptions(provider, model, config.reasoning_effort, maxTokens);
   const usageTracker =
     provider === "openrouter" && model.api === "openai-completions"
       ? createOpenRouterUsageTracker(isCustomOpenRouterModel(model))
@@ -184,14 +218,15 @@ export function prepareModelRequest(
       },
       ...(usageTracker && { fetch: usageTracker.fetch }),
       apiKey: getEffectiveApiKey(provider, config.api_key),
-      maxTokens: getOutputTokenBudget(model, context, request.maxTokens ?? config.max_tokens),
+      maxTokens,
       ...(!isCustomOpenRouterModel(model) &&
-        modelSupportsTemperature(provider, model) && { temperature }),
+        modelSupportsTemperature(provider, model) &&
+        reasoningOptions.thinkingEnabled !== true && { temperature }),
       sessionId: request.sessionId,
       cacheRetention: getCacheRetention(provider),
       signal: request.signal,
       timeoutMs: request.timeoutMs,
-      ...getReasoningOptions(provider, model, config.reasoning_effort),
+      ...reasoningOptions,
       ...getProviderPayloadOptions(provider),
     } as ProviderStreamOptions,
   };

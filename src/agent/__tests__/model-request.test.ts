@@ -271,7 +271,8 @@ describe("model request preparation", () => {
     expect(request.options).toMatchObject({
       apiKey: "sk-test-key",
       maxTokens: 8192,
-      temperature: 0.4,
+      thinkingEnabled: true,
+      thinkingBudgetTokens: 2048,
       sessionId: "session-1",
       cacheRetention: "long",
     });
@@ -568,5 +569,75 @@ describe("output budget", () => {
         10000
       )
     ).toBe(0);
+  });
+});
+
+describe("budget and Google reasoning payloads", () => {
+  it.each(["none", "low", "high", "max"] as const)(
+    "uses Anthropic budget thinking for %s without increasing output",
+    async (reasoning_effort) => {
+      const request = prepareModelRequest(
+        AgentConfigSchema.parse({ api_key: "test-key", reasoning_effort }),
+        { context: { messages: [{ role: "user", content: "test", timestamp: 1 }] } }
+      );
+      let payload: unknown;
+      await complete(request.model, request.context, {
+        ...request.options,
+        onPayload(value) {
+          payload = value;
+          throw new Error("capture");
+        },
+      });
+      expect(payload).toHaveProperty("max_tokens", 4096);
+      expect(payload).toHaveProperty(
+        "thinking.type",
+        reasoning_effort === "none" ? "disabled" : "enabled"
+      );
+      if (reasoning_effort !== "none") {
+        expect(payload).toHaveProperty(
+          "thinking.budget_tokens",
+          reasoning_effort === "low" ? 2048 : 3072
+        );
+        expect(payload).not.toHaveProperty("temperature");
+      }
+    }
+  );
+
+  it.each(["none", "low", "high", "max"] as const)(
+    "uses Google native thinking for %s",
+    async (reasoning_effort) => {
+      const request = prepareModelRequest(
+        AgentConfigSchema.parse({
+          provider: "google",
+          model: "gemini-3.5-flash",
+          api_key: "test-key",
+          reasoning_effort,
+        }),
+        { context: { messages: [{ role: "user", content: "test", timestamp: 1 }] } }
+      );
+      let payload: unknown;
+      await complete(request.model, request.context, {
+        ...request.options,
+        onPayload(value) {
+          payload = value;
+          throw new Error("capture");
+        },
+      });
+      expect(payload).toHaveProperty("config.maxOutputTokens", 4096);
+      if (reasoning_effort === "none") expect(payload).toHaveProperty("config.thinkingConfig");
+      else
+        expect(payload).toHaveProperty(
+          "config.thinkingConfig.thinkingLevel",
+          reasoning_effort === "low" ? "LOW" : "HIGH"
+        );
+    }
+  );
+
+  it("disables optional budget thinking when the answer ceiling is too small", () => {
+    const request = prepareModelRequest(
+      AgentConfigSchema.parse({ api_key: "test-key", max_tokens: 1024, reasoning_effort: "high" }),
+      { context: { messages: [] } }
+    );
+    expect(request.options).toMatchObject({ maxTokens: 1024, thinkingEnabled: false });
   });
 });
