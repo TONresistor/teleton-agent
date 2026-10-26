@@ -281,20 +281,8 @@ Unfinished work, blocked tasks, questions waiting for user response. Most urgent
       messages: [summaryMessage, ...recentMessages],
     };
   } catch (error) {
-    log.error({ err: error }, "AI summarization failed, using fallback");
-
-    const summaryText = `${COMPACTION_PREFIX}: ${oldMessages.length} earlier messages from this conversation]`;
-
-    const summaryMessage: Message = {
-      role: "user",
-      content: summaryText,
-      timestamp: oldMessages[0]?.timestamp ?? Date.now(),
-    };
-
-    return {
-      ...context,
-      messages: [summaryMessage, ...recentMessages],
-    };
+    log.error({ err: error }, "AI summarization failed, keeping original context");
+    return context;
   }
 }
 
@@ -308,6 +296,16 @@ export async function compactAndSaveTranscript(
   utilityModel?: string,
   previousSummary?: string | null
 ): Promise<string> {
+  const compactedContext = await compactContext(
+    context,
+    config,
+    apiKey,
+    provider,
+    utilityModel,
+    previousSummary
+  );
+  if (compactedContext === context) return sessionId;
+
   const newSessionId = randomUUID();
 
   log.info(`Creating compacted transcript: ${sessionId} → ${newSessionId}`);
@@ -323,15 +321,6 @@ export async function compactAndSaveTranscript(
       utilityModel,
     });
   }
-
-  const compactedContext = await compactContext(
-    context,
-    config,
-    apiKey,
-    provider,
-    utilityModel,
-    previousSummary
-  );
 
   for (const message of compactedContext.messages) {
     appendToTranscript(newSessionId, message);
@@ -383,6 +372,7 @@ export class CompactionManager {
       utilityModel,
       findPreviousCompactionSummary(context)
     );
+    if (newSessionId === sessionId) return null;
     log.info(`Compaction complete: ${newSessionId}`);
 
     return newSessionId;

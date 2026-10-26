@@ -194,9 +194,13 @@ Be specific but concise. Preserve critical information.`;
       maxTokens,
     });
 
+    if (response.stopReason === "error" || response.stopReason === "aborted") {
+      throw new Error(response.errorMessage || `Summary response ${response.stopReason}`);
+    }
     const textContent = response.content.find((block) => block.type === "text");
     const summary = textContent?.type === "text" ? textContent.text : "";
-    return summary.trim() || "Unable to generate summary.";
+    if (!summary.trim()) throw new Error("Model returned an empty summary");
+    return summary.trim();
   } catch (error) {
     log.error({ err: error }, "Summarization error");
     throw new Error(`Summarization failed: ${getErrorMessage(error)}`);
@@ -289,11 +293,15 @@ ${partialSummaries.map((s, i) => `Part ${i + 1}:\n${s}`).join("\n\n---\n\n")}`,
     maxTokens: params.maxSummaryTokens ?? DEFAULT_SUMMARY_FALLBACK_TOKENS,
   });
 
+  if (mergeResponse.stopReason === "error" || mergeResponse.stopReason === "aborted") {
+    throw new Error(mergeResponse.errorMessage || `Summary merge ${mergeResponse.stopReason}`);
+  }
   const textContent = mergeResponse.content.find((block) => block.type === "text");
   const merged = textContent?.type === "text" ? textContent.text : "";
+  if (!merged.trim()) throw new Error("Model returned an empty merged summary");
 
   return {
-    summary: merged.trim() || "Unable to merge summaries.",
+    summary: merged.trim(),
     tokensUsed: estimateMessageTokens(merged),
     chunksProcessed: chunks.length,
   };
@@ -383,15 +391,5 @@ export async function summarizeWithFallback(params: {
     }
   }
 
-  const note =
-    `Context contained ${params.messages.length} messages ` +
-    `(${oversizedNotes.length} were oversized). ` +
-    `AI summarization unavailable due to size constraints. ` +
-    `Recent conversation history was preserved.`;
-
-  return {
-    summary: note,
-    tokensUsed: estimateMessageTokens(note),
-    chunksProcessed: 0,
-  };
+  throw new Error("AI summarization failed for all fallback attempts");
 }

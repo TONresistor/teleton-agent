@@ -64,6 +64,24 @@ describe("CompactionManager", () => {
     expect(secondInstructions).not.toContain("SUMMARY A");
   });
 
+  it("keeps the original session and transcript when summarization fails", async () => {
+    const original = context("retained");
+    mocks.transcripts.set("original-session", [...original.messages]);
+    mocks.summarize.mockReset().mockRejectedValue(new Error("Summary unavailable"));
+    const manager = new CompactionManager({
+      enabled: true,
+      maxMessages: 2,
+      keepRecentMessages: 1,
+      memoryFlushEnabled: false,
+    });
+
+    expect(
+      await manager.checkAndCompact("original-session", original, "key", "chat", "anthropic")
+    ).toBeNull();
+    expect([...mocks.transcripts.keys()]).toEqual(["original-session"]);
+    expect(mocks.transcripts.get("original-session")).toEqual(original.messages);
+  });
+
   it("reuses the summary embedded in the same conversation transcript", async () => {
     const manager = new CompactionManager({
       enabled: true,
