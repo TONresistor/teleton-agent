@@ -17,6 +17,7 @@ import {
   type PreparedModelRequest,
 } from "./model-request.js";
 import { isSilentReply } from "../constants/tokens.js";
+import { extractText } from "../utils/pi-message.js";
 
 // Model resolution + provider model registration live in the neutral providers/
 // layer so non-agent consumers (e.g. memory) can resolve models without importing
@@ -71,8 +72,7 @@ function finalizeResponse(
     }
   }
 
-  const textContent = response.content.find((block) => block.type === "text");
-  const text = textContent?.type === "text" ? textContent.text : "";
+  const text = extractText(response);
 
   if (
     options.persistTranscript &&

@@ -93,6 +93,25 @@ describe("Telegram tool preparation", () => {
     expectPreparedTools(mocks.complete.mock.calls[0][1]);
   });
 
+  it.each([false, true])("returns every text block in order (streaming: %s)", async (streaming) => {
+    const message = assistantMessage();
+    message.content = [
+      { type: "text", text: "First block" },
+      { type: "text", text: "Second block" },
+    ];
+    mocks.complete.mockResolvedValue(message);
+    mocks.stream.mockReturnValue({
+      async *[Symbol.asyncIterator]() {},
+      result: vi.fn().mockResolvedValue(message),
+    });
+    const options = { context: { messages: [] } };
+    const response = streaming
+      ? await streamWithContext(config, options).result
+      : await chatWithContext(config, options);
+
+    expect(response.text).toBe("First block\nSecond block");
+  });
+
   it("applies the same guard to streaming calls", async () => {
     mocks.stream.mockReturnValue({
       async *[Symbol.asyncIterator]() {},
