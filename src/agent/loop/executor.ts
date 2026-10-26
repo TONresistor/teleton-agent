@@ -102,6 +102,14 @@ export async function executeAgentLoop(
     const iterUsage = response.message.usage;
     if (iterUsage) addUsage(accumulatedUsage, iterUsage);
 
+    if (assistantMsg.stopReason === "aborted") {
+      trace.progress(totalToolCalls, iteration, accumulatedUsage);
+      if (opts.streamToChat && isBotBridge(opts.streamToChat.bridge)) {
+        await opts.streamToChat.bridge.clearDraft(opts.streamToChat.chatId);
+      }
+      throw new Error(assistantMsg.errorMessage || "Model response was aborted before completion");
+    }
+
     if (assistantMsg.stopReason === "error") {
       try {
         const recovered = await recoverLlmError(

@@ -104,6 +104,63 @@ afterEach(async () => {
 });
 
 describe("Minimal harness regressions", () => {
+  it.each([false, true])(
+    "rejects an aborted response before tools run (tools: %s)",
+    async (withTools) => {
+      const { runtime, effect } = runtimeWithAction();
+      const interrupted = answer(
+        "Partial answer",
+        "aborted",
+        withTools ? toolAnswer().content : undefined
+      );
+      mocks.complete.mockResolvedValue(interrupted);
+
+      await expect(
+        runtime.processMessage({
+          chatId: "abort-test",
+          userMessage: "perform action",
+          toolContext: { bridge: bridge(), db: mocks.db, config: config(), senderId: 1 },
+        })
+      ).rejects.toThrow("Model response was aborted");
+
+      expect(effect).not.toHaveBeenCalled();
+      expect(mocks.complete).toHaveBeenCalledOnce();
+      await flushAllTranscripts();
+      const session = getOrCreateSession("abort-test");
+      const rows = readFileSync(getTranscriptPath(session.sessionId), "utf8")
+        .trim()
+        .split("\n")
+        .map((line) => JSON.parse(line));
+      expect(rows.filter((row) => row.role === "assistant")).toEqual([]);
+      expect(
+        mocks.db.prepare("SELECT status FROM agent_turn_traces WHERE chat_id = ?").get("abort-test")
+      ).toEqual({ status: "error" });
+    }
+  );
+
+  it("clears an aborted streaming draft without publishing partial text", async () => {
+    const interrupted = answer("Partial answer", "aborted");
+    mocks.stream.mockReturnValue({
+      result: async () => interrupted,
+      async *[Symbol.asyncIterator]() {
+        yield { type: "text_delta", delta: "Partial answer" };
+      },
+    });
+    const b = bridge();
+    await expect(
+      new AgentRuntime(config(), "test").processMessage({
+        chatId: "1",
+        userMessage: "write response",
+        streamToChat: { chatId: "1", bridge: b, mode: "replace" },
+      })
+    ).rejects.toThrow("Model response was aborted");
+
+    expect(b.bot.api.sendMessage).not.toHaveBeenCalled();
+    expect(b.activeDraftIds.size).toBe(0);
+    expect(b.bot.api.sendMessageDraft).toHaveBeenLastCalledWith(1, expect.any(Number), " ");
+    expect(mocks.complete).not.toHaveBeenCalled();
+  });
+
   it("C03: distinct Telegram triggers of one running task execute only once", async () => {
     const { runtime, effect } = runtimeWithAction();
     let release!: () => void;

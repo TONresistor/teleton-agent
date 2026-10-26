@@ -78,6 +78,7 @@ function finalizeResponse(
     options.persistTranscript &&
     options.sessionId &&
     response.stopReason !== "error" &&
+    response.stopReason !== "aborted" &&
     !isSilentReply(text)
   ) {
     appendToTranscript(options.sessionId, response);
