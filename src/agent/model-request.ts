@@ -89,11 +89,19 @@ function getReasoningOptions(
   reasoningEffort: AgentConfig["reasoning_effort"]
 ): Record<string, unknown> {
   const requiresZaiThinking = provider === "zai" && model.thinkingLevelMap?.off === null;
-  if ((provider !== "codex" && provider !== "openai" && !requiresZaiThinking) || !model.reasoning) {
+  const adaptiveMiniMax =
+    provider === "minimax" &&
+    hasApi(model, "anthropic-messages") &&
+    model.compat?.forceAdaptiveThinking === true;
+  if (
+    (provider !== "codex" && provider !== "openai" && !adaptiveMiniMax && !requiresZaiThinking) ||
+    !model.reasoning
+  ) {
     return {};
   }
   const level = clampThinkingLevel(model, reasoningEffort === "none" ? "off" : reasoningEffort);
   const mapped = model.thinkingLevelMap?.[level];
+  if (adaptiveMiniMax) return { effort: mapped ?? level };
   return { reasoningEffort: mapped ?? (level === "off" ? "none" : level) };
 }
 

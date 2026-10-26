@@ -4,6 +4,39 @@ import { AgentConfigSchema } from "../../config/schema.js";
 import { prepareModelRequest } from "../model-request.js";
 
 describe("model request preparation", () => {
+  it.each([
+    ["none", "low"],
+    ["minimal", "low"],
+    ["low", "low"],
+    ["medium", "medium"],
+    ["high", "high"],
+    ["xhigh", "xhigh"],
+    ["max", "max"],
+  ] as const)("sends MiniMax M3.1 Flash effort %s as %s", async (reasoning_effort, expected) => {
+    const request = prepareModelRequest(
+      AgentConfigSchema.parse({
+        provider: "minimax",
+        model: "MiniMax-M3.1-Flash",
+        api_key: "test-key",
+        reasoning_effort,
+      }),
+      { context: { messages: [{ role: "user", content: "test", timestamp: 1 }] } }
+    );
+    let payload: unknown;
+    await complete(request.model, request.context, {
+      ...request.options,
+      onPayload(value) {
+        payload = value;
+        throw new Error("Stop before network request");
+      },
+    });
+
+    expect(payload).toHaveProperty("thinking.type", "adaptive");
+    expect(payload).toHaveProperty("output_config.effort", expected);
+    expect(payload).not.toHaveProperty("reasoning_effort");
+    expect(payload).not.toHaveProperty("temperature");
+  });
+
   it("forwards custom OpenRouter IDs and tools without optional sampling parameters", async () => {
     const request = prepareModelRequest(
       AgentConfigSchema.parse({
