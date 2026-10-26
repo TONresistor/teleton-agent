@@ -94,7 +94,11 @@ function getReasoningOptions(
     hasApi(model, "anthropic-messages") &&
     model.compat?.forceAdaptiveThinking === true;
   if (
-    (provider !== "codex" && provider !== "openai" && !adaptiveMiniMax && !requiresZaiThinking) ||
+    (provider !== "codex" &&
+      provider !== "openai" &&
+      provider !== "xai" &&
+      !adaptiveMiniMax &&
+      !requiresZaiThinking) ||
     !model.reasoning
   ) {
     return {};

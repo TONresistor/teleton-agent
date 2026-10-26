@@ -37,6 +37,33 @@ describe("model request preparation", () => {
     expect(payload).not.toHaveProperty("temperature");
   });
 
+  it.each(["grok-4.3", "grok-4.5"])("sends supported reasoning efforts for %s", async (model) => {
+    for (const [reasoning_effort, expected] of [
+      ["none", "low"],
+      ["medium", "medium"],
+      ["xhigh", "xhigh"],
+      ["max", "xhigh"],
+    ] as const) {
+      const request = prepareModelRequest(
+        AgentConfigSchema.parse({ provider: "xai", model, api_key: "test-key", reasoning_effort }),
+        { context: { messages: [{ role: "user", content: "test", timestamp: 1 }] } }
+      );
+      let payload: unknown;
+      await complete(request.model, request.context, {
+        ...request.options,
+        onPayload(value) {
+          payload = value;
+          throw new Error("Stop before network request");
+        },
+      });
+
+      expect(payload).toHaveProperty(
+        "reasoning.effort",
+        reasoning_effort === "none" && model === "grok-4.3" ? "none" : expected
+      );
+    }
+  });
+
   it("forwards custom OpenRouter IDs and tools without optional sampling parameters", async () => {
     const request = prepareModelRequest(
       AgentConfigSchema.parse({
