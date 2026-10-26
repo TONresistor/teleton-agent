@@ -109,6 +109,23 @@ afterEach(async () => {
 });
 
 describe("Minimal harness regressions", () => {
+  it("uses the fallback immediately when the primary quota is exhausted", async () => {
+    const cfg = config();
+    cfg.agent.fallbacks = [{ provider: "openai", model: "gpt-4.1", api_key: "fallback-key" }];
+    mocks.complete
+      .mockResolvedValueOnce({ ...answer("", "error"), errorMessage: "429 insufficient_quota" })
+      .mockResolvedValueOnce(answer("Fallback answer"));
+
+    const result = await new AgentRuntime(cfg, "test").processMessage({
+      chatId: "quota-test",
+      userMessage: "answer this",
+    });
+
+    expect(result.content).toBe("Fallback answer");
+    expect(mocks.complete).toHaveBeenCalledTimes(2);
+    expect(mocks.complete.mock.calls[1][0]).toMatchObject({ provider: "openai", id: "gpt-4.1" });
+  });
+
   it.each([false, true])(
     "rejects an aborted response before tools run (tools: %s)",
     async (withTools) => {

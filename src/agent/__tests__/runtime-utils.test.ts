@@ -118,6 +118,24 @@ describe("isTrivialMessage", () => {
 
 describe("LLM error classification", () => {
   it.each([
+    "upstream_stream_read_error",
+    "upstream_request_failed",
+    "stream disconnected before completion: stream closed before response.completed",
+    "HTTP/2 stream failed",
+    "fetch failed",
+    "504 Gateway Timeout",
+    "529 overloaded",
+  ])("classifies transient transport failures: %s", (message) => {
+    expect(classifyLlmError(message).kind).toBe("server_error");
+  });
+
+  it.each(["Invalid request req_011CU503xyz", "Invalid request req_500_abc", "5242880 bytes"])(
+    "does not treat request IDs or byte counts as status codes: %s",
+    (message) => {
+      expect(classifyLlmError(message).kind).toBe("unknown");
+    }
+  );
+  it.each([
     "429 rate limit",
     "usage limit reached",
     "insufficient_quota",

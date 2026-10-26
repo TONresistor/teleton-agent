@@ -55,13 +55,14 @@ export function isRateLimitError(errorMessage?: string): boolean {
 export function isServerError(errorMessage?: string): boolean {
   if (!errorMessage) return false;
   return (
-    errorMessage.includes("500") ||
-    errorMessage.includes("502") ||
-    errorMessage.includes("503") ||
-    errorMessage.includes("529") ||
-    errorMessage.includes("overloaded") ||
-    errorMessage.includes("Internal server error") ||
-    errorMessage.includes("api_error") ||
+    /(?<![a-z0-9_])(?:500|502|503|504|520|524|529)(?![a-z0-9_])/i.test(errorMessage) ||
+    /overloaded|internal server error|api_error/i.test(errorMessage) ||
+    /upstream[ _]request[ _]failed|upstream_stream_read_error|http\/?2 stream failed/i.test(
+      errorMessage
+    ) ||
+    /stream disconnected before completion|stream ended before a terminal response event|fetch failed/i.test(
+      errorMessage
+    ) ||
     // Transient streaming-transport drops are retryable: an LLM provider WebSocket
     // closing mid-stream (1012 service restart, 1006 abnormal, 1011 server error)
     // or a dropped socket is not a terminal error — back off and retry.

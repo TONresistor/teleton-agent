@@ -4,6 +4,7 @@ import type {
   Tool as PiAiTool,
   UserMessage,
 } from "@earendil-works/pi-ai";
+import { isRetryableAssistantError } from "@earendil-works/pi-ai";
 import type { Config } from "../../config/schema.js";
 import type { SupportedProvider } from "../../config/providers.js";
 import {
@@ -178,6 +179,9 @@ export async function recoverLlmError(
   }
 
   if (errorClass.kind === "rate_limit") {
+    if (!isRetryableAssistantError(assistantMsg)) {
+      throw new Error(`API quota or usage limit reached: ${errorMsg}`);
+    }
     retry.rateLimitRetries++;
     if (retry.rateLimitRetries <= RATE_LIMIT_MAX_RETRIES) {
       const base = parseRetryAfterMs(errorMsg) ?? 1000 * 2 ** (retry.rateLimitRetries - 1);
