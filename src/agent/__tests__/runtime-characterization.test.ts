@@ -206,6 +206,7 @@ const toolContext = {
 describe("AgentRuntime characterization", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(registry.getToolCategory).mockReturnValue("data-bearing");
     mocks.session.messageCount = 0;
     mocks.selectTools.mockResolvedValue(undefined);
     mocks.resolveProviderFallback.mockReturnValue(null);
@@ -318,5 +319,101 @@ describe("AgentRuntime characterization", () => {
       "gpt-5.6-terra",
       expect.any(String)
     );
+  });
+
+  it.each([
+    ["data-bearing", true],
+    ["action", false],
+  ] as const)("allows overflow recovery after %s (attempted: %s)", async (category, attempted) => {
+    vi.mocked(registry.getToolCategory).mockReturnValue(category);
+    const toolCall = { type: "toolCall" as const, id: "read-1", name: "lookup", arguments: {} };
+    mocks.runModelIteration
+      .mockResolvedValueOnce(iteration(assistantMessage([toolCall], "toolUse")))
+      .mockResolvedValueOnce(
+        iteration(assistantMessage([], "error", undefined, "maximum context length exceeded"))
+      )
+      .mockResolvedValueOnce(
+        iteration(assistantMessage([{ type: "text", text: "recovered" }]), "recovered")
+      );
+    mocks.executeToolBatch.mockResolvedValue({ toolPlans: [], execResults: [] });
+    mocks.recordToolResults.mockImplementation(async (_r, _p, _e, sink) => {
+      sink.totalToolCalls.push({
+        name: "lookup",
+        input: {},
+        attempted,
+        result: { success: attempted },
+      });
+      return [];
+    });
+    mocks.recoverLlmError.mockResolvedValueOnce({
+      session: mocks.session,
+      context: { messages: [] },
+    });
+    const result = await new AgentRuntime(config(), "", registry).processMessage({
+      chatId: "chat-1",
+      userMessage: "lookup",
+      toolContext,
+    });
+    expect(result.content).toBe("recovered");
+    expect(mocks.recoverLlmError).toHaveBeenCalledOnce();
+  });
+
+  it.each([true, false])(
+    "stops overflow after an action (success: %s) without resetting",
+    async (success) => {
+      vi.mocked(registry.getToolCategory).mockReturnValue("action");
+      const toolCall = { type: "toolCall" as const, id: "action-1", name: "send", arguments: {} };
+      mocks.runModelIteration
+        .mockResolvedValueOnce(iteration(assistantMessage([toolCall], "toolUse")))
+        .mockResolvedValueOnce(
+          iteration(assistantMessage([], "error", undefined, "maximum context length exceeded"))
+        );
+      mocks.executeToolBatch.mockResolvedValue({ toolPlans: [], execResults: [] });
+      mocks.recordToolResults.mockImplementation(async (_r, _p, _e, sink) => {
+        sink.totalToolCalls.push({ name: "send", input: {}, attempted: true, result: { success } });
+        return [
+          {
+            role: "toolResult",
+            toolCallId: "action-1",
+            toolName: "send",
+            content: [{ type: "text", text: "recorded receipt or uncertain outcome" }],
+            isError: !success,
+            timestamp: 3,
+          },
+        ];
+      });
+      const result = await new AgentRuntime(config(), "", registry).processMessage({
+        chatId: "chat-1",
+        userMessage: "send",
+        toolContext,
+      });
+      expect(result.content).toContain("will not retry");
+      expect(result.toolCalls).toHaveLength(1);
+      expect(mocks.runModelIteration).toHaveBeenCalledTimes(2);
+      expect(mocks.recoverLlmError).not.toHaveBeenCalled();
+      expect(mocks.traceFinish).toHaveBeenCalledWith(
+        expect.objectContaining({ status: "error", stopReason: "context_overflow_after_action" })
+      );
+    }
+  );
+
+  it("still recovers overflow before any action", async () => {
+    mocks.runModelIteration
+      .mockResolvedValueOnce(
+        iteration(assistantMessage([], "error", undefined, "maximum context length exceeded"))
+      )
+      .mockResolvedValueOnce(
+        iteration(assistantMessage([{ type: "text", text: "recovered" }]), "recovered")
+      );
+    mocks.recoverLlmError.mockResolvedValueOnce({
+      session: mocks.session,
+      context: { messages: [] },
+    });
+    const result = await new AgentRuntime(config()).processMessage({
+      chatId: "chat-1",
+      userMessage: "read",
+    });
+    expect(result.content).toBe("recovered");
+    expect(mocks.recoverLlmError).toHaveBeenCalledOnce();
   });
 });

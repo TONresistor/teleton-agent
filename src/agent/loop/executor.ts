@@ -8,7 +8,7 @@ import { isBotBridge } from "../../telegram/bridge-guards.js";
 import { createLogger } from "../../utils/logger.js";
 import { resolveModelTarget } from "../model-target.js";
 import { resolveProviderFallback } from "../provider-fallback.js";
-import { addUsage } from "../runtime-utils.js";
+import { addUsage, isContextOverflowError } from "../runtime-utils.js";
 import type { CompletedToolCall } from "../telegram-send-state.js";
 import { enforceProviderToolLimit } from "../tool-selector.js";
 import type { AgentTurnTraceRecorder } from "../turn-trace.js";
@@ -110,6 +110,25 @@ export async function executeAgentLoop(
       throw new Error(assistantMsg.errorMessage || "Model response was aborted before completion");
     }
 
+    const actionAlreadyAttempted = totalToolCalls.some(
+      (call) =>
+        call.attempted !== false && deps.toolRegistry?.getToolCategory(call.name) !== "data-bearing"
+    );
+    if (
+      assistantMsg.stopReason === "error" &&
+      isContextOverflowError(assistantMsg.errorMessage) &&
+      actionAlreadyAttempted
+    ) {
+      stopReason = "context_overflow_after_action";
+      forcedContent =
+        "I stopped because the context limit was reached after an action was attempted. " +
+        "Its recorded result is preserved; I will not retry the action automatically. " +
+        "Check the action's outcome before continuing.";
+      finalResponse = response;
+      wasStreamed = streamed;
+      break;
+    }
+
     if (assistantMsg.stopReason === "error") {
       try {
         const recovered = await recoverLlmError(
@@ -133,11 +152,6 @@ export async function executeAgentLoop(
         iteration--;
         continue;
       } catch (error) {
-        const actionAlreadyAttempted = totalToolCalls.some(
-          (call) =>
-            call.attempted !== false &&
-            deps.toolRegistry?.getToolCategory(call.name) !== "data-bearing"
-        );
         const previousProvider = activeProvider;
         const previousModel = activeAgentConfig.model;
         const fallback = resolveProviderFallback(
@@ -262,7 +276,11 @@ export async function executeAgentLoop(
     }
   }
 
-  if (finalResponse && !context.messages.includes(finalResponse.message)) {
+  if (
+    finalResponse &&
+    finalResponse.message.stopReason !== "error" &&
+    !context.messages.includes(finalResponse.message)
+  ) {
     context.messages.push(finalResponse.message);
   }
 
