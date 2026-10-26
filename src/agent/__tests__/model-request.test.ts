@@ -5,6 +5,64 @@ import { prepareModelRequest } from "../model-request.js";
 
 describe("model request preparation", () => {
   it.each([
+    ["anthropic", "claude-sonnet-5-5", "low", "low", "messages.1.output_config.effort"],
+    ["anthropic", "claude-sonnet-5-5", "max", "max", "messages.1.output_config.effort"],
+    ["anthropic", "claude-sonnet-5-5", "none", "low", "messages.1.output_config.effort"],
+    ["anthropic", "claude-opus-4-6", "minimal", "low", "output_config.effort"],
+    ["openrouter", "anthropic/claude-sonnet-5.5", "max", "max", "messages.1.output_config.effort"],
+    ["openrouter", "openai/gpt-6-sol", "low", "low", "reasoning.effort"],
+    ["openrouter", "openai/gpt-6-sol", "max", "max", "reasoning.effort"],
+    ["openrouter", "openai/gpt-6-sol", "none", "none", "reasoning.effort"],
+    ["moonshot", "k3", "none", "low", "reasoning_effort"],
+    ["moonshot", "k3", "medium", "high", "reasoning_effort"],
+    ["moonshot", "k3", "max", "max", "reasoning_effort"],
+    ["groq", "openai/gpt-oss-120b", "low", "low", "reasoning_effort"],
+    ["groq", "openai/gpt-oss-120b", "max", "high", "reasoning_effort"],
+  ] as const)(
+    "sends supported effort for %s/%s (%s → %s)",
+    async (provider, model, reasoning_effort, expected, path) => {
+      const request = prepareModelRequest(
+        AgentConfigSchema.parse({ provider, model, api_key: "test-key", reasoning_effort }),
+        { context: { messages: [{ role: "user", content: "test", timestamp: 1 }] } }
+      );
+      let payload: unknown;
+      const fetch = vi.fn().mockRejectedValue(new Error("Network disabled in test"));
+      await complete(request.model, request.context, {
+        ...request.options,
+        fetch,
+        onPayload(value) {
+          payload = value;
+          throw new Error("Stop before network request");
+        },
+      });
+
+      expect(fetch).not.toHaveBeenCalled();
+      expect(payload).toHaveProperty(path, expected);
+    }
+  );
+
+  it("allows optional adaptive thinking to be disabled", async () => {
+    const request = prepareModelRequest(
+      AgentConfigSchema.parse({
+        provider: "anthropic",
+        model: "claude-opus-4-6",
+        api_key: "test-key",
+        reasoning_effort: "none",
+      }),
+      { context: { messages: [{ role: "user", content: "test", timestamp: 1 }] } }
+    );
+    let payload: unknown;
+    await complete(request.model, request.context, {
+      ...request.options,
+      onPayload(value) {
+        payload = value;
+        throw new Error("Stop before network request");
+      },
+    });
+    expect(payload).toHaveProperty("thinking.type", "disabled");
+    expect(payload).not.toHaveProperty("output_config.effort");
+  });
+  it.each([
     ["none", "low"],
     ["minimal", "low"],
     ["low", "low"],

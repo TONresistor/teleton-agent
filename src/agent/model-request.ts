@@ -88,24 +88,23 @@ function getReasoningOptions(
   model: Model<Api>,
   reasoningEffort: AgentConfig["reasoning_effort"]
 ): Record<string, unknown> {
+  if (!model.reasoning) return {};
   const requiresZaiThinking = provider === "zai" && model.thinkingLevelMap?.off === null;
-  const adaptiveMiniMax =
-    provider === "minimax" &&
-    hasApi(model, "anthropic-messages") &&
-    model.compat?.forceAdaptiveThinking === true;
-  if (
-    (provider !== "codex" &&
-      provider !== "openai" &&
-      provider !== "xai" &&
-      !adaptiveMiniMax &&
-      !requiresZaiThinking) ||
-    !model.reasoning
-  ) {
-    return {};
-  }
+  const adaptiveThinking =
+    hasApi(model, "anthropic-messages") && model.compat?.forceAdaptiveThinking === true;
+  const openAiThinking =
+    hasApi(model, "openai-responses") ||
+    hasApi(model, "openai-codex-responses") ||
+    (hasApi(model, "openai-completions") &&
+      (model.compat?.supportsReasoningEffort !== false || requiresZaiThinking));
+  if (!adaptiveThinking && !openAiThinking) return {};
   const level = clampThinkingLevel(model, reasoningEffort === "none" ? "off" : reasoningEffort);
   const mapped = model.thinkingLevelMap?.[level];
-  if (adaptiveMiniMax) return { effort: mapped ?? level };
+  if (adaptiveThinking) {
+    return level === "off"
+      ? { thinkingEnabled: false }
+      : { thinkingEnabled: true, effort: mapped ?? (level === "minimal" ? "low" : level) };
+  }
   return { reasoningEffort: mapped ?? (level === "off" ? "none" : level) };
 }
 
@@ -189,8 +188,6 @@ export function prepareModelRequest(
       signal: request.signal,
       timeoutMs: request.timeoutMs,
       ...getReasoningOptions(provider, model, config.reasoning_effort),
-      ...(hasApi(model, "anthropic-messages") &&
-        model.compat?.forceAdaptiveThinking === true && { thinkingEnabled: true }),
       ...getProviderPayloadOptions(provider),
     } as ProviderStreamOptions,
   };
