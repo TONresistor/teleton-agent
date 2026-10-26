@@ -158,7 +158,8 @@ export async function compactContext(
   apiKey: string,
   provider?: SupportedProvider,
   utilityModel?: string,
-  previousSummary?: string | null
+  previousSummary?: string | null,
+  baseUrl?: string
 ): Promise<Context> {
   const keepCount = config.keepRecentMessages ?? 10;
 
@@ -264,6 +265,7 @@ What was completed. Each bullet: tool used + result. Keep specific values.
 Unfinished work, blocked tasks, questions waiting for user response. Most urgent first.`,
       provider,
       utilityModel,
+      baseUrl,
     });
 
     log.info(`AI Summary: ${result.tokensUsed} tokens, ${result.chunksProcessed} chunks processed`);
@@ -294,7 +296,8 @@ export async function compactAndSaveTranscript(
   chatId?: string,
   provider?: SupportedProvider,
   utilityModel?: string,
-  previousSummary?: string | null
+  previousSummary?: string | null,
+  baseUrl?: string
 ): Promise<string> {
   const compactedContext = await compactContext(
     context,
@@ -302,7 +305,8 @@ export async function compactAndSaveTranscript(
     apiKey,
     provider,
     utilityModel,
-    previousSummary
+    previousSummary,
+    baseUrl
   );
   if (compactedContext === context) return sessionId;
 
@@ -319,6 +323,7 @@ export async function compactAndSaveTranscript(
       apiKey,
       provider,
       utilityModel,
+      baseUrl,
     });
   }
 
@@ -343,7 +348,8 @@ export class CompactionManager {
     apiKey: string,
     chatId?: string,
     provider?: SupportedProvider,
-    utilityModel?: string
+    utilityModel?: string,
+    baseUrl?: string
   ): Promise<string | null> {
     const tokenCount = estimateContextTokens(context);
 
@@ -370,7 +376,8 @@ export class CompactionManager {
       chatId,
       provider,
       utilityModel,
-      findPreviousCompactionSummary(context)
+      findPreviousCompactionSummary(context),
+      baseUrl
     );
     if (newSessionId === sessionId) return null;
     log.info(`Compaction complete: ${newSessionId}`);

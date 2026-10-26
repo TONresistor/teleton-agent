@@ -177,9 +177,10 @@ export async function summarizeViaClaude(params: {
   customInstructions?: string;
   provider?: SupportedProvider;
   utilityModel?: string;
+  baseUrl?: string;
 }): Promise<string> {
   const provider = params.provider || "anthropic";
-  const model = getUtilityModel(provider, params.utilityModel);
+  const model = getUtilityModel(provider, params.utilityModel, params.baseUrl);
   const maxTokens = params.maxSummaryTokens ?? DEFAULT_SUMMARY_FALLBACK_TOKENS;
   const formatted = formatMessagesForSummary(params.messages);
 
@@ -246,6 +247,7 @@ export async function summarizeInChunks(params: {
   customInstructions?: string;
   provider?: SupportedProvider;
   utilityModel?: string;
+  baseUrl?: string;
 }): Promise<SummarizationResult> {
   if (params.messages.length === 0) {
     return {
@@ -267,6 +269,7 @@ export async function summarizeInChunks(params: {
       customInstructions: params.customInstructions,
       provider: params.provider,
       utilityModel: params.utilityModel,
+      baseUrl: params.baseUrl,
     });
 
     return {
@@ -290,6 +293,7 @@ export async function summarizeInChunks(params: {
       customInstructions: params.customInstructions,
       provider: params.provider,
       utilityModel: params.utilityModel,
+      baseUrl: params.baseUrl,
     });
 
     partialSummaries.push(partial);
@@ -298,7 +302,7 @@ export async function summarizeInChunks(params: {
   log.info(`Merging ${partialSummaries.length} partial summaries`);
 
   const provider = params.provider || "anthropic";
-  const model = getUtilityModel(provider, params.utilityModel);
+  const model = getUtilityModel(provider, params.utilityModel, params.baseUrl);
   const mergeContext: Context = {
     messages: [
       {
@@ -361,6 +365,7 @@ export async function summarizeWithFallback(params: {
   customInstructions?: string;
   provider?: SupportedProvider;
   utilityModel?: string;
+  baseUrl?: string;
 }): Promise<SummarizationResult> {
   if (params.messages.length === 0) {
     return {
@@ -386,6 +391,7 @@ export async function summarizeWithFallback(params: {
       customInstructions: params.customInstructions,
       provider: params.provider,
       utilityModel: params.utilityModel,
+      baseUrl: params.baseUrl,
     });
   } catch (fullError) {
     log.warn(`Full summarization failed: ${getErrorMessage(fullError)}`);
@@ -420,6 +426,7 @@ export async function summarizeWithFallback(params: {
         customInstructions: params.customInstructions,
         provider: params.provider,
         utilityModel: params.utilityModel,
+        baseUrl: params.baseUrl,
       });
 
       const notes = oversizedNotes.length > 0 ? `\n\n${oversizedNotes.join("\n")}` : "";

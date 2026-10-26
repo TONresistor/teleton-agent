@@ -285,4 +285,24 @@ describe("summary adapter responses", () => {
       "IMPORTANT_TAIL"
     );
   });
+  it("uses the configured endpoint for chunks and merge", async () => {
+    const actual =
+      await vi.importActual<typeof import("../ai-summarization.js")>("../ai-summarization.js");
+    const urls: string[] = [];
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (url) => {
+      urls.push(String(url));
+      return summaryResponse(["summary"]);
+    });
+    for (const baseUrl of ["https://first.test", "https://second.test"]) {
+      await actual.summarizeInChunks({
+        messages: context("source").messages,
+        apiKey: "test-key",
+        maxChunkTokens: 1,
+        baseUrl,
+      });
+    }
+    expect(urls.slice(0, 3).every((url) => url.startsWith("https://first.test/"))).toBe(true);
+    expect(urls.slice(3).every((url) => url.startsWith("https://second.test/"))).toBe(true);
+    expect(urls).toHaveLength(6);
+  });
 });

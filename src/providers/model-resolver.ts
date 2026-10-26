@@ -339,12 +339,20 @@ export function getProviderModel(
   }
 }
 
-export function getUtilityModel(provider: SupportedProvider, overrideModel?: string): Model<Api> {
+export function getUtilityModel(
+  provider: SupportedProvider,
+  overrideModel?: string,
+  baseUrl?: string
+): Model<Api> {
   const meta = getProviderMetadata(provider);
   const requested = overrideModel || meta.utilityModel;
   const modelId =
-    provider === "local" && requested === "auto" ? (defaultLocalModel ?? requested) : requested;
-  return getProviderModel(provider, modelId);
+    provider === "local" && requested === "auto"
+      ? baseUrl
+        ? (Object.keys(LOCAL_ENDPOINTS.get(baseUrl.replace(/\/+$/, "")) ?? {})[0] ?? requested)
+        : (defaultLocalModel ?? requested)
+      : requested;
+  return getProviderModel(provider, modelId, baseUrl);
 }
 
 /** Conservative estimate; measured prefix usage already includes the system and tools. */

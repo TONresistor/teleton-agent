@@ -28,9 +28,10 @@ async function generateSlugViaClaude(params: {
   apiKey: string;
   provider?: SupportedProvider;
   utilityModel?: string;
+  baseUrl?: string;
 }): Promise<string> {
   const provider = params.provider || "anthropic";
-  const model = getUtilityModel(provider, params.utilityModel);
+  const model = getUtilityModel(provider, params.utilityModel, params.baseUrl);
 
   const formatted = formatMessagesForSummary(params.messages.slice(-SESSION_SLUG_RECENT_MESSAGES));
 
@@ -92,6 +93,7 @@ export async function saveSessionMemory(params: {
   apiKey: string;
   provider?: SupportedProvider;
   utilityModel?: string;
+  baseUrl?: string;
 }): Promise<void> {
   try {
     const { TELETON_ROOT } = await import("../workspace/paths.js");
@@ -107,6 +109,7 @@ export async function saveSessionMemory(params: {
       apiKey: params.apiKey,
       provider: params.provider,
       utilityModel: params.utilityModel,
+      baseUrl: params.baseUrl,
     });
 
     const filename = `${dateStr}-${slug}.md`;
@@ -125,6 +128,7 @@ export async function saveSessionMemory(params: {
           "Summarize this session comprehensively. Include key topics, decisions made, problems solved, and important context.",
         provider: params.provider,
         utilityModel: params.utilityModel,
+        baseUrl: params.baseUrl,
       });
     } catch (error) {
       log.warn({ err: error }, "Session summary generation failed");
@@ -192,6 +196,7 @@ export async function consolidateOldMemoryFiles(params: {
   apiKey: string;
   provider?: SupportedProvider;
   utilityModel?: string;
+  baseUrl?: string;
 }): Promise<{ consolidated: number }> {
   try {
     const { TELETON_ROOT } = await import("../workspace/paths.js");
@@ -309,6 +314,7 @@ ${sourceList}
 Preserve key facts, decisions, patterns, and important context. Remove redundancy. Organize by topic. You may reference source file names when relevant.`,
           provider: params.provider,
           utilityModel: params.utilityModel,
+          baseUrl: params.baseUrl,
         });
         summary = result.summary;
       } catch (error) {

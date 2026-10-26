@@ -151,6 +151,7 @@ export async function prepareTurn(
           apiKey: getEffectiveApiKey(deps.config.agent.provider, deps.config.agent.api_key),
           provider: deps.config.agent.provider as SupportedProvider,
           utilityModel: deps.config.agent.utility_model,
+          baseUrl: deps.config.agent.base_url,
         });
 
         log.info(`Memory saved before reset`);
@@ -363,7 +364,8 @@ export async function prepareTurn(
     getEffectiveApiKey(deps.config.agent.provider, deps.config.agent.api_key),
     chatId,
     deps.config.agent.provider as SupportedProvider,
-    deps.config.agent.utility_model
+    deps.config.agent.utility_model,
+    deps.config.agent.base_url
   );
   if (preemptiveCompaction) {
     log.info(`Preemptive compaction triggered, reloading session...`);

@@ -5,6 +5,7 @@ vi.mock("../../utils/fetch.js", () => ({ fetchWithTimeout: mocks.fetchWithTimeou
 
 import {
   getProviderModel,
+  getUtilityModel,
   isCustomOpenRouterModel,
   registerLocalModels,
 } from "../model-resolver.js";
@@ -81,5 +82,17 @@ describe("dynamic model registry", () => {
     mocks.fetchWithTimeout.mockRejectedValueOnce(new Error("endpoint unavailable"));
     await expect(registerLocalModels("http://new.local/v1")).resolves.toEqual([]);
     expect(() => getProviderModel("local", "old-model")).toThrow(/not served/i);
+  });
+  it("isolates utility model endpoints and local discovery", async () => {
+    for (const endpoint of ["https://first.test/v1", "https://second.test/v1"]) {
+      expect(getUtilityModel("anthropic", undefined, endpoint).baseUrl).toBe(endpoint);
+      mocks.fetchWithTimeout.mockResolvedValue({
+        ok: true,
+        json: async () => ({ data: [{ id: endpoint.includes("first") ? "first" : "second" }] }),
+      });
+      await registerLocalModels(endpoint);
+    }
+    expect(getUtilityModel("local", "auto", "https://first.test/v1").id).toBe("first");
+    expect(getUtilityModel("local", "auto", "https://second.test/v1").id).toBe("second");
   });
 });

@@ -166,6 +166,7 @@ export const sessionSearchExecutor: ToolExecutor<SessionSearchParams> = async (
             apiKey,
             provider,
             utilityModel: context.config?.agent?.utility_model,
+            baseUrl: context.config?.agent?.base_url,
             maxSummaryTokens: 300,
             customInstructions:
               "Summarize this conversation excerpt in 2-3 sentences. Focus on the topic and key points discussed.",
