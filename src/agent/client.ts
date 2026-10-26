@@ -79,6 +79,10 @@ function finalizeResponse(
     options.sessionId &&
     response.stopReason !== "error" &&
     response.stopReason !== "aborted" &&
+    !(
+      response.stopReason === "length" &&
+      response.content.some((block) => block.type === "toolCall")
+    ) &&
     !isSilentReply(text)
   ) {
     appendToTranscript(options.sessionId, response);

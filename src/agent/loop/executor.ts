@@ -110,6 +110,24 @@ export async function executeAgentLoop(
       throw new Error(assistantMsg.errorMessage || "Model response was aborted before completion");
     }
 
+    if (assistantMsg.stopReason === "length") {
+      stopReason = "output_budget";
+      const partialText = [...accumulatedTexts, response.text].filter(Boolean).join("\n");
+      forcedContent =
+        (partialText ? partialText + "\n\n" : "") +
+        "The model response was truncated at its output limit. " +
+        "No tools from this incomplete response were executed. Send a follow-up to continue.";
+      finalResponse = {
+        ...response,
+        message: {
+          ...assistantMsg,
+          content: assistantMsg.content.filter((block) => block.type === "text"),
+        },
+      };
+      wasStreamed = streamed;
+      break;
+    }
+
     const actionAlreadyAttempted = totalToolCalls.some(
       (call) =>
         call.attempted !== false && deps.toolRegistry?.getToolCategory(call.name) !== "data-bearing"

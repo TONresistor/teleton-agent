@@ -3,6 +3,7 @@ import type { Tool } from "@earendil-works/pi-ai/compat";
 import { AgentConfigSchema } from "../../config/schema.js";
 
 const mocks = vi.hoisted(() => ({
+  appendToTranscript: vi.fn(),
   complete: vi.fn(),
   stream: vi.fn(),
 }));
@@ -17,6 +18,11 @@ vi.mock("@earendil-works/pi-ai/compat", async () => {
     stream: mocks.stream,
   };
 });
+
+vi.mock("../../session/transcript.js", () => ({
+  appendToTranscript: mocks.appendToTranscript,
+  readTranscript: () => [],
+}));
 
 import { chatWithContext, streamWithContext } from "../client.js";
 
@@ -110,6 +116,21 @@ describe("Telegram tool preparation", () => {
       : await chatWithContext(config, options);
 
     expect(response.text).toBe("First block\nSecond block");
+  });
+
+  it("does not persist tool calls from a truncated response", async () => {
+    mocks.appendToTranscript.mockClear();
+    mocks.complete.mockResolvedValue({
+      ...assistantMessage(),
+      stopReason: "length",
+      content: [{ type: "toolCall", id: "partial", name: "send", arguments: {} }],
+    });
+    await chatWithContext(config, {
+      context: { messages: [] },
+      sessionId: "test",
+      persistTranscript: true,
+    });
+    expect(mocks.appendToTranscript).not.toHaveBeenCalled();
   });
 
   it("applies the same guard to streaming calls", async () => {

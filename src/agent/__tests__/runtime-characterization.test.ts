@@ -416,4 +416,31 @@ describe("AgentRuntime characterization", () => {
     expect(result.content).toBe("recovered");
     expect(mocks.recoverLlmError).toHaveBeenCalledOnce();
   });
+  it.each([false, true])(
+    "does not execute or complete a truncated response (tools: %s)",
+    async (withTool) => {
+      const message = assistantMessage(
+        [
+          { type: "text", text: "partial answer" },
+          ...(withTool
+            ? [{ type: "toolCall" as const, name: "send", id: "partial", arguments: {} }]
+            : []),
+        ],
+        "length"
+      );
+      mocks.runModelIteration.mockResolvedValueOnce(iteration(message, "partial answer"));
+      const result = await new AgentRuntime(config(), "", registry).processMessage({
+        chatId: "chat-1",
+        userMessage: "send",
+        toolContext,
+      });
+      expect(result.content).toContain("partial answer");
+      expect(result.content).toContain("truncated");
+      expect(mocks.executeToolBatch).not.toHaveBeenCalled();
+      expect(mocks.runModelIteration).toHaveBeenCalledOnce();
+      expect(mocks.traceFinish).toHaveBeenCalledWith(
+        expect.objectContaining({ status: "budget_exhausted", stopReason: "output_budget" })
+      );
+    }
+  );
 });
