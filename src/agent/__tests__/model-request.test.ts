@@ -646,3 +646,175 @@ describe("budget and Google reasoning payloads", () => {
     expect(request.options).toMatchObject({ maxTokens: 1024, thinkingEnabled: false });
   });
 });
+
+describe("effective Responses output minimum", () => {
+  it.each([1, 8])(
+    "rejects requested budget %s locally instead of reporting overflow",
+    async (max_tokens) => {
+      const { chatWithContext, streamWithContext } = await import("../client.js");
+      const fetch = vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("Network disabled"));
+      const config = AgentConfigSchema.parse({
+        provider: "openai",
+        model: "gpt-6-sol",
+        api_key: "sk-test-only",
+        max_tokens,
+      });
+      try {
+        await expect(chatWithContext(config, { context: { messages: [] } })).rejects.toThrow(
+          "at least 16 tokens"
+        );
+        expect(() => streamWithContext(config, { context: { messages: [] } })).toThrow(
+          "at least 16 tokens"
+        );
+        expect(fetch).not.toHaveBeenCalled();
+      } finally {
+        fetch.mockRestore();
+      }
+    }
+  );
+
+  it.each([16, 4096])(
+    "preserves requested budget %s in the real Responses payload",
+    async (max_tokens) => {
+      const request = prepareModelRequest(
+        AgentConfigSchema.parse({
+          provider: "openai",
+          model: "gpt-6-sol",
+          api_key: "sk-test-only",
+          max_tokens,
+        }),
+        { context: { messages: [{ role: "user", content: "test", timestamp: 1 }] } }
+      );
+      let payload: unknown;
+      await complete(request.model, request.context, {
+        ...request.options,
+        onPayload(value) {
+          payload = value;
+          throw new Error("Stop before network");
+        },
+      });
+      expect(request.options.maxTokens).toBe(max_tokens);
+      expect(payload).toHaveProperty("max_output_tokens", max_tokens);
+    }
+  );
+
+  it.each([false, true])(
+    "reports real context exhaustion when available output falls below 16 (stream: %s)",
+    async (streaming) => {
+      const { chatWithContext, streamWithContext } = await import("../client.js");
+      const { getProviderModel } = await import("../../providers/model-resolver.js");
+      const config = AgentConfigSchema.parse({
+        provider: "openai",
+        model: "gpt-6-sol",
+        api_key: "sk-test-only",
+        max_tokens: 4096,
+      });
+      const model = getProviderModel("openai", config.model);
+      const tokens = model.contextWindow - 4096 - 8;
+      const context = {
+        messages: [
+          {
+            role: "assistant" as const,
+            content: [],
+            api: model.api,
+            provider: model.provider,
+            model: model.id,
+            stopReason: "stop" as const,
+            timestamp: 1,
+            usage: {
+              input: tokens,
+              output: 0,
+              cacheRead: 0,
+              cacheWrite: 0,
+              totalTokens: tokens,
+              cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+            },
+          },
+        ],
+      };
+      const fetch = vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("Network disabled"));
+      try {
+        expect(prepareModelRequest(config, { context }).options.maxTokens).toBe(0);
+        const response = streaming
+          ? await streamWithContext(config, { context }).result
+          : await chatWithContext(config, { context });
+        expect(response.message.stopReason).toBe("error");
+        expect(response.message.errorMessage).toContain("Context length exceeded");
+        expect(fetch).not.toHaveBeenCalled();
+      } finally {
+        fetch.mockRestore();
+      }
+    }
+  );
+
+  it.each(["codex", "anthropic", "google", "groq"] as const)(
+    "does not impose the Responses minimum on %s's other transport",
+    async (provider) => {
+      const models = {
+        codex: "gpt-5.6-terra",
+        anthropic: "claude-haiku-4-5-20251001",
+        google: "gemini-3.5-flash",
+        groq: "openai/gpt-oss-20b",
+      };
+      const key =
+        provider === "codex"
+          ? `header.${Buffer.from(JSON.stringify({ "https://api.openai.com/auth": { chatgpt_account_id: "test-account" } })).toString("base64")}.signature`
+          : "sk-test-only";
+      const request = prepareModelRequest(
+        AgentConfigSchema.parse({
+          provider,
+          model: models[provider],
+          api_key: key,
+          max_tokens: 1,
+          reasoning_effort: "none",
+        }),
+        { context: { messages: [{ role: "user", content: "test", timestamp: 1 }] } }
+      );
+      let payload: unknown;
+      await complete(request.model, request.context, {
+        ...request.options,
+        onPayload(value) {
+          payload = value;
+          throw new Error("Stop before network");
+        },
+      });
+      expect(request.options.maxTokens).toBe(1);
+      expect(payload).toBeDefined();
+      if (provider === "codex") expect(payload).not.toHaveProperty("max_output_tokens");
+    }
+  );
+
+  it("does not impose a minimum when the Responses adapter omits the output field", async () => {
+    const { getProviderModel, getOutputTokenBudget } =
+      await import("../../providers/model-resolver.js");
+    const model = getProviderModel("openai", "gpt-6-sol");
+    expect(
+      getOutputTokenBudget(
+        { ...model, compat: { ...model.compat, supportsMaxOutputTokens: false } },
+        { messages: [] },
+        1,
+        "sk-test-only"
+      )
+    ).toBe(1);
+    const request = prepareModelRequest(
+      AgentConfigSchema.parse({
+        provider: "openai",
+        model: model.id,
+        api_key: "fake-sign-in-token",
+        max_tokens: 1,
+      }),
+      { context: { messages: [] } }
+    );
+    let payload: unknown;
+    await complete(request.model, request.context, {
+      ...request.options,
+      onPayload(value) {
+        payload = value;
+        throw new Error("Stop before network");
+      },
+    });
+    expect(request.options.maxTokens).toBe(1);
+    expect(payload).toBeDefined();
+    expect(payload).not.toHaveProperty("max_output_tokens");
+  });
+});

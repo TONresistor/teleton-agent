@@ -57,7 +57,7 @@ Slug:`,
       ],
     };
 
-    const maxTokens = getOutputTokenBudget(model, context, SESSION_SLUG_MAX_TOKENS);
+    const maxTokens = getOutputTokenBudget(model, context, SESSION_SLUG_MAX_TOKENS, params.apiKey);
     if (!maxTokens) throw new Error("Context length exceeded during slug generation");
     const response = await complete(model, context, {
       apiKey: params.apiKey,

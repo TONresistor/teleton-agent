@@ -1,6 +1,8 @@
 import { estimateContextTokens, estimateMessageTokens } from "@earendil-works/pi-ai/utils/estimate";
 import {
   getModel,
+  hasApi,
+  getEnvApiKey,
   normalizeContext,
   type Context,
   type Model,
@@ -359,10 +361,31 @@ export function getUtilityModel(
 export function getOutputTokenBudget(
   model: Model<Api>,
   context: Context,
-  requested: number
+  requested: number,
+  apiKey?: string
 ): number {
   if (!Number.isFinite(requested) || requested < 1)
     throw new Error("Output token budget must be positive");
+  // Mirror the installed Responses adapter: Codex and transports omitting the field have no such minimum.
+  const responsesKey =
+    model.api === "openai-responses"
+      ? apiKey?.trim()
+        ? apiKey
+        : getEnvApiKey(model.provider)
+      : undefined;
+  const chatGptSignIn =
+    model.provider === "openai" &&
+    model.baseUrl === "https://api.openai.com/v1" &&
+    responsesKey !== undefined &&
+    !responsesKey.startsWith("sk-");
+  const minimum =
+    hasApi(model, "openai-responses") &&
+    model.compat?.supportsMaxOutputTokens !== false &&
+    !chatGptSignIn
+      ? 16
+      : 1;
+  if (requested < minimum)
+    throw new Error(`Output token budget must be at least ${minimum} tokens for OpenAI Responses`);
   const transcript = normalizeContext(context);
   // Current schemas may differ from those covered by a previous usage measurement.
   const staticTokens = transcript.messages.reduce(
@@ -388,8 +411,12 @@ export function getOutputTokenBudget(
         : message
     ),
   };
-  const contextTokens = Math.max(estimateContextTokens(estimationTranscript.messages).tokens, staticTokens);
+  const contextTokens = Math.max(
+    estimateContextTokens(estimationTranscript.messages).tokens,
+    staticTokens
+  );
   const available =
     model.contextWindow > 0 ? model.contextWindow - contextTokens - 4096 : model.maxTokens;
-  return Math.max(0, Math.floor(Math.min(requested, model.maxTokens, available)));
+  const budget = Math.max(0, Math.floor(Math.min(requested, model.maxTokens, available)));
+  return budget < minimum ? 0 : budget;
 }

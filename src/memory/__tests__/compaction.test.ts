@@ -465,4 +465,19 @@ describe("summary adapter responses", () => {
       mocks.persistence = undefined;
     }
   });
+  it("rejects an undersized utility Responses budget before transport", async () => {
+    const actual =
+      await vi.importActual<typeof import("../ai-summarization.js")>("../ai-summarization.js");
+    const fetch = vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("Network disabled"));
+    await expect(
+      actual.summarizeViaClaude({
+        messages: context("small budget").messages,
+        apiKey: "sk-test-only",
+        provider: "openai",
+        utilityModel: "gpt-6-sol",
+        maxSummaryTokens: 8,
+      })
+    ).rejects.toThrow("at least 16 tokens");
+    expect(fetch).not.toHaveBeenCalled();
+  });
 });

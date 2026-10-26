@@ -212,11 +212,11 @@ Be specific but concise. Preserve critical information.`;
       ],
     };
 
-    if (!getOutputTokenBudget(model, context, maxTokens))
+    if (!getOutputTokenBudget(model, context, maxTokens, params.apiKey))
       throw new Error("Context length exceeded during summarization");
     const response = await complete(model, context, {
       apiKey: params.apiKey,
-      maxTokens: getOutputTokenBudget(model, context, maxTokens),
+      maxTokens: getOutputTokenBudget(model, context, maxTokens, params.apiKey),
     });
 
     if (
@@ -323,7 +323,8 @@ ${partialSummaries.map((s, i) => `Part ${i + 1}:\n${s}`).join("\n\n---\n\n")}`,
     !getOutputTokenBudget(
       model,
       mergeContext,
-      params.maxSummaryTokens ?? DEFAULT_SUMMARY_FALLBACK_TOKENS
+      params.maxSummaryTokens ?? DEFAULT_SUMMARY_FALLBACK_TOKENS,
+      params.apiKey
     )
   )
     throw new Error("Context length exceeded during summary merge");
@@ -332,7 +333,8 @@ ${partialSummaries.map((s, i) => `Part ${i + 1}:\n${s}`).join("\n\n---\n\n")}`,
     maxTokens: getOutputTokenBudget(
       model,
       mergeContext,
-      params.maxSummaryTokens ?? DEFAULT_SUMMARY_FALLBACK_TOKENS
+      params.maxSummaryTokens ?? DEFAULT_SUMMARY_FALLBACK_TOKENS,
+      params.apiKey
     ),
   });
 

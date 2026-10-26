@@ -198,7 +198,13 @@ export function prepareModelRequest(
     tools,
   };
   const temperature = request.temperature ?? config.temperature;
-  const maxTokens = getOutputTokenBudget(model, context, request.maxTokens ?? config.max_tokens);
+  const apiKey = getEffectiveApiKey(provider, config.api_key);
+  const maxTokens = getOutputTokenBudget(
+    model,
+    context,
+    request.maxTokens ?? config.max_tokens,
+    apiKey
+  );
   const reasoningOptions = getReasoningOptions(provider, model, config.reasoning_effort, maxTokens);
   const usageTracker =
     provider === "openrouter" && model.api === "openai-completions"
@@ -226,7 +232,7 @@ export function prepareModelRequest(
       },
       ...(retryTracker && { fetch: retryTracker.fetch }),
       maxRetries: 0,
-      apiKey: getEffectiveApiKey(provider, config.api_key),
+      apiKey,
       maxTokens,
       ...(!isCustomOpenRouterModel(model) &&
         modelSupportsTemperature(provider, model) &&
