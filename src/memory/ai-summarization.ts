@@ -194,7 +194,11 @@ Be specific but concise. Preserve critical information.`;
       maxTokens,
     });
 
-    if (response.stopReason === "error" || response.stopReason === "aborted") {
+    if (
+      response.stopReason === "error" ||
+      response.stopReason === "aborted" ||
+      response.stopReason === "length"
+    ) {
       throw new Error(response.errorMessage || `Summary response ${response.stopReason}`);
     }
     const textContent = response.content.find((block) => block.type === "text");
@@ -293,7 +297,11 @@ ${partialSummaries.map((s, i) => `Part ${i + 1}:\n${s}`).join("\n\n---\n\n")}`,
     maxTokens: params.maxSummaryTokens ?? DEFAULT_SUMMARY_FALLBACK_TOKENS,
   });
 
-  if (mergeResponse.stopReason === "error" || mergeResponse.stopReason === "aborted") {
+  if (
+    mergeResponse.stopReason === "error" ||
+    mergeResponse.stopReason === "aborted" ||
+    mergeResponse.stopReason === "length"
+  ) {
     throw new Error(mergeResponse.errorMessage || `Summary merge ${mergeResponse.stopReason}`);
   }
   const textContent = mergeResponse.content.find((block) => block.type === "text");
