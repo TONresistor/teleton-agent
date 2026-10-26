@@ -212,4 +212,77 @@ describe("summary adapter responses", () => {
       expect(summary).toBe("FIRST\nSECOND");
     }
   );
+  it("sends bounded tool arguments, receipts and errors without mutating the transcript", async () => {
+    const actual =
+      await vi.importActual<typeof import("../ai-summarization.js")>("../ai-summarization.js");
+    const messages: Message[] = [
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "toolCall",
+            id: "receipt-call",
+            name: "transfer",
+            arguments: { amount: 12345, binary: "AAAA" },
+          },
+        ],
+        api: "test",
+        provider: "test",
+        model: "test",
+        stopReason: "toolUse",
+        timestamp: 1,
+        usage: {
+          input: 0,
+          output: 0,
+          cacheRead: 0,
+          cacheWrite: 0,
+          totalTokens: 0,
+          cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+        },
+      },
+      {
+        role: "toolResult",
+        toolCallId: "receipt-call",
+        toolName: "transfer",
+        content: [
+          {
+            type: "text",
+            text:
+              "receipt=EXACT_RECEIPT; failed: insufficient balance; " + "long text ".repeat(10000),
+          },
+          { type: "image", data: "DO_NOT_SEND", mimeType: "image/png" },
+        ],
+        isError: true,
+        timestamp: 2,
+      },
+    ];
+    const before = JSON.stringify(messages);
+    let body = "";
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, init) => {
+      body = String(init?.body);
+      return summaryResponse(["summary"]);
+    });
+    await actual.summarizeViaClaude({ messages, apiKey: "test-key" });
+    for (const value of [
+      "12345",
+      "EXACT_RECEIPT",
+      "insufficient balance",
+      "receipt-call",
+      "isError=true",
+    ])
+      expect(body).toContain(value);
+    expect(body).not.toContain("DO_NOT_SEND");
+    expect(body).not.toContain("AAAA");
+    expect(actual.formatMessagesForSummary(messages).length).toBeLessThan(17000);
+    expect(actual.splitMessagesByTokens(messages, 100)).toHaveLength(2);
+    expect(JSON.stringify(messages)).toBe(before);
+  });
+  it("does not truncate ordinary conversation text before chunking", async () => {
+    const actual =
+      await vi.importActual<typeof import("../ai-summarization.js")>("../ai-summarization.js");
+    const content = "ordinary text ".repeat(3000) + "IMPORTANT_TAIL";
+    expect(actual.formatMessagesForSummary([{ role: "user", content, timestamp: 1 }])).toContain(
+      "IMPORTANT_TAIL"
+    );
+  });
 });
