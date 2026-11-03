@@ -94,6 +94,11 @@ const MODEL_OPTIONS: Record<string, CatalogModelOption[]> = {
       description: "Agentic coding, reasoning, vision, 272K effective context",
     },
     {
+      value: "gpt-6.1-terra",
+      name: "GPT-6.1 Terra",
+      description: "Balanced agentic reasoning and vision, 272K effective context",
+    },
+    {
       value: "gpt-6-sol",
       name: "GPT-6 Sol",
       description: "Agentic coding, reasoning, vision, 272K effective context",
@@ -166,6 +171,11 @@ const MODEL_OPTIONS: Record<string, CatalogModelOption[]> = {
       value: "gpt-5.6-terra",
       name: "GPT-5.6 Terra",
       description: "Balanced agentic coding model, 272K context",
+    },
+    {
+      value: "gpt-6.1-terra",
+      name: "GPT-6.1 Terra",
+      description: "Agentic reasoning and vision, 500K context",
     },
     {
       value: "gpt-6.1-sol",
@@ -297,6 +307,21 @@ const MODEL_OPTIONS: Record<string, CatalogModelOption[]> = {
       value: "openai/gpt-6.1-sol",
       name: "GPT-6.1 Sol",
       description: "Agentic reasoning and vision via OpenRouter, 1M context",
+    },
+    {
+      value: "openai/gpt-6.1-terra",
+      name: "GPT-6.1 Terra",
+      description: "Reasoning and vision via OpenRouter",
+    },
+    {
+      value: "openai/gpt-6.1-terra-pro",
+      name: "GPT-6.1 Terra Pro",
+      description: "Advanced reasoning and vision via OpenRouter",
+    },
+    {
+      value: "moonshotai/kimi-k3.1-pro",
+      name: "Kimi K3.1 Pro",
+      description: "Agentic reasoning and vision via OpenRouter",
     },
     {
       value: "openai/gpt-6.1-sol-pro",
@@ -532,6 +557,16 @@ const MODEL_OPTIONS: Record<string, CatalogModelOption[]> = {
       description: "Coding plan, reasoning, 1M context",
     },
     {
+      value: "k3.1-pro",
+      name: "Kimi K3.1 Pro",
+      description: "Agentic reasoning and vision, 1M context",
+    },
+    {
+      value: "k3.1-pro-highspeed",
+      name: "Kimi K3.1 Pro Highspeed",
+      description: "Fast agentic reasoning and vision, 1M context",
+    },
+    {
       value: "k3",
       name: "Kimi K3",
       description: "Flagship coding model, reasoning, vision, 1M context",
@@ -554,6 +589,21 @@ const MODEL_OPTIONS: Record<string, CatalogModelOption[]> = {
       description: "Agentic reasoning and vision, 1M context",
     },
     {
+      value: "mistral-large-4-0-8",
+      name: "Mistral Large 4.0.8",
+      description: "Agentic reasoning and vision, 1M context",
+    },
+    {
+      value: "deepseek-v4-1-flash-1017",
+      name: "DeepSeek V4.1 Flash 1017",
+      description: "Agentic reasoning, 1M context",
+    },
+    {
+      value: "zai-glm-5-3-flash",
+      name: "GLM-5.3 Flash",
+      description: "Fast reasoning and vision, 1M context",
+    },
+    {
       value: "mistral-medium-latest",
       name: "Mistral Medium (Latest)",
       description: "Agentic coding and multimodal reasoning, 262K context",
@@ -562,11 +612,6 @@ const MODEL_OPTIONS: Record<string, CatalogModelOption[]> = {
       value: "mistral-small-2603",
       name: "Mistral Small 4",
       description: "Efficient reasoning, coding and vision, 256K context",
-    },
-    {
-      value: "mistral-large-2512",
-      name: "Mistral Large 3",
-      description: "General-purpose multimodal model, 262K context",
     },
     {
       value: "mistral-small-latest",
@@ -633,6 +678,11 @@ const MODEL_OPTIONS: Record<string, CatalogModelOption[]> = {
       description: "Fast reasoning and vision, 1M context",
     },
     {
+      value: "MiniMaxAI/MiniMax-M3.1-Flash",
+      name: "MiniMax M3.1 Flash",
+      description: "Fast reasoning and vision via Hugging Face",
+    },
+    {
       value: "moonshotai/Kimi-K3",
       name: "Kimi K3",
       description: "Agentic reasoning and vision, 1M context",
@@ -687,11 +737,6 @@ const MODEL_OPTIONS: Record<string, CatalogModelOption[]> = {
       value: "openai/gpt-oss-120b",
       name: "GPT OSS 120B",
       description: "Open reasoning model, 131K context",
-    },
-    {
-      value: "stepfun-ai/Step-3.7-Flash",
-      name: "Step 3.7 Flash",
-      description: "Fast reasoning model, 262K context",
     },
     {
       value: "deepseek-ai/DeepSeek-V4-Pro",

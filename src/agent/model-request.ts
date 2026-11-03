@@ -136,6 +136,12 @@ function getReasoningOptions(
       thinking: { enabled: budget >= minimum, ...(budget >= minimum && { budgetTokens: budget }) },
     };
   }
+  if (hasApi(model, "mistral-conversations")) {
+    const mapped = model.thinkingLevelMap?.[level];
+    return model.thinkingLevelMap
+      ? { reasoningEffort: mapped ?? (level === "off" ? "none" : level) }
+      : { ...(level !== "off" ? { promptMode: "reasoning" } : {}) };
+  }
   if (!adaptiveThinking && !openAiThinking) return {};
   const mapped = model.thinkingLevelMap?.[level];
   if (adaptiveThinking) {

@@ -10,6 +10,16 @@ vi.mock("../../providers/codex-credentials.js", () => ({
 
 describe("model request preparation", () => {
   it.each([
+    ["openai", "gpt-6.1-terra", "none", "none", "reasoning.effort"],
+    ["codex", "gpt-6.1-terra", "max", "max", "reasoning.effort"],
+    ["openrouter", "openai/gpt-6.1-terra", "low", "low", "reasoning.effort"],
+    ["openrouter", "openai/gpt-6.1-terra-pro", "max", "max", "reasoning.effort"],
+    ["openrouter", "moonshotai/kimi-k3.1-pro", "max", "max", "reasoning.effort"],
+    ["moonshot", "k3.1-pro", "none", "low", "reasoning_effort"],
+    ["moonshot", "k3.1-pro-highspeed", "max", "max", "reasoning_effort"],
+    ["mistral", "mistral-large-4-0-8", "low", "low", "reasoningEffort"],
+    ["mistral", "deepseek-v4-1-flash-1017", "none", "none", "reasoningEffort"],
+    ["mistral", "zai-glm-5-3-flash", "max", "max", "reasoningEffort"],
     ["anthropic", "claude-sonnet-5-5", "low", "low", "messages.1.output_config.effort"],
     ["anthropic", "claude-sonnet-5-5", "max", "max", "messages.1.output_config.effort"],
     ["anthropic", "claude-sonnet-5-5", "none", "low", "messages.1.output_config.effort"],
@@ -27,7 +37,15 @@ describe("model request preparation", () => {
     "sends supported effort for %s/%s (%s → %s)",
     async (provider, model, reasoning_effort, expected, path) => {
       const request = prepareModelRequest(
-        AgentConfigSchema.parse({ provider, model, api_key: "test-key", reasoning_effort }),
+        AgentConfigSchema.parse({
+          provider,
+          model,
+          api_key:
+            provider === "codex"
+              ? `test.${Buffer.from(JSON.stringify({ "https://api.openai.com/auth": { chatgpt_account_id: "fixture" } })).toString("base64url")}.test`
+              : "test-key",
+          reasoning_effort,
+        }),
         { context: { messages: [{ role: "user", content: "test", timestamp: 1 }] } }
       );
       let payload: unknown;
