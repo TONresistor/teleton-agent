@@ -6,9 +6,6 @@ import type { Tool, ToolExecutor, ToolContext, ToolScope } from "../types.js";
 import type { ToolCall } from "@earendil-works/pi-ai";
 
 // Mock modules
-vi.mock("@earendil-works/pi-ai", () => ({
-  validateToolCall: vi.fn((tools, toolCall) => toolCall.arguments),
-}));
 
 vi.mock("../module-permissions.js", () => ({
   ModulePermissions: vi.fn(),
@@ -422,19 +419,25 @@ describe("ToolRegistry", () => {
     });
 
     it("denies executing a dm-only tool in a group", async () => {
-      const result = await registry.execute({ name: "dm_tool", input: { message: "x" } } as any, {
-        ...mockContext,
-        isGroup: true,
-      });
+      const result = await registry.execute(
+        { name: "dm_tool", arguments: { message: "x" } } as any,
+        {
+          ...mockContext,
+          isGroup: true,
+        }
+      );
       expect(result.success).toBe(false);
       expect(result.error).toMatch(/direct message/i);
     });
 
     it("allows executing a dm-only tool in a DM", async () => {
-      const result = await registry.execute({ name: "dm_tool", input: { message: "x" } } as any, {
-        ...mockContext,
-        isGroup: false,
-      });
+      const result = await registry.execute(
+        { name: "dm_tool", arguments: { message: "x" } } as any,
+        {
+          ...mockContext,
+          isGroup: false,
+        }
+      );
       expect(result.success).toBe(true);
     });
   });
@@ -501,6 +504,62 @@ describe("ToolRegistry", () => {
   // ---------- Tool execution ----------
 
   describe("execute()", () => {
+    it.each([false, true])(
+      "validates real tool arguments (plain JSON Schema: %s)",
+      async (plain) => {
+        const schema = Type.Object({
+          count: Type.Integer(),
+          label: Type.String(),
+          tags: Type.Array(Type.String()),
+        });
+        const executor = createMockExecutor();
+        registry.register(
+          {
+            name: "validate_args",
+            description: "Validate arguments",
+            parameters: plain ? JSON.parse(JSON.stringify(schema)) : schema,
+          },
+          executor,
+          "open"
+        );
+        const result = await registry.execute(
+          {
+            type: "toolCall",
+            id: "coerce",
+            name: "validate_args",
+            arguments: { count: "3.5", label: null, tags: "one" },
+          },
+          mockContext
+        );
+        expect(result.success).toBe(true);
+        expect(executor).toHaveBeenCalledWith(
+          { count: 3, label: "null", tags: ["one"] },
+          mockContext
+        );
+      }
+    );
+
+    it.each<Pick<ToolCall, "arguments" | "argumentsError">>([
+      { arguments: {} },
+      { arguments: { message: {} } },
+      { arguments: { message: "partial" }, argumentsError: "Invalid JSON" },
+    ] satisfies Partial<ToolCall>[])("never executes an invalid tool call: %j", async (input) => {
+      const executor = createMockExecutor();
+      registry.register(createMockTool("validate_args"), executor, "open");
+      const result = await registry.execute(
+        {
+          type: "toolCall",
+          id: "invalid",
+          name: "validate_args",
+          ...input,
+        },
+        mockContext
+      );
+      expect(result.success).toBe(false);
+      expect(result.error).toBeTruthy();
+      expect(executor).not.toHaveBeenCalled();
+    });
+
     it("executes directly when a legacy approval flag is present", async () => {
       const tool = createMockTool("financial_tool", "action");
       const executor = createMockExecutor({ success: true, data: { tx: "abc" } });

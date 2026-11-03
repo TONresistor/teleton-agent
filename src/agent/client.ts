@@ -4,6 +4,7 @@ import {
   type Context,
   type AssistantMessage,
   type Message,
+  type TextContent,
 } from "@earendil-works/pi-ai/compat";
 import type { AgentConfig } from "../config/schema.js";
 import { appendToTranscript, readTranscript } from "../session/transcript.js";
@@ -17,6 +18,7 @@ import {
   type PreparedModelRequest,
 } from "./model-request.js";
 import { isSilentReply } from "../constants/tokens.js";
+import { createThinkFilter, extractText } from "../utils/pi-message.js";
 
 // Model resolution + provider model registration live in the neutral providers/
 // layer so non-agent consumers (e.g. memory) can resolve models without importing
@@ -51,9 +53,8 @@ export interface ChatResponse {
   message: AssistantMessage;
   text: string;
   context: Context;
+  retryAfterMs?: number;
 }
-
-const THINK_RE = /<think>[\s\S]*?<\/think>/g;
 
 /**
  * Shared post-processing for both complete() and stream() responses: strip
@@ -65,19 +66,29 @@ function finalizeResponse(
   context: Context,
   options: ChatOptions
 ): ChatResponse {
+  const filter = createThinkFilter();
+  let lastText: TextContent | undefined;
   for (const block of response.content) {
-    if (block.type === "text" && block.text.includes("<think>")) {
-      block.text = block.text.replace(THINK_RE, "").trim();
+    if (block.type === "text") {
+      if (lastText) lastText.text += filter.flushPublic();
+      block.text = filter.push(block.text);
+      lastText = block;
     }
   }
+  const suffix = filter.end(response.stopReason === "stop" || response.stopReason === "toolUse");
+  if (lastText) lastText.text += suffix;
 
-  const textContent = response.content.find((block) => block.type === "text");
-  const text = textContent?.type === "text" ? textContent.text : "";
+  const text = extractText(response);
 
   if (
     options.persistTranscript &&
     options.sessionId &&
     response.stopReason !== "error" &&
+    response.stopReason !== "aborted" &&
+    !(
+      response.stopReason === "length" &&
+      response.content.some((block) => block.type === "toolCall")
+    ) &&
     !isSilentReply(text)
   ) {
     appendToTranscript(options.sessionId, response);
@@ -108,15 +119,42 @@ async function retryAfterCredentialRefresh(
   return complete(request.model, request.context, request.options);
 }
 
+function contextOverflowResponse(request: PreparedModelRequest): AssistantMessage {
+  return {
+    role: "assistant",
+    content: [],
+    api: request.model.api,
+    provider: request.model.provider,
+    model: request.model.id,
+    timestamp: Date.now(),
+    stopReason: "error",
+    errorMessage: "Context length exceeded: no safe output budget remains",
+    usage: {
+      input: 0,
+      output: 0,
+      cacheRead: 0,
+      cacheWrite: 0,
+      totalTokens: 0,
+      cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+    },
+  };
+}
+
 export async function chatWithContext(
   config: AgentConfig,
   options: ChatOptions
 ): Promise<ChatResponse> {
   const request = prepareModelRequest(config, options);
-  const initialResponse = await complete(request.model, request.context, request.options);
+  const initialResponse =
+    request.options.maxTokens === 0
+      ? contextOverflowResponse(request)
+      : await complete(request.model, request.context, request.options);
   const response = await retryAfterCredentialRefresh(request, initialResponse);
   request.finalizeUsage?.(response);
-  return finalizeResponse(response, request.context, options);
+  return {
+    ...finalizeResponse(response, request.context, options),
+    retryAfterMs: request.retryAfterMs?.(),
+  };
 }
 
 export interface StreamResult {
@@ -126,19 +164,38 @@ export interface StreamResult {
 
 export function streamWithContext(config: AgentConfig, options: ChatOptions): StreamResult {
   const request = prepareModelRequest(config, options);
+  if (request.options.maxTokens === 0) {
+    return {
+      textStream: (async function* () {})(),
+      result: Promise.resolve(
+        finalizeResponse(contextOverflowResponse(request), request.context, options)
+      ),
+    };
+  }
   const eventStream = stream(request.model, request.context, request.options);
 
   // Transform event stream into a simple text delta async iterable
   async function* textDeltas(): AsyncIterable<string> {
+    const filter = createThinkFilter();
+    let textBlocks = 0;
     for await (const event of eventStream) {
+      if (event.type === "text_start" && textBlocks++ > 0) {
+        const suffix = filter.flushPublic();
+        if (suffix) yield suffix;
+        yield "\n";
+      }
       if (event.type === "text_delta" && event.delta) {
-        yield event.delta;
+        const visible = filter.push(event.delta);
+        if (visible) yield visible;
       }
       // Stop yielding text when tool calls start — the response needs full processing
       if (event.type === "toolcall_start") {
-        return;
+        break;
       }
     }
+    const terminal = await eventStream.result();
+    const suffix = filter.end(terminal.stopReason === "stop" || terminal.stopReason === "toolUse");
+    if (suffix) yield suffix;
   }
 
   // Result promise: wait for the stream to complete and build ChatResponse
@@ -146,7 +203,10 @@ export function streamWithContext(config: AgentConfig, options: ChatOptions): St
     const initialResponse = await eventStream.result();
     const response = await retryAfterCredentialRefresh(request, initialResponse);
     request.finalizeUsage?.(response);
-    return finalizeResponse(response, request.context, options);
+    return {
+      ...finalizeResponse(response, request.context, options),
+      retryAfterMs: request.retryAfterMs?.(),
+    };
   })();
 
   return { textStream: textDeltas(), result: resultPromise };

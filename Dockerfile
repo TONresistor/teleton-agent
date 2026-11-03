@@ -12,6 +12,7 @@ RUN apt-get update && apt-get install -y \
 
 # Copy dependency files and SDK workspace (needed for workspace resolution)
 COPY package.json package-lock.json ./
+COPY patches/ patches/
 COPY packages/sdk/package.json packages/sdk/
 
 # Install all deps (including devDependencies for build + SDK workspace)
@@ -37,6 +38,7 @@ WORKDIR /app
 # Copy package files and install production deps only.
 # Keep a toolchain available during installation for native addons, then purge it.
 COPY package.json package-lock.json ./
+COPY patches/ patches/
 RUN apt-get update \
     && apt-get install -y --no-install-recommends python3 make g++ \
     && npm pkg delete scripts.prepare \

@@ -53,6 +53,8 @@ const LEGACY_MODEL_CASES: ReadonlyArray<
 
 describe("provider model catalog", () => {
   it.each([
+    ["mistral", "mistral-large-2512"],
+    ["huggingface", "stepfun-ai/Step-3.7-Flash"],
     ["codex", "gpt-5.5"],
     ["codex", "gpt-5.3-codex-spark"],
     ["codex", "gpt-5.4"],
@@ -136,6 +138,17 @@ describe("provider model catalog", () => {
   });
 
   it.each([
+    ["openai", "gpt-6.1-terra"],
+    ["codex", "gpt-6.1-terra"],
+    ["moonshot", "k3.1-pro"],
+    ["moonshot", "k3.1-pro-highspeed"],
+    ["openrouter", "openai/gpt-6.1-terra"],
+    ["openrouter", "openai/gpt-6.1-terra-pro"],
+    ["openrouter", "moonshotai/kimi-k3.1-pro"],
+    ["mistral", "mistral-large-4-0-8"],
+    ["mistral", "deepseek-v4-1-flash-1017"],
+    ["mistral", "zai-glm-5-3-flash"],
+    ["huggingface", "MiniMaxAI/MiniMax-M3.1-Flash"],
     ["anthropic", "claude-sonnet-5-5"],
     ["anthropic", "claude-haiku-5-5"],
     ["google", "gemini-4-argon"],

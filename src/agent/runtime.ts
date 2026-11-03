@@ -190,7 +190,12 @@ export class AgentRuntime {
         this.hookRunner
       );
       trace.finish({
-        status: loop.stopReason.endsWith("budget") ? "budget_exhausted" : "completed",
+        status:
+          loop.stopReason === "context_overflow_after_action"
+            ? "error"
+            : loop.stopReason.endsWith("budget")
+              ? "budget_exhausted"
+              : "completed",
         calls: loop.totalToolCalls,
         iterations: loop.iterations,
         usage: loop.accumulatedUsage,

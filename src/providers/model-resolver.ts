@@ -1,4 +1,13 @@
-import { getModel, type Model, type Api } from "@earendil-works/pi-ai/compat";
+import { estimateContextTokens, estimateMessageTokens } from "@earendil-works/pi-ai/utils/estimate";
+import {
+  getModel,
+  hasApi,
+  getEnvApiKey,
+  normalizeContext,
+  type Context,
+  type Model,
+  type Api,
+} from "@earendil-works/pi-ai/compat";
 import { getProviderMetadata, type SupportedProvider } from "../config/providers.js";
 import { createLogger } from "../utils/logger.js";
 import { fetchWithTimeout } from "../utils/fetch.js";
@@ -332,10 +341,82 @@ export function getProviderModel(
   }
 }
 
-export function getUtilityModel(provider: SupportedProvider, overrideModel?: string): Model<Api> {
+export function getUtilityModel(
+  provider: SupportedProvider,
+  overrideModel?: string,
+  baseUrl?: string
+): Model<Api> {
   const meta = getProviderMetadata(provider);
   const requested = overrideModel || meta.utilityModel;
   const modelId =
-    provider === "local" && requested === "auto" ? (defaultLocalModel ?? requested) : requested;
-  return getProviderModel(provider, modelId);
+    provider === "local" && requested === "auto"
+      ? baseUrl
+        ? (Object.keys(LOCAL_ENDPOINTS.get(baseUrl.replace(/\/+$/, "")) ?? {})[0] ?? requested)
+        : (defaultLocalModel ?? requested)
+      : requested;
+  return getProviderModel(provider, modelId, baseUrl);
+}
+
+/** Conservative estimate; measured prefix usage already includes the system and tools. */
+export function getOutputTokenBudget(
+  model: Model<Api>,
+  context: Context,
+  requested: number,
+  apiKey?: string
+): number {
+  if (!Number.isFinite(requested) || requested < 1)
+    throw new Error("Output token budget must be positive");
+  // Mirror the installed Responses adapter: Codex and transports omitting the field have no such minimum.
+  const responsesKey =
+    model.api === "openai-responses"
+      ? apiKey?.trim()
+        ? apiKey
+        : getEnvApiKey(model.provider)
+      : undefined;
+  const chatGptSignIn =
+    model.provider === "openai" &&
+    model.baseUrl === "https://api.openai.com/v1" &&
+    responsesKey !== undefined &&
+    !responsesKey.startsWith("sk-");
+  const minimum =
+    hasApi(model, "openai-responses") &&
+    model.compat?.supportsMaxOutputTokens !== false &&
+    !chatGptSignIn
+      ? 16
+      : 1;
+  if (requested < minimum)
+    throw new Error(`Output token budget must be at least ${minimum} tokens for OpenAI Responses`);
+  const transcript = normalizeContext(context);
+  // Current schemas may differ from those covered by a previous usage measurement.
+  const staticTokens = transcript.messages.reduce(
+    (sum, message) => sum + estimateMessageTokens(message),
+    0
+  );
+  const estimationTranscript = {
+    messages: transcript.messages.map((message) =>
+      message.role === "assistant" &&
+      "contextUsageInvalidated" in message &&
+      message.contextUsageInvalidated === true
+        ? {
+            ...message,
+            usage: {
+              ...message.usage,
+              input: 0,
+              output: 0,
+              cacheRead: 0,
+              cacheWrite: 0,
+              totalTokens: 0,
+            },
+          }
+        : message
+    ),
+  };
+  const contextTokens = Math.max(
+    estimateContextTokens(estimationTranscript.messages).tokens,
+    staticTokens
+  );
+  const available =
+    model.contextWindow > 0 ? model.contextWindow - contextTokens - 4096 : model.maxTokens;
+  const budget = Math.max(0, Math.floor(Math.min(requested, model.maxTokens, available)));
+  return budget < minimum ? 0 : budget;
 }

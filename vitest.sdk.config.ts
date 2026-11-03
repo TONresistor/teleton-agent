@@ -9,6 +9,7 @@ export default defineConfig({
     testTimeout: 10_000,
     coverage: {
       provider: "v8",
+      reportsDirectory: "coverage/sdk",
       reporter: ["text", "json-summary"],
       include: ["src/sdk/**/*.ts", "packages/sdk/src/**/*.ts"],
       exclude: ["**/__tests__/**", "**/dist/**"],

@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.8] - 2026-11-03
+
+### Added
+
+- Add GPT-6.1 Terra to OpenAI, Codex, and OpenRouter, plus Terra Pro on OpenRouter.
+- Add Kimi K3.1 Pro and Highspeed on Kimi Coding, Kimi K3.1 Pro on OpenRouter, Mistral Large 4.0.8, DeepSeek V4.1 Flash 1017 and GLM-5.3 Flash on Mistral, and MiniMax M3.1 Flash on HuggingFace.
+- Identify Teleton Agent in provider requests.
+
+### Changed
+
+- Update pi-ai to 1.5.0 and GramJS to Telegram Layer 232.
+- Remove deprecated Mistral Large 3 and unavailable HuggingFace Step 3.7 Flash from model pickers while preserving configured model resolution.
+- Cache Docker build layers, calculate coverage on the primary Node.js runtime while retaining tests across all supported runtimes, and separate backend and SDK coverage reports.
+- Pin GitHub Actions to immutable revisions and keep Telegram notification failures from failing CI.
+- Use pi-ai 1.5 JSON Schema argument validation while retaining TypeBox tool schemas.
+
+### Fixed
+
+- Stop aborted or truncated model responses before executing their tool calls, and prevent context-overflow recovery from replaying actions already performed in the turn.
+- Preserve conversation history when summarization fails, reject truncated summaries, and retain all text blocks and tool details during compaction.
+- Correct usage estimates after compaction and bound output and thinking budgets to model, context, and API limits.
+- Map supported reasoning levels and budgets for MiniMax, Grok, Google, and Mistral models.
+- Respect configured endpoints for utility calls and retain the utility model compatibility export.
+- Filter thinking from streamed drafts without losing public text that follows it.
+- Recognize retryable provider errors and respect provider retry delays.
+
+### Security
+
+- Update vulnerable runtime dependencies, including follow-redirects to 1.16.2.
+
 ## [0.11.7] - 2026-10-23
 
 ### Added

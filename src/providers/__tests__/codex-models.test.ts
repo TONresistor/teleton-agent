@@ -5,6 +5,7 @@ import { AgentConfigSchema } from "../../config/schema.js";
 import { getProviderModel } from "../model-resolver.js";
 
 const CODEX_MODELS = [
+  "gpt-6.1-terra",
   "gpt-6.1-sol",
   "gpt-6-sol",
   "gpt-6-luna",
@@ -22,7 +23,9 @@ describe("Codex models", () => {
     expect(model.provider).toBe("openai-codex");
     expect(model.api).toBe("openai-codex-responses");
     expect(model.input).toContain("image");
-    expect(model.contextWindow).toBe(modelId === "gpt-6.1-sol" ? 500_000 : 272_000);
+    expect(model.contextWindow).toBe(
+      ["gpt-6.1-sol", "gpt-6.1-terra"].includes(modelId) ? 500_000 : 272_000
+    );
     expect(model.maxTokens).toBe(128_000);
   });
 

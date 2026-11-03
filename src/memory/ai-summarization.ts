@@ -1,11 +1,6 @@
-import {
-  complete,
-  type Context,
-  type Message,
-  type TextContent,
-} from "@earendil-works/pi-ai/compat";
-import { extractText, extractToolNames, stripEnvelopePrefix } from "../utils/pi-message.js";
-import { getUtilityModel } from "../providers/model-resolver.js";
+import { complete, type Context, type Message } from "@earendil-works/pi-ai/compat";
+import { extractText, stripEnvelopePrefix, truncate } from "../utils/pi-message.js";
+import { getUtilityModel, getOutputTokenBudget } from "../providers/model-resolver.js";
 import type { SupportedProvider } from "../config/providers.js";
 import {
   CHARS_PER_TOKEN_ESTIMATE,
@@ -73,38 +68,65 @@ export function splitMessagesByTokens(messages: Message[], maxChunkTokens: numbe
   return chunks;
 }
 
+const SUMMARY_MESSAGE_MAX_CHARS = 16_000;
+
+function boundedSummaryText(text: string, maxChars = SUMMARY_MESSAGE_MAX_CHARS): string {
+  return truncate(
+    text
+      .replace(/data:[^\s";]+;base64,[A-Za-z0-9+/=_-]+/g, "[binary omitted]")
+      .replace(/[A-Za-z0-9+/_-]{256,}={0,2}/g, "[encoded data omitted]"),
+    maxChars
+  );
+}
+
+function serializeSummaryValue(value: unknown): string {
+  return (
+    JSON.stringify(value, (key, entry) =>
+      /base64|binary/i.test(key) ||
+      entry?.type === "image" ||
+      (entry?.type === "Buffer" && Array.isArray(entry.data))
+        ? "[binary omitted]"
+        : entry
+    ) ?? "{}"
+  );
+}
+
 function extractMessageContent(message: Message): string {
   if (message.role === "user") {
-    return typeof message.content === "string" ? message.content : "[complex content]";
-  } else if (message.role === "assistant") {
-    return extractText(message);
+    return `User: ${boundedSummaryText(stripEnvelopePrefix(extractText(message)), Infinity)}`;
+  }
+  if (message.role === "assistant") {
+    const parts = [boundedSummaryText(extractText(message), Infinity)].filter(Boolean);
+    for (const block of message.content) {
+      if (block.type !== "toolCall") continue;
+      const args = serializeSummaryValue(block.arguments);
+      parts.push(
+        `[Tool call: ${block.name}; id=${block.id}; arguments=${boundedSummaryText(args ?? "{}", 2048)}]`
+      );
+    }
+    return parts.join("\n");
+  }
+  if (message.role === "toolResult") {
+    let text = message.content
+      .filter((block) => block.type === "text")
+      .map((block) => block.text)
+      .join("\n");
+    let reference = "";
+    try {
+      const parsed: unknown = JSON.parse(text);
+      const artifact = (parsed as { data?: { _artifact?: { id?: unknown } } })?.data?._artifact;
+      text = serializeSummaryValue(parsed);
+      if (artifact?.id) reference = `; artifact=${String(artifact.id)}; read_with=tool_result_read`;
+    } catch {
+      /* Plain text results need no artifact lookup. */
+    }
+    return `[Tool result: ${message.toolName}; id=${message.toolCallId}; isError=${message.isError}${reference}]\n${boundedSummaryText(text)}`;
   }
   return "";
 }
 
 export function formatMessagesForSummary(messages: Message[]): string {
-  const formatted: string[] = [];
-
-  for (const msg of messages) {
-    if (msg.role === "user") {
-      const content = typeof msg.content === "string" ? msg.content : "[complex]";
-      const body = stripEnvelopePrefix(content);
-      formatted.push(`User: ${body}`);
-    } else if (msg.role === "assistant") {
-      const textBlocks = msg.content.filter((b): b is TextContent => b.type === "text");
-      if (textBlocks.length > 0) {
-        formatted.push(`Assistant: ${extractText(msg)}`);
-      }
-      const toolNames = extractToolNames(msg);
-      if (toolNames.length > 0) {
-        formatted.push(`[Used tools: ${toolNames.join(", ")}]`);
-      }
-    } else if (msg.role === "toolResult") {
-      formatted.push(`[Tool result: ${msg.toolName}]`);
-    }
-  }
-
-  return formatted.join("\n\n");
+  return messages.map(extractMessageContent).filter(Boolean).join("\n\n");
 }
 
 /**
@@ -155,9 +177,10 @@ export async function summarizeViaClaude(params: {
   customInstructions?: string;
   provider?: SupportedProvider;
   utilityModel?: string;
+  baseUrl?: string;
 }): Promise<string> {
   const provider = params.provider || "anthropic";
-  const model = getUtilityModel(provider, params.utilityModel);
+  const model = getUtilityModel(provider, params.utilityModel, params.baseUrl);
   const maxTokens = params.maxSummaryTokens ?? DEFAULT_SUMMARY_FALLBACK_TOKENS;
   const formatted = formatMessagesForSummary(params.messages);
 
@@ -189,14 +212,23 @@ Be specific but concise. Preserve critical information.`;
       ],
     };
 
+    if (!getOutputTokenBudget(model, context, maxTokens, params.apiKey))
+      throw new Error("Context length exceeded during summarization");
     const response = await complete(model, context, {
       apiKey: params.apiKey,
-      maxTokens,
+      maxTokens: getOutputTokenBudget(model, context, maxTokens, params.apiKey),
     });
 
-    const textContent = response.content.find((block) => block.type === "text");
-    const summary = textContent?.type === "text" ? textContent.text : "";
-    return summary.trim() || "Unable to generate summary.";
+    if (
+      response.stopReason === "error" ||
+      response.stopReason === "aborted" ||
+      response.stopReason === "length"
+    ) {
+      throw new Error(response.errorMessage || `Summary response ${response.stopReason}`);
+    }
+    const summary = extractText(response);
+    if (!summary.trim()) throw new Error("Model returned an empty summary");
+    return summary.trim();
   } catch (error) {
     log.error({ err: error }, "Summarization error");
     throw new Error(`Summarization failed: ${getErrorMessage(error)}`);
@@ -215,6 +247,7 @@ export async function summarizeInChunks(params: {
   customInstructions?: string;
   provider?: SupportedProvider;
   utilityModel?: string;
+  baseUrl?: string;
 }): Promise<SummarizationResult> {
   if (params.messages.length === 0) {
     return {
@@ -236,6 +269,7 @@ export async function summarizeInChunks(params: {
       customInstructions: params.customInstructions,
       provider: params.provider,
       utilityModel: params.utilityModel,
+      baseUrl: params.baseUrl,
     });
 
     return {
@@ -259,6 +293,7 @@ export async function summarizeInChunks(params: {
       customInstructions: params.customInstructions,
       provider: params.provider,
       utilityModel: params.utilityModel,
+      baseUrl: params.baseUrl,
     });
 
     partialSummaries.push(partial);
@@ -267,7 +302,7 @@ export async function summarizeInChunks(params: {
   log.info(`Merging ${partialSummaries.length} partial summaries`);
 
   const provider = params.provider || "anthropic";
-  const model = getUtilityModel(provider, params.utilityModel);
+  const model = getUtilityModel(provider, params.utilityModel, params.baseUrl);
   const mergeContext: Context = {
     messages: [
       {
@@ -284,16 +319,37 @@ ${partialSummaries.map((s, i) => `Part ${i + 1}:\n${s}`).join("\n\n---\n\n")}`,
     ],
   };
 
+  if (
+    !getOutputTokenBudget(
+      model,
+      mergeContext,
+      params.maxSummaryTokens ?? DEFAULT_SUMMARY_FALLBACK_TOKENS,
+      params.apiKey
+    )
+  )
+    throw new Error("Context length exceeded during summary merge");
   const mergeResponse = await complete(model, mergeContext, {
     apiKey: params.apiKey,
-    maxTokens: params.maxSummaryTokens ?? DEFAULT_SUMMARY_FALLBACK_TOKENS,
+    maxTokens: getOutputTokenBudget(
+      model,
+      mergeContext,
+      params.maxSummaryTokens ?? DEFAULT_SUMMARY_FALLBACK_TOKENS,
+      params.apiKey
+    ),
   });
 
-  const textContent = mergeResponse.content.find((block) => block.type === "text");
-  const merged = textContent?.type === "text" ? textContent.text : "";
+  if (
+    mergeResponse.stopReason === "error" ||
+    mergeResponse.stopReason === "aborted" ||
+    mergeResponse.stopReason === "length"
+  ) {
+    throw new Error(mergeResponse.errorMessage || `Summary merge ${mergeResponse.stopReason}`);
+  }
+  const merged = extractText(mergeResponse);
+  if (!merged.trim()) throw new Error("Model returned an empty merged summary");
 
   return {
-    summary: merged.trim() || "Unable to merge summaries.",
+    summary: merged.trim(),
     tokensUsed: estimateMessageTokens(merged),
     chunksProcessed: chunks.length,
   };
@@ -311,6 +367,7 @@ export async function summarizeWithFallback(params: {
   customInstructions?: string;
   provider?: SupportedProvider;
   utilityModel?: string;
+  baseUrl?: string;
 }): Promise<SummarizationResult> {
   if (params.messages.length === 0) {
     return {
@@ -336,6 +393,7 @@ export async function summarizeWithFallback(params: {
       customInstructions: params.customInstructions,
       provider: params.provider,
       utilityModel: params.utilityModel,
+      baseUrl: params.baseUrl,
     });
   } catch (fullError) {
     log.warn(`Full summarization failed: ${getErrorMessage(fullError)}`);
@@ -370,6 +428,7 @@ export async function summarizeWithFallback(params: {
         customInstructions: params.customInstructions,
         provider: params.provider,
         utilityModel: params.utilityModel,
+        baseUrl: params.baseUrl,
       });
 
       const notes = oversizedNotes.length > 0 ? `\n\n${oversizedNotes.join("\n")}` : "";
@@ -383,15 +442,5 @@ export async function summarizeWithFallback(params: {
     }
   }
 
-  const note =
-    `Context contained ${params.messages.length} messages ` +
-    `(${oversizedNotes.length} were oversized). ` +
-    `AI summarization unavailable due to size constraints. ` +
-    `Recent conversation history was preserved.`;
-
-  return {
-    summary: note,
-    tokensUsed: estimateMessageTokens(note),
-    chunksProcessed: 0,
-  };
+  throw new Error("AI summarization failed for all fallback attempts");
 }

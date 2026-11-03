@@ -55,13 +55,14 @@ export function isRateLimitError(errorMessage?: string): boolean {
 export function isServerError(errorMessage?: string): boolean {
   if (!errorMessage) return false;
   return (
-    errorMessage.includes("500") ||
-    errorMessage.includes("502") ||
-    errorMessage.includes("503") ||
-    errorMessage.includes("529") ||
-    errorMessage.includes("overloaded") ||
-    errorMessage.includes("Internal server error") ||
-    errorMessage.includes("api_error") ||
+    /(?<![a-z0-9_])(?:500|502|503|504|520|524|529)(?![a-z0-9_])/i.test(errorMessage) ||
+    /overloaded|internal server error|api_error/i.test(errorMessage) ||
+    /upstream[ _]request[ _]failed|upstream_stream_read_error|http\/?2 stream failed/i.test(
+      errorMessage
+    ) ||
+    /stream disconnected before completion|stream ended before a terminal response event|fetch failed/i.test(
+      errorMessage
+    ) ||
     // Transient streaming-transport drops are retryable: an LLM provider WebSocket
     // closing mid-stream (1012 service restart, 1006 abnormal, 1011 server error)
     // or a dropped socket is not a terminal error — back off and retry.
@@ -92,15 +93,17 @@ export function classifyLlmError(errorMessage?: string): {
 
 /**
  * Parse a Retry-After hint (in seconds) from a provider error string, if present.
- * Mirrors the precedent in flood-retry.ts. Returns milliseconds (capped at 60s), or null.
+ * Returns milliseconds; the turn deadline decides whether the full wait fits.
  */
 export function parseRetryAfterMs(errorMessage?: string): number | null {
   if (!errorMessage) return null;
-  const match = errorMessage.match(/retry[-\s]?after[:\s]+(\d+)/i);
+  const match =
+    errorMessage.match(/retry[-\s]?after[:\s]+(\d+(?:\.\d+)?)/i) ??
+    errorMessage.match(/"retryDelay"\s*:\s*"(\d+(?:\.\d+)?)s"/i);
   if (!match) return null;
   const seconds = Number(match[1]);
   if (!Number.isFinite(seconds) || seconds <= 0) return null;
-  return Math.min(seconds * 1000, 60_000);
+  return seconds * 1000;
 }
 
 export function isTrivialMessage(text: string): boolean {

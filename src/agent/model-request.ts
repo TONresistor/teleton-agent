@@ -1,3 +1,10 @@
+import { createRetryAfterTracker } from "../utils/fetch.js";
+import { thinkingBudgetForLevel } from "@earendil-works/pi-ai/api/simple-options";
+import {
+  usesGoogleThinkingLevel,
+  resolveGoogleThinkingLevel,
+  toGoogleThinkingLevel,
+} from "@earendil-works/pi-ai/api/google-shared";
 import {
   clampThinkingLevel,
   hasApi,
@@ -12,7 +19,11 @@ import type { AgentConfig } from "../config/schema.js";
 import type { SupportedProvider } from "../config/providers.js";
 import { getCodexApiKey } from "../providers/codex-credentials.js";
 import { getGrokBuildApiKey } from "../providers/grok-build-credentials.js";
-import { getProviderModel, isCustomOpenRouterModel } from "../providers/model-resolver.js";
+import {
+  getProviderModel,
+  getOutputTokenBudget,
+  isCustomOpenRouterModel,
+} from "../providers/model-resolver.js";
 import { createOpenRouterUsageTracker } from "../providers/openrouter-usage.js";
 import { TELEGRAM_SEND_TOOLS } from "../constants/tools.js";
 import { sanitizeToolsForGemini } from "./schema-sanitizer.js";
@@ -34,6 +45,7 @@ export interface PreparedModelRequest {
   context: Context;
   options: ProviderStreamOptions;
   finalizeUsage?: (message: AssistantMessage) => void;
+  retryAfterMs?: () => number | undefined;
 }
 
 /** Resolve the effective API key for a provider (local/gocoon need no real key). */
@@ -86,14 +98,57 @@ function getCacheRetention(provider: SupportedProvider): "none" | "long" {
 function getReasoningOptions(
   provider: SupportedProvider,
   model: Model<Api>,
-  reasoningEffort: AgentConfig["reasoning_effort"]
+  reasoningEffort: AgentConfig["reasoning_effort"],
+  maxTokens: number
 ): Record<string, unknown> {
+  if (!model.reasoning) return {};
   const requiresZaiThinking = provider === "zai" && model.thinkingLevelMap?.off === null;
-  if ((provider !== "codex" && provider !== "openai" && !requiresZaiThinking) || !model.reasoning) {
-    return {};
-  }
+  const adaptiveThinking =
+    hasApi(model, "anthropic-messages") && model.compat?.forceAdaptiveThinking === true;
+  const openAiThinking =
+    hasApi(model, "openai-responses") ||
+    hasApi(model, "openai-codex-responses") ||
+    (hasApi(model, "openai-completions") &&
+      (model.compat?.supportsReasoningEffort !== false || requiresZaiThinking));
   const level = clampThinkingLevel(model, reasoningEffort === "none" ? "off" : reasoningEffort);
+  if (hasApi(model, "anthropic-messages") && !adaptiveThinking) {
+    if (level === "off") return { thinkingEnabled: false };
+    const budget = Math.min(thinkingBudgetForLevel(level), Math.max(0, maxTokens - 1024));
+    if (budget < 1024) {
+      if (model.thinkingLevelMap?.off === null)
+        throw new Error("Output budget cannot fit required thinking and an answer");
+      return { thinkingEnabled: false };
+    }
+    return { thinkingEnabled: true, thinkingBudgetTokens: budget };
+  }
+  if (hasApi(model, "google-generative-ai")) {
+    if (level === "off") return { thinking: { enabled: false } };
+    if (usesGoogleThinkingLevel(model))
+      return {
+        thinking: {
+          enabled: true,
+          level: toGoogleThinkingLevel(resolveGoogleThinkingLevel(model, level)),
+        },
+      };
+    const minimum = model.id.includes("flash-lite") ? 512 : 128;
+    const budget = Math.min(thinkingBudgetForLevel(level), Math.max(0, maxTokens - 1024));
+    return {
+      thinking: { enabled: budget >= minimum, ...(budget >= minimum && { budgetTokens: budget }) },
+    };
+  }
+  if (hasApi(model, "mistral-conversations")) {
+    const mapped = model.thinkingLevelMap?.[level];
+    return model.thinkingLevelMap
+      ? { reasoningEffort: mapped ?? (level === "off" ? "none" : level) }
+      : { ...(level !== "off" ? { promptMode: "reasoning" } : {}) };
+  }
+  if (!adaptiveThinking && !openAiThinking) return {};
   const mapped = model.thinkingLevelMap?.[level];
+  if (adaptiveThinking) {
+    return level === "off"
+      ? { thinkingEnabled: false }
+      : { thinkingEnabled: true, effort: mapped ?? (level === "minimal" ? "low" : level) };
+  }
   return { reasoningEffort: mapped ?? (level === "off" ? "none" : level) };
 }
 
@@ -149,29 +204,50 @@ export function prepareModelRequest(
     tools,
   };
   const temperature = request.temperature ?? config.temperature;
+  const apiKey = getEffectiveApiKey(provider, config.api_key);
+  const maxTokens = getOutputTokenBudget(
+    model,
+    context,
+    request.maxTokens ?? config.max_tokens,
+    apiKey
+  );
+  const reasoningOptions = getReasoningOptions(provider, model, config.reasoning_effort, maxTokens);
   const usageTracker =
     provider === "openrouter" && model.api === "openai-completions"
       ? createOpenRouterUsageTracker(isCustomOpenRouterModel(model))
       : undefined;
 
+  const supportsCustomFetch =
+    !hasApi(model, "google-generative-ai") && !hasApi(model, "google-vertex");
+  const retryTracker = supportsCustomFetch
+    ? createRetryAfterTracker(usageTracker?.fetch)
+    : undefined;
   return {
     provider,
     model,
     context,
     finalizeUsage: usageTracker?.apply,
+    retryAfterMs: retryTracker?.retryAfterMs,
     options: {
-      ...(usageTracker && { fetch: usageTracker.fetch }),
-      apiKey: getEffectiveApiKey(provider, config.api_key),
-      maxTokens: request.maxTokens ?? config.max_tokens,
+      identity: {
+        userAgent: { custom: "teleton-agent" },
+        attribution: {
+          name: "teleton-agent",
+          url: "https://github.com/TONresistor/teleton-agent",
+        },
+      },
+      ...(retryTracker && { fetch: retryTracker.fetch }),
+      maxRetries: 0,
+      apiKey,
+      maxTokens,
       ...(!isCustomOpenRouterModel(model) &&
-        modelSupportsTemperature(provider, model) && { temperature }),
+        modelSupportsTemperature(provider, model) &&
+        reasoningOptions.thinkingEnabled !== true && { temperature }),
       sessionId: request.sessionId,
       cacheRetention: getCacheRetention(provider),
       signal: request.signal,
       timeoutMs: request.timeoutMs,
-      ...getReasoningOptions(provider, model, config.reasoning_effort),
-      ...(hasApi(model, "anthropic-messages") &&
-        model.compat?.forceAdaptiveThinking === true && { thinkingEnabled: true }),
+      ...reasoningOptions,
       ...getProviderPayloadOptions(provider),
     } as ProviderStreamOptions,
   };

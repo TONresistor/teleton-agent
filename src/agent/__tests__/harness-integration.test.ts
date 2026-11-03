@@ -31,6 +31,11 @@ import {
 } from "../../session/transcript.js";
 import { CompactionManager } from "../../memory/compaction.js";
 import { prepareTurn } from "../../agent/turn-preparation.js";
+import {
+  summarizeViaClaude,
+  summarizeInChunks,
+  summarizeWithFallback,
+} from "../../memory/ai-summarization.js";
 
 const usage = {
   input: 1,
@@ -104,6 +109,178 @@ afterEach(async () => {
 });
 
 describe("Minimal harness regressions", () => {
+  it("uses the fallback immediately when the primary quota is exhausted", async () => {
+    const cfg = config();
+    cfg.agent.fallbacks = [{ provider: "openai", model: "gpt-4.1", api_key: "fallback-key" }];
+    mocks.complete
+      .mockResolvedValueOnce({ ...answer("", "error"), errorMessage: "429 insufficient_quota" })
+      .mockResolvedValueOnce(answer("Fallback answer"));
+
+    const result = await new AgentRuntime(cfg, "test").processMessage({
+      chatId: "quota-test",
+      userMessage: "answer this",
+    });
+
+    expect(result.content).toBe("Fallback answer");
+    expect(mocks.complete).toHaveBeenCalledTimes(2);
+    expect(mocks.complete.mock.calls[1][0]).toMatchObject({ provider: "openai", id: "gpt-4.1" });
+  });
+
+  it.each([false, true])(
+    "rejects an aborted response before tools run (tools: %s)",
+    async (withTools) => {
+      const { runtime, effect } = runtimeWithAction();
+      const interrupted = answer(
+        "Partial answer",
+        "aborted",
+        withTools ? toolAnswer().content : undefined
+      );
+      mocks.complete.mockResolvedValue(interrupted);
+
+      await expect(
+        runtime.processMessage({
+          chatId: "abort-test",
+          userMessage: "perform action",
+          toolContext: { bridge: bridge(), db: mocks.db, config: config(), senderId: 1 },
+        })
+      ).rejects.toThrow("Model response was aborted");
+
+      expect(effect).not.toHaveBeenCalled();
+      expect(mocks.complete).toHaveBeenCalledOnce();
+      await flushAllTranscripts();
+      const session = getOrCreateSession("abort-test");
+      const rows = readFileSync(getTranscriptPath(session.sessionId), "utf8")
+        .trim()
+        .split("\n")
+        .map((line) => JSON.parse(line));
+      expect(rows.filter((row) => row.role === "assistant")).toEqual([]);
+      expect(
+        mocks.db.prepare("SELECT status FROM agent_turn_traces WHERE chat_id = ?").get("abort-test")
+      ).toEqual({ status: "error" });
+    }
+  );
+
+  it("clears an aborted streaming draft without publishing partial text", async () => {
+    const interrupted = answer("Partial answer", "aborted");
+    mocks.stream.mockReturnValue({
+      result: async () => interrupted,
+      async *[Symbol.asyncIterator]() {
+        yield { type: "text_delta", delta: "Partial answer" };
+      },
+    });
+    const b = bridge();
+    await expect(
+      new AgentRuntime(config(), "test").processMessage({
+        chatId: "1",
+        userMessage: "write response",
+        streamToChat: { chatId: "1", bridge: b, mode: "replace" },
+      })
+    ).rejects.toThrow("Model response was aborted");
+
+    expect(b.bot.api.sendMessage).not.toHaveBeenCalled();
+    expect(b.activeDraftIds.size).toBe(0);
+    expect(b.bot.api.sendMessageDraft).toHaveBeenLastCalledWith(1, expect.any(Number), " ");
+    expect(mocks.complete).not.toHaveBeenCalled();
+  });
+
+  it.each(["error", "aborted", "empty"])(
+    "rejects a failed summary response: %s",
+    async (failure) => {
+      mocks.complete.mockResolvedValue({
+        ...answer(
+          failure === "empty" ? " " : "Partial summary",
+          failure === "empty" ? "stop" : failure
+        ),
+        errorMessage: failure === "error" ? "401 Invalid API key" : undefined,
+      });
+      await expect(
+        summarizeViaClaude({
+          messages: [{ role: "user", content: "Preserve this fact", timestamp: 1 }],
+          apiKey: "simulated",
+        })
+      ).rejects.toThrow();
+    }
+  );
+
+  it.each(["error", "aborted", "empty"])("rejects a failed summary merge: %s", async (failure) => {
+    mocks.complete
+      .mockResolvedValueOnce(answer("First summary"))
+      .mockResolvedValueOnce(answer("Second summary"))
+      .mockResolvedValueOnce(
+        answer(failure === "empty" ? " " : "Partial merge", failure === "empty" ? "stop" : failure)
+      );
+    await expect(
+      summarizeInChunks({
+        messages: [
+          { role: "user", content: "First fact", timestamp: 1 },
+          { role: "user", content: "Second fact", timestamp: 2 },
+        ],
+        apiKey: "simulated",
+        maxChunkTokens: 1,
+      })
+    ).rejects.toThrow();
+    expect(mocks.complete).toHaveBeenCalledTimes(3);
+  });
+
+  it("does not return a placeholder when every summary attempt fails", async () => {
+    mocks.complete.mockResolvedValue({
+      ...answer("", "error"),
+      errorMessage: "401 Invalid API key",
+    });
+    await expect(
+      summarizeWithFallback({
+        messages: [{ role: "user", content: "Keep this fact", timestamp: 1 }],
+        apiKey: "simulated",
+        contextWindow: 128000,
+      })
+    ).rejects.toThrow("AI summarization failed for all fallback attempts");
+  });
+
+  it("preserves the current transcript and inbound message when actual summary calls fail", async () => {
+    const session = getOrCreateSession("failed-compaction");
+    appendToTranscript(session.sessionId, { role: "user", content: "KEEP_OLD_FACT", timestamp: 1 });
+    appendToTranscript(session.sessionId, answer("Previous answer") as any);
+    mocks.complete.mockResolvedValue({
+      ...answer("", "error"),
+      errorMessage: "401 Invalid API key",
+    });
+    const result = await prepareTurn(
+      { chatId: "failed-compaction", userMessage: "CURRENT_ONCE" },
+      Date.now(),
+      {
+        config: config(),
+        soul: "test",
+        compactionManager: new CompactionManager({
+          enabled: true,
+          maxMessages: 3,
+          keepRecentMessages: 1,
+          memoryFlushEnabled: false,
+        }),
+        contextBuilder: null,
+        embedder: null,
+        toolRegistry: null,
+        getMemoryStats: () => ({ totalMessages: 0, totalChats: 0, knowledgeChunks: 0 }),
+      }
+    );
+    expect(result.kind).toBe("ready");
+    if (result.kind !== "ready") return;
+    expect(result.turn.session.sessionId).toBe(session.sessionId);
+    expect(
+      result.turn.context.messages.some(
+        (msg) => msg.role === "user" && msg.content === "KEEP_OLD_FACT"
+      )
+    ).toBe(true);
+    await flushAllTranscripts();
+    const rows = readFileSync(getTranscriptPath(session.sessionId), "utf8")
+      .trim()
+      .split("\n")
+      .map((line) => JSON.parse(line));
+    expect(
+      rows.filter((row) => typeof row.content === "string" && row.content.includes("CURRENT_ONCE"))
+    ).toHaveLength(1);
+    expect(rows.some((row) => row.content === "KEEP_OLD_FACT")).toBe(true);
+  });
+
   it("C03: distinct Telegram triggers of one running task execute only once", async () => {
     const { runtime, effect } = runtimeWithAction();
     let release!: () => void;

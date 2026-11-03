@@ -8,7 +8,7 @@ import { isBotBridge } from "../../telegram/bridge-guards.js";
 import { createLogger } from "../../utils/logger.js";
 import { resolveModelTarget } from "../model-target.js";
 import { resolveProviderFallback } from "../provider-fallback.js";
-import { addUsage } from "../runtime-utils.js";
+import { addUsage, isContextOverflowError } from "../runtime-utils.js";
 import type { CompletedToolCall } from "../telegram-send-state.js";
 import { enforceProviderToolLimit } from "../tool-selector.js";
 import type { AgentTurnTraceRecorder } from "../turn-trace.js";
@@ -102,6 +102,51 @@ export async function executeAgentLoop(
     const iterUsage = response.message.usage;
     if (iterUsage) addUsage(accumulatedUsage, iterUsage);
 
+    if (assistantMsg.stopReason === "aborted") {
+      trace.progress(totalToolCalls, iteration, accumulatedUsage);
+      if (opts.streamToChat && isBotBridge(opts.streamToChat.bridge)) {
+        await opts.streamToChat.bridge.clearDraft(opts.streamToChat.chatId);
+      }
+      throw new Error(assistantMsg.errorMessage || "Model response was aborted before completion");
+    }
+
+    if (assistantMsg.stopReason === "length") {
+      stopReason = "output_budget";
+      const partialText = [...accumulatedTexts, response.text].filter(Boolean).join("\n");
+      forcedContent =
+        (partialText ? partialText + "\n\n" : "") +
+        "The model response was truncated at its output limit. " +
+        "No tools from this incomplete response were executed. Send a follow-up to continue.";
+      finalResponse = {
+        ...response,
+        message: {
+          ...assistantMsg,
+          content: assistantMsg.content.filter((block) => block.type === "text"),
+        },
+      };
+      wasStreamed = streamed;
+      break;
+    }
+
+    const actionAlreadyAttempted = totalToolCalls.some(
+      (call) =>
+        call.attempted !== false && deps.toolRegistry?.getToolCategory(call.name) !== "data-bearing"
+    );
+    if (
+      assistantMsg.stopReason === "error" &&
+      isContextOverflowError(assistantMsg.errorMessage) &&
+      actionAlreadyAttempted
+    ) {
+      stopReason = "context_overflow_after_action";
+      forcedContent =
+        "I stopped because the context limit was reached after an action was attempted. " +
+        "Its recorded result is preserved; I will not retry the action automatically. " +
+        "Check the action's outcome before continuing.";
+      finalResponse = response;
+      wasStreamed = streamed;
+      break;
+    }
+
     if (assistantMsg.stopReason === "error") {
       try {
         const recovered = await recoverLlmError(
@@ -118,6 +163,9 @@ export async function executeAgentLoop(
             provider: activeProvider,
             processStartTime,
             userMsg,
+            retryAfterMs: response.retryAfterMs,
+            signal: providerSignal,
+            deadline: processStartTime + maxDurationMs,
           }
         );
         session = recovered.session;
@@ -125,11 +173,7 @@ export async function executeAgentLoop(
         iteration--;
         continue;
       } catch (error) {
-        const actionAlreadyAttempted = totalToolCalls.some(
-          (call) =>
-            call.attempted !== false &&
-            deps.toolRegistry?.getToolCategory(call.name) !== "data-bearing"
-        );
+        if (providerSignal.aborted || Date.now() - processStartTime >= maxDurationMs) throw error;
         const previousProvider = activeProvider;
         const previousModel = activeAgentConfig.model;
         const fallback = resolveProviderFallback(
@@ -254,7 +298,11 @@ export async function executeAgentLoop(
     }
   }
 
-  if (finalResponse && !context.messages.includes(finalResponse.message)) {
+  if (
+    finalResponse &&
+    finalResponse.message.stopReason !== "error" &&
+    !context.messages.includes(finalResponse.message)
+  ) {
     context.messages.push(finalResponse.message);
   }
 

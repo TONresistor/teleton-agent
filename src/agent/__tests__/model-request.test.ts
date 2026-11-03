@@ -3,7 +3,171 @@ import { complete } from "@earendil-works/pi-ai/compat";
 import { AgentConfigSchema } from "../../config/schema.js";
 import { prepareModelRequest } from "../model-request.js";
 
+vi.mock("../../providers/codex-credentials.js", () => ({
+  getCodexApiKey: (fallback: string) => fallback,
+  refreshCodexApiKey: async () => null,
+}));
+
 describe("model request preparation", () => {
+  it.each([
+    ["openai", "gpt-6.1-terra", "none", "none", "reasoning.effort"],
+    ["codex", "gpt-6.1-terra", "max", "max", "reasoning.effort"],
+    ["openrouter", "openai/gpt-6.1-terra", "low", "low", "reasoning.effort"],
+    ["openrouter", "openai/gpt-6.1-terra-pro", "max", "max", "reasoning.effort"],
+    ["openrouter", "moonshotai/kimi-k3.1-pro", "max", "max", "reasoning.effort"],
+    ["moonshot", "k3.1-pro", "none", "low", "reasoning_effort"],
+    ["moonshot", "k3.1-pro-highspeed", "max", "max", "reasoning_effort"],
+    ["mistral", "mistral-large-4-0-8", "low", "low", "reasoningEffort"],
+    ["mistral", "deepseek-v4-1-flash-1017", "none", "none", "reasoningEffort"],
+    ["mistral", "zai-glm-5-3-flash", "max", "max", "reasoningEffort"],
+    ["anthropic", "claude-sonnet-5-5", "low", "low", "messages.1.output_config.effort"],
+    ["anthropic", "claude-sonnet-5-5", "max", "max", "messages.1.output_config.effort"],
+    ["anthropic", "claude-sonnet-5-5", "none", "low", "messages.1.output_config.effort"],
+    ["anthropic", "claude-opus-4-6", "minimal", "low", "output_config.effort"],
+    ["openrouter", "anthropic/claude-sonnet-5.5", "max", "max", "messages.1.output_config.effort"],
+    ["openrouter", "openai/gpt-6-sol", "low", "low", "reasoning.effort"],
+    ["openrouter", "openai/gpt-6-sol", "max", "max", "reasoning.effort"],
+    ["openrouter", "openai/gpt-6-sol", "none", "none", "reasoning.effort"],
+    ["moonshot", "k3", "none", "low", "reasoning_effort"],
+    ["moonshot", "k3", "medium", "high", "reasoning_effort"],
+    ["moonshot", "k3", "max", "max", "reasoning_effort"],
+    ["groq", "openai/gpt-oss-120b", "low", "low", "reasoning_effort"],
+    ["groq", "openai/gpt-oss-120b", "max", "high", "reasoning_effort"],
+  ] as const)(
+    "sends supported effort for %s/%s (%s → %s)",
+    async (provider, model, reasoning_effort, expected, path) => {
+      const request = prepareModelRequest(
+        AgentConfigSchema.parse({
+          provider,
+          model,
+          api_key:
+            provider === "codex"
+              ? `test.${Buffer.from(JSON.stringify({ "https://api.openai.com/auth": { chatgpt_account_id: "fixture" } })).toString("base64url")}.test`
+              : "test-key",
+          reasoning_effort,
+        }),
+        { context: { messages: [{ role: "user", content: "test", timestamp: 1 }] } }
+      );
+      let payload: unknown;
+      const fetch = vi.fn().mockRejectedValue(new Error("Network disabled in test"));
+      await complete(request.model, request.context, {
+        ...request.options,
+        fetch,
+        onPayload(value) {
+          payload = value;
+          throw new Error("Stop before network request");
+        },
+      });
+
+      expect(fetch).not.toHaveBeenCalled();
+      expect(payload).toHaveProperty(path, expected);
+    }
+  );
+
+  it("allows optional adaptive thinking to be disabled", async () => {
+    const request = prepareModelRequest(
+      AgentConfigSchema.parse({
+        provider: "anthropic",
+        model: "claude-opus-4-6",
+        api_key: "test-key",
+        reasoning_effort: "none",
+      }),
+      { context: { messages: [{ role: "user", content: "test", timestamp: 1 }] } }
+    );
+    let payload: unknown;
+    await complete(request.model, request.context, {
+      ...request.options,
+      onPayload(value) {
+        payload = value;
+        throw new Error("Stop before network request");
+      },
+    });
+    expect(payload).toHaveProperty("thinking.type", "disabled");
+    expect(payload).not.toHaveProperty("output_config.effort");
+  });
+  it.each([
+    ["none", "low"],
+    ["minimal", "low"],
+    ["low", "low"],
+    ["medium", "medium"],
+    ["high", "high"],
+    ["xhigh", "xhigh"],
+    ["max", "max"],
+  ] as const)("sends MiniMax M3.1 Flash effort %s as %s", async (reasoning_effort, expected) => {
+    const request = prepareModelRequest(
+      AgentConfigSchema.parse({
+        provider: "minimax",
+        model: "MiniMax-M3.1-Flash",
+        api_key: "test-key",
+        reasoning_effort,
+      }),
+      { context: { messages: [{ role: "user", content: "test", timestamp: 1 }] } }
+    );
+    let payload: unknown;
+    await complete(request.model, request.context, {
+      ...request.options,
+      onPayload(value) {
+        payload = value;
+        throw new Error("Stop before network request");
+      },
+    });
+
+    expect(payload).toHaveProperty("thinking.type", "adaptive");
+    expect(payload).toHaveProperty("output_config.effort", expected);
+    expect(payload).not.toHaveProperty("reasoning_effort");
+    expect(payload).not.toHaveProperty("temperature");
+  });
+
+  it.each(["grok-4.3", "grok-4.5"])("sends supported reasoning efforts for %s", async (model) => {
+    for (const [reasoning_effort, expected] of [
+      ["none", "low"],
+      ["medium", "medium"],
+      ["xhigh", "xhigh"],
+      ["max", "xhigh"],
+    ] as const) {
+      const request = prepareModelRequest(
+        AgentConfigSchema.parse({ provider: "xai", model, api_key: "test-key", reasoning_effort }),
+        { context: { messages: [{ role: "user", content: "test", timestamp: 1 }] } }
+      );
+      let payload: unknown;
+      await complete(request.model, request.context, {
+        ...request.options,
+        onPayload(value) {
+          payload = value;
+          throw new Error("Stop before network request");
+        },
+      });
+
+      expect(payload).toHaveProperty(
+        "reasoning.effort",
+        reasoning_effort === "none" && model === "grok-4.3" ? "none" : expected
+      );
+    }
+  });
+
+  it("identifies teleton-agent in OpenRouter request headers", async () => {
+    const request = prepareModelRequest(
+      AgentConfigSchema.parse({
+        provider: "openrouter",
+        model: "example/brand-new",
+        api_key: "test-key",
+      }),
+      { context: { messages: [{ role: "user", content: "test", timestamp: 1 }] } }
+    );
+    const fetch = vi
+      .fn<typeof globalThis.fetch>()
+      .mockResolvedValue(
+        new Response("data: [DONE]\n\n", { headers: { "Content-Type": "text/event-stream" } })
+      );
+    await complete(request.model, request.context, { ...request.options, fetch });
+
+    expect(fetch).toHaveBeenCalledOnce();
+    const headers = new Headers(fetch.mock.calls[0]?.[1]?.headers);
+    expect(headers.get("User-Agent")).toBe("teleton-agent");
+    expect(headers.get("X-OpenRouter-Title")).toBe("teleton-agent");
+    expect(headers.get("HTTP-Referer")).toBe("https://github.com/TONresistor/teleton-agent");
+  });
+
   it("forwards custom OpenRouter IDs and tools without optional sampling parameters", async () => {
     const request = prepareModelRequest(
       AgentConfigSchema.parse({
@@ -130,7 +294,8 @@ describe("model request preparation", () => {
     expect(request.options).toMatchObject({
       apiKey: "sk-test-key",
       maxTokens: 8192,
-      temperature: 0.4,
+      thinkingEnabled: true,
+      thinkingBudgetTokens: 2048,
       sessionId: "session-1",
       cacheRetention: "long",
     });
@@ -377,4 +542,297 @@ describe("model request preparation", () => {
       expect(payload).not.toHaveProperty("temperature");
     }
   );
+});
+
+describe("output budget", () => {
+  it("caps output at the model ceiling", () => {
+    const request = prepareModelRequest(
+      AgentConfigSchema.parse({ api_key: "test-key", max_tokens: 100000 }),
+      { context: { messages: [] } }
+    );
+    expect(request.options.maxTokens).toBe(request.model.maxTokens);
+  });
+
+  it("counts the system and tool schemas without double-counting a measured prefix", async () => {
+    const { getOutputTokenBudget } = await import("../../providers/model-resolver.js");
+    const request = prepareModelRequest(AgentConfigSchema.parse({ api_key: "test-key" }), {
+      context: { messages: [] },
+    });
+    const model = { ...request.model, contextWindow: 10000, maxTokens: 10000 };
+    expect(
+      getOutputTokenBudget(model, { systemPrompt: "s".repeat(3500), messages: [] }, 10000)
+    ).toBe(4904);
+    const measured = {
+      role: "assistant" as const,
+      content: [],
+      api: model.api,
+      provider: model.provider,
+      model: model.id,
+      stopReason: "stop" as const,
+      timestamp: 1,
+      usage: {
+        input: 2000,
+        output: 0,
+        cacheRead: 0,
+        cacheWrite: 0,
+        totalTokens: 2000,
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+      },
+    };
+    expect(
+      getOutputTokenBudget(model, { systemPrompt: "s".repeat(3500), messages: [measured] }, 10000)
+    ).toBe(3904);
+    expect(
+      getOutputTokenBudget(
+        model,
+        {
+          messages: [measured],
+          tools: [{ name: "large", description: "x".repeat(35000), parameters: {} }],
+        },
+        10000
+      )
+    ).toBe(0);
+  });
+});
+
+describe("budget and Google reasoning payloads", () => {
+  it.each(["none", "low", "high", "max"] as const)(
+    "uses Anthropic budget thinking for %s without increasing output",
+    async (reasoning_effort) => {
+      const request = prepareModelRequest(
+        AgentConfigSchema.parse({ api_key: "test-key", reasoning_effort }),
+        { context: { messages: [{ role: "user", content: "test", timestamp: 1 }] } }
+      );
+      let payload: unknown;
+      await complete(request.model, request.context, {
+        ...request.options,
+        onPayload(value) {
+          payload = value;
+          throw new Error("capture");
+        },
+      });
+      expect(payload).toHaveProperty("max_tokens", 4096);
+      expect(payload).toHaveProperty(
+        "thinking.type",
+        reasoning_effort === "none" ? "disabled" : "enabled"
+      );
+      if (reasoning_effort !== "none") {
+        expect(payload).toHaveProperty(
+          "thinking.budget_tokens",
+          reasoning_effort === "low" ? 2048 : 3072
+        );
+        expect(payload).not.toHaveProperty("temperature");
+      }
+    }
+  );
+
+  it.each(["none", "low", "high", "max"] as const)(
+    "uses Google native thinking for %s",
+    async (reasoning_effort) => {
+      const request = prepareModelRequest(
+        AgentConfigSchema.parse({
+          provider: "google",
+          model: "gemini-3.5-flash",
+          api_key: "test-key",
+          reasoning_effort,
+        }),
+        { context: { messages: [{ role: "user", content: "test", timestamp: 1 }] } }
+      );
+      let payload: unknown;
+      await complete(request.model, request.context, {
+        ...request.options,
+        onPayload(value) {
+          payload = value;
+          throw new Error("capture");
+        },
+      });
+      expect(payload).toHaveProperty("config.maxOutputTokens", 4096);
+      if (reasoning_effort === "none") expect(payload).toHaveProperty("config.thinkingConfig");
+      else
+        expect(payload).toHaveProperty(
+          "config.thinkingConfig.thinkingLevel",
+          reasoning_effort === "low" ? "LOW" : "HIGH"
+        );
+    }
+  );
+
+  it("disables optional budget thinking when the answer ceiling is too small", () => {
+    const request = prepareModelRequest(
+      AgentConfigSchema.parse({ api_key: "test-key", max_tokens: 1024, reasoning_effort: "high" }),
+      { context: { messages: [] } }
+    );
+    expect(request.options).toMatchObject({ maxTokens: 1024, thinkingEnabled: false });
+  });
+});
+
+describe("effective Responses output minimum", () => {
+  it.each([1, 8])(
+    "rejects requested budget %s locally instead of reporting overflow",
+    async (max_tokens) => {
+      const { chatWithContext, streamWithContext } = await import("../client.js");
+      const fetch = vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("Network disabled"));
+      const config = AgentConfigSchema.parse({
+        provider: "openai",
+        model: "gpt-6-sol",
+        api_key: "sk-test-only",
+        max_tokens,
+      });
+      try {
+        await expect(chatWithContext(config, { context: { messages: [] } })).rejects.toThrow(
+          "at least 16 tokens"
+        );
+        expect(() => streamWithContext(config, { context: { messages: [] } })).toThrow(
+          "at least 16 tokens"
+        );
+        expect(fetch).not.toHaveBeenCalled();
+      } finally {
+        fetch.mockRestore();
+      }
+    }
+  );
+
+  it.each([16, 4096])(
+    "preserves requested budget %s in the real Responses payload",
+    async (max_tokens) => {
+      const request = prepareModelRequest(
+        AgentConfigSchema.parse({
+          provider: "openai",
+          model: "gpt-6-sol",
+          api_key: "sk-test-only",
+          max_tokens,
+        }),
+        { context: { messages: [{ role: "user", content: "test", timestamp: 1 }] } }
+      );
+      let payload: unknown;
+      await complete(request.model, request.context, {
+        ...request.options,
+        onPayload(value) {
+          payload = value;
+          throw new Error("Stop before network");
+        },
+      });
+      expect(request.options.maxTokens).toBe(max_tokens);
+      expect(payload).toHaveProperty("max_output_tokens", max_tokens);
+    }
+  );
+
+  it.each([false, true])(
+    "reports real context exhaustion when available output falls below 16 (stream: %s)",
+    async (streaming) => {
+      const { chatWithContext, streamWithContext } = await import("../client.js");
+      const { getProviderModel } = await import("../../providers/model-resolver.js");
+      const config = AgentConfigSchema.parse({
+        provider: "openai",
+        model: "gpt-6-sol",
+        api_key: "sk-test-only",
+        max_tokens: 4096,
+      });
+      const model = getProviderModel("openai", config.model);
+      const tokens = model.contextWindow - 4096 - 8;
+      const context = {
+        messages: [
+          {
+            role: "assistant" as const,
+            content: [],
+            api: model.api,
+            provider: model.provider,
+            model: model.id,
+            stopReason: "stop" as const,
+            timestamp: 1,
+            usage: {
+              input: tokens,
+              output: 0,
+              cacheRead: 0,
+              cacheWrite: 0,
+              totalTokens: tokens,
+              cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+            },
+          },
+        ],
+      };
+      const fetch = vi.spyOn(globalThis, "fetch").mockRejectedValue(new Error("Network disabled"));
+      try {
+        expect(prepareModelRequest(config, { context }).options.maxTokens).toBe(0);
+        const response = streaming
+          ? await streamWithContext(config, { context }).result
+          : await chatWithContext(config, { context });
+        expect(response.message.stopReason).toBe("error");
+        expect(response.message.errorMessage).toContain("Context length exceeded");
+        expect(fetch).not.toHaveBeenCalled();
+      } finally {
+        fetch.mockRestore();
+      }
+    }
+  );
+
+  it.each(["codex", "anthropic", "google", "groq"] as const)(
+    "does not impose the Responses minimum on %s's other transport",
+    async (provider) => {
+      const models = {
+        codex: "gpt-5.6-terra",
+        anthropic: "claude-haiku-4-5-20251001",
+        google: "gemini-3.5-flash",
+        groq: "openai/gpt-oss-20b",
+      };
+      const key =
+        provider === "codex"
+          ? `header.${Buffer.from(JSON.stringify({ "https://api.openai.com/auth": { chatgpt_account_id: "test-account" } })).toString("base64")}.signature`
+          : "sk-test-only";
+      const request = prepareModelRequest(
+        AgentConfigSchema.parse({
+          provider,
+          model: models[provider],
+          api_key: key,
+          max_tokens: 1,
+          reasoning_effort: "none",
+        }),
+        { context: { messages: [{ role: "user", content: "test", timestamp: 1 }] } }
+      );
+      let payload: unknown;
+      await complete(request.model, request.context, {
+        ...request.options,
+        onPayload(value) {
+          payload = value;
+          throw new Error("Stop before network");
+        },
+      });
+      expect(request.options.maxTokens).toBe(1);
+      expect(payload).toBeDefined();
+      if (provider === "codex") expect(payload).not.toHaveProperty("max_output_tokens");
+    }
+  );
+
+  it("does not impose a minimum when the Responses adapter omits the output field", async () => {
+    const { getProviderModel, getOutputTokenBudget } =
+      await import("../../providers/model-resolver.js");
+    const model = getProviderModel("openai", "gpt-6-sol");
+    expect(
+      getOutputTokenBudget(
+        { ...model, compat: { ...model.compat, supportsMaxOutputTokens: false } },
+        { messages: [] },
+        1,
+        "sk-test-only"
+      )
+    ).toBe(1);
+    const request = prepareModelRequest(
+      AgentConfigSchema.parse({
+        provider: "openai",
+        model: model.id,
+        api_key: "fake-sign-in-token",
+        max_tokens: 1,
+      }),
+      { context: { messages: [] } }
+    );
+    let payload: unknown;
+    await complete(request.model, request.context, {
+      ...request.options,
+      onPayload(value) {
+        payload = value;
+        throw new Error("Stop before network");
+      },
+    });
+    expect(request.options.maxTokens).toBe(1);
+    expect(payload).toBeDefined();
+    expect(payload).not.toHaveProperty("max_output_tokens");
+  });
 });

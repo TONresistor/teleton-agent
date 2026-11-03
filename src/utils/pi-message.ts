@@ -49,3 +49,47 @@ export function stripEnvelopePrefix(content: string): string {
 export function truncate(s: string, n: number): string {
   return s.length > n ? s.substring(0, n) + "..." : s;
 }
+
+/** Per-response filter: retain possible tag prefixes across stream chunks. */
+export function createThinkFilter(): {
+  push(text: string): string;
+  flushPublic(): string;
+  end(completed?: boolean): string;
+} {
+  let pending = "";
+  let hidden = false;
+  return {
+    push(text) {
+      pending += text;
+      let visible = "";
+      while (pending) {
+        const tag = hidden ? "</think>" : "<think>";
+        const index = pending.indexOf(tag);
+        if (index >= 0) {
+          if (!hidden) visible += pending.slice(0, index);
+          pending = pending.slice(index + tag.length);
+          hidden = !hidden;
+          continue;
+        }
+        let keep = Math.min(tag.length - 1, pending.length);
+        while (keep > 0 && !tag.startsWith(pending.slice(-keep))) keep--;
+        if (!hidden) visible += pending.slice(0, pending.length - keep);
+        pending = keep ? pending.slice(-keep) : "";
+        break;
+      }
+      return visible;
+    },
+    flushPublic() {
+      if (hidden) return "";
+      const suffix = pending;
+      pending = "";
+      return suffix;
+    },
+    end(completed = true) {
+      // Incomplete responses discard pending prefixes; hidden content is never flushed.
+      const suffix = completed && !hidden ? pending : "";
+      pending = "";
+      return suffix;
+    },
+  };
+}

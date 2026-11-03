@@ -1,3 +1,4 @@
+import { getEffectiveApiKey } from "./agent/model-request.js";
 import type Database from "better-sqlite3";
 import type { Config } from "./config/schema.js";
 import type { EmbeddingProvider } from "./memory/embeddings/provider.js";
@@ -114,9 +115,10 @@ export class StartupMaintenance {
     import("./session/memory-hook.js")
       .then(({ consolidateOldMemoryFiles }) =>
         consolidateOldMemoryFiles({
-          apiKey: this.config.agent.api_key,
+          apiKey: getEffectiveApiKey(this.config.agent.provider, this.config.agent.api_key),
           provider: this.config.agent.provider as SupportedProvider,
           utilityModel: this.config.agent.utility_model,
+          baseUrl: this.config.agent.base_url,
         })
       )
       .then((r) => {
