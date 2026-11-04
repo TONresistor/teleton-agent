@@ -14,6 +14,8 @@ export {
   validatePath,
   validateReadPath,
   validateWritePath,
+  assertMutablePath,
+  assertDeletablePath,
   validateDirectory,
   isWithinWorkspace,
   sanitizeFilename,

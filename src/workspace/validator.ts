@@ -3,7 +3,12 @@
 import { existsSync, lstatSync, readdirSync } from "fs";
 import { resolve, normalize, relative, extname, basename, join, sep } from "path";
 import { homedir } from "os";
-import { WORKSPACE_ROOT, ALLOWED_EXTENSIONS, MAX_FILE_SIZES } from "./paths.js";
+import {
+  WORKSPACE_ROOT,
+  ALLOWED_EXTENSIONS,
+  MAX_FILE_SIZES,
+  PROTECTED_WORKSPACE_FILES,
+} from "./paths.js";
 import { MAX_FILENAME_LENGTH } from "../constants/limits.js";
 
 /**
@@ -184,6 +189,57 @@ export function validateReadPath(inputPath: string): ValidatedPath {
 // Owner configuration files that cannot be overwritten by the agent
 const IMMUTABLE_FILES = ["SOUL.md", "STRATEGY.md", "SECURITY.md"];
 
+function matchesProtectedFile(filename: string, names: readonly string[]): boolean {
+  // Reserve case aliases too, including on case-insensitive filesystems.
+  return names.some((name) => name.toLowerCase() === filename.toLowerCase());
+}
+
+export function assertMutablePath(
+  validated: ValidatedPath,
+  inputPath: string,
+  operation: "write" | "rename" = "write"
+): void {
+  if (matchesProtectedFile(validated.filename, IMMUTABLE_FILES)) {
+    throw new WorkspaceSecurityError(
+      `Cannot ${operation === "write" ? "write to" : operation} ${validated.filename}. This file is configured by the owner. Use memory_write instead.`,
+      inputPath
+    );
+  }
+}
+
+export function assertDeletablePath(
+  validated: ValidatedPath,
+  inputPath: string,
+  recursive: boolean
+): void {
+  if (validated.relativePath === "") {
+    throw new WorkspaceSecurityError("Cannot delete the workspace root.", inputPath);
+  }
+
+  const checkName = (filename: string): void => {
+    if (matchesProtectedFile(filename, PROTECTED_WORKSPACE_FILES)) {
+      throw new WorkspaceSecurityError(
+        `Cannot delete protected file: ${filename}. This file is essential for the agent's operation.`,
+        inputPath
+      );
+    }
+  };
+  checkName(validated.filename);
+
+  if (recursive && validated.isDirectory) {
+    const pending = [validated.absolutePath];
+    while (pending.length > 0) {
+      const directory = pending.pop();
+      if (directory === undefined) break;
+      for (const entry of readdirSync(directory, { withFileTypes: true })) {
+        checkName(entry.name);
+        // Directory entries do not follow symlinks into other trees.
+        if (entry.isDirectory()) pending.push(join(directory, entry.name));
+      }
+    }
+  }
+}
+
 export function validateWritePath(
   inputPath: string,
   fileType?: keyof typeof ALLOWED_EXTENSIONS
@@ -191,12 +247,7 @@ export function validateWritePath(
   const validated = validatePath(inputPath, true);
 
   // SECURITY: Block writes to owner-only configuration files
-  if (IMMUTABLE_FILES.includes(validated.filename)) {
-    throw new WorkspaceSecurityError(
-      `Cannot write to ${validated.filename}. This file is configured by the owner. Use memory_write instead.`,
-      inputPath
-    );
-  }
+  assertMutablePath(validated, inputPath);
 
   // Check extension if type specified (OPTIONAL - not enforced by default)
   if (fileType && ALLOWED_EXTENSIONS[fileType]) {

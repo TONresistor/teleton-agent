@@ -101,7 +101,7 @@ export const jettonSendExecutor: ToolExecutor<JettonSendParams> = async (
     }
 
     const senderJettonWallet = jettonBalance.wallet_address.address;
-    const decimals = jettonBalance.jetton.decimals || 9;
+    const decimals = jettonBalance.jetton.decimals ?? 9;
     const symbol = jettonBalance.jetton.symbol || "JETTON";
     const currentBalance = BigInt(jettonBalance.balance);
 
