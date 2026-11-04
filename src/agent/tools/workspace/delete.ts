@@ -3,7 +3,11 @@
 import { Type } from "@sinclair/typebox";
 import { unlinkSync, rmdirSync, readdirSync, rmSync } from "fs";
 import type { Tool, ToolExecutor } from "../types.js";
-import { validatePath, PROTECTED_WORKSPACE_FILES } from "../../../workspace/index.js";
+import {
+  assertDeletablePath,
+  validatePath,
+  WorkspaceSecurityError,
+} from "../../../workspace/index.js";
 
 interface WorkspaceDeleteParams {
   path: string;
@@ -33,14 +37,14 @@ export const workspaceDeleteExecutor: ToolExecutor<WorkspaceDeleteParams> = asyn
   // Validate the path
   const validated = validatePath(path, false);
 
-  // Check if it's a protected file
-  if (PROTECTED_WORKSPACE_FILES.includes(validated.filename)) {
-    return {
-      success: false,
-      error:
-        `Cannot delete protected file: ${validated.filename}. ` +
-        `This file is essential for the agent's operation.`,
-    };
+  // Check the entire target before removing any part of a directory tree.
+  try {
+    assertDeletablePath(validated, path, recursive);
+  } catch (error) {
+    if (error instanceof WorkspaceSecurityError) {
+      return { success: false, error: error.message };
+    }
+    throw error;
   }
 
   if (validated.isDirectory) {

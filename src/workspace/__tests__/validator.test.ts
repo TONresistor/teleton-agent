@@ -23,6 +23,14 @@ vi.mock("../paths.js", async () => {
     WORKSPACE_ROOT: tempWorkspace,
     TELETON_ROOT: join(tempWorkspace, ".."),
     WORKSPACE_PATHS: {},
+    PROTECTED_WORKSPACE_FILES: [
+      "SOUL.md",
+      "STRATEGY.md",
+      "SECURITY.md",
+      "MEMORY.md",
+      "IDENTITY.md",
+      "USER.md",
+    ],
     ALLOWED_EXTENSIONS: {
       images: [".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp"],
       audio: [".mp3", ".ogg", ".wav", ".m4a", ".opus"],

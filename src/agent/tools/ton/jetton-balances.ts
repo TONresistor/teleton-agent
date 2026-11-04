@@ -68,7 +68,7 @@ export const jettonBalancesExecutor: ToolExecutor<JettonBalancesParams> = async 
       }
 
       // Convert balance from blockchain units to human-readable
-      const decimals = jetton.decimals || 9;
+      const decimals = jetton.decimals ?? 9;
       const rawBalance = BigInt(balance);
       const divisor = BigInt(10 ** decimals);
       const wholePart = rawBalance / divisor;
