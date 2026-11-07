@@ -115,6 +115,7 @@ export type {
   PluginToolContext,
   ToolResult,
   ToolScope,
+  ToolMode,
   ToolCategory,
   // Plugin event hooks
   PluginMessageEvent,
@@ -149,7 +150,7 @@ export type {
   AgentStopEvent,
 } from "./types.js";
 
-export { PLUGIN_HOOK_NAMES, TOOL_SCOPES, TOOL_CATEGORIES } from "./types.js";
+export { PLUGIN_HOOK_NAMES, TOOL_SCOPES, TOOL_MODES, TOOL_CATEGORIES } from "./types.js";
 
 // ─── Errors ──────────────────────────────────────────────────────
 

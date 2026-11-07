@@ -12,6 +12,7 @@ import { createLogger } from "../../utils/logger.js";
 import {
   PLUGIN_HOOK_NAMES,
   TOOL_CATEGORIES,
+  TOOL_MODES,
   TOOL_SCOPES,
   type PluginManifest,
   type SimpleToolDef,
@@ -146,6 +147,11 @@ export function validateToolDefs(defs: unknown[], pluginName: string): SimpleToo
 
     if (t.scope !== undefined && !TOOL_SCOPES.includes(t.scope as never)) {
       log.warn(`[${pluginName}] tool "${t.name}" has invalid scope, skipping`);
+      continue;
+    }
+
+    if (t.mode !== undefined && !TOOL_MODES.includes(t.mode as never)) {
+      log.warn(`[${pluginName}] tool "${t.name}" has invalid mode, skipping`);
       continue;
     }
 

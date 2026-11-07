@@ -72,12 +72,14 @@ try {
     `import {
   PLUGIN_HOOK_NAMES,
   TOOL_CATEGORIES,
+  TOOL_MODES,
   TOOL_SCOPES,
   PluginSDKError,
   SDK_VERSION,
   type PluginManifest,
   type PluginSDK,
   type SimpleToolDef,
+  type ToolMode,
   type StartContext,
 } from "@teleton-agent/sdk";
 
@@ -88,11 +90,13 @@ const manifest: PluginManifest = {
   hooks: [{ name: "agent:start", priority: 10 }],
 };
 
+const mode: ToolMode = "user";
 const tools: SimpleToolDef<{ name: string }>[] = [{
   name: "consumer_hello",
   description: "Consumer compilation check",
   parameters: { type: "object" },
   scope: "allowlist",
+  mode,
   category: "action",
   requiresApproval: true,
   async execute(params, context) {
@@ -113,6 +117,7 @@ void manifest;
 void tools;
 void PLUGIN_HOOK_NAMES;
 void TOOL_CATEGORIES;
+void TOOL_MODES;
 void TOOL_SCOPES;
 void SDK_VERSION;
 void new PluginSDKError("consumer check", "OPERATION_FAILED");
@@ -147,6 +152,15 @@ void new PluginSDKError("consumer check", "OPERATION_FAILED");
   }
   if (runtime.PLUGIN_HOOK_NAMES.length !== 13) {
     throw new Error("SDK runtime hook contract is incomplete");
+  }
+
+  const workspaceRuntime = await import(pathToFileURL(join(sdkDir, "dist", "index.js")).href);
+  const error = new workspaceRuntime.PluginSDKError("consumer check", "NOT_AVAILABLE");
+  if (
+    workspaceRuntime.PluginSDKError === runtime.PluginSDKError ||
+    !(error instanceof runtime.PluginSDKError)
+  ) {
+    throw new Error("SDK errors must be recognized across independently installed SDK copies");
   }
 
   process.stdout.write(`SDK package verified (${packageJson.version}, ${packResult.size} bytes)\n`);

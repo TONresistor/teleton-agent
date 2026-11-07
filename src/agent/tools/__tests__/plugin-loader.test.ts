@@ -1,7 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { adaptPlugin } from "../plugin-loader.js";
+import { ToolRegistry } from "../registry.js";
 import { sanitizeConfigForPlugins } from "../plugin-validator.js";
-import { SDK_VERSION } from "@teleton-agent/sdk";
+import { SDK_VERSION, type SimpleToolDef, type ToolMode } from "@teleton-agent/sdk";
 import type { Config } from "../../../config/schema.js";
 import type Database from "better-sqlite3";
 
@@ -306,6 +307,49 @@ describe("adaptPlugin — SDK version + dependency check", () => {
 });
 
 // ─── T4: Plugin config isolation (sanitizeConfigForPlugins) ─────
+
+describe("adaptPlugin — Telegram runtime modes", () => {
+  it("filters tools by mode through registration and hot replacement", () => {
+    const makeTools = (mode?: ToolMode): SimpleToolDef[] => [
+      {
+        name: "mode_tool",
+        description: "Mode-specific plugin tool",
+        category: "data-bearing",
+        mode,
+        execute: async () => ({ success: true }),
+      },
+    ];
+    const adapt = (mode?: ToolMode) =>
+      adaptPlugin(
+        makeRawPlugin({ tools: makeTools(mode) }),
+        "mode-plugin",
+        makeConfig(),
+        [],
+        minimalSdkDeps
+      ).tools(makeConfig());
+    const registry = new ToolRegistry("bot");
+
+    registry.registerPluginTools("mode-plugin", adapt("user"));
+    expect(registry.getForContext(false, null)).toEqual([]);
+    registry.setMode("user");
+    expect(registry.getForContext(false, null).map((tool) => tool.name)).toEqual(["mode_tool"]);
+
+    registry.replacePluginTools("mode-plugin", adapt("bot"));
+    expect(registry.getForContext(false, null)).toEqual([]);
+    registry.setMode("bot");
+    expect(registry.getForContext(false, null)).toHaveLength(1);
+
+    registry.replacePluginTools("mode-plugin", adapt("both"));
+    expect(registry.getForContext(false, null)).toHaveLength(1);
+    registry.setMode("user");
+    expect(registry.getForContext(false, null)).toHaveLength(1);
+
+    registry.replacePluginTools("mode-plugin", adapt());
+    expect(registry.getForContext(false, null)).toHaveLength(1);
+    registry.setMode("bot");
+    expect(registry.getForContext(false, null)).toHaveLength(1);
+  });
+});
 
 describe("sanitizeConfigForPlugins — config isolation", () => {
   it("T4a: strips api_key, api_hash, session, phone, and all secrets", () => {

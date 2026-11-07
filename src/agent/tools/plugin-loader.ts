@@ -313,6 +313,7 @@ export function adaptPlugin(
             // isolated handle. Failing closed also covers DB startup errors.
             executor: withPluginDb(restrictedContextExecutor),
             scope: def.scope as ToolScope | undefined,
+            mode: def.mode,
             requiresApproval: def.requiresApproval,
           };
         });

@@ -768,6 +768,7 @@ Each tool in the `tools` array (or returned by the tools factory function) must 
 | `parameters` | `object` | No | JSON Schema describing the tool's input parameters. |
 | `execute` | `function` | Yes | `async (params, context) => { success, data?, error? }` |
 | `scope` | `string` | No | Visibility: `"always"` (default), `"dm-only"`, `"group-only"`, `"admin-only"` |
+| `mode` | `ToolMode` | No | Telegram runtime: `"user"`, `"bot"`, or `"both"` (default) |
 | `category` | `string` | No | `"data-bearing"` (results masked in old iterations) or `"action"` (always preserved) |
 
 ### The Execute Function
@@ -797,6 +798,10 @@ async execute(params, context) {
 - `"admin-only"` -- Only available to users in `telegram.admin_ids`
 - `"allowlist"` -- Only available to configured allowlisted users
 - `"disabled"` -- Never exposed
+
+### Mode
+
+Set `mode: "user"` for tools that require MTProto capabilities, or `mode: "bot"` for bot-only tools. The default, `"both"`, keeps the tool available in either runtime. Teleton filters tools by mode and rejects execution in the wrong runtime; `scope` controls access separately.
 
 ### Category
 

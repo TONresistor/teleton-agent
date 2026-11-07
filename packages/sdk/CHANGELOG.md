@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Optional tool `mode` (`user`, `bot`, or `both`) with runtime validation and filtering.
+
+### Fixed
+
+- Recognize `PluginSDKError` across independently installed or bundled SDK copies.
+
 ### Changed
 
 - `requiresApproval` is retained for plugin manifest compatibility but no longer interrupts agentic execution.

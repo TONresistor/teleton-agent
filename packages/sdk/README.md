@@ -1211,6 +1211,7 @@ export const tools = (sdk: PluginSDK): SimpleToolDef[] => {
 | `parameters` | `Record<string, unknown>?` | JSON Schema for params |
 | `execute` | `(params, context) => Promise<ToolResult>` | Tool handler |
 | `scope` | `ToolScope?` | Visibility scope (default: `"always"`) |
+| `mode` | `ToolMode?` | Telegram runtime: `"user"`, `"bot"`, or `"both"` (default) |
 | `category` | `ToolCategory?` | Masking category |
 | `requiresApproval` | `boolean?` | Deprecated compatibility field; ignored by the runtime |
 
@@ -1315,7 +1316,7 @@ Runtime context passed to tool `execute` functions.
 
 ## Error Handling
 
-All SDK methods that perform I/O throw `PluginSDKError` on failure. Use the `code` property for control flow:
+Check each method's return type: some reads, such as `ton.getBalance()` and `ton.getPrice()`, return `null` on failure or when unavailable. Other methods throw `PluginSDKError`; use its `code` for control flow. `instanceof PluginSDKError` recognizes errors across independently installed or bundled SDK copies.
 
 ```typescript
 import { PluginSDKError } from "@teleton-agent/sdk";

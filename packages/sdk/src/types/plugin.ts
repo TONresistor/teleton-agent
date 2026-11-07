@@ -347,6 +347,12 @@ export const TOOL_SCOPES = [
 /** Tool visibility scope for context-based filtering. */
 export type ToolScope = (typeof TOOL_SCOPES)[number];
 
+/** Telegram runtime modes supported by plugin tools. */
+export const TOOL_MODES = ["user", "bot", "both"] as const;
+
+/** Telegram runtime mode required by a tool. */
+export type ToolMode = (typeof TOOL_MODES)[number];
+
 /** Tool categories supported by the runtime. */
 export const TOOL_CATEGORIES = ["data-bearing", "action"] as const;
 
@@ -397,6 +403,8 @@ export interface SimpleToolDef<TParams extends Record<string, unknown> = Record<
   execute: (params: TParams, context: PluginToolContext) => Promise<ToolResult>;
   /** Visibility scope (default: "always") */
   scope?: ToolScope;
+  /** Telegram runtime mode (default: "both"). */
+  mode?: ToolMode;
   /** Tool category for masking behavior */
   category?: ToolCategory;
   /** @deprecated Retained for manifest compatibility; ignored by the runtime. */

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { PLUGIN_HOOK_NAMES, TOOL_CATEGORIES, TOOL_SCOPES } from "@teleton-agent/sdk";
+import { PLUGIN_HOOK_NAMES, TOOL_CATEGORIES, TOOL_MODES, TOOL_SCOPES } from "@teleton-agent/sdk";
 import { validateManifest, validateToolDefs } from "../plugin-validator.js";
 
 const execute = async () => ({ success: true });
@@ -96,6 +96,11 @@ describe("validateManifest", () => {
 });
 
 describe("validateToolDefs", () => {
+  it.each(TOOL_MODES)("accepts the public runtime mode %s", (mode) => {
+    const definition = { name: "mode_tool", description: "Mode-specific tool", mode, execute };
+    expect(validateToolDefs([definition], "contract-test")).toEqual([definition]);
+  });
+
   it("accepts every public scope and category", () => {
     const defs = TOOL_SCOPES.flatMap((scope) =>
       TOOL_CATEGORIES.map((category, index) => ({
@@ -113,6 +118,7 @@ describe("validateToolDefs", () => {
   it.each([
     { name: "UpperCase", description: "Invalid name", execute },
     { name: "valid_name", description: "Invalid scope", scope: "private", execute },
+    { name: "valid_name", description: "Invalid mode", mode: "mtproto", execute },
     { name: "valid_name", description: "Invalid category", category: "read", execute },
     { name: "valid_name", description: "Invalid parameters", parameters: [], execute },
     { name: "valid_name", description: "Invalid approval", requiresApproval: "yes", execute },
