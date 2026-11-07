@@ -1,4 +1,5 @@
 import { Type } from "@sinclair/typebox";
+import { fromNano } from "@ton/ton";
 import type { Tool, ToolExecutor, ToolResult } from "../types.js";
 import { tonapiFetch } from "../../../constants/api-endpoints.js";
 import { getErrorMessage } from "../../../utils/errors.js";
@@ -114,7 +115,7 @@ export const dnsCheckExecutor: ToolExecutor<DnsCheckParams> = async (
       );
 
       if (auction) {
-        const currentBid = (BigInt(auction.price) / BigInt(1_000_000_000)).toString();
+        const currentBid = fromNano(auction.price);
         const endDate = new Date(auction.date * 1000).toISOString().replace("T", " ").split(".")[0];
         const nftAddress = dnsInfo.item?.address || "Unknown";
 

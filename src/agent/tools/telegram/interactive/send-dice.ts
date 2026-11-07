@@ -12,11 +12,12 @@ const log = createLogger("Tools");
 interface SendDiceParams {
   chat_id: string;
   emoticon?: "🎲" | "🎯" | "🏀" | "⚽" | "🎰" | "🎳";
+  replyToId?: number;
 }
 
 export const telegramSendDiceTool: Tool = {
   name: "telegram_send_dice",
-  description: `Roll an animated dice or game message with a server-determined random result. Emoticon options: \ud83c\udfb2 (dice), \ud83c\udfaf (darts), \ud83c\udfc0 (basketball), \u26bd (football), \ud83c\udfb0 (slots), \ud83c\udfb3 (bowling). Returns the numeric outcome. Use when user asks 'roll a dice', 'spin the wheel', or 'play dice'.`,
+  description: `Roll an animated dice or game message with a server-determined random result. Emoticon options: \ud83c\udfb2 (dice), \ud83c\udfaf (darts), \ud83c\udfc0 (basketball), \u26bd (football), \ud83c\udfb0 (slots), \ud83c\udfb3 (bowling). Optional replyToId attaches the dice as a reply to that message. Returns the numeric outcome. Use when user asks 'roll a dice', 'spin the wheel', or 'play dice'.`,
 
   parameters: Type.Object({
     chat_id: Type.String({
@@ -28,6 +29,12 @@ export const telegramSendDiceTool: Tool = {
         enum: ["🎲", "🎯", "🏀", "⚽", "🎰", "🎳"],
       })
     ),
+    replyToId: Type.Optional(
+      Type.Integer({
+        description: "Optional message ID to reply to",
+        minimum: 1,
+      })
+    ),
   }),
 };
 
@@ -36,9 +43,12 @@ export const telegramSendDiceExecutor: ToolExecutor<SendDiceParams> = async (
   context
 ): Promise<ToolResult> => {
   try {
-    const { chat_id, emoticon = "🎲" } = params;
+    const { chat_id, emoticon = "🎲", replyToId } = params;
 
-    const result = await context.bridge.sendDice(chat_id, emoticon);
+    const result =
+      replyToId === undefined
+        ? await context.bridge.sendDice(chat_id, emoticon)
+        : await context.bridge.sendDice(chat_id, emoticon, replyToId);
 
     return {
       success: true,

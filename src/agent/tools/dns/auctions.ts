@@ -1,4 +1,5 @@
 import { Type } from "@sinclair/typebox";
+import { fromNano } from "@ton/ton";
 import type { Tool, ToolExecutor, ToolResult } from "../types.js";
 import { tonapiFetch } from "../../../constants/api-endpoints.js";
 import { getErrorMessage } from "../../../utils/errors.js";
@@ -75,7 +76,7 @@ export const dnsAuctionsExecutor: ToolExecutor<DnsAuctionsParams> = async (
     const formattedAuctions: FormattedAuction[] = auctions.data
       .slice(0, limit)
       .map((auction: TonApiDnsAuction) => {
-        const currentBid = (BigInt(auction.price) / BigInt(1_000_000_000)).toString();
+        const currentBid = fromNano(auction.price);
         const endDate = new Date(auction.date * 1000).toISOString().replace("T", " ").split(".")[0];
 
         return {
