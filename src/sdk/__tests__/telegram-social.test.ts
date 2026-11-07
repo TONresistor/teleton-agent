@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { createTelegramSocialSDK } from "../telegram-social.js";
 import { PluginSDKError } from "@teleton-agent/sdk";
 import { Api } from "telegram";
+import { realpathSync } from "fs";
 
 // ─── GramJS mock ────────────────────────────────────────────────
 vi.mock("telegram", () => {
@@ -38,7 +39,15 @@ vi.mock("telegram", () => {
         SendStarsForm: cls("payments.SendStarsForm"),
         GetStarGifts: cls("payments.GetStarGifts"),
         GetSavedStarGifts: cls("payments.GetSavedStarGifts"),
+        GetResaleStarGifts: cls("payments.GetResaleStarGifts"),
+        GetStarsTransactions: cls("payments.GetStarsTransactions"),
+        GetUniqueStarGift: cls("payments.GetUniqueStarGift"),
+        SendStarGiftOffer: cls("payments.SendStarGiftOffer"),
       },
+      fragment: { GetCollectibleInfo: cls("fragment.GetCollectibleInfo") },
+      InputCollectibleUsername: cls("InputCollectibleUsername"),
+      InputCollectiblePhone: cls("InputCollectiblePhone"),
+      StarsAmount: cls("StarsAmount"),
       stories: {
         SendStory: cls("stories.SendStory"),
       },
@@ -103,6 +112,93 @@ describe("createTelegramSocialSDK", () => {
     vi.clearAllMocks();
     mockBridge.isAvailable.mockReturnValue(true);
     sdk = createTelegramSocialSDK(mockBridge, mockLog);
+  });
+
+  it("preserves fractional Stars in balances and history", async () => {
+    mockGramJsClient.invoke.mockResolvedValueOnce({ balance: { amount: 10n, nanos: 500_000_000 } });
+    await expect(sdk.getStarsBalance()).resolves.toBe(10.5);
+    mockGramJsClient.invoke.mockResolvedValueOnce({
+      history: [{ id: "tx", amount: { amount: -2n, nanos: -250_000_000 }, date: 1 }],
+    });
+    expect((await sdk.getStarsTransactions())[0].amount).toBe(-2.25);
+  });
+
+  it("preserves a known zero chat member count", async () => {
+    mockGramJsClient.getEntity.mockResolvedValue({
+      className: "Chat",
+      id: 7n,
+      title: "Empty",
+      participantsCount: 0,
+    });
+    mockGramJsClient.invoke.mockResolvedValue({ fullChat: {} });
+    expect((await sdk.getChatInfo("7"))?.membersCount).toBe(0);
+  });
+
+  it("uses the Stars resale price instead of mistaking a TON price for Stars", async () => {
+    mockGramJsClient.invoke.mockResolvedValueOnce({
+      gifts: [
+        {
+          slug: "both-currencies",
+          resellAmount: [
+            { className: "StarsTonAmount", amount: 1_000_000_000n },
+            { className: "StarsAmount", amount: 25n, nanos: 500_000_000 },
+          ],
+        },
+        {
+          slug: "ton-only",
+          resellAmount: [{ className: "StarsTonAmount", amount: 2_000_000_000n }],
+        },
+      ],
+    });
+    await expect(sdk.getResaleGifts("123")).resolves.toEqual([
+      { id: "both-currencies", starsAmount: 25.5 },
+    ]);
+  });
+
+  it("maps saved-gift PeerUser senders and omits non-user peers", async () => {
+    mockGramJsClient.invoke.mockResolvedValueOnce({
+      gifts: [
+        { fromId: { userId: 42n }, gift: { id: 1n, stars: 5n }, date: 1 },
+        { fromId: { channelId: 7n }, gift: { id: 2n, stars: 5n }, date: 1 },
+      ],
+    });
+    const gifts = await sdk.getMyGifts();
+    expect(gifts[0].fromId).toBe(42);
+    expect(gifts[1].fromId).toBeUndefined();
+  });
+
+  it("tries a phone collectible when the username lookup reports not found", async () => {
+    mockGramJsClient.invoke
+      .mockRejectedValueOnce({ errorMessage: "USERNAME_NOT_OCCUPIED" })
+      .mockResolvedValueOnce({ purchaseDate: 1, currency: "TON", amount: 1n });
+    expect(await sdk.getCollectibleInfo("+88812345678")).toMatchObject({
+      type: "phone",
+      value: "+88812345678",
+    });
+    expect(mockGramJsClient.invoke.mock.calls[1][0].collectible).toMatchObject({
+      phone: "+88812345678",
+    });
+  });
+
+  it("keeps zero gift rarity and rejects offers shorter than six hours", async () => {
+    mockGramJsClient.invoke.mockResolvedValueOnce({
+      gift: {
+        id: 1n,
+        giftId: 2n,
+        slug: "gift-1",
+        num: 1,
+        attributes: [
+          { className: "StarGiftAttributeModel", name: "Rare", rarity: { permille: 0 } },
+        ],
+      },
+      users: [],
+    });
+    expect((await sdk.getUniqueGift("gift-1"))?.attributes[0].rarityPercent).toBe(0);
+    mockGramJsClient.invoke.mockClear();
+    await expect(sdk.sendGiftOffer(123, "gift-1", 1, { duration: 60 })).rejects.toMatchObject({
+      code: "INVALID_INPUT",
+    });
+    expect(mockGramJsClient.invoke).not.toHaveBeenCalled();
   });
 
   // ─── BRIDGE_NOT_CONNECTED for all methods ──────────────────
@@ -857,7 +953,7 @@ describe("createTelegramSocialSDK", () => {
         gifts: [
           {
             gift: { id: BigInt(1), stars: BigInt(100) },
-            fromId: 42,
+            fromId: { userId: 42n },
             date: 1700000000,
             unsaved: false,
             msgId: 555,
@@ -942,6 +1038,17 @@ describe("createTelegramSocialSDK", () => {
 
   // ─── sendStory ──────────────────────────────────────────────
   describe("sendStory()", () => {
+    it("accepts canonical temporary paths and returns IDs from UpdatesCombined", async () => {
+      vi.mocked(realpathSync)
+        .mockReturnValueOnce("/private/tmp/img.jpg")
+        .mockReturnValueOnce("/private/tmp");
+      mockGramJsClient.invoke.mockResolvedValue(
+        new (Api.UpdatesCombined as any)({
+          updates: [{ className: "UpdateStory", story: { id: 71 } }],
+        })
+      );
+      await expect(sdk.sendStory("/tmp/img.jpg", { caption: "hello" })).resolves.toBe(71);
+    });
     it("uploads photo and sends story", async () => {
       mockGramJsClient.uploadFile.mockResolvedValue({ _: "InputFile" });
       mockGramJsClient.invoke.mockResolvedValue(

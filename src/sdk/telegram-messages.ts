@@ -8,6 +8,7 @@ import { resolveTelegramMessageText } from "../telegram/rich-message.js";
 import { getApi, toSimpleMessageWithText } from "./telegram-utils.js";
 import { boundedLimit, requireNonEmpty, requirePositiveInteger } from "./validation.js";
 import { createTelegramRuntime } from "./telegram/runtime.js";
+import { toTLMarkup } from "./formatting.js";
 
 /**
  * Creates the Telegram messages, media, and advanced SDK methods.
@@ -19,6 +20,20 @@ export function createTelegramMessagesSDK(
   mode?: "user" | "bot"
 ) {
   const { requireBridge, requireUserMode, getClient } = createTelegramRuntime(bridge, mode);
+
+  function mediaButtons(opts?: MediaSendOptions) {
+    if (opts?.inlineKeyboard === undefined) return {};
+    return {
+      buttons: toTLMarkup(
+        opts.inlineKeyboard.map((row) =>
+          row.map((button) => ({
+            text: button.text,
+            callbackData: button.callback_data,
+          }))
+        )
+      ),
+    };
+  }
 
   return {
     // ─── Messages ──────────────────────────────────────────────
@@ -260,6 +275,7 @@ export function createTelegramMessagesSDK(
 
         const result = await gramJsClient.sendFile(chatId, {
           file: photo,
+          ...mediaButtons(opts),
           caption: opts?.caption,
           replyTo: opts?.replyToId,
           forceDocument: false,
@@ -288,6 +304,7 @@ export function createTelegramMessagesSDK(
 
         const result = await gramJsClient.sendFile(chatId, {
           file: video,
+          ...mediaButtons(opts),
           caption: opts?.caption,
           replyTo: opts?.replyToId,
           forceDocument: false,
@@ -325,6 +342,7 @@ export function createTelegramMessagesSDK(
 
         const result = await gramJsClient.sendFile(chatId, {
           file: voice,
+          ...mediaButtons(opts),
           caption: opts?.caption,
           replyTo: opts?.replyToId,
           attributes: [
@@ -360,6 +378,7 @@ export function createTelegramMessagesSDK(
 
         const result = await gramJsClient.sendFile(chatId, {
           file,
+          ...mediaButtons(opts),
           caption: opts?.caption,
           replyTo: opts?.replyToId,
           forceDocument: true,
@@ -385,6 +404,7 @@ export function createTelegramMessagesSDK(
 
         const result = await gramJsClient.sendFile(chatId, {
           file: gif,
+          ...mediaButtons(opts),
           caption: opts?.caption,
           replyTo: opts?.replyToId,
           attributes: [new Api.DocumentAttributeAnimated()],

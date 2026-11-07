@@ -7,6 +7,7 @@ import { randomLong } from "../utils/gramjs-bigint.js";
 import { createTelegramMessagesSDK } from "./telegram-messages.js";
 import { createTelegramSocialSDK } from "./telegram-social.js";
 import { createTelegramRuntime } from "./telegram/runtime.js";
+import { requirePositiveInteger } from "./validation.js";
 
 export function createTelegramSDK(
   bridge: ITelegramBridge,
@@ -58,10 +59,14 @@ export function createTelegramSDK(
       }
     },
 
-    async sendDice(chatId, emoticon, _replyToId) {
+    async sendDice(chatId, emoticon, replyToId) {
       requireBridge();
+      if (replyToId !== undefined) requirePositiveInteger(replyToId, "Reply message ID");
       try {
-        const sent = await bridge.sendDice(chatId, emoticon);
+        const sent =
+          replyToId === undefined
+            ? await bridge.sendDice(chatId, emoticon)
+            : await bridge.sendDice(chatId, emoticon, replyToId);
         return { value: sent.value, messageId: sent.id };
       } catch (error) {
         if (error instanceof PluginSDKError) throw error;
@@ -170,6 +175,7 @@ export function createTelegramSDK(
     getMe(): TelegramUser | null {
       requireUserMode("getMe");
       try {
+        if (!bridge.isAvailable()) return null;
         if (!isUserBridge(bridge)) return null;
         const me = bridge.getClient().getMe();
         if (!me) return null;

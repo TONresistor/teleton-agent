@@ -260,10 +260,11 @@ export class GrammyBotBridge implements ITelegramBridge {
     return true;
   }
 
-  async sendDice(chatId: string, emoji?: string): Promise<SentDiceMessage> {
+  async sendDice(chatId: string, emoji?: string, replyToId?: number): Promise<SentDiceMessage> {
     const result = await this.bot.api.sendDice(
       this.toChatId(chatId),
-      emoji as Parameters<typeof this.bot.api.sendDice>[1]
+      emoji as Parameters<typeof this.bot.api.sendDice>[1],
+      replyToId === undefined ? undefined : { reply_parameters: { message_id: replyToId } }
     );
 
     return {

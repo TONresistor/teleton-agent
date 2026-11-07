@@ -81,7 +81,7 @@ console.log(`Swapped on ${result.dex}: ${result.amountIn} TON -> ~${result.expec
                     <li>Use <code>"ton"</code> as the asset identifier for native TON</li>
                     <li>Use the jetton master contract address for any other token</li>
                     <li>Amounts are in human-readable units (e.g., <code>10</code> for 10 TON, not nanoTON)</li>
-                    <li>Slippage is a decimal (e.g., <code>0.01</code> = 1%), range: 0.001 to 0.5</li>
+                    <li>Slippage is a decimal (e.g., <code>0.01</code> = 1%), range: 0 to 1</li>
                 </ul>
             </section>
 
@@ -206,7 +206,7 @@ console.log(`STON.fi swap: ${result.amountIn} -> ${result.expectedOutput}`);</co
   fromAsset: string;   // "ton" or jetton master address
   toAsset: string;     // "ton" or jetton master address
   amount: number;      // Human-readable units
-  slippage?: number;   // 0.01 = 1% (default: 0.01, range: 0.001-0.5)
+  slippage?: number;   // 0.01 = 1% (default: 0.01, range: 0-1)
 }</code></pre></div>
 
                 <div class="code-block"><div class="code-header"><span>DexQuoteResult</span></div><pre><code class="language-typescript">interface DexQuoteResult {

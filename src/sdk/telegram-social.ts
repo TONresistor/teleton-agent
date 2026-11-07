@@ -30,6 +30,11 @@ import {
 } from "./validation.js";
 import { createTelegramRuntime, type TelegramUserOpContext } from "./telegram/runtime.js";
 
+function starsValue(value?: Api.TypeStarsAmount): number {
+  if (!value) return 0;
+  return Number(value.amount.toString()) + ("nanos" in value ? value.nanos / 1_000_000_000 : 0);
+}
+
 export function createTelegramSocialSDK(
   bridge: ITelegramBridge,
   log: PluginLogger,
@@ -104,7 +109,7 @@ export function createTelegramSocialSDK(
             const fullChannel = await client.invoke(new Api.channels.GetFullChannel({ channel }));
             const fullChat = fullChannel.fullChat as Api.ChannelFull;
             description = fullChat.about || undefined;
-            membersCount = fullChat.participantsCount || undefined;
+            membersCount = fullChat.participantsCount ?? undefined;
           } catch {
             // May lack permissions
           }
@@ -139,7 +144,7 @@ export function createTelegramSocialSDK(
             title: chat.title || "Unknown",
             type: "group",
             description,
-            membersCount: chat.participantsCount || undefined,
+            membersCount: chat.participantsCount ?? undefined,
           };
         }
 
@@ -436,7 +441,7 @@ export function createTelegramSocialSDK(
           })
         );
 
-        return Number(result.balance?.amount?.toString() || "0");
+        return starsValue(result.balance);
       });
     },
 
@@ -510,7 +515,10 @@ export function createTelegramSocialSDK(
           const gift = savedGift.gift as Api.StarGift;
           return {
             id: gift?.id?.toString() || "",
-            fromId: savedGift.fromId ? Number(savedGift.fromId) : undefined,
+            fromId:
+              savedGift.fromId && "userId" in savedGift.fromId
+                ? Number(savedGift.fromId.userId)
+                : undefined,
             date: savedGift.date || 0,
             starsAmount: Number(gift?.stars?.toString() || "0"),
             saved: savedGift.unsaved !== true,
@@ -531,12 +539,16 @@ export function createTelegramSocialSDK(
           })
         );
 
-        return (result.gifts || []).map((g: any) => {
+        return (result.gifts || []).flatMap((g: any) => {
           const listing = g as Api.StarGiftUnique;
-          return {
-            id: listing.slug || listing.id?.toString() || "",
-            starsAmount: Number(listing.resellAmount?.[0]?.amount?.toString() || "0"),
-          };
+          const price = listing.resellAmount?.find((amount) => amount.className === "StarsAmount");
+          if (!price) return [];
+          return [
+            {
+              id: listing.slug || listing.id?.toString() || "",
+              starsAmount: starsValue(price),
+            },
+          ];
         });
       });
     },
@@ -649,7 +661,7 @@ export function createTelegramSocialSDK(
 
         return (result.history || []).map((tx: any) => ({
           id: tx.id?.toString() || "",
-          amount: Number(tx.amount?.amount?.toString() || "0"),
+          amount: starsValue(tx.amount),
           date: tx.date || 0,
           peer: tx.peer?.className || undefined,
           description: tx.description || undefined,
@@ -731,14 +743,7 @@ export function createTelegramSocialSDK(
             username: slug.replace("@", ""),
           });
           result = await client.invoke(new Api.fragment.GetCollectibleInfo({ collectible }));
-        } catch (innerError: unknown) {
-          const tgErr = innerError as { errorMessage?: string };
-          if (
-            tgErr.errorMessage === "USERNAME_NOT_OCCUPIED" ||
-            tgErr.errorMessage === "PHONE_NOT_OCCUPIED"
-          ) {
-            return null;
-          }
+        } catch {
           // Try as phone — only swallow "not found" errors
           try {
             type = "phone";
@@ -816,7 +821,7 @@ export function createTelegramSocialSDK(
             return {
               type,
               name,
-              rarityPercent: permille ? permille / 10 : undefined,
+              rarityPercent: permille === undefined ? undefined : permille / 10,
             };
           }),
           availability:
@@ -880,8 +885,14 @@ export function createTelegramSocialSDK(
       return userOp("sendGiftOffer", "send gift offer", async ({ client, Api }) => {
         requireNonEmpty(giftSlug, "Gift slug");
         requirePositiveInteger(price, "Offer price");
-        const peer = await client.getInputEntity(userId.toString());
         const duration = requirePositiveInteger(opts?.duration ?? 86400, "Offer duration");
+        if (duration < 21600) {
+          throw new PluginSDKError(
+            "Offer duration must be at least 21600 seconds",
+            "INVALID_INPUT"
+          );
+        }
+        const peer = await client.getInputEntity(userId.toString());
 
         await client.invoke(
           new Api.payments.SendStarGiftOffer({
@@ -903,9 +914,7 @@ export function createTelegramSocialSDK(
         const { helpers } = await import("telegram");
         const { CustomFile } = await import("telegram/client/uploads.js");
         const { readFileSync, statSync } = await import("fs");
-        const { basename } = await import("path");
-
-        const { resolve, normalize } = await import("path");
+        const { basename, resolve, normalize, relative, isAbsolute, sep } = await import("path");
         const { homedir } = await import("os");
         const { realpathSync } = await import("fs");
 
@@ -921,7 +930,20 @@ export function createTelegramSocialSDK(
           `${teletonWorkspace}downloads/`,
           `${teletonWorkspace}memes/`,
         ];
-        if (!allowedPrefixes.some((p) => filePath.startsWith(p))) {
+        if (
+          !allowedPrefixes.some((prefix) => {
+            let root: string;
+            try {
+              root = realpathSync(prefix);
+            } catch {
+              root = resolve(prefix);
+            }
+            const path = relative(root, filePath);
+            return (
+              path !== "" && path !== ".." && !path.startsWith(`..${sep}`) && !isAbsolute(path)
+            );
+          })
+        ) {
           throw new PluginSDKError(
             "sendStory: media path must be within /tmp, Downloads, Pictures, or Videos",
             "OPERATION_FAILED"
@@ -974,7 +996,7 @@ export function createTelegramSocialSDK(
         );
 
         const storyUpdate =
-          result instanceof Api.Updates
+          result instanceof Api.Updates || result instanceof Api.UpdatesCombined
             ? result.updates.find((u) => u.className === "UpdateStory")
             : undefined;
         return storyUpdate?.story?.id ?? null;

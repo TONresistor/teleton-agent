@@ -14,6 +14,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Recognize `PluginSDKError` across independently installed or bundled SDK copies.
+- Forward dice replies and media keyboards, and preserve gift sender IDs and fractional Stars.
+- Honor bot URL buttons, inline parse modes, thumbnails, and declared capabilities; report failed inline edits.
+- Resolve DNS wallet records through the correct endpoint, bound auction results, and encode initial bids with the contract's minimum price.
+- Honor zero TTL and expiry boundaries; reject invalid TTL, non-JSON values, payment expectations, send modes, and zero-unit jetton transfers.
 
 ### Changed
 

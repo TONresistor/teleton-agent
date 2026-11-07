@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import Database from "better-sqlite3";
 import { createStorageSDK } from "../storage.js";
+import { PluginSDKError } from "@teleton-agent/sdk";
 
 describe("StorageSDK", () => {
   let db: InstanceType<typeof Database>;
@@ -16,6 +17,31 @@ describe("StorageSDK", () => {
   afterEach(() => {
     vi.restoreAllMocks();
     db.close();
+  });
+
+  it("expires zero TTL and values exactly at their expiration time", () => {
+    const clock = vi.spyOn(Date, "now").mockReturnValue(1000);
+    storage.set("zero", "value", { ttl: 0 });
+    expect(storage.has("zero")).toBe(false);
+    expect(storage.get("zero")).toBeUndefined();
+    storage.set("boundary", "value", { ttl: 10 });
+    clock.mockReturnValue(1010);
+    expect(storage.get("boundary")).toBeUndefined();
+    expect(storage.has("boundary")).toBe(false);
+  });
+
+  it.each([Number.NaN, Number.POSITIVE_INFINITY, -1])(
+    "rejects invalid TTL %s before storing",
+    (ttl) => {
+      expect(() => storage.set("bad", "value", { ttl })).toThrow(PluginSDKError);
+      expect(storage.has("bad")).toBe(false);
+    }
+  );
+
+  it("rejects values whose JSON serialization is undefined", () => {
+    expect(() => storage.set("function", () => {})).toThrow(PluginSDKError);
+    expect(() => storage.set("symbol", Symbol("value"))).toThrow(PluginSDKError);
+    expect(storage.has("function")).toBe(false);
   });
 
   // ---------- Basic CRUD ----------

@@ -749,11 +749,12 @@ export class GramJSUserBridge implements ITelegramBridge {
     }
   }
 
-  async sendDice(chatId: string, emoji?: string): Promise<SentDiceMessage> {
+  async sendDice(chatId: string, emoji?: string, replyToId?: number): Promise<SentDiceMessage> {
     try {
       const gramJsClient = this.client.getClient();
       const message = await gramJsClient.sendFile(chatId, {
         file: new Api.InputMediaDice({ emoticon: emoji ?? "🎲" }),
+        replyTo: replyToId,
       });
       const dice = message.dice;
       if (!dice) {

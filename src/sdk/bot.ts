@@ -17,6 +17,8 @@ import {
 } from "./formatting.js";
 import { editInlineViaGramJS } from "../bot/services/inline-transport.js";
 import { getGramJSErrorMessage } from "../utils/errors.js";
+import { PluginSDKError } from "@teleton-agent/sdk";
+import { getErrorMessage } from "../utils/errors.js";
 
 export function createBotSDK(
   router: InlineRouter | null,
@@ -56,6 +58,11 @@ export function createBotSDK(
     },
 
     onInlineQuery(handler) {
+      if (!manifest.inline)
+        throw new PluginSDKError(
+          "Inline queries are not declared in the bot manifest",
+          "NOT_AVAILABLE"
+        );
       if (handlers.onInlineQuery) {
         log.warn("onInlineQuery called again — overwriting previous handler");
       }
@@ -69,6 +76,8 @@ export function createBotSDK(
     },
 
     onCallback(pattern, handler) {
+      if (!manifest.callbacks)
+        throw new PluginSDKError("Callbacks are not declared in the bot manifest", "NOT_AVAILABLE");
       if (!handlers.onCallback) {
         handlers.onCallback = [];
       }
@@ -86,15 +95,21 @@ export function createBotSDK(
     },
 
     onChosenResult(handler) {
+      if (!manifest.inline)
+        throw new PluginSDKError(
+          "Inline queries are not declared in the bot manifest",
+          "NOT_AVAILABLE"
+        );
       handlers.onChosenResult = handler;
       syncToRouter();
     },
 
     async editInlineMessage(inlineMessageId, text, opts) {
       const keyboard = opts?.keyboard ? prefixButtons(opts.keyboard, pluginName) : undefined;
+      const parseMode = opts?.parseMode ?? "HTML";
 
       // Try GramJS first (styled buttons)
-      if (gramjsBot?.isConnected() && keyboard) {
+      if (gramjsBot?.isConnected() && parseMode === "HTML") {
         try {
           await editInlineViaGramJS({
             gramjsBot,
@@ -104,6 +119,11 @@ export function createBotSDK(
           });
           return;
         } catch (error: unknown) {
+          if (!grammyBot)
+            throw new PluginSDKError(
+              `Failed to edit inline message: ${getErrorMessage(error)}`,
+              "OPERATION_FAILED"
+            );
           log.warn(
             `GramJS edit failed, falling back to Grammy: ${getGramJSErrorMessage(error) || error}`
           );
@@ -115,15 +135,23 @@ export function createBotSDK(
         try {
           const kb = keyboard ? toGrammyKeyboard(keyboard) : undefined;
           await grammyBot.api.editMessageTextInline(inlineMessageId, stripCustomEmoji(text), {
-            parse_mode: (opts?.parseMode as "HTML" | "MarkdownV2") ?? "HTML",
+            parse_mode: parseMode as "HTML" | "Markdown" | "MarkdownV2",
             link_preview_options: { is_disabled: true },
             reply_markup: kb,
           });
         } catch (error: unknown) {
           const grammyErr = error as { description?: string };
           if (grammyErr.description?.includes("message is not modified")) return;
-          log.error(`Failed to edit inline message: ${grammyErr.description || error}`);
+          throw new PluginSDKError(
+            `Failed to edit inline message: ${grammyErr.description || getErrorMessage(error)}`,
+            "OPERATION_FAILED"
+          );
         }
+      } else {
+        throw new PluginSDKError(
+          "No bot transport is available for this inline edit",
+          "NOT_AVAILABLE"
+        );
       }
     },
 

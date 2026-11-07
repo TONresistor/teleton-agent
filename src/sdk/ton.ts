@@ -53,6 +53,13 @@ import { fetchJettonMeta, findJettonBalance, formatTokenBalance } from "./ton/je
 import { mapNftItem, type TonApiNftItem } from "./ton/nft-api.js";
 import { createJettonAnalyticsSDK } from "./ton/jetton-analytics.js";
 import { createHighloadSDK } from "./ton-highload.js";
+import { requireNonEmpty, requirePositiveNumber } from "./validation.js";
+
+function validateSendMode(mode?: number): void {
+  if (mode !== undefined && (!Number.isInteger(mode) || mode < 0 || mode > 3)) {
+    throw new PluginSDKError("Unsafe sendMode", "OPERATION_FAILED");
+  }
+}
 
 /**
  * Drop the cached TON node when an error is a 429 or 5xx, so the next attempt
@@ -219,6 +226,9 @@ async function prepareJettonTransfer(
   const amountStr = amount.toFixed(decimals);
   const [whole, frac = ""] = amountStr.split(".");
   const amountInUnits = BigInt(whole + (frac + "0".repeat(decimals)).slice(0, decimals));
+  if (amountInUnits <= 0n) {
+    throw new PluginSDKError("Amount is below the jetton's smallest unit", "INVALID_INPUT");
+  }
 
   if (amountInUnits > currentBalance) {
     const balStr = formatTokenBalance(currentBalance, decimals);
@@ -410,6 +420,17 @@ export function createTonSDK(
       }
 
       const maxAgeMinutes = params.maxAgeMinutes ?? DEFAULT_MAX_AGE_MINUTES;
+      requirePositiveNumber(params.amount, "Expected payment amount");
+      const expectedMemo = requireNonEmpty(
+        params.memo.trim().replace(/^@/, ""),
+        "Payment memo"
+      ).toLowerCase();
+      if (!Number.isFinite(maxAgeMinutes) || maxAgeMinutes < 0) {
+        throw new PluginSDKError(
+          "Maximum payment age must be a finite non-negative number",
+          "INVALID_INPUT"
+        );
+      }
 
       // Opportunistic cleanup of old transactions
       cleanupOldTransactions(db, DEFAULT_TX_RETENTION_DAYS, log);
@@ -433,8 +454,7 @@ export function createTonSDK(
 
           // Memo match (case-insensitive, strip @)
           const memo = (tx.comment ?? "").trim().toLowerCase().replace(/^@/, "");
-          const expected = params.memo.toLowerCase().replace(/^@/, "");
-          if (memo !== expected) continue;
+          if (memo !== expectedMemo) continue;
 
           // Replay protection: use actual blockchain transaction hash
           const txHash = tx.hash;
@@ -503,7 +523,7 @@ export function createTonSDK(
             name: jetton.name || "Unknown Token",
             decimals,
             verified: jetton.verification === "whitelist",
-            usdPrice: item.price?.prices?.USD ? Number(item.price.prices.USD) : undefined,
+            usdPrice: item.price?.prices?.USD == null ? undefined : Number(item.price.prices.USD),
           });
         }
 
@@ -908,9 +928,7 @@ export function createTonSDK(
         throw new PluginSDKError("Amount must be a non-negative number", "OPERATION_FAILED");
       }
 
-      if (opts?.sendMode !== undefined && (opts.sendMode < 0 || opts.sendMode > 3)) {
-        throw new PluginSDKError("Unsafe sendMode", "OPERATION_FAILED");
-      }
+      validateSendMode(opts?.sendMode);
 
       return signAndSend(
         [{ to, value, body: opts?.body, bounce: opts?.bounce, stateInit: opts?.stateInit }],
@@ -932,9 +950,7 @@ export function createTonSDK(
         throw new PluginSDKError("Maximum 255 messages per transfer", "OPERATION_FAILED");
       }
 
-      if (opts?.sendMode !== undefined && (opts.sendMode < 0 || opts.sendMode > 3)) {
-        throw new PluginSDKError("Unsafe sendMode", "OPERATION_FAILED");
-      }
+      validateSendMode(opts?.sendMode);
 
       for (const m of messages) {
         try {
@@ -973,9 +989,7 @@ export function createTonSDK(
       return {
         address: wallet.address,
         send: async (args) => {
-          if (args.sendMode !== undefined && (args.sendMode < 0 || args.sendMode > 3)) {
-            throw new PluginSDKError("Unsafe sendMode", "OPERATION_FAILED");
-          }
+          validateSendMode(args.sendMode);
           const client = await getCachedTonClient();
           const sent = await withTxLock(async () => {
             const contract = client.open(wallet);

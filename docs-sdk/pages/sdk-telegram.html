@@ -488,7 +488,7 @@ for (const tx of txs) {
                         <tr><td><code>sendGift(userId, giftId, opts?)</code></td><td><code>Promise&lt;void&gt;</code></td><td>Send a star gift to a user. Options: <code>message</code>, <code>anonymous</code>.</td></tr>
                         <tr><td><code>getAvailableGifts()</code></td><td><code>Promise&lt;StarGift[]&gt;</code></td><td>Get available star gifts catalog.</td></tr>
                         <tr><td><code>getMyGifts(limit?)</code></td><td><code>Promise&lt;ReceivedGift[]&gt;</code></td><td>Get star gifts received by the bot. Default limit: 50.</td></tr>
-                        <tr><td><code>getResaleGifts(giftId, limit?)</code></td><td><code>Promise&lt;StarGift[]&gt;</code></td><td>Get gifts available for resale from a collection.</td></tr>
+                        <tr><td><code>getResaleGifts(giftId, limit?)</code></td><td><code>Promise&lt;StarGift[]&gt;</code></td><td>Get Stars-priced resale gifts from a collection. TON-only listings are omitted.</td></tr>
                         <tr><td><code>buyResaleGift(giftId)</code></td><td><code>Promise&lt;void&gt;</code></td><td>Buy a star gift from the resale market.</td></tr>
                     </tbody>
                 </table></div>

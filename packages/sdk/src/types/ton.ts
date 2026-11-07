@@ -307,7 +307,7 @@ export interface DexQuoteParams {
   toAsset: string;
   /** Amount in human-readable units */
   amount: number;
-  /** Slippage tolerance (0.01 = 1%, default 0.01, range 0.001-0.5) */
+  /** Slippage tolerance (0.01 = 1%, default 0.01, range 0-1) */
   slippage?: number;
 }
 
@@ -453,7 +453,7 @@ export interface DnsResolveResult {
 
 /** DNS sub-namespace on TonSDK */
 export interface DnsSDK {
-  /** Check domain availability, price, and auction status */
+  /** Check domain availability, ownership, and linked wallet */
   check(domain: string): Promise<DnsCheckResult>;
   /** Resolve a .ton domain to an address */
   resolve(domain: string): Promise<DnsResolveResult | null>;

@@ -108,10 +108,10 @@ DexSwapParams extends DexQuoteParams: { dex?: "stonfi" | "dedust" }
 
 ## sdk.ton.dns — DNS & Domains (8 methods)
 
-- `check(domain: string): Promise<DnsCheckResult>` — Check domain availability, owner, auction status.
+- `check(domain: string): Promise<DnsCheckResult>` — Check domain availability, ownership, and linked wallet.
 - `resolve(domain: string): Promise<DnsResolveResult | null>` — Resolve .ton domain to wallet address.
 - `getAuctions(limit?: number): Promise<DnsAuction[]>` — List active domain auctions.
-- `startAuction(domain: string): Promise<DnsAuctionResult>` — Start auction for unclaimed domain.
+- `startAuction(domain: string): Promise<DnsAuctionResult>` — Start auction for an unclaimed domain, automatically sending the contract's minimum bid for its length and date.
 - `bid(domain: string, amount: number): Promise<DnsBidResult>` — Place bid on active auction.
 - `link(domain: string, address: string): Promise<void>` — Link domain to wallet address.
 - `unlink(domain: string): Promise<void>` — Remove domain link.

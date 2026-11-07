@@ -61,4 +61,15 @@ describe("GramJSUserBridge dice", () => {
     expect(options.file).toBeInstanceOf(Api.InputMediaDice);
     expect(options.file.emoticon).toBe("🎲");
   });
+
+  it("passes the reply target through GramJS", async () => {
+    const bridge = new GramJSUserBridge({
+      apiId: 1,
+      apiHash: "test",
+      phone: "+10000000000",
+      sessionPath: "/tmp/teleton-dice-test",
+    });
+    await bridge.sendDice("123", "🎲", 17);
+    expect(mocks.sendFile).toHaveBeenCalledWith("123", expect.objectContaining({ replyTo: 17 }));
+  });
 });

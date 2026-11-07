@@ -181,7 +181,7 @@ export interface ITelegramBridge {
   setTyping(chatId: string): Promise<void>;
   sendReaction(chatId: string, messageId: number, emoji: string): Promise<void>;
   pinMessage(chatId: string, messageId: number): Promise<boolean>;
-  sendDice(chatId: string, emoji?: string): Promise<SentDiceMessage>;
+  sendDice(chatId: string, emoji?: string, replyToId?: number): Promise<SentDiceMessage>;
 
   // Chat info
   getChatInfo(chatId: string): Promise<ChatInfo>;

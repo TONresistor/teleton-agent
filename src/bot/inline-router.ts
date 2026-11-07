@@ -223,13 +223,14 @@ export class InlineRouter {
           await answerCallbackOnce(ctx, { text, show_alert: alert });
         },
         async editMessage(text: string, opts?: { keyboard?: ButtonDef[][]; parseMode?: string }) {
+          const parseMode = opts?.parseMode ?? "HTML";
           const styledButtons = opts?.keyboard
             ? prefixButtons(opts.keyboard, pluginName)
             : undefined;
 
           // Try GramJS for inline messages (styled/colored buttons via MTProto)
           const inlineMsgId = ctx.callbackQuery?.inline_message_id;
-          if (inlineMsgId && gramjsBotRef?.isConnected() && styledButtons) {
+          if (inlineMsgId && gramjsBotRef?.isConnected() && parseMode === "HTML") {
             try {
               await editInlineViaGramJS({
                 gramjsBot: gramjsBotRef,
@@ -248,7 +249,7 @@ export class InlineRouter {
           // Grammy fallback (no colored buttons)
           const replyMarkup = styledButtons ? toGrammyKeyboard(styledButtons) : undefined;
           await ctx.editMessageText(text, {
-            parse_mode: (opts?.parseMode as "HTML" | "MarkdownV2") ?? "HTML",
+            parse_mode: parseMode as "HTML" | "Markdown" | "MarkdownV2",
             link_preview_options: { is_disabled: true },
             reply_markup: replyMarkup,
           });
@@ -359,7 +360,7 @@ export class InlineRouter {
         type: "photo" as const,
         id: prefixedId,
         photo_url: content.photoUrl,
-        thumbnail_url: content.thumbUrl ?? content.photoUrl,
+        thumbnail_url: content.thumbUrl ?? result.thumbUrl ?? content.photoUrl,
         title: result.title,
         description: result.description,
         caption: content.caption,
@@ -372,7 +373,7 @@ export class InlineRouter {
         type: "gif" as const,
         id: prefixedId,
         gif_url: content.gifUrl,
-        thumbnail_url: content.thumbUrl ?? content.gifUrl,
+        thumbnail_url: content.thumbUrl ?? result.thumbUrl ?? content.gifUrl,
         title: result.title,
         caption: content.caption,
         reply_markup,

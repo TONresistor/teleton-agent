@@ -151,7 +151,7 @@ export function createSecretsSDK(
     },
 
     has(key: string): boolean {
-      return get(key) !== undefined;
+      return Boolean(get(key));
     },
   };
 }

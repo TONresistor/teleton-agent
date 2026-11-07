@@ -149,6 +149,15 @@ describe("createTelegramSDK — core", () => {
 
   // ─── sendDice ───────────────────────────────────────────────
   describe("sendDice()", () => {
+    it("forwards the reply target and rejects invalid reply IDs", async () => {
+      mockBridge.sendDice = vi.fn().mockResolvedValue({ id: 55, value: 6 });
+      await sdk.sendDice("12345", "🎲", 17);
+      expect(mockBridge.sendDice).toHaveBeenCalledWith("12345", "🎲", 17);
+      mockBridge.sendDice.mockClear();
+      await expect(sdk.sendDice("12345", "🎲", 0)).rejects.toMatchObject({ code: "INVALID_INPUT" });
+      expect(mockBridge.sendDice).not.toHaveBeenCalled();
+    });
+
     it("calls bridge.sendDice and returns result", async () => {
       mockBridge.sendDice = vi.fn().mockResolvedValue({ id: 55, value: 6 });
 
@@ -174,6 +183,12 @@ describe("createTelegramSDK — core", () => {
         code: "BRIDGE_NOT_CONNECTED",
       });
     });
+  });
+
+  it("returns no cached identity after the bridge disconnects", () => {
+    mockBridge.isAvailable.mockReturnValue(false);
+    mockBridgeClient.getMe.mockReturnValue({ id: 123n, firstName: "Cached", isBot: false });
+    expect(sdk.getMe()).toBeNull();
   });
 
   // ─── sendReaction ───────────────────────────────────────────

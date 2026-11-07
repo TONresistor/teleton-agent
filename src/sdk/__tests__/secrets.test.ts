@@ -70,6 +70,11 @@ afterEach(() => {
 // Resolution chain tests
 // ---------------------------------------------------------------------------
 describe("SecretsSDK resolution chain", () => {
+  it("treats an empty configured secret as unavailable, consistently with require", () => {
+    const sdk = createSecretsSDK("empty-contract", { KEY: "" }, mockLog);
+    expect(sdk.has("KEY")).toBe(false);
+    expect(() => sdk.require("KEY")).toThrow(PluginSDKError);
+  });
   it("returns env var first (highest priority)", () => {
     // All three sources have the value
     setEnv("TELETON_PLUGIN_MYPLUGIN_API_KEY", "from-env");

@@ -990,6 +990,43 @@ describe("createTonSDK", () => {
   // VERIFY PAYMENT
   // ═══════════════════════════════════════════════════════════════
 
+  it.each(["sendJetton", "createJettonTransfer"] as const)(
+    "%s rejects transfers rounded to zero base units",
+    async (method) => {
+      (loadWallet as Mock).mockReturnValue({ address: VALID_ADDRESS });
+      (tonapiFetch as Mock).mockResolvedValue(
+        mockResponse({
+          balances: [
+            {
+              jetton: { address: VALID_ADDRESS, decimals: 9 },
+              wallet_address: { address: VALID_ADDRESS },
+              balance: "1000000000",
+            },
+          ],
+        })
+      );
+      await expect(sdk[method](VALID_ADDRESS, VALID_ADDRESS, 0.0000000001)).rejects.toMatchObject({
+        code: "INVALID_INPUT",
+      });
+    }
+  );
+
+  it("preserves a known zero USD price in jetton balances", async () => {
+    (tonapiFetch as Mock).mockResolvedValue(
+      mockResponse({
+        balances: [
+          {
+            jetton: { address: VALID_ADDRESS, decimals: 9 },
+            wallet_address: { address: VALID_ADDRESS },
+            balance: "1",
+            price: { prices: { USD: 0 } },
+          },
+        ],
+      })
+    );
+    expect((await sdk.getJettonBalances(VALID_ADDRESS))[0].usdPrice).toBe(0);
+  });
+
   describe("verifyPayment()", () => {
     let db: Database.Database;
     let sdkWithDb: ReturnType<typeof createTonSDK>;
@@ -1006,6 +1043,43 @@ describe("createTonSDK", () => {
 
     afterEach(() => {
       db.close();
+    });
+
+    it.each([
+      { amount: Number.NaN },
+      { amount: 0 },
+      { amount: -1 },
+      { amount: Number.POSITIVE_INFINITY },
+      { memo: " @ " },
+      { memo: " " },
+      { maxAgeMinutes: Number.NaN },
+      { maxAgeMinutes: -1 },
+    ])(
+      "rejects invalid payment expectations before reading transactions: %j",
+      async (overrides) => {
+        await expect(
+          sdkWithDb.verifyPayment({ amount: 1, memo: "player", gameType: "test", ...overrides })
+        ).rejects.toMatchObject({ code: "INVALID_INPUT" });
+        expect(sdkWithDb.getTransactions).not.toHaveBeenCalled();
+      }
+    );
+
+    it("normalizes whitespace around an expected payment memo", async () => {
+      vi.spyOn(sdkWithDb, "getTransactions").mockResolvedValue([
+        {
+          type: "ton_received",
+          hash: "memo-normalized",
+          amount: "1 TON",
+          from: "EQ-sender",
+          comment: "player",
+          date: "2026-11-07T00:00:00Z",
+          secondsAgo: 1,
+          explorer: "",
+        },
+      ]);
+      expect(
+        (await sdkWithDb.verifyPayment({ amount: 1, memo: " @Player ", gameType: "test" })).verified
+      ).toBe(true);
     });
 
     it("throws when no database is available", async () => {
@@ -1801,6 +1875,11 @@ describe("createTonSDK", () => {
       });
 
       it("throws OPERATION_FAILED for unsafe sendMode (4, 32, 128)", async () => {
+        for (const sendMode of [Number.NaN, 1.5]) {
+          await expect(sdk.send(VALID_ADDRESS, 1, { sendMode })).rejects.toMatchObject({
+            code: "OPERATION_FAILED",
+          });
+        }
         await expect(sdk.send(VALID_ADDRESS, 1, { sendMode: 4 })).rejects.toMatchObject({
           code: "OPERATION_FAILED",
         });
@@ -1910,6 +1989,11 @@ describe("createTonSDK", () => {
       });
 
       it("throws OPERATION_FAILED for unsafe sendMode", async () => {
+        for (const sendMode of [Number.NaN, 1.5]) {
+          await expect(
+            sdk.sendMessages([{ to: VALID_ADDRESS, value: 1 }], { sendMode })
+          ).rejects.toMatchObject({ code: "OPERATION_FAILED" });
+        }
         await expect(
           sdk.sendMessages([{ to: VALID_ADDRESS, value: 1 }], { sendMode: 4 })
         ).rejects.toMatchObject({
@@ -1955,6 +2039,15 @@ describe("createTonSDK", () => {
         (withTxLock as Mock).mockImplementation((fn: () => any) => fn());
         mockContract.getSeqno.mockResolvedValue(20);
         mockContract.sendTransfer.mockResolvedValue(undefined);
+      });
+
+      it("rejects non-integer modes in sender adapters", async () => {
+        const sender = await sdk.createSender();
+        for (const sendMode of [Number.NaN, 1.5]) {
+          await expect(sender.send({ to: {} as any, value: 1n, sendMode })).rejects.toMatchObject({
+            code: "OPERATION_FAILED",
+          });
+        }
       });
 
       it("returns object with address and send function", async () => {

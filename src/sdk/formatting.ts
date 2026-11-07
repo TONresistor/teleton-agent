@@ -21,6 +21,7 @@ export type ButtonStyle = "success" | "danger" | "primary";
 export interface StyledButtonDef {
   text: string;
   callbackData: string;
+  url?: string;
   style?: ButtonStyle;
   /** If set, renders as an inline copy button (click-to-clipboard) via MTProto */
   copyText?: string;
@@ -38,15 +39,6 @@ export function toTLMarkup(buttons: StyledButtonDef[][]): Api.ReplyInlineMarkup 
         (row) =>
           new Api.KeyboardInlineButtonRow({
             buttons: row.map((btn) => {
-              // Copy button: native click-to-clipboard (no callback needed)
-              if (btn.copyText) {
-                return new Api.KeyboardInlineButton({
-                  text: btn.text,
-                  type: new Api.InlineButtonTypeCopy({ copyText: btn.copyText }),
-                });
-              }
-
-              // Callback button: with optional color style
               const style = btn.style
                 ? new Api.KeyboardButtonStyle({
                     bgSuccess: btn.style === "success",
@@ -54,6 +46,24 @@ export function toTLMarkup(buttons: StyledButtonDef[][]): Api.ReplyInlineMarkup 
                     bgPrimary: btn.style === "primary",
                   })
                 : undefined;
+              // Copy button: native click-to-clipboard (no callback needed)
+              if (btn.copyText) {
+                return new Api.KeyboardInlineButton({
+                  text: btn.text,
+                  type: new Api.InlineButtonTypeCopy({ copyText: btn.copyText }),
+                  style,
+                });
+              }
+
+              if (btn.url) {
+                return new Api.KeyboardInlineButton({
+                  text: btn.text,
+                  type: new Api.InlineButtonTypeUrl({ url: btn.url }),
+                  style,
+                });
+              }
+
+              // Callback button: with optional color style
               return new Api.KeyboardInlineButton({
                 text: btn.text,
                 type: new Api.InlineButtonTypeCallback({
@@ -78,6 +88,8 @@ export function toGrammyKeyboard(buttons: StyledButtonDef[][]): InlineKeyboard {
     for (const btn of buttons[i]) {
       if (btn.copyText) {
         kb.copyText(btn.text, btn.copyText);
+      } else if (btn.url) {
+        kb.url(btn.text, btn.url);
       } else {
         kb.text(btn.text, btn.callbackData);
       }
@@ -105,6 +117,9 @@ export function prefixButtons(
     row.map((btn) => {
       if (btn.copy) {
         return { text: btn.text, callbackData: "", copyText: btn.copy, style: btn.style };
+      }
+      if (btn.url) {
+        return { text: btn.text, callbackData: "", url: btn.url, style: btn.style };
       }
       return {
         text: btn.text,

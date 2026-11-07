@@ -11,12 +11,25 @@ import {
 } from "../formatting.js";
 
 describe("SDK formatting helpers", () => {
+  it("preserves URL buttons through prefixing and both keyboard transports", () => {
+    const rows = prefixButtons(
+      [[{ text: "Open", url: "https://example.com", style: "primary" }]],
+      "demo"
+    );
+    expect(toGrammyKeyboard(rows).inline_keyboard).toEqual([
+      [{ text: "Open", url: "https://example.com" }],
+    ]);
+    const button = toTLMarkup(rows).rows[0].buttons[0];
+    expect(button.type).toBeInstanceOf(Api.InlineButtonTypeUrl);
+    expect(button.type).toMatchObject({ url: "https://example.com" });
+    expect(button.style?.bgPrimary).toBe(true);
+  });
   it("builds TL callback, styled, and copy buttons while dropping empty rows", () => {
     const markup = toTLMarkup([
       [],
       [
         { text: "Confirm", callbackData: "confirm:1", style: "success" },
-        { text: "Copy", callbackData: "", copyText: "EQ123" },
+        { text: "Copy", callbackData: "", copyText: "EQ123", style: "danger" },
       ],
     ]);
 
@@ -27,6 +40,7 @@ describe("SDK formatting helpers", () => {
     expect(markup.rows[0].buttons[0].type).toBeInstanceOf(Api.InlineButtonTypeCallback);
     expect(markup.rows[0].buttons[1]).toBeInstanceOf(Api.KeyboardInlineButton);
     expect(markup.rows[0].buttons[1].type).toBeInstanceOf(Api.InlineButtonTypeCopy);
+    expect(markup.rows[0].buttons[1].style?.bgDanger).toBe(true);
   });
 
   it("builds the Grammy fallback with callback and copy rows", () => {

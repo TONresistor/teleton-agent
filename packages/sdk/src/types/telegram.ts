@@ -689,7 +689,8 @@ export interface TelegramSDK {
   getMyGifts(limit?: number): Promise<ReceivedGift[]>;
 
   /**
-   * Get star gifts available for resale from a specific collection.
+   * Get Stars-priced gifts available for resale from a specific collection.
+   * Listings priced only in TON are omitted.
    *
    * @param giftId — Collection ID (numeric string from getAvailableGifts)
    * @param limit — Max results (default: 50)

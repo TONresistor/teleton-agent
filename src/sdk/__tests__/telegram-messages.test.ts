@@ -28,6 +28,10 @@ vi.mock("telegram", () => {
       UpdatesCombined: cls("UpdatesCombined"),
       InputMessagesFilterEmpty: cls("InputMessagesFilterEmpty"),
       DocumentAttributeVideo: cls("DocumentAttributeVideo"),
+      ReplyInlineMarkup: cls("ReplyInlineMarkup"),
+      KeyboardInlineButtonRow: cls("KeyboardInlineButtonRow"),
+      KeyboardInlineButton: cls("KeyboardInlineButton"),
+      InlineButtonTypeCallback: cls("InlineButtonTypeCallback"),
       DocumentAttributeAudio: cls("DocumentAttributeAudio"),
       DocumentAttributeFilename: cls("DocumentAttributeFilename"),
       DocumentAttributeAnimated: cls("DocumentAttributeAnimated"),
@@ -58,6 +62,25 @@ describe("createTelegramMessagesSDK", () => {
     mockBridge.isAvailable.mockReturnValue(true);
     sdk = createTelegramMessagesSDK(mockBridge, mockLog);
   });
+
+  it.each(["sendPhoto", "sendVideo", "sendVoice", "sendFile", "sendGif"] as const)(
+    "%s forwards caption, reply target and inline keyboard",
+    async (method) => {
+      mockGramJsClient.sendFile.mockResolvedValue({ id: 7 });
+      await sdk[method]("chat1", Buffer.from("media"), {
+        caption: "caption",
+        replyToId: 17,
+        inlineKeyboard: [[{ text: "Confirm", callback_data: "confirm:7" }]],
+      });
+      const options = mockGramJsClient.sendFile.mock.calls[0][1];
+      expect(options.caption).toBe("caption");
+      expect(options.replyTo).toBe(17);
+      expect(options.buttons.rows[0].buttons[0]).toMatchObject({
+        text: "Confirm",
+        type: { data: Buffer.from("confirm:7") },
+      });
+    }
+  );
 
   // ─── BRIDGE_NOT_CONNECTED for all methods ──────────────────
   describe("BRIDGE_NOT_CONNECTED guard", () => {

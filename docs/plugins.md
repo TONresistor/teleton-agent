@@ -340,7 +340,7 @@ await sdk.telegram.muteUser(chatId, userId, untilDate);
 | `sendGift(userId, giftId, opts?)` | `Promise<void>` | Send a star gift |
 | `getAvailableGifts()` | `Promise<StarGift[]>` | Get gift catalog |
 | `getMyGifts(limit?)` | `Promise<ReceivedGift[]>` | Get received gifts |
-| `getResaleGifts(giftId, limit?)` | `Promise<StarGift[]>` | Get resale gifts from a collection |
+| `getResaleGifts(giftId, limit?)` | `Promise<StarGift[]>` | Get Stars-priced resale gifts; TON-only listings are omitted |
 | `buyResaleGift(giftId)` | `Promise<void>` | Buy a resale gift |
 | `getStarsTransactions(limit?)` | `Promise<StarsTransaction[]>` | Stars transaction history |
 
@@ -469,10 +469,10 @@ Manage .ton domains: check availability, resolve addresses, auctions, and link d
 
 | Method | Returns | Description |
 |--------|---------|-------------|
-| `check(domain)` | `Promise<DnsCheckResult>` | Check availability, owner, auction status |
+| `check(domain)` | `Promise<DnsCheckResult>` | Check availability, ownership, and linked wallet |
 | `resolve(domain)` | `Promise<DnsResolveResult \| null>` | Resolve domain to wallet address |
 | `getAuctions(limit?)` | `Promise<DnsAuction[]>` | List active auctions |
-| `startAuction(domain)` | `Promise<DnsAuctionResult>` | Start auction (~0.06 TON minimum bid) |
+| `startAuction(domain)` | `Promise<DnsAuctionResult>` | Start auction with the minimum bid calculated from domain length and date |
 | `bid(domain, amount)` | `Promise<DnsBidResult>` | Place bid on active auction |
 | `link(domain, address)` | `Promise<void>` | Link domain to wallet address |
 | `unlink(domain)` | `Promise<void>` | Remove wallet link |

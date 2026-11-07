@@ -36,6 +36,16 @@ describe("GrammyBotBridge dice", () => {
     expect(parsed.text).toBe("[Dice: 🎲 = 4]");
   });
 
+  it("passes the reply target through the Bot API", async () => {
+    const send = vi.spyOn(bridge.getBot().api, "sendDice").mockResolvedValue({
+      message_id: 42,
+      date: 1,
+      dice: { emoji: "🎲", value: 5 },
+    } as never);
+    await bridge.sendDice("123", "🎲", 17);
+    expect(send).toHaveBeenCalledWith(123, "🎲", { reply_parameters: { message_id: 17 } });
+  });
+
   it("subscribes to incoming dice messages", () => {
     const on = vi.spyOn(bridge.getBot(), "on").mockReturnValue(bridge.getBot());
 

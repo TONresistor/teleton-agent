@@ -153,7 +153,7 @@ for (const auction of auctions) {
 
             <section class="section" id="start-auction">
                 <h2>startAuction(domain)</h2>
-                <p>Start a new auction for an unclaimed .ton domain. This places an initial bid.</p>
+                <p>Start a new auction for an unclaimed .ton domain. This automatically sends the contract's minimum initial bid, calculated from the domain length and date. Short domains require a higher bid; the amount sent is returned as <code>bidAmount</code>.</p>
                 <p><strong>Parameters:</strong></p>
                 <ul>
                     <li><code>domain</code> (<code>string</code>), Domain to auction (e.g. <code>"newproject.ton"</code>)</li>

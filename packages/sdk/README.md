@@ -469,10 +469,10 @@ Manage .ton domains: check availability, resolve addresses, participate in aucti
 
 | Method | Returns | Description |
 |--------|---------|-------------|
-| `check(domain)` | `Promise<DnsCheckResult>` | Check availability, owner, auction status |
+| `check(domain)` | `Promise<DnsCheckResult>` | Check availability, ownership, and linked wallet |
 | `resolve(domain)` | `Promise<DnsResolveResult \| null>` | Resolve domain to wallet address |
 | `getAuctions(limit?)` | `Promise<DnsAuction[]>` | List active auctions |
-| `startAuction(domain)` | `Promise<DnsAuctionResult>` | Start auction for an available domain |
+| `startAuction(domain)` | `Promise<DnsAuctionResult>` | Start auction using the contract's minimum bid, calculated from domain length and date |
 | `bid(domain, amount)` | `Promise<DnsBidResult>` | Place bid on active auction |
 | `link(domain, address)` | `Promise<void>` | Link domain to wallet address |
 | `unlink(domain)` | `Promise<void>` | Remove wallet link |
@@ -627,7 +627,7 @@ await sdk.ton.dns.setSiteRecord("mysite.ton", "aabbccdd...64hex");
 | `sendGift(userId, giftId, opts?)` | `Promise<void>` | Send a star gift |
 | `getAvailableGifts()` | `Promise<StarGift[]>` | Get gift catalog |
 | `getMyGifts(limit?)` | `Promise<ReceivedGift[]>` | Get received gifts |
-| `getResaleGifts(giftId, limit?)` | `Promise<StarGift[]>` | Get resale gifts from a collection |
+| `getResaleGifts(giftId, limit?)` | `Promise<StarGift[]>` | Get Stars-priced resale gifts; TON-only listings are omitted |
 | `buyResaleGift(giftId)` | `Promise<void>` | Buy a resale gift |
 | `getStarsTransactions(limit?)` | `Promise<StarsTransaction[]>` | Stars transaction history |
 | `transferCollectible(msgId, toUserId)` | `Promise<TransferResult>` | Transfer a collectible gift |
@@ -869,7 +869,7 @@ Secure access to plugin secrets (API keys, tokens, credentials). Resolution orde
 |--------|---------|-------------|
 | `get(key)` | `string \| undefined` | Get secret value |
 | `require(key)` | `string` | Get secret, throws `SECRET_NOT_FOUND` if missing |
-| `has(key)` | `boolean` | Check if a secret is configured |
+| `has(key)` | `boolean` | Check if a non-empty secret is available |
 
 ```typescript
 const apiKey = sdk.secrets.get("api_key");
@@ -894,6 +894,8 @@ Used in `PluginManifest.secrets` to declare required secrets.
 
 Simple key-value storage for plugins. Uses an auto-created `_kv` table in the plugin's isolated DB. No `migrate()` export needed. Values are JSON-serialized with optional TTL.
 
+TTL must be finite and non-negative; `ttl: 0` expires immediately. Values that cannot be JSON-serialized are rejected.
+
 | Method | Returns | Description |
 |--------|---------|-------------|
 | `get<T>(key)` | `T \| undefined` | Get value (undefined if missing or expired) |
@@ -916,6 +918,8 @@ sdk.storage.set("api_result", data, { ttl: 300_000 });
 ### Bot SDK (`sdk.bot`)
 
 The Bot SDK enables plugins to handle Telegram inline queries and button callbacks. It is **lazy-loaded** — `sdk.bot` is `null` unless the plugin declares bot capabilities in its manifest.
+
+Register only the inline/callback capabilities declared in the manifest; undeclared capabilities throw `NOT_AVAILABLE`. `editInlineMessage()` honors `parseMode` and rejects unavailable transports or failed requests; unchanged messages remain a successful no-op.
 
 To enable the Bot SDK, add a `bot` field to your manifest:
 

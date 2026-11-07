@@ -60,6 +60,55 @@ describe("InlineRouter", () => {
     router = new InlineRouter();
   });
 
+  it("honors callback Markdown edits when GramJS is connected", async () => {
+    const mtprotoEdit = vi.fn();
+    router.setGramJSBot({
+      isConnected: () => true,
+      editInlineMessageByStringId: mtprotoEdit,
+    } as any);
+    router.registerPlugin("cats", {
+      onCallback: [
+        {
+          pattern: "edit",
+          regex: compileGlob("edit"),
+          handler: async (context) => {
+            await context.editMessage("*Hello*", {
+              parseMode: "MarkdownV2",
+              keyboard: [[{ text: "Open", url: "https://example.com" }]],
+            });
+          },
+        },
+      ],
+    });
+    const ctx = createCallbackCtx("cats:edit");
+    await router.middleware()(ctx, vi.fn());
+    expect(mtprotoEdit).not.toHaveBeenCalled();
+    expect(ctx.editMessageText).toHaveBeenCalledWith(
+      "*Hello*",
+      expect.objectContaining({ parse_mode: "MarkdownV2" })
+    );
+  });
+
+  it.each(["photo", "gif"] as const)("preserves result-level %s thumbnails", async (type) => {
+    router.registerPlugin("cats", {
+      onInlineQuery: async () => [
+        {
+          id: "1",
+          type,
+          title: "Preview",
+          thumbUrl: "https://example.com/thumb.jpg",
+          content:
+            type === "photo"
+              ? { photoUrl: "https://example.com/photo.jpg" }
+              : { gifUrl: "https://example.com/clip.gif" },
+        },
+      ],
+    });
+    const ctx = createInlineQueryCtx("cats:preview");
+    await router.middleware()(ctx, vi.fn());
+    expect(ctx._answered.results[0].thumbnail_url).toBe("https://example.com/thumb.jpg");
+  });
+
   describe("inline_query routing", () => {
     it("routes query with known prefix to plugin", async () => {
       const handler = vi.fn(async () => [

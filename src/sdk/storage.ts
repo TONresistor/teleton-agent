@@ -41,7 +41,7 @@ export function createStorageSDK(db: Database.Database): StorageSDK {
   const stmtDel = db.prepare(`DELETE FROM ${KV_TABLE} WHERE key = ?`);
   const stmtClear = db.prepare(`DELETE FROM ${KV_TABLE}`);
   const stmtCleanup = db.prepare(
-    `DELETE FROM ${KV_TABLE} WHERE expires_at IS NOT NULL AND expires_at < ?`
+    `DELETE FROM ${KV_TABLE} WHERE expires_at IS NOT NULL AND expires_at <= ?`
   );
 
   function maybeCleanup(): void {
@@ -55,7 +55,7 @@ export function createStorageSDK(db: Database.Database): StorageSDK {
       maybeCleanup();
       const row = stmtGet.get(key) as { value: string; expires_at: number | null } | undefined;
       if (!row) return undefined;
-      if (row.expires_at !== null && row.expires_at < Date.now()) {
+      if (row.expires_at !== null && row.expires_at <= Date.now()) {
         stmtDel.run(key);
         return undefined;
       }
@@ -67,19 +67,23 @@ export function createStorageSDK(db: Database.Database): StorageSDK {
     },
 
     set<T>(key: string, value: T, opts?: { ttl?: number }): void {
+      if (opts?.ttl !== undefined && (!Number.isFinite(opts.ttl) || opts.ttl < 0)) {
+        throw new PluginSDKError("TTL must be a finite non-negative number", "INVALID_INPUT");
+      }
       if (value === undefined) {
         throw new PluginSDKError("Cannot store undefined value", "OPERATION_FAILED");
       }
       let serialized: string;
       try {
         serialized = JSON.stringify(value);
+        if (serialized === undefined) throw new Error("Value is not JSON-serializable");
       } catch (error) {
         throw new PluginSDKError(
           `Failed to serialize value: ${getErrorMessage(error)}`,
           "OPERATION_FAILED"
         );
       }
-      const expiresAt = opts?.ttl ? Date.now() + opts.ttl : null;
+      const expiresAt = opts?.ttl === undefined ? null : Date.now() + opts.ttl;
       stmtSet.run(key, serialized, expiresAt);
     },
 
@@ -91,7 +95,7 @@ export function createStorageSDK(db: Database.Database): StorageSDK {
     has(key: string): boolean {
       const row = stmtGet.get(key) as { value: string; expires_at: number | null } | undefined;
       if (!row) return false;
-      if (row.expires_at !== null && row.expires_at < Date.now()) {
+      if (row.expires_at !== null && row.expires_at <= Date.now()) {
         stmtDel.run(key);
         return false;
       }
