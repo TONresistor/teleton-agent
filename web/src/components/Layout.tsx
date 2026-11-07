@@ -138,8 +138,8 @@ function IconConfig() {
 const navLinkBase: CSSProperties = {
   display: 'flex',
   alignItems: 'center',
-  gap: '10px',
-  padding: '6px 12px',
+  gap: '8px',
+  padding: '4px 10px',
   borderRadius: 'var(--radius-sm)',
   color: 'var(--text-secondary)',
   textDecoration: 'none',
@@ -161,17 +161,35 @@ interface NavItemProps {
   to: string;
   active: boolean;
   icon: ReactNode;
+  iconColor: string;
   label: string;
 }
 
-function NavItem({ to, active, icon, label }: NavItemProps) {
+function NavItem({ to, active, icon, iconColor, label }: NavItemProps) {
   return (
     <Link
       to={to}
       className={`${navLinkHoverClass}${active ? ' active' : ''}`}
       style={active ? navLinkActive : navLinkBase}
     >
-      {icon}
+      <span
+        aria-hidden="true"
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          width: '24px',
+          height: '24px',
+          flexShrink: 0,
+          borderRadius: '6px',
+          color: '#fff',
+          backgroundColor: iconColor,
+          backgroundImage: 'linear-gradient(180deg, rgba(255, 255, 255, 0.18), transparent)',
+          boxShadow: 'inset 0 1px 0 rgba(255, 255, 255, 0.16)',
+        }}
+      >
+        {icon}
+      </span>
       {label}
     </Link>
   );
@@ -188,21 +206,21 @@ function DashboardNav() {
     window.location.href = '/';
   };
 
-  const items: { to: string; icon: ReactNode; label: string }[] = [
-    { to: '/',          icon: <IconDashboard />, label: 'Dashboard' },
-    { to: '/tools',     icon: <IconTools />,     label: 'Tools' },
-    { to: '/plugins',   icon: <IconPlugins />,   label: 'Plugins' },
-    { to: '/soul',      icon: <IconSoul />,      label: 'System Prompt' },
-    { to: '/memory',    icon: <IconMemory />,    label: 'Memory' },
-    { to: '/conversations', icon: <IconConversations />, label: 'Chats' },
-    { to: '/wallet',        icon: <IconWallet />,        label: 'Wallet' },
-    { to: '/gocoon',        icon: <IconGocoon />,        label: 'Gocoon' },
-    { to: '/workspace', icon: <IconWorkspace />, label: 'Workspace' },
-    { to: '/tasks',     icon: <IconTasks />,     label: 'Tasks' },
-    { to: '/mcp',       icon: <IconMCP />,       label: 'MCP' },
-    { to: '/hooks',     icon: <IconHooks />,     label: 'Hooks' },
-    { to: '/logs',      icon: <IconLogs />,      label: 'Logs' },
-    { to: '/config',    icon: <IconConfig />,    label: 'Config' },
+  const items: Omit<NavItemProps, 'active'>[] = [
+    { to: '/',          icon: <IconDashboard />, iconColor: '#249cf0', label: 'Dashboard' },
+    { to: '/tools',     icon: <IconTools />,     iconColor: '#f77b42', label: 'Tools' },
+    { to: '/plugins',   icon: <IconPlugins />,   iconColor: '#8054f5', label: 'Plugins' },
+    { to: '/soul',      icon: <IconSoul />,      iconColor: '#2ac49a', label: 'System Prompt' },
+    { to: '/memory',    icon: <IconMemory />,    iconColor: '#ed5c9d', label: 'Memory' },
+    { to: '/conversations', icon: <IconConversations />, iconColor: '#38b76c', label: 'Chats' },
+    { to: '/wallet',        icon: <IconWallet />,        iconColor: '#269bd9', label: 'Wallet' },
+    { to: '/gocoon',        icon: <IconGocoon />,        iconColor: '#7662df', label: 'Gocoon' },
+    { to: '/workspace', icon: <IconWorkspace />, iconColor: '#efb12b', label: 'Workspace' },
+    { to: '/tasks',     icon: <IconTasks />,     iconColor: '#f18c36', label: 'Tasks' },
+    { to: '/mcp',       icon: <IconMCP />,       iconColor: '#2aafc5', label: 'MCP' },
+    { to: '/hooks',     icon: <IconHooks />,     iconColor: '#e66a83', label: 'Hooks' },
+    { to: '/logs',      icon: <IconLogs />,      iconColor: '#81858e', label: 'Logs' },
+    { to: '/config',    icon: <IconConfig />,    iconColor: '#8b8f97', label: 'Config' },
   ];
 
   return (
@@ -214,19 +232,15 @@ function DashboardNav() {
           background: var(--bg-glass-hover) !important;
         }
         .nav-link-hover svg {
+          width: 16px;
+          height: 16px;
           flex-shrink: 0;
-          opacity: 0.7;
-          transition: opacity 0.18s ease;
-        }
-        .nav-link-hover.active svg,
-        .nav-link-hover:hover svg {
-          opacity: 1;
         }
       `}</style>
 
       <nav style={{ display: 'flex', flexDirection: 'column', gap: '2px' }}>
-        {items.map(({ to, icon, label }) => (
-          <NavItem key={to} to={to} active={p === to} icon={icon} label={label} />
+        {items.map(({ to, icon, iconColor, label }) => (
+          <NavItem key={to} to={to} active={p === to} icon={icon} iconColor={iconColor} label={label} />
         ))}
       </nav>
 
