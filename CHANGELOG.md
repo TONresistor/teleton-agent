@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.11.9] - 2026-11-07
+
+### Changed
+
+- Align Plugin SDK 2.1.1 with the runtime contract.
+- Refresh WebUI navigation icons and spacing.
+
+### Fixed
+
+- Prevent deletion and renaming of protected workspace paths.
+- Preserve zero-decimal jetton amounts in transfers and balance display.
+
 ## [0.11.8] - 2026-11-03
 
 ### Added
