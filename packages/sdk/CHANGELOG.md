@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [2.1.1] - 2026-11-08
+
 ### Added
 
 - Optional tool `mode` (`user`, `bot`, or `both`) with runtime validation and filtering.
@@ -17,6 +19,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Forward dice replies and media keyboards, and preserve gift sender IDs and fractional Stars.
 - Honor bot URL buttons, inline parse modes, thumbnails, and declared capabilities; report failed inline edits.
 - Resolve DNS wallet records through the correct endpoint, bound auction results, and encode initial bids with the contract's minimum price.
+- Confirm DNS contract acceptance before reporting successful auction creation or bids.
 - Honor zero TTL and expiry boundaries; reject invalid TTL, non-JSON values, payment expectations, send modes, and zero-unit jetton transfers.
 
 ### Changed
