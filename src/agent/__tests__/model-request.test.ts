@@ -64,6 +64,32 @@ describe("model request preparation", () => {
     }
   );
 
+  it("omits unsupported prompt cache fields for Cerebras", async () => {
+    const request = prepareModelRequest(
+      AgentConfigSchema.parse({
+        provider: "cerebras",
+        model: "gpt-oss-120b",
+        api_key: "test-key",
+      }),
+      { context: { messages: [{ role: "user", content: "test", timestamp: 1 }] } }
+    );
+    let payload: unknown;
+    const fetch = vi.fn().mockRejectedValue(new Error("Network disabled in test"));
+    await complete(request.model, request.context, {
+      ...request.options,
+      fetch,
+      onPayload(value) {
+        payload = value;
+        throw new Error("Stop before network request");
+      },
+    });
+
+    expect(fetch).not.toHaveBeenCalled();
+    expect(request.options.cacheRetention).toBe("none");
+    expect(payload).not.toHaveProperty("prompt_cache_key");
+    expect(payload).not.toHaveProperty("prompt_cache_retention");
+  });
+
   it("allows optional adaptive thinking to be disabled", async () => {
     const request = prepareModelRequest(
       AgentConfigSchema.parse({
