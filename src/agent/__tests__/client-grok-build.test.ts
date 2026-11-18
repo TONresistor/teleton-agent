@@ -9,11 +9,9 @@ const mocks = vi.hoisted(() => ({
   appendToTranscript: vi.fn(),
 }));
 
-vi.mock("@earendil-works/pi-ai/compat", async () => {
-  const actual =
-    await vi.importActual<typeof import("@earendil-works/pi-ai")>("@earendil-works/pi-ai");
+vi.mock(import("@earendil-works/pi-ai/compat"), async (importOriginal) => {
   return {
-    ...actual,
+    ...(await importOriginal()),
     complete: mocks.complete,
     stream: mocks.stream,
   };
