@@ -9,7 +9,7 @@ set -euo pipefail
 REPO="tonresistor/teleton-agent"
 DOCKER_IMAGE="ghcr.io/${REPO}:latest"
 NPM_PACKAGE="teleton"
-SUPPORTED_NODE_RANGE="^22.23.4 || ^24.22.1 || >=26.12.1"
+SUPPORTED_NODE_RANGE="^22.23.5 || ^24.22.3 || >=26.13.1"
 
 # Colors
 RED='\033[0;31m'
@@ -50,11 +50,11 @@ node_version_supported() {
   fi
 
   if (( major == 22 )); then
-    (( minor > 23 || (minor == 23 && patch >= 4) ))
+    (( minor > 23 || (minor == 23 && patch >= 5) ))
   elif (( major == 24 )); then
-    (( minor > 22 || (minor == 22 && patch >= 1) ))
+    (( minor > 22 || (minor == 22 && patch >= 3) ))
   else
-    (( major > 26 || (major == 26 && (minor > 12 || (minor == 12 && patch >= 1))) ))
+    (( major > 26 || (major == 26 && (minor > 13 || (minor == 13 && patch >= 1))) ))
   fi
 }
 
