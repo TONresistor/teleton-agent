@@ -273,11 +273,14 @@ describe("model request preparation", () => {
     }
   });
 
-  it("omits unsupported prompt cache fields for Groq", async () => {
+  it.each([
+    ["groq", "openai/gpt-oss-120b"],
+    ["cerebras", "gpt-oss-120b"],
+  ] as const)("omits unsupported prompt cache fields for %s", async (provider, model) => {
     const request = prepareModelRequest(
       AgentConfigSchema.parse({
-        provider: "groq",
-        model: "openai/gpt-oss-120b",
+        provider,
+        model,
         api_key: "sk-test-key",
       }),
       {
@@ -297,6 +300,7 @@ describe("model request preparation", () => {
     });
 
     expect(fetch).not.toHaveBeenCalled();
+    expect(payload).toBeDefined();
     expect(request.options.cacheRetention).toBe("none");
     const wirePayload = JSON.parse(JSON.stringify(payload)) as Record<string, unknown>;
     expect(wirePayload).not.toHaveProperty("prompt_cache_key");
