@@ -53,6 +53,24 @@ const LEGACY_MODEL_CASES: ReadonlyArray<
 
 describe("provider model catalog", () => {
   it.each([
+    ["openai", "gpt-6.2-sol", "openai-responses", 272_000],
+    ["openai", "gpt-6.2-astra", "openai-responses", 272_000],
+    ["codex", "gpt-6.2-sol", "openai-codex-responses", 500_000],
+    ["codex", "gpt-6.2-astra", "openai-codex-responses", 272_000],
+    ["openrouter", "openai/gpt-6.2-sol", "openai-completions", 1_050_000],
+    ["openrouter", "openai/gpt-6.2-astra", "openai-completions", 1_050_000],
+    ["anthropic", "claude-fable-5-2", "anthropic-messages", 1_000_000],
+    ["openrouter", "anthropic/claude-fable-5.2", "anthropic-messages", 1_000_000],
+  ] as const)("offers and resolves %s/%s", (provider, id, api, contextWindow) => {
+    expect(getModelsForProvider(provider).map((model) => model.value)).toContain(id);
+    expect(getProviderModel(provider, id)).toMatchObject({
+      id,
+      api,
+      contextWindow,
+      reasoning: true,
+    });
+  });
+  it.each([
     ["mistral", "mistral-large-2512"],
     ["huggingface", "stepfun-ai/Step-3.7-Flash"],
     ["codex", "gpt-5.5"],

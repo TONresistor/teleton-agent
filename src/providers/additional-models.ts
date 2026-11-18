@@ -1,7 +1,66 @@
-import type { Api, Model } from "@earendil-works/pi-ai/compat";
+import { getModel, type Api, type Model } from "@earendil-works/pi-ai/compat";
+
+function gpt62Model(
+  provider: "openai" | "codex" | "openrouter",
+  family: "sol" | "astra"
+): Model<Api> {
+  const registryProvider = provider === "codex" ? "openai-codex" : provider;
+  const referenceId = provider === "openrouter" ? "openai/gpt-6.1-sol" : "gpt-6.1-sol";
+  const reference =
+    provider === "codex"
+      ? getModel("openai-codex", "gpt-6.1-sol")
+      : provider === "openrouter"
+        ? getModel("openrouter", "openai/gpt-6.1-sol")
+        : getModel("openai", "gpt-6.1-sol");
+  if (!reference) throw new Error(`Missing reference model ${registryProvider}/${referenceId}`);
+  const id = `${provider === "openrouter" ? "openai/" : ""}gpt-6.2-${family}`;
+  const input = family === "astra" ? 8 : 2;
+  const output = family === "astra" ? 40 : 10;
+  return {
+    ...reference,
+    id,
+    name: `GPT-6.2 ${family === "astra" ? "Astra" : "Sol"}`,
+    contextWindow:
+      provider === "openrouter"
+        ? 1_050_000
+        : provider === "codex" && family === "sol"
+          ? 500_000
+          : 272_000,
+    thinkingLevelMap: {
+      off: null,
+      minimal: null,
+      low: "low",
+      medium: "medium",
+      high: "high",
+      xhigh: "xhigh",
+      max: "max",
+    },
+    cost: {
+      input,
+      output,
+      cacheRead: input * 0.05,
+      cacheWrite: input * 1.25,
+      tiers: [
+        {
+          inputTokensAbove: 272_000,
+          input: input * 2,
+          output: output * 1.5,
+          cacheRead: input * 0.1,
+          cacheWrite: input * 2.5,
+        },
+      ],
+    },
+  };
+}
 
 /** Models missing from the bundled pi-ai catalog, including retained legacy models. */
 export const ADDITIONAL_MODELS: Record<string, Model<Api>> = {
+  "openai:gpt-6.2-sol": gpt62Model("openai", "sol"),
+  "openai:gpt-6.2-astra": gpt62Model("openai", "astra"),
+  "codex:gpt-6.2-sol": gpt62Model("codex", "sol"),
+  "codex:gpt-6.2-astra": gpt62Model("codex", "astra"),
+  "openrouter:openai/gpt-6.2-sol": gpt62Model("openrouter", "sol"),
+  "openrouter:openai/gpt-6.2-astra": gpt62Model("openrouter", "astra"),
   "openrouter:minimax/minimax-m3.1-flash": {
     id: "minimax/minimax-m3.1-flash",
     name: "MiniMax M3.1 Flash",

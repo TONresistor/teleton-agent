@@ -22,6 +22,11 @@ interface CatalogModelOption extends ModelOption {
 const MODEL_OPTIONS: Record<string, CatalogModelOption[]> = {
   anthropic: [
     {
+      value: "claude-fable-5-2",
+      name: "Claude Fable 5.2",
+      description: "Advanced reasoning and vision, 1M context",
+    },
+    {
       value: "claude-sonnet-5-5",
       name: "Claude Sonnet 5.5",
       description: "Balanced agentic coding, reasoning, vision, 1M context",
@@ -88,6 +93,16 @@ const MODEL_OPTIONS: Record<string, CatalogModelOption[]> = {
     },
   ],
   openai: [
+    {
+      value: "gpt-6.2-sol",
+      name: "GPT-6.2 Sol",
+      description: "Agentic coding, reasoning and vision, 272K effective context",
+    },
+    {
+      value: "gpt-6.2-astra",
+      name: "GPT-6.2 Astra",
+      description: "Advanced reasoning and vision, 272K effective context",
+    },
     {
       value: "gpt-6.1-sol",
       name: "GPT-6.1 Sol",
@@ -171,6 +186,16 @@ const MODEL_OPTIONS: Record<string, CatalogModelOption[]> = {
       value: "gpt-5.6-terra",
       name: "GPT-5.6 Terra",
       description: "Balanced agentic coding model, 272K context",
+    },
+    {
+      value: "gpt-6.2-sol",
+      name: "GPT-6.2 Sol",
+      description: "Agentic coding, reasoning and vision, 500K context",
+    },
+    {
+      value: "gpt-6.2-astra",
+      name: "GPT-6.2 Astra",
+      description: "Advanced reasoning and vision, 272K context",
     },
     {
       value: "gpt-6.1-terra",
@@ -303,6 +328,21 @@ const MODEL_OPTIONS: Record<string, CatalogModelOption[]> = {
     },
   ],
   openrouter: [
+    {
+      value: "openai/gpt-6.2-sol",
+      name: "GPT-6.2 Sol",
+      description: "Agentic reasoning and vision, 1M context",
+    },
+    {
+      value: "openai/gpt-6.2-astra",
+      name: "GPT-6.2 Astra",
+      description: "Advanced reasoning and vision, 1M context",
+    },
+    {
+      value: "anthropic/claude-fable-5.2",
+      name: "Claude Fable 5.2",
+      description: "Advanced reasoning and vision, 1M context",
+    },
     {
       value: "openai/gpt-6.1-sol",
       name: "GPT-6.1 Sol",

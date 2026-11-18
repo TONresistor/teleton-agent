@@ -9,6 +9,35 @@ vi.mock("../../providers/codex-credentials.js", () => ({
 }));
 
 describe("model request preparation", () => {
+  it.each(["openai", "codex", "openrouter"] as const)(
+    "prepares GPT-6.2 through %s",
+    async (provider) => {
+      const model = provider === "openrouter" ? "openai/gpt-6.2-sol" : "gpt-6.2-sol";
+      const request = prepareModelRequest(
+        AgentConfigSchema.parse({
+          provider,
+          model,
+          api_key: "sk-test-key",
+          reasoning_effort: "none",
+        }),
+        {
+          context: { messages: [{ role: "user", content: "test", timestamp: 1 }] },
+        }
+      );
+      const token = `header.${Buffer.from(JSON.stringify({ "https://api.openai.com/auth": { chatgpt_account_id: "test" } })).toString("base64")}.signature`;
+      let payload: unknown;
+      await complete(request.model, request.context, {
+        ...request.options,
+        apiKey: provider === "codex" ? token : "sk-test-key",
+        onPayload(value) {
+          payload = value;
+          throw new Error("Stop before network");
+        },
+      });
+      expect(payload).toHaveProperty("model", model);
+      expect(request.options.reasoningEffort).toBe("low");
+    }
+  );
   it.each([
     ["openai", "gpt-6.1-terra", "none", "none", "reasoning.effort"],
     ["codex", "gpt-6.1-terra", "max", "max", "reasoning.effort"],
