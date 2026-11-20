@@ -17,6 +17,8 @@ export interface ToolContext {
   senderId: number;
   /** Whether this is a group chat */
   isGroup: boolean;
+  /** Audience of the incoming Telegram turn, as determined by the message handler. */
+  telegramChatType?: "dm" | "group" | "channel";
   /** Whether this request came from bot guest mode. */
   isGuest?: boolean;
   /** Stable ID for one inbound turn; used for action idempotency. */

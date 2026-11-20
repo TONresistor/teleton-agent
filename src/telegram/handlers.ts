@@ -526,6 +526,7 @@ export class MessageHandler {
             db: this.db,
             senderId: message.senderId,
             config: this.fullConfig,
+            telegramChatType: message.isChannel ? "channel" : message.isGroup ? "group" : "dm",
           };
 
           // 7. Get response from agent (with tools)

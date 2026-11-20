@@ -140,7 +140,8 @@ const BUILTIN_NAMESPACE_RULES: NamespaceRule[] = [
   {
     name: "telegram.memory",
     description: "Read, search, and update agent memory and prior session history.",
-    matches: (name) => /^(memory_read|memory_search|memory_write|session_search)$/.test(name),
+    matches: (name) =>
+      /^(memory_read|memory_search|memory_write|session_search|session_read_context)$/.test(name),
   },
   {
     name: "ton.jettons",

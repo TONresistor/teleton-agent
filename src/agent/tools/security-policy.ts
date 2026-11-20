@@ -10,6 +10,7 @@ const OWNER_PRIVATE_DATA = new Set([
   "memory_read",
   "memory_search",
   "session_search",
+  "session_read_context",
   "telegram_get_admined_channels",
   "telegram_get_blocked",
   "telegram_get_common_chats",

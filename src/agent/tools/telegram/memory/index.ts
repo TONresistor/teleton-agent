@@ -1,7 +1,12 @@
 import { memoryWriteTool, memoryWriteExecutor } from "./memory-write.js";
 import { memoryReadTool, memoryReadExecutor } from "./memory-read.js";
 import { memorySearchTool, memorySearchExecutor } from "./memory-search.js";
-import { sessionSearchTool, sessionSearchExecutor } from "./session-search.js";
+import {
+  sessionSearchTool,
+  sessionSearchExecutor,
+  sessionReadContextTool,
+  sessionReadContextExecutor,
+} from "./session-search.js";
 import type { ToolEntry } from "../../types.js";
 
 export const tools: ToolEntry[] = [
@@ -27,6 +32,12 @@ export const tools: ToolEntry[] = [
   {
     tool: sessionSearchTool,
     executor: sessionSearchExecutor,
+    mode: "both",
+    tags: ["core"],
+  },
+  {
+    tool: sessionReadContextTool,
+    executor: sessionReadContextExecutor,
     mode: "both",
     tags: ["core"],
   },
