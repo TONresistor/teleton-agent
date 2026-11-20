@@ -106,11 +106,9 @@
     "@ton/ton"
   ],
   "overrides": {
-    "@aws-sdk/xml-builder": "3.972.19",
     "@ton/ton": {
       "zod": "$zod"
     },
-    "fast-xml-parser": "5.7.1",
     "axios": "1.20.0",
     "body-parser": "2.4.0",
     "brace-expansion": "5.0.12",
@@ -127,11 +125,11 @@
     "@types/better-sqlite3": "^9.6.0",
     "@types/node": "^22.20.5",
     "@types/qrcode-terminal": "^0.12.2",
-    "@typescript-eslint/eslint-plugin": "^8.72.0",
-    "@typescript-eslint/parser": "^8.72.0",
+    "@typescript-eslint/eslint-plugin": "^8.73.0",
+    "@typescript-eslint/parser": "^8.73.0",
     "@vitest/coverage-v8": "^5.0.5",
     "audit-ci": "^7.1.0",
-    "eslint": "^10.13.0",
+    "eslint": "^10.15.0",
     "husky": "^9.1.7",
     "jscpd": "^5.4.2",
     "knip": "^6.42.1",
