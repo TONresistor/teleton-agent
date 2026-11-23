@@ -96,7 +96,7 @@
     "qrcode-terminal": "^0.12.0",
     "selfsigned": "^5.5.0",
     "sqlite-vec": "^0.1.7",
-    "telegram": "github:TONresistor/gramjs#1564a010b264f381045aaf7f9d44740d08bc6d1f",
+    "telegram": "github:TONresistor/gramjs#67e5288cfa1f9001e60e372c22f8112b4b62c57f",
     "yaml": "^2.9.1",
     "zod": "^4.6.7"
   },
