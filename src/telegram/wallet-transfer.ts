@@ -14,7 +14,7 @@ import { keyPairFromSeed, mnemonicToPrivateKey, mnemonicValidate } from "@ton/cr
 import { WalletContractV4, WalletContractV5R1 } from "@ton/ton";
 import { Api, type TelegramClient } from "telegram";
 import { TELETON_ROOT } from "../workspace/paths.js";
-import { getCachedTonClient } from "../ton/wallet-service.js";
+import { getCachedTonClient, getTelegramWalletSigningKeys } from "../ton/wallet-service.js";
 import { withTxLock } from "../ton/tx-lock.js";
 import { randomLong } from "../utils/gramjs-bigint.js";
 import { getErrorMessage } from "../utils/errors.js";
@@ -25,7 +25,29 @@ const KEY_FILE = join(TELETON_ROOT, "telegram-wallet.json");
 const PENDING_FILE = join(TELETON_ROOT, "telegram-wallet-pending.json");
 type PendingTransfer = { wallet: string; messageHash: string; recipient: string; amount: string };
 
-export async function telegramWalletSigner(state: Api.WalletState) {
+export async function telegramWalletSigner(state: Api.WalletState, useMemory = false) {
+  if (useMemory) {
+    const seeds = getTelegramWalletSigningKeys();
+    if (!seeds) throw new Error("Telegram wallet signing is locked");
+    const anchor = keyPairFromSeed(seeds.anchorSeed);
+    const keys = keyPairFromSeed(seeds.signingSeed);
+    try {
+      const address = Address.parse(state.address);
+      const wallet = [0x7fff7f11, 0x7fff7ffd]
+        .map((id) => new NativeTelegramWallet(anchor.publicKey, id))
+        .find((candidate) => candidate.address.equals(address));
+      if (!wallet || !keys.publicKey.equals(Buffer.from(state.publicKey)))
+        throw new Error("Native Telegram wallet signing key does not match the account wallet");
+      return { wallet, keys };
+    } catch (error) {
+      keys.secretKey.fill(0);
+      throw error;
+    } finally {
+      seeds.anchorSeed.fill(0);
+      seeds.signingSeed.fill(0);
+      anchor.secretKey.fill(0);
+    }
+  }
   if (!existsSync(KEY_FILE)) {
     throw new Error(
       "Telegram wallet signing key is not configured. A key held only inside Telegram cannot be used by Teleton. The owner must install the matching mnemonic in the private telegram-wallet.json file; never request or expose it in chat."
@@ -38,44 +60,11 @@ export async function telegramWalletSigner(state: Api.WalletState) {
     mnemonic?: string[];
     version?: string;
     walletId?: number;
-    scheme?: string;
-    anchorSeed?: string;
-    signingSeed?: string;
   };
   try {
     config = JSON.parse(readFileSync(KEY_FILE, "utf8"));
   } catch {
     throw new Error("Invalid telegram-wallet.json");
-  }
-  if (config.scheme === "telegram-rotation") {
-    if (
-      typeof config.anchorSeed !== "string" ||
-      typeof config.signingSeed !== "string" ||
-      !/^[0-9a-f]{64}$/.test(config.anchorSeed) ||
-      !/^[0-9a-f]{64}$/.test(config.signingSeed) ||
-      ![0x7fff7f11, 0x7fff7ffd].includes(config.walletId ?? 0)
-    )
-      throw new Error("Invalid native Telegram wallet key cache");
-    const anchorSeed = Buffer.from(config.anchorSeed, "hex");
-    const signingSeed = Buffer.from(config.signingSeed, "hex");
-    const anchor = keyPairFromSeed(anchorSeed);
-    const keys = keyPairFromSeed(signingSeed);
-    anchorSeed.fill(0);
-    signingSeed.fill(0);
-    try {
-      const wallet = new NativeTelegramWallet(anchor.publicKey, config.walletId);
-      if (
-        !keys.publicKey.equals(Buffer.from(state.publicKey)) ||
-        !wallet.address.equals(Address.parse(state.address))
-      )
-        throw new Error("Native Telegram wallet key cache does not match the account wallet");
-      return { wallet, keys };
-    } catch (error) {
-      keys.secretKey.fill(0);
-      throw error;
-    } finally {
-      anchor.secretKey.fill(0);
-    }
   }
   if (
     !Array.isArray(config.mnemonic) ||
@@ -118,6 +107,7 @@ export async function sendTelegramWalletTransfer(
   client: TelegramClient,
   params: { to: string; amount: string; comment?: string }
 ) {
+  let secretKey: Buffer | undefined;
   return withTxLock(async () => {
     if (!/^\d+(?:\.\d{1,9})?$/.test(params.amount) || toNano(params.amount) <= 0n)
       throw new Error("Amount must be a positive decimal string with at most 9 decimal places");
@@ -126,13 +116,9 @@ export async function sendTelegramWalletTransfer(
     const state = await client.invoke(new Api.wallet.GetState());
     if (!(state instanceof Api.WalletState)) throw new Error("The Telegram wallet is not ready");
     const bootstrap = getTelegramWalletBootstrap(client);
-    if (!existsSync(KEY_FILE) && bootstrap) {
-      bootstrap.retry();
-      throw new Error(
-        `Telegram wallet signer is not configured yet: backend status ${bootstrap.status}. Follow the deterministic admin DM if 2FA is required; never provide a password to the AI.`
-      );
-    }
-    const { wallet, keys } = await telegramWalletSigner(state);
+    if (bootstrap) await bootstrap.unlockSigner(state);
+    const { wallet, keys } = await telegramWalletSigner(state, !!bootstrap);
+    secretKey = keys.secretKey;
     let recipient: Address;
     let userId: Api.TypeInputUser = new Api.InputUserEmpty();
     const target = params.to.trim();
@@ -229,6 +215,17 @@ export async function sendTelegramWalletTransfer(
     const dataNormal = message.toBoc();
     if (dataNormal.length > 16 * 1024)
       throw new Error("Signed transfer exceeds Telegram's 16 KiB limit");
+    if (bootstrap) {
+      const current = await client.invoke(new Api.wallet.GetState());
+      if (
+        !(current instanceof Api.WalletState) ||
+        !wallet.address.equals(Address.parse(current.address)) ||
+        !keys.publicKey.equals(Buffer.from(current.publicKey))
+      )
+        throw new Error(
+          "The Telegram wallet changed before submission. No transfer was submitted."
+        );
+    }
     const sender = await client.getSender(client.session.dcId);
     const pending: PendingTransfer = {
       wallet: state.address,
@@ -278,5 +275,7 @@ export async function sendTelegramWalletTransfer(
         warning: `Submission outcome is unknown: ${getErrorMessage(error)}. Do not resend; inspect transaction status.`,
       };
     }
+  }).finally(() => {
+    secretKey?.fill(0);
   });
 }

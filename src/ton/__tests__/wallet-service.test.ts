@@ -78,7 +78,7 @@ describe("wallet type compatibility", () => {
     saveWallet(await generateWallet("w5r1"));
     expect(isTelegramWalletEnabled()).toBe(false);
   });
-  it("rejects a foreign Telegram signer source before signing", async () => {
+  it("ignores a foreign signer file while the Telegram wallet is locked", async () => {
     const wallet = await generateWallet();
     saveWallet({ ...wallet, keySource: "telegram-wallet", mnemonic: [] });
     const seed = Buffer.alloc(32, 5).toString("hex");
@@ -86,6 +86,6 @@ describe("wallet type compatibility", () => {
       join(root, "telegram-wallet.json"),
       JSON.stringify({ scheme: "telegram-rotation", anchorSeed: seed, signingSeed: seed })
     );
-    await expect(getKeyPair()).rejects.toThrow("address mismatch");
+    await expect(getKeyPair()).rejects.toThrow("signing is locked");
   });
 });

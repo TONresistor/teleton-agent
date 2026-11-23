@@ -2,9 +2,9 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vites
 import { mkdirSync, readFileSync, rmSync, writeFileSync, chmodSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { Api, type TelegramClient } from "telegram";
-import { mnemonicNew, mnemonicToPrivateKey } from "@ton/crypto";
+import { keyPairFromSeed, mnemonicNew, mnemonicToPrivateKey } from "@ton/crypto";
 import { WalletContractV4, WalletContractV5R1 } from "@ton/ton";
-import { Cell, loadMessage } from "@ton/core";
+import { beginCell, Cell, loadMessage } from "@ton/core";
 import { toLong } from "../../utils/gramjs-bigint.js";
 
 const mocks = vi.hoisted(() => ({
@@ -12,6 +12,8 @@ const mocks = vi.hoisted(() => ({
   state: vi.fn(),
   seqno: vi.fn(),
   account: vi.fn(),
+  bootstrap: vi.fn(),
+  memoryKeys: vi.fn(),
 }));
 vi.mock("../../workspace/paths.js", () => ({ TELETON_ROOT: mocks.root }));
 vi.mock("../../ton/wallet-service.js", () => ({
@@ -19,8 +21,11 @@ vi.mock("../../ton/wallet-service.js", () => ({
     getContractState: mocks.account,
     open: () => ({ getSeqno: mocks.seqno }),
   }),
+  getTelegramWalletSigningKeys: mocks.memoryKeys,
 }));
+vi.mock("../wallet-bootstrap.js", () => ({ getTelegramWalletBootstrap: mocks.bootstrap }));
 import { sendTelegramWalletTransfer, telegramWalletSigner } from "../wallet-transfer.js";
+import { NativeTelegramWallet } from "../wallet-protocol.js";
 
 let words: string[];
 let wallet: WalletContractV4;
@@ -49,6 +54,9 @@ beforeAll(async () => {
 });
 beforeEach(() => {
   vi.clearAllMocks();
+  invoke.mockReset();
+  mocks.bootstrap.mockReset();
+  mocks.memoryKeys.mockReset();
   rmSync(mocks.root, { recursive: true, force: true });
   mkdirSync(mocks.root);
   writeFileSync(keyFile, JSON.stringify({ version: "v4", mnemonic: words }), { mode: 0o600 });
@@ -74,6 +82,47 @@ afterAll(() => {
 });
 
 describe("Telegram wallet transfers", () => {
+  it.each([false, true])(
+    "uses in-memory native keys and checks the active wallet before sending (changed=%s)",
+    async (changed) => {
+      rmSync(keyFile);
+      const anchorSeed = Buffer.alloc(32, 3);
+      const signingSeed = Buffer.alloc(32, 4);
+      const active = new NativeTelegramWallet(keyPairFromSeed(anchorSeed).publicKey);
+      const currentState = new Api.WalletState({
+        address: active.address.toString(),
+        publicKey: keyPairFromSeed(signingSeed).publicKey,
+        balance: toLong("1000000000"),
+      });
+      mocks.memoryKeys.mockReturnValueOnce({ anchorSeed, signingSeed });
+      const unlockSigner = vi.fn(async () => {});
+      mocks.bootstrap.mockReturnValue({ unlockSigner });
+      mocks.account.mockResolvedValue({
+        state: "active",
+        code: active.init.code.toBoc(),
+        data: beginCell().storeUint(0, 72).storeBuffer(currentState.publicKey).endCell().toBoc(),
+      });
+      mocks.seqno.mockResolvedValue(7);
+      invoke
+        .mockResolvedValueOnce(currentState)
+        .mockResolvedValueOnce(changed ? state : currentState);
+
+      const transfer = sendTelegramWalletTransfer(client, params);
+      if (changed) {
+        await expect(transfer).rejects.toThrow("wallet changed before submission");
+        expect(send).not.toHaveBeenCalled();
+        expect(existsSync(pendingFile)).toBe(false);
+      } else {
+        await expect(transfer).resolves.toMatchObject({ status: "submitted" });
+        expect(send).toHaveBeenCalledExactlyOnceWith(expect.any(Api.wallet.SendTransfer));
+      }
+      expect(unlockSigner).toHaveBeenCalledExactlyOnceWith(currentState);
+      expect(anchorSeed).toEqual(Buffer.alloc(32));
+      expect(signingSeed).toEqual(Buffer.alloc(32));
+      expect(existsSync(keyFile)).toBe(false);
+    }
+  );
+
   it("supports a standard v5r1 wallet whose key and address match Telegram", async () => {
     const keys = await mnemonicToPrivateKey(words);
     const v5 = WalletContractV5R1.create({ workchain: 0, publicKey: keys.publicKey });

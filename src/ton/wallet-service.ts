@@ -221,6 +221,8 @@ export function invalidateTonClientCache(): void {
  * Returns null if no wallet is configured.
  */
 export async function getKeyPair(): Promise<{ publicKey: Buffer; secretKey: Buffer } | null> {
+  if (loadWallet()?.keySource === "telegram-wallet" && unlockTelegramWallet)
+    await unlockTelegramWallet();
   const wallet = loadWallet();
   if (_keyPairCache && wallet?.version !== "tg") return _keyPairCache;
   if (!wallet) return null;
@@ -324,10 +326,9 @@ export async function getTonPrice(): Promise<{
 
 function getNativeWalletKeys(wallet: WalletData) {
   if (wallet.keySource === "telegram-wallet") {
-    const path = join(TELETON_ROOT, "telegram-wallet.json");
-    const cached = JSON.parse(readFileSync(path, "utf8"));
-    if (cached.scheme !== "telegram-rotation") throw new Error("Invalid native signer cache");
-    return validateNativeSeeds(wallet, cached.anchorSeed, cached.signingSeed);
+    const keys = getTelegramWalletSigningKeys();
+    if (!keys) throw new Error("Telegram wallet signing is locked");
+    return keys;
   }
   if (wallet.anchorSeed && wallet.signingSeed)
     return validateNativeSeeds(wallet, wallet.anchorSeed, wallet.signingSeed);
@@ -396,9 +397,46 @@ export async function getHighloadKeyPair() {
   return mnemonicToPrivateKey(legacy.mnemonic);
 }
 
+type TelegramWalletSeeds = { anchorSeed: Buffer; signingSeed: Buffer };
+
 let telegramWalletVerification: { address: string; publicKey: string } | undefined;
+let telegramWalletKeys: TelegramWalletSeeds | undefined;
+let unlockTelegramWallet: (() => Promise<void>) | undefined;
+
+export function setTelegramWalletUnlocker(unlock?: () => Promise<void>): void {
+  unlockTelegramWallet = unlock;
+}
+
+export function setTelegramWalletSigningKeys(keys: TelegramWalletSeeds): void {
+  telegramWalletKeys?.anchorSeed.fill(0);
+  telegramWalletKeys?.signingSeed.fill(0);
+  telegramWalletKeys = {
+    anchorSeed: Buffer.from(keys.anchorSeed),
+    signingSeed: Buffer.from(keys.signingSeed),
+  };
+}
+
+export function hasTelegramWalletSigningKeys(): boolean {
+  return telegramWalletKeys !== undefined && isTelegramWalletEnabled();
+}
+
+export function getTelegramWalletSigningKeys(): TelegramWalletSeeds | undefined {
+  if (!telegramWalletKeys || !isTelegramWalletEnabled()) return undefined;
+  return {
+    anchorSeed: Buffer.from(telegramWalletKeys.anchorSeed),
+    signingSeed: Buffer.from(telegramWalletKeys.signingSeed),
+  };
+}
+
 export function clearTelegramWalletVerification(): void {
   telegramWalletVerification = undefined;
+  telegramWalletKeys?.anchorSeed.fill(0);
+  telegramWalletKeys?.signingSeed.fill(0);
+  telegramWalletKeys = undefined;
+  if (_walletCache?.version === "tg") {
+    _keyPairCache?.secretKey.fill(0);
+    _keyPairCache = null;
+  }
 }
 function matchesPrimaryTelegramWallet(address: string, publicKey: string): boolean {
   const wallet = loadWallet();

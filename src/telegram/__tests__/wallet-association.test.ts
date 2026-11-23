@@ -1,5 +1,5 @@
 import { beforeEach, afterEach, describe, expect, it, vi } from "vitest";
-import { mkdirSync, rmSync, readFileSync, writeFileSync, existsSync, statSync } from "node:fs";
+import { mkdirSync, rmSync, readFileSync, writeFileSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { Api, type TelegramClient } from "telegram";
 import { keyPairFromSeed, signVerify } from "@ton/crypto";
@@ -12,12 +12,15 @@ const mocks = vi.hoisted(() => ({
   srp: vi.fn(),
   verified: vi.fn(() => true),
   revoke: vi.fn(),
+  keepKeys: vi.fn(),
 }));
 vi.mock("../../workspace/paths.js", () => ({ TELETON_ROOT: mocks.root }));
 vi.mock("../../ton/wallet-service.js", () => ({
   setTelegramWalletVerification: mocks.verified,
   clearTelegramWalletVerification: mocks.revoke,
   loadWallet: () => mocks.primary,
+  setTelegramWalletSigningKeys: mocks.keepKeys,
+  setTelegramWalletUnlocker: vi.fn(),
   saveWallet: (value: any) => {
     mocks.save(value);
     mocks.primary = value;
@@ -117,7 +120,7 @@ afterEach(() => {
   rmSync(mocks.root, { recursive: true, force: true });
 });
 describe("new-onboarding TgWallet association", () => {
-  it("imports once, verifies served state, installs private keys and enables the linked primary", async () => {
+  it("imports once, verifies served state, keeps signing keys in memory and enables the linked primary", async () => {
     await controller.start();
     expect(send).toHaveBeenCalledTimes(1);
     expect(controller.status).toBe("ready");
@@ -128,11 +131,8 @@ describe("new-onboarding TgWallet association", () => {
     expect(mocks.primary.telegramAssociation).toBe("linked");
     expect(mocks.primary.keySource).toBe("telegram-wallet");
     expect(mocks.primary.mnemonic).toEqual([]);
-    const path = join(mocks.root, "telegram-wallet.json");
-    expect(statSync(path).mode & 0o777).toBe(0o600);
-    expect(JSON.parse(readFileSync(path, "utf8")).signingSeed).toBe(
-      seeds.signingSeed.toString("hex")
-    );
+    expect(existsSync(join(mocks.root, "telegram-wallet.json"))).toBe(false);
+    expect(mocks.keepKeys).toHaveBeenCalledOnce();
     expect(JSON.stringify(notify.mock.calls)).not.toContain(phrase);
   });
   it("reconciles a completed import after a restart without replacing again", async () => {
@@ -225,11 +225,7 @@ describe("new-onboarding TgWallet association", () => {
     expect(
       invoke.mock.calls.filter(([request]) => request instanceof Api.wallet.GetProofChallenge)
     ).toHaveLength(2);
-    for (const name of [
-      "telegram-wallet.json",
-      "telegram-wallet-association.json",
-      "telegram-wallet-auth-requests.json",
-    ])
+    for (const name of ["telegram-wallet-association.json", "telegram-wallet-auth-requests.json"])
       expect(readFileSync(join(mocks.root, name), "utf8")).not.toContain("private-password");
   });
   it("reconciles a lost success response without sending again", async () => {

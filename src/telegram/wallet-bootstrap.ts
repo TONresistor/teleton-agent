@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, renameSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { Api, type TelegramClient } from "telegram";
 import { computeCheck } from "telegram/Password.js";
@@ -20,11 +20,13 @@ import {
   saveWallet,
   setTelegramWalletVerification,
   clearTelegramWalletVerification,
+  hasTelegramWalletSigningKeys,
+  setTelegramWalletSigningKeys,
+  setTelegramWalletUnlocker,
   type WalletData,
 } from "../ton/wallet-service.js";
 
 const ASSOCIATION_FILE = join(TELETON_ROOT, "telegram-wallet-association.json");
-const KEY_FILE = join(TELETON_ROOT, "telegram-wallet.json");
 const REQUESTS_FILE = join(TELETON_ROOT, "telegram-wallet-auth-requests.json");
 const STATUS_FILE = join(TELETON_ROOT, "telegram-wallet-auth-status.json");
 const TTL = 5 * 60_000;
@@ -58,7 +60,8 @@ export class TelegramWalletBootstrap {
   private pending?: Pending;
   private job?: Promise<void>;
   private stopped = false;
-  private lastAttempt = 0;
+  private signingJob?: { result: Promise<void>; waiting: Promise<void> };
+  private waitingForUnlock?: () => void;
   get isStopped() {
     return this.stopped;
   }
@@ -106,7 +109,6 @@ export class TelegramWalletBootstrap {
   start(): Promise<void> {
     if (this.job || this.stopped || this.status === "blocked") return this.job ?? Promise.resolve();
     clearTelegramWalletVerification();
-    this.lastAttempt = Date.now();
     this.job = this.run().catch(async (error) => {
       if (this.stopped) return;
       clearTelegramWalletVerification();
@@ -119,13 +121,48 @@ export class TelegramWalletBootstrap {
     });
     return this.job;
   }
-  retry(): void {
-    if (this.status !== "blocked" || this.stopped || Date.now() - this.lastAttempt < 60_000) return;
-    this.job = undefined;
-    this.setStatus("starting");
-    void this.start();
+  async unlockSigner(state?: Api.WalletState): Promise<void> {
+    this.checkStopped();
+    const current = state ?? (await this.rpc(this.client.invoke(new Api.wallet.GetState())));
+    this.checkStopped();
+    if (!(current instanceof Api.WalletState)) {
+      clearTelegramWalletVerification();
+      throw new Error("WALLET_NOT_READY");
+    }
+    const primary = loadWallet();
+    if (primary?.keySource === "telegram-wallet" && !this.primaryMatches(current)) {
+      this.followWallet(current, primary);
+      throw new Error(
+        "The Telegram wallet changed. Check the new wallet before requesting another transfer."
+      );
+    }
+    this.assertPrimaryMatches(current);
+    if (hasTelegramWalletSigningKeys()) return;
+
+    if (!this.signingJob) {
+      const waiting = new Promise<void>((resolve) => {
+        this.waitingForUnlock = resolve;
+      });
+      const result = this.recoverSigning(current)
+        .catch((error) => {
+          if (!this.stopped) this.setStatus("blocked", code(error));
+          throw error;
+        })
+        .finally(() => {
+          this.waitingForUnlock = undefined;
+          this.signingJob = undefined;
+        });
+      this.signingJob = { result, waiting };
+    }
+    await Promise.race([this.signingJob.result, this.signingJob.waiting]);
+    if (!hasTelegramWalletSigningKeys())
+      throw new Error(
+        "Telegram wallet unlock is waiting for your 2FA reply. No transfer was submitted."
+      );
   }
+
   stop(): void {
+    setTelegramWalletUnlocker();
     clearTelegramWalletVerification();
     this.stopped = true;
     if (this.pending) {
@@ -216,6 +253,7 @@ export class TelegramWalletBootstrap {
       }, TTL);
       timer.unref?.();
       this.pending = { ...record, timer, resolve, reject };
+      this.waitingForUnlock?.();
     });
   }
   private async associate(primary: WalletData) {
@@ -253,13 +291,6 @@ export class TelegramWalletBootstrap {
           current.telegramAssociation !== "pending"
         )
           throw new Error("PRIMARY_WALLET_CHANGED");
-        privateJSON(KEY_FILE, {
-          scheme: "telegram-rotation",
-          version: "telegram",
-          walletId: wallet.walletId,
-          anchorSeed: seeds.anchorSeed.toString("hex"),
-          signingSeed: seeds.signingSeed.toString("hex"),
-        });
         saveWallet({
           ...primary,
           keySource: "telegram-wallet",
@@ -278,6 +309,8 @@ export class TelegramWalletBootstrap {
           )
         )
           throw new Error("PRIMARY_WALLET_MISMATCH");
+        setTelegramWalletSigningKeys(seeds);
+        setTelegramWalletUnlocker(() => this.unlockSigner());
         this.setStatus("ready");
       };
       for (let attempt = 0; attempt < 4; attempt++) {
@@ -407,55 +440,51 @@ export class TelegramWalletBootstrap {
     const state = await this.rpc(this.client.invoke(new Api.wallet.GetState()));
     this.checkStopped();
     if (!(state instanceof Api.WalletState)) throw new Error("WALLET_NOT_READY");
-    const assertPrimaryMatches = (served: Api.TypeWalletState) => {
-      const selected = loadWallet();
-      if (
-        !(served instanceof Api.WalletState) ||
-        selected?.version !== "tg" ||
-        !Address.parse(selected.address).equals(Address.parse(served.address)) ||
-        selected.publicKey.toLowerCase() !== Buffer.from(served.publicKey).toString("hex")
-      )
-        throw new Error("PRIMARY_WALLET_MISMATCH");
-    };
-    assertPrimaryMatches(state);
-    if (existsSync(KEY_FILE) && (statSync(KEY_FILE).mode & 0o077) === 0) {
-      try {
-        const cached = JSON.parse(readFileSync(KEY_FILE, "utf8"));
-        if (
-          cached.scheme === "telegram-rotation" &&
-          /^[0-9a-f]{64}$/.test(cached.anchorSeed) &&
-          /^[0-9a-f]{64}$/.test(cached.signingSeed)
-        ) {
-          const seed = Buffer.from(cached.anchorSeed, "hex");
-          const pair = keyPairFromSeed(seed);
-          const signing = keyPairFromSeed(Buffer.from(cached.signingSeed, "hex"));
-          seed.fill(0);
-          try {
-            const wallet = new NativeTelegramWallet(pair.publicKey, cached.walletId);
-            if (
-              signing.publicKey.equals(Buffer.from(state.publicKey)) &&
-              wallet.address.equals(Address.parse(state.address))
-            ) {
-              if (
-                !setTelegramWalletVerification(
-                  state.address,
-                  Buffer.from(state.publicKey).toString("hex")
-                )
-              )
-                throw new Error("PRIMARY_WALLET_MISMATCH");
-              this.setStatus("ready");
-              return;
-            }
-          } finally {
-            pair.secretKey.fill(0);
-            signing.secretKey.fill(0);
-          }
-        }
-      } catch (error) {
-        if (code(error) === "PRIMARY_WALLET_MISMATCH") throw error;
-      }
+    if (primary.keySource === "telegram-wallet") {
+      this.followWallet(state, primary);
+      setTelegramWalletUnlocker(() => this.unlockSigner());
+      return;
     }
-    assertPrimaryMatches(state);
+    await this.recoverSigning(state);
+  }
+
+  private primaryMatches(state: Api.TypeWalletState): boolean {
+    const selected = loadWallet();
+    return (
+      state instanceof Api.WalletState &&
+      selected?.version === "tg" &&
+      selected.telegramAssociation !== "pending" &&
+      Address.parse(selected.address).equals(Address.parse(state.address)) &&
+      selected.publicKey.toLowerCase() === Buffer.from(state.publicKey).toString("hex")
+    );
+  }
+
+  private assertPrimaryMatches(state: Api.TypeWalletState): void {
+    if (!this.primaryMatches(state)) throw new Error("PRIMARY_WALLET_MISMATCH");
+  }
+
+  private followWallet(state: Api.WalletState, previous: WalletData): void {
+    const address = Address.parse(state.address).toString({ bounceable: false });
+    const publicKey = Buffer.from(state.publicKey);
+    if (publicKey.length !== 32) throw new Error("WALLET_KEY_MISMATCH");
+    if (!this.primaryMatches(state)) {
+      saveWallet({
+        version: "tg",
+        address,
+        publicKey: publicKey.toString("hex"),
+        mnemonic: [],
+        keySource: "telegram-wallet",
+        telegramAssociation: "linked",
+        createdAt: previous.createdAt,
+      });
+    }
+    if (!setTelegramWalletVerification(address, publicKey.toString("hex")))
+      throw new Error("PRIMARY_WALLET_MISMATCH");
+    this.setStatus("linked");
+  }
+
+  private async recoverSigning(state: Api.WalletState): Promise<void> {
+    this.assertPrimaryMatches(state);
     if (!state.canExportPhrase) throw new Error("WALLET_EXPORT_UNAVAILABLE");
     let proof: Api.TypeInputCheckPasswordSRP | undefined;
     let parts: Api.wallet.SecretPhraseParts | undefined;
@@ -472,7 +501,7 @@ export class TelegramWalletBootstrap {
           attempt === 3
         )
           throw error;
-        assertPrimaryMatches(state);
+        this.assertPrimaryMatches(state);
         const password = await this.password();
         try {
           this.setStatus("recovering");
@@ -526,20 +555,21 @@ export class TelegramWalletBootstrap {
         if (!wallet) throw new Error("WALLET_ADDRESS_MISMATCH");
         const currentState = await this.rpc(this.client.invoke(new Api.wallet.GetState()));
         this.checkStopped();
-        assertPrimaryMatches(currentState);
+        this.assertPrimaryMatches(currentState);
         if (
           !(currentState instanceof Api.WalletState) ||
           !wallet.address.equals(Address.parse(currentState.address)) ||
           !signing.publicKey.equals(Buffer.from(currentState.publicKey))
         )
           throw new Error("WALLET_KEY_MISMATCH");
-        privateJSON(KEY_FILE, {
-          scheme: "telegram-rotation",
-          version: "telegram",
-          walletId: wallet.walletId,
-          anchorSeed: keys.anchorSeed.toString("hex"),
-          signingSeed: keys.signingSeed.toString("hex"),
-        });
+        const selected = loadWallet();
+        if (selected?.keySource === "telegram-wallet") {
+          saveWallet({
+            ...selected,
+            anchorPublicKey: pair.publicKey.toString("hex"),
+            walletId: wallet.walletId,
+          });
+        }
         if (
           !setTelegramWalletVerification(
             state.address,
@@ -547,10 +577,12 @@ export class TelegramWalletBootstrap {
           )
         )
           throw new Error("PRIMARY_WALLET_MISMATCH");
+        setTelegramWalletSigningKeys(keys);
         this.setStatus("ready");
-        await this.notify(
-          "Telegram wallet signing is ready. Keys are stored privately; no phrase or key was sent to the AI. No transaction was sent."
-        );
+        if (this.waitingForUnlock && proof)
+          await this.notify(
+            "Telegram wallet signing is ready for this session. No transaction was sent."
+          );
       } finally {
         signing.secretKey.fill(0);
         keys.anchorSeed.fill(0);

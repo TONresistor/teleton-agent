@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { mkdirSync, readFileSync, rmSync, statSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { createCipheriv, createHmac } from "node:crypto";
 import { Api, type TelegramClient } from "telegram";
@@ -12,13 +12,22 @@ const mocks = vi.hoisted(() => ({
   primary: undefined as any,
   verified: vi.fn(() => true),
   revoke: vi.fn(),
+  keepKeys: vi.fn(),
+  save: vi.fn(),
+  hasKeys: vi.fn(() => false),
 }));
 vi.mock("../../workspace/paths.js", () => ({ TELETON_ROOT: mocks.root }));
 vi.mock("../../ton/wallet-service.js", () => ({
   loadWallet: () => mocks.primary,
   setTelegramWalletVerification: mocks.verified,
   clearTelegramWalletVerification: mocks.revoke,
-  saveWallet: vi.fn(),
+  saveWallet: (value: unknown) => {
+    mocks.save(value);
+    mocks.primary = value;
+  },
+  hasTelegramWalletSigningKeys: mocks.hasKeys,
+  setTelegramWalletSigningKeys: mocks.keepKeys,
+  setTelegramWalletUnlocker: vi.fn(),
 }));
 vi.mock("telegram/Password.js", () => ({ computeCheck: mocks.computeCheck }));
 import { TelegramWalletBootstrap } from "../wallet-bootstrap.js";
@@ -121,6 +130,35 @@ afterEach(() => {
 });
 
 describe("deterministic Telegram wallet bootstrap", () => {
+  it("follows a replaced Telegram wallet at startup and unlocks only on demand", async () => {
+    mocks.primary = {
+      ...mocks.primary,
+      address: new NativeTelegramWallet(
+        keyPairFromSeed(Buffer.alloc(32, 3)).publicKey
+      ).address.toString(),
+      publicKey: "00".repeat(32),
+      keySource: "telegram-wallet",
+      createdAt: "then",
+    };
+    const oldAddress = mocks.primary.address;
+    controller = new TelegramWalletBootstrap(client, owner);
+    await controller.start();
+    expect(controller.status).toBe("linked");
+    expect(mocks.primary.address).not.toBe(oldAddress);
+    expect(mocks.save).toHaveBeenCalledWith(
+      expect.objectContaining({ mnemonic: [], telegramAssociation: "linked" })
+    );
+    expect(invoke.mock.calls.map(([request]) => request.className)).toEqual(["wallet.GetState"]);
+    expect(sendMessage).not.toHaveBeenCalled();
+    expect(mocks.keepKeys).not.toHaveBeenCalled();
+
+    await expect(controller.unlockSigner()).rejects.toThrow("waiting for your 2FA reply");
+    expect(controller.status).toBe("waiting_2fa");
+    await controller.consume(reply());
+    await vi.waitFor(() => expect(controller?.status).toBe("ready"));
+    expect(mocks.keepKeys).toHaveBeenCalledOnce();
+    expect(existsSync(join(mocks.root, "telegram-wallet.json"))).toBe(false);
+  });
   it.each(["address", "publicKey"])(
     "refuses a different principal %s before exporting or overwriting keys",
     async (field) => {
@@ -199,10 +237,8 @@ describe("deterministic Telegram wallet bootstrap", () => {
     expect(controller.status).toBe("ready");
     expect(mocks.computeCheck.mock.calls[0][1]).toBe("private-password");
     expect(getSender.mock.calls.map((row) => row[0])).toEqual([2, 3]);
-    const cache = readFileSync(join(mocks.root, "telegram-wallet.json"), "utf8");
-    expect(cache).not.toContain(phrase);
-    expect(cache).not.toContain("private-password");
-    expect(statSync(join(mocks.root, "telegram-wallet.json")).mode & 0o077).toBe(0);
+    expect(existsSync(join(mocks.root, "telegram-wallet.json"))).toBe(false);
+    expect(mocks.keepKeys).toHaveBeenCalledOnce();
     expect(JSON.stringify(sendMessage.mock.calls)).not.toContain("private-password");
     expect(await controller.consume(reply())).toBe(true);
     expect(mocks.computeCheck).toHaveBeenCalledTimes(1);

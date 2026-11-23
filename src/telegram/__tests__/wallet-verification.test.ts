@@ -6,7 +6,12 @@ import { Type } from "@sinclair/typebox";
 import { toLong } from "../../utils/gramjs-bigint.js";
 const root = vi.hoisted(() => `/tmp/telegram-wallet-verification-${process.pid}`);
 vi.mock("../../workspace/paths.js", () => ({ TELETON_ROOT: root }));
-import { generateWallet, saveWallet, isTelegramWalletEnabled } from "../../ton/wallet-service.js";
+import {
+  generateWallet,
+  saveWallet,
+  isTelegramWalletEnabled,
+  loadWallet,
+} from "../../ton/wallet-service.js";
 import { deriveTelegramWalletKeys } from "../wallet-protocol.js";
 import { TelegramWalletBootstrap } from "../wallet-bootstrap.js";
 import { ToolRegistry } from "../../agent/tools/registry.js";
@@ -23,7 +28,7 @@ afterEach(() => {
 });
 describe("real registry with runtime wallet verification", () => {
   it.each([true, false])(
-    "requires the actual primary wallet match (matches=%s)",
+    "requires fresh Telegram wallet state before enabling admin tools (matches old=%s)",
     async (matches) => {
       const primary = await generateWallet();
       const seeds = deriveTelegramWalletKeys(Buffer.from(primary.mnemonic.join(" ")));
@@ -87,10 +92,11 @@ describe("real registry with runtime wallet verification", () => {
         })
       );
       await running;
-      expect(isTelegramWalletEnabled()).toBe(matches);
-      expect(controller.status).toBe(matches ? "ready" : "blocked");
-      expect(registry.getForContext(false, null, "dm", true, 42)).toHaveLength(matches ? 1 : 0);
-      expect((await registry.execute(call, context)).success).toBe(matches);
+      expect(isTelegramWalletEnabled()).toBe(true);
+      expect(controller.status).toBe("linked");
+      expect(loadWallet()?.publicKey).toBe(matches ? primary.publicKey : "00".repeat(32));
+      expect(registry.getForContext(false, null, "dm", true, 42)).toHaveLength(1);
+      expect((await registry.execute(call, context)).success).toBe(true);
       expect(invoke).toHaveBeenCalledTimes(1);
       expect(readFileSync(keyFile, "utf8")).toBe(original);
       controller.stop();
