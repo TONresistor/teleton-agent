@@ -1,12 +1,13 @@
 import { TelegramUserClient, type TelegramClientConfig } from "../client.js";
 import { statSync } from "node:fs";
 import { basename } from "node:path";
+import { fromNano } from "@ton/core";
 import { Api, utils } from "telegram";
 import { CustomFile } from "telegram/client/uploads.js";
 import type { NewMessageEvent } from "telegram/events/NewMessage.js";
 import { createLogger } from "../../utils/logger.js";
 import { withFloodRetry } from "../flood-retry.js";
-import { randomLong } from "../../utils/gramjs-bigint.js";
+import { randomLong, readStarsAmount } from "../../utils/gramjs-bigint.js";
 import { getGramJSErrorMessage } from "../../utils/errors.js";
 import { markdownToTelegramHtml } from "../formatting.js";
 import { TELEGRAM_MAX_MESSAGE_LENGTH } from "../../constants/limits.js";
@@ -39,6 +40,11 @@ const log = createLogger("Telegram");
 
 /** Max time to wait for getSender() before giving up (deleted accounts, timeouts). */
 const SENDER_RESOLVE_TIMEOUT_MS = 5000;
+
+function formatGiftOfferPrice(price: Api.TypeStarsAmount): string {
+  const amount = readStarsAmount(price);
+  return amount ? `${amount.displayAmount} ${amount.currency}` : "unknown amount";
+}
 
 const RICH_FORMATTING_PATTERNS = [
   /(?:^|\n)\s{0,3}#{1,6}\s+\S/, // heading
@@ -1037,7 +1043,9 @@ export class GramJSUserBridge implements ITelegramBridge {
     const action = msg.action;
     if (!action) return null;
 
+    const isOnchainOffer = action instanceof Api.MessageActionStarGiftOnchainOffer;
     const isGiftAction =
+      isOnchainOffer ||
       action instanceof Api.MessageActionStarGiftPurchaseOffer ||
       action instanceof Api.MessageActionStarGiftPurchaseOfferDeclined ||
       action instanceof Api.MessageActionStarGift;
@@ -1053,41 +1061,57 @@ export class GramJSUserBridge implements ITelegramBridge {
 
     let text = "";
 
-    if (action instanceof Api.MessageActionStarGiftPurchaseOffer) {
+    if (isOnchainOffer) {
+      const gift = action.gift;
+      const slug = gift instanceof Api.StarGiftUnique ? gift.slug : undefined;
+      let status = "pending";
+      if (action.settled) status = "settled";
+      else if (action.cancelled) status = "cancelled";
+      else if (action.declined) status = "declined";
+      else if (action.expired) status = "expired";
+      else if (action.cancelling) status = "cancelling";
+      else if (action.accepted) status = "accepted";
+
+      const price = fromNano(action.amount.toString());
+      const expires = action.expiresAt
+        ? new Date(action.expiresAt * 1000).toISOString()
+        : "unknown";
+      text = `[On-chain Gift Offer]\n`;
+      text += `Gift: "${gift.title || "Unknown Gift"}"${slug ? ` (slug: ${slug})` : ""}\n`;
+      text += `Offer: ${price} TON\nExpires: ${expires}\nStatus: ${status}`;
+    } else if (action instanceof Api.MessageActionStarGiftPurchaseOffer) {
       const gift = action.gift;
       const isUnique = gift instanceof Api.StarGiftUnique;
       const title = gift.title || "Unknown Gift";
       const slug = isUnique ? gift.slug : undefined;
       const num = isUnique ? gift.num : undefined;
-      const priceStars = action.price.amount?.toString() || "?";
+      const price = formatGiftOfferPrice(action.price);
       const status = action.accepted ? "accepted" : action.declined ? "declined" : "pending";
       const expires = action.expiresAt
         ? new Date(action.expiresAt * 1000).toISOString()
         : "unknown";
 
       text = `[Gift Offer Received]\n`;
-      text += `Offer: ${priceStars} Stars for your NFT "${title}"${num ? ` #${num}` : ""}${slug ? ` (slug: ${slug})` : ""}\n`;
+      text += `Offer: ${price} for your NFT "${title}"${num ? ` #${num}` : ""}${slug ? ` (slug: ${slug})` : ""}\n`;
       text += `From: ${senderUsername ? `@${senderUsername}` : senderFirstName || `user:${senderId}`}\n`;
       text += `Expires: ${expires}\n`;
       text += `Status: ${status}\n`;
       text += `Message ID: ${msg.id} — use telegram_resolve_gift_offer(offerMsgId=${msg.id}) to accept or telegram_resolve_gift_offer(offerMsgId=${msg.id}, decline=true) to decline.`;
 
-      log.info(
-        `Gift offer received: ${priceStars} Stars for "${title}" from ${senderUsername || senderId}`
-      );
+      log.info(`Gift offer received: ${price} for "${title}" from ${senderUsername || senderId}`);
     } else if (action instanceof Api.MessageActionStarGiftPurchaseOfferDeclined) {
       const gift = action.gift;
       const isUnique = gift instanceof Api.StarGiftUnique;
       const title = gift.title || "Unknown Gift";
       const slug = isUnique ? gift.slug : undefined;
       const num = isUnique ? gift.num : undefined;
-      const priceStars = action.price.amount?.toString() || "?";
+      const price = formatGiftOfferPrice(action.price);
       const reason = action.expired ? "expired" : "declined";
 
       text = `[Gift Offer ${action.expired ? "Expired" : "Declined"}]\n`;
-      text += `Your offer of ${priceStars} Stars for NFT "${title}"${num ? ` #${num}` : ""}${slug ? ` (slug: ${slug})` : ""} was ${reason}.`;
+      text += `Your offer of ${price} for NFT "${title}"${num ? ` #${num}` : ""}${slug ? ` (slug: ${slug})` : ""} was ${reason}.`;
 
-      log.info(`Gift offer ${reason}: ${priceStars} Stars for "${title}"`);
+      log.info(`Gift offer ${reason}: ${price} for "${title}"`);
     } else if (action instanceof Api.MessageActionStarGift) {
       const gift = action.gift;
       const title = gift.title || "Unknown Gift";
@@ -1115,6 +1139,12 @@ export class GramJSUserBridge implements ITelegramBridge {
 
     if (msg.peerId) this.cachePeer(chatId, msg.peerId);
 
+    const isChannel = isOnchainOffer && (msg.post ?? false);
+    const isGroup =
+      isOnchainOffer &&
+      !isChannel &&
+      (msg.peerId instanceof Api.PeerChat || msg.peerId instanceof Api.PeerChannel);
+
     return {
       id: msg.id,
       chatId,
@@ -1122,10 +1152,10 @@ export class GramJSUserBridge implements ITelegramBridge {
       senderUsername,
       senderFirstName,
       text: text.trim(),
-      isGroup: false,
-      isChannel: false,
+      isGroup,
+      isChannel,
       isBot,
-      mentionsMe: true,
+      mentionsMe: !isGroup || (msg.mentioned ?? false),
       timestamp: new Date(msg.date * 1000),
       hasMedia: false,
       _rawPeer: msg.peerId,
