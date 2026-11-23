@@ -1,4 +1,24 @@
 import { randomBytes } from "crypto";
+import { fromNano } from "@ton/core";
+import type { Api } from "telegram";
+
+export function readStarsAmount(
+  value: Api.TypeStarsAmount
+):
+  { currency: "Stars" | "TON"; amount: string; displayAmount: string; isTon: boolean } | undefined {
+  const amount = value.amount?.toString();
+  if (amount === undefined) return undefined;
+
+  if (value.className === "StarsTonAmount") {
+    return { currency: "TON", amount, displayAmount: fromNano(amount), isTon: true };
+  }
+  if (value.className === "StarsAmount") {
+    // Both currencies use 9 decimal places. Keep large and fractional prices exact.
+    const nanostars = BigInt(amount) * 1_000_000_000n + BigInt(value.nanos);
+    return { currency: "Stars", amount, displayAmount: fromNano(nanostars), isTon: false };
+  }
+  return undefined;
+}
 
 /**
  * Convert native bigint, number, or string to bigint for GramJS TL long fields.

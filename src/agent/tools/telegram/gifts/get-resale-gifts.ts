@@ -1,9 +1,8 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { Type } from "@sinclair/typebox";
 import { Api } from "telegram";
 import type { Tool, ToolExecutor, ToolResult } from "../../types.js";
 import { getErrorMessage } from "../../../../utils/errors.js";
-import { toLong } from "../../../../utils/gramjs-bigint.js";
+import { readStarsAmount, toLong } from "../../../../utils/gramjs-bigint.js";
 import { createLogger } from "../../../../utils/logger.js";
 import { getClient } from "../../../../sdk/telegram-utils.js";
 
@@ -16,6 +15,7 @@ interface GetResaleGiftsParams {
   giftId: string;
   limit?: number;
   sortByPrice?: boolean;
+  market?: "all" | "stars" | "ton" | "fragment";
 }
 
 /**
@@ -43,6 +43,15 @@ export const telegramGetResaleGiftsTool: Tool = {
         description: "Sort by price (lowest first). Default: false (sorted by recent)",
       })
     ),
+    market: Type.Optional(
+      Type.Union(
+        [Type.Literal("all"), Type.Literal("stars"), Type.Literal("ton"), Type.Literal("fragment")],
+        {
+          description:
+            "Filter resale listings to Stars, TON, or Fragment. Defaults to all listings.",
+        }
+      )
+    ),
   }),
 };
 
@@ -54,7 +63,7 @@ export const telegramGetResaleGiftsExecutor: ToolExecutor<GetResaleGiftsParams> 
   context
 ): Promise<ToolResult> => {
   try {
-    const { giftId, limit = 30, sortByPrice = false } = params;
+    const { giftId, limit = 30, sortByPrice = false, market = "all" } = params;
     const gramJsClient = getClient(context.bridge);
 
     if (!/^\d+$/.test(giftId)) {
@@ -71,15 +80,28 @@ export const telegramGetResaleGiftsExecutor: ToolExecutor<GetResaleGiftsParams> 
         offset: "",
         limit,
         sortByPrice,
+        starsOnly: market === "stars" || undefined,
+        tonOnly: market === "ton" || undefined,
+        fragmentOnly: market === "fragment" || undefined,
       })
     );
 
-    const listings = (result.gifts || []).map((gift: any) => {
+    const listings = (result.gifts || []).map((gift) => {
       if (gift.className === "StarGiftUnique") {
         // StarGiftUnique: individual collectible with slug, num, owner, attributes
         const resellAmounts = gift.resellAmount || [];
-        const starsPrice = resellAmounts.find((a: any) => !("ton" in a));
-        const tonPrice = resellAmounts.find((a: any) => "ton" in a);
+        const starsPrice = resellAmounts.find((amount) => amount.className === "StarsAmount");
+        const tonPrice = resellAmounts.find((amount) => amount.className === "StarsTonAmount");
+        const priceStars = starsPrice && readStarsAmount(starsPrice)?.displayAmount;
+        const onchainSale = gift.onchainSale ?? false;
+        const resaleTonOnly = gift.resaleTonOnly ?? false;
+        const canBuyWithStars =
+          market !== "fragment" &&
+          !onchainSale &&
+          !resaleTonOnly &&
+          priceStars !== undefined &&
+          /^[1-9]\d*$/.test(priceStars) &&
+          Number.isSafeInteger(Number(priceStars));
 
         return {
           type: "unique" as const,
@@ -91,9 +113,13 @@ export const telegramGetResaleGiftsExecutor: ToolExecutor<GetResaleGiftsParams> 
           ownerId:
             gift.ownerId && "userId" in gift.ownerId ? gift.ownerId.userId?.toString() : undefined,
           ownerName: gift.ownerName || undefined,
-          priceStars: starsPrice ? starsPrice.amount?.toString() : undefined,
-          priceTon: tonPrice ? tonPrice.amount?.toString() : undefined,
-          attributes: (gift.attributes || []).map((attr: any) => ({
+          priceStars,
+          priceTon: tonPrice && readStarsAmount(tonPrice)?.displayAmount,
+          onchainSale,
+          fixedSale: gift.fixedSale ?? false,
+          resaleTonOnly,
+          canBuyWithStars,
+          attributes: (gift.attributes || []).map((attr) => ({
             type: attr.className?.replace("StarGiftAttribute", "").toLowerCase(),
             name: "name" in attr ? attr.name : undefined,
           })),
@@ -120,8 +146,9 @@ export const telegramGetResaleGiftsExecutor: ToolExecutor<GetResaleGiftsParams> 
         listings,
         count: listings.length,
         totalCount: result.count,
-        usage:
-          "Use telegram_buy_resale_gift(slug, maxPriceStars) with the listing's priceStars as the owner-approved maximum.",
+        usage: listings.some((listing) => listing.type === "unique" && listing.canBuyWithStars)
+          ? "For a listing with canBuyWithStars=true, use telegram_buy_resale_gift with its slug and the maximum Stars explicitly approved by the owner."
+          : undefined,
       },
     };
   } catch (error) {

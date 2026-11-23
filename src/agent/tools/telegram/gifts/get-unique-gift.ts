@@ -1,9 +1,9 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import { Type } from "@sinclair/typebox";
 import { Api } from "telegram";
 import type { Tool, ToolExecutor, ToolResult } from "../../types.js";
 import { getErrorMessage } from "../../../../utils/errors.js";
 import { createLogger } from "../../../../utils/logger.js";
+import { readStarsAmount } from "../../../../utils/gramjs-bigint.js";
 import { getClient } from "../../../../sdk/telegram-utils.js";
 
 const log = createLogger("Tools");
@@ -15,7 +15,7 @@ interface GetUniqueGiftParams {
 export const telegramGetUniqueGiftTool: Tool = {
   name: "telegram_get_unique_gift",
   description:
-    "Look up a unique collectible NFT gift by its slug (from t.me/nft/<slug>). Returns full NFT details including owner, attributes, price, and availability.",
+    "Look up a unique collectible NFT gift by its slug (from t.me/nft/<slug>). Returns its owner, attributes, availability, resale prices, and on-chain sale details.",
   category: "data-bearing",
   parameters: Type.Object({
     slug: Type.String({
@@ -36,18 +36,15 @@ export const telegramGetUniqueGiftExecutor: ToolExecutor<GetUniqueGiftParams> = 
 
     const gift = result.gift;
 
-    const users = result.users || [];
-    const ownerUserId =
-      gift.className === "StarGiftUnique" && gift.ownerId && "userId" in gift.ownerId
-        ? gift.ownerId.userId?.toString()
-        : undefined;
-    const ownerUser = users.find(
-      (u: any) => u.className === "User" && u.id?.toString() === ownerUserId
-    );
-
     if (gift.className !== "StarGiftUnique") {
       return { success: false, error: "Gift is not a unique collectible" };
     }
+
+    const ownerUserId =
+      gift.ownerId && "userId" in gift.ownerId ? gift.ownerId.userId?.toString() : undefined;
+    const ownerUser = (result.users || []).find(
+      (user): user is Api.User => user.className === "User" && user.id?.toString() === ownerUserId
+    );
 
     log.info(`get_unique_gift: slug=${slug} title=${gift.title}`);
 
@@ -63,32 +60,25 @@ export const telegramGetUniqueGiftExecutor: ToolExecutor<GetUniqueGiftParams> = 
           id: ownerUserId,
           name: gift.ownerName || undefined,
           address: gift.ownerAddress || undefined,
-          username:
-            ownerUser && ownerUser.className === "User"
-              ? ownerUser.username || undefined
-              : undefined,
-          firstName:
-            ownerUser && ownerUser.className === "User"
-              ? ownerUser.firstName || undefined
-              : undefined,
-          lastName:
-            ownerUser && ownerUser.className === "User"
-              ? ownerUser.lastName || undefined
-              : undefined,
+          username: ownerUser?.username || undefined,
+          firstName: ownerUser?.firstName || undefined,
+          lastName: ownerUser?.lastName || undefined,
         },
         giftAddress: gift.giftAddress || undefined,
-        attributes: (gift.attributes || []).map((attr: any) => ({
+        attributes: (gift.attributes || []).map((attr) => ({
           type: attr.className?.replace("StarGiftAttribute", "").toLowerCase(),
           name: "name" in attr ? attr.name : undefined,
           rarityPercent:
-            "rarity" in attr && "permille" in attr.rarity
-              ? Number((attr.rarity as Api.StarGiftAttributeRarity).permille) / 10
-              : undefined,
+            "rarity" in attr && "permille" in attr.rarity ? attr.rarity.permille / 10 : undefined,
         })),
-        resellPrices: (gift.resellAmount || []).map((a: any) => ({
-          amount: a.amount?.toString(),
-          isTon: "ton" in a,
-        })),
+        resellPrices: (gift.resellAmount || [])
+          .map(readStarsAmount)
+          .filter((price) => price !== undefined),
+        onchainSale: gift.onchainSale ?? false,
+        fixedSale: gift.fixedSale ?? false,
+        mySale: gift.mySale ?? false,
+        offerMinAmount: gift.offerMinAmount?.toString(),
+        feeBps: gift.feeBps,
         availability: gift.availabilityIssued
           ? {
               total: gift.availabilityTotal,
