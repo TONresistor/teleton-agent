@@ -24,7 +24,7 @@ interface NamespaceRule extends ToolNamespaceMetadata {
 const TELEGRAM_SCHEDULE_RE = /scheduled|schedule_message|create_scheduled_task/;
 const TELEGRAM_CHANNEL_RE = /channel|join_channel|leave_channel|invite_to_channel/;
 const TELEGRAM_GIFT_MANAGE_RE =
-  /buy_resale_gift|set_gift_status|set_collectible_price|send_gift_offer|resolve_gift_offer|my_gifts|user_gifts/;
+  /buy_onchain_gift|manage_onchain_gift|buy_resale_gift|set_gift_status|set_collectible_price|send_gift_offer|resolve_gift_offer|my_gifts|user_gifts/;
 
 /**
  * Reviewed built-in taxonomy. Rules are ordered from most specific to broadest.

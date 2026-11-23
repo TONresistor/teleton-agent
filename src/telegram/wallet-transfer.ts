@@ -3,6 +3,8 @@ import { join } from "node:path";
 import {
   Address,
   Cell,
+  fromNano,
+  type MessageRelaxed,
   SendMode,
   beginCell,
   external,
@@ -103,15 +105,38 @@ export async function telegramWalletSigner(state: Api.WalletState, useMemory = f
   return { wallet, keys };
 }
 
-export async function sendTelegramWalletTransfer(
+export type TelegramWalletMessages = {
+  messages: MessageRelaxed[];
+  sendModes: SendMode[];
+  expiresAt?: number;
+};
+
+type ContractTransfer = {
+  maxTotalTon: string;
+  prepare: (state: Api.WalletState) => Promise<TelegramWalletMessages>;
+};
+
+export function sendTelegramWalletMessages(client: TelegramClient, params: ContractTransfer) {
+  return sendWalletTransaction(client, params);
+}
+
+export function sendTelegramWalletTransfer(
   client: TelegramClient,
   params: { to: string; amount: string; comment?: string }
 ) {
+  return sendWalletTransaction(client, params);
+}
+
+async function sendWalletTransaction(
+  client: TelegramClient,
+  params: { to: string; amount: string; comment?: string } | ContractTransfer
+) {
   let secretKey: Buffer | undefined;
   return withTxLock(async () => {
-    if (!/^\d+(?:\.\d{1,9})?$/.test(params.amount) || toNano(params.amount) <= 0n)
+    const amount = "prepare" in params ? params.maxTotalTon : params.amount;
+    if (!/^\d+(?:\.\d{1,9})?$/.test(amount) || toNano(amount) <= 0n)
       throw new Error("Amount must be a positive decimal string with at most 9 decimal places");
-    if (Buffer.byteLength(params.comment ?? "", "utf8") > 1024)
+    if (!("prepare" in params) && Buffer.byteLength(params.comment ?? "", "utf8") > 1024)
       throw new Error("Comment must be at most 1024 UTF-8 bytes");
     const state = await client.invoke(new Api.wallet.GetState());
     if (!(state instanceof Api.WalletState)) throw new Error("The Telegram wallet is not ready");
@@ -119,32 +144,6 @@ export async function sendTelegramWalletTransfer(
     if (bootstrap) await bootstrap.unlockSigner(state);
     const { wallet, keys } = await telegramWalletSigner(state, !!bootstrap);
     secretKey = keys.secretKey;
-    let recipient: Address;
-    let userId: Api.TypeInputUser = new Api.InputUserEmpty();
-    const target = params.to.trim();
-    try {
-      recipient = Address.parse(target);
-    } catch {
-      if (!/^@\w+$/.test(target) && !/^\d+$/.test(target))
-        throw new Error("Recipient must be a TON address, Telegram user ID or @username");
-      const user = await client.getEntity(target);
-      if (!(user instanceof Api.User) || user.bot || user.deleted)
-        throw new Error("Recipient must be an accessible human Telegram user");
-      const peer = await client.getInputEntity(user);
-      if (peer instanceof Api.InputPeerUser)
-        userId = new Api.InputUser({ userId: peer.userId, accessHash: peer.accessHash });
-      else if (peer instanceof Api.InputPeerSelf) userId = new Api.InputUserSelf();
-      else throw new Error("Could not resolve recipient");
-      const result = await client.invoke(
-        new Api.wallet.GetUserAddresses({ id: [userId], addresses: [] })
-      );
-      const entry = result.addresses.find((item) => item.userId?.toString() === user.id.toString());
-      if (!entry?.address) throw new Error("Telegram returned no wallet address for the recipient");
-      recipient = Address.parse(entry.address);
-      if (peer instanceof Api.InputPeerSelf) userId = new Api.InputUserEmpty();
-    }
-    if (toNano(params.amount) > BigInt(state.balance.toString()))
-      throw new Error("Insufficient Telegram wallet balance");
     if (existsSync(PENDING_FILE)) {
       const pending = JSON.parse(readFileSync(PENDING_FILE, "utf8")) as PendingTransfer;
       if (pending.wallet !== state.address)
@@ -159,6 +158,69 @@ export async function sendTelegramWalletTransfer(
       }
       unlinkSync(PENDING_FILE);
     }
+    let userId: Api.TypeInputUser = new Api.InputUserEmpty();
+    let prepared: TelegramWalletMessages;
+    if ("prepare" in params) {
+      if (!(wallet instanceof NativeTelegramWallet))
+        throw new Error("On-chain gifts require a native Telegram wallet");
+      prepared = await params.prepare(state);
+    } else {
+      let recipient: Address;
+      const target = params.to.trim();
+      try {
+        recipient = Address.parse(target);
+      } catch {
+        if (!/^@\w+$/.test(target) && !/^\d+$/.test(target))
+          throw new Error("Recipient must be a TON address, Telegram user ID or @username");
+        const user = await client.getEntity(target);
+        if (!(user instanceof Api.User) || user.bot || user.deleted)
+          throw new Error("Recipient must be an accessible human Telegram user");
+        const peer = await client.getInputEntity(user);
+        if (peer instanceof Api.InputPeerUser)
+          userId = new Api.InputUser({ userId: peer.userId, accessHash: peer.accessHash });
+        else if (peer instanceof Api.InputPeerSelf) userId = new Api.InputUserSelf();
+        else throw new Error("Could not resolve recipient");
+        const result = await client.invoke(
+          new Api.wallet.GetUserAddresses({ id: [userId], addresses: [] })
+        );
+        const entry = result.addresses.find(
+          (item) => item.userId?.toString() === user.id.toString()
+        );
+        if (!entry?.address)
+          throw new Error("Telegram returned no wallet address for the recipient");
+        recipient = Address.parse(entry.address);
+        if (peer instanceof Api.InputPeerSelf) userId = new Api.InputUserEmpty();
+      }
+
+      prepared = {
+        messages: [
+          internal({
+            to: recipient,
+            value: toNano(params.amount),
+            bounce: false,
+            body: params.comment ?? "",
+          }),
+        ],
+        sendModes: [
+          wallet instanceof NativeTelegramWallet
+            ? SendMode.PAY_GAS_SEPARATELY | SendMode.IGNORE_ERRORS
+            : SendMode.PAY_GAS_SEPARATELY,
+        ],
+      };
+    }
+    if (
+      !prepared.messages.length ||
+      prepared.messages.length > 255 ||
+      prepared.sendModes.length !== prepared.messages.length
+    )
+      throw new Error("Invalid Telegram wallet transaction messages");
+    const totalValue = prepared.messages.reduce((sum, message) => {
+      if (message.info.type !== "internal" || message.info.value.coins < 0n)
+        throw new Error("Expected an internal message with a nonnegative amount");
+      return sum + message.info.value.coins;
+    }, 0n);
+    if (totalValue > BigInt(state.balance.toString()))
+      throw new Error("Insufficient Telegram wallet balance");
     const chain = await getCachedTonClient();
     const account = await chain.getContractState(wallet.address);
     if (account.state === "frozen") throw new Error("Telegram wallet contract is frozen");
@@ -181,20 +243,13 @@ export async function sendTelegramWalletTransfer(
     const signingArgs = {
       seqno,
       secretKey: keys.secretKey,
-      timeout: Math.floor(Date.now() / 1000) + 120,
-      sendMode:
-        wallet instanceof NativeTelegramWallet
-          ? SendMode.PAY_GAS_SEPARATELY | SendMode.IGNORE_ERRORS
-          : SendMode.PAY_GAS_SEPARATELY,
-      messages: [
-        internal({
-          to: recipient,
-          value: toNano(params.amount),
-          bounce: false,
-          body: params.comment ?? "",
-        }),
-      ],
+      timeout: Math.min(Math.floor(Date.now() / 1000) + 120, prepared.expiresAt ?? Infinity),
+      sendMode: prepared.sendModes[0],
+      sendModes: prepared.sendModes,
+      messages: prepared.messages,
     };
+    if (signingArgs.timeout <= Math.floor(Date.now() / 1000))
+      throw new Error("Telegram gift transaction has expired");
     const body =
       wallet instanceof NativeTelegramWallet
         ? wallet.createTransfer(signingArgs)
@@ -215,6 +270,31 @@ export async function sendTelegramWalletTransfer(
     const dataNormal = message.toBoc();
     if (dataNormal.length > 16 * 1024)
       throw new Error("Signed transfer exceeds Telegram's 16 KiB limit");
+    let estimatedFee: string | undefined;
+    if ("prepare" in params) {
+      const estimate = await chain.estimateExternalMessageFee(wallet.address, {
+        body,
+        initCode: account.state === "active" ? null : wallet.init.code,
+        initData: account.state === "active" ? null : wallet.init.data,
+        ignoreSignature: false,
+      });
+      const feeValues = [
+        estimate.source_fees.in_fwd_fee,
+        estimate.source_fees.storage_fee,
+        estimate.source_fees.gas_fee,
+        estimate.source_fees.fwd_fee,
+      ];
+      if (!feeValues.every((fee) => Number.isSafeInteger(fee) && fee >= 0))
+        throw new Error("Invalid network fee estimate");
+      const fee = feeValues.reduce((sum, fee) => sum + BigInt(fee), 0n);
+      estimatedFee = fromNano(fee);
+      if (totalValue + fee > toNano(params.maxTotalTon))
+        throw new Error(
+          "Gift transaction and estimated network fees exceed the approved total budget"
+        );
+      if (totalValue + fee > BigInt(state.balance.toString()))
+        throw new Error("Insufficient Telegram wallet balance including network fees");
+    }
     if (bootstrap) {
       const current = await client.invoke(new Api.wallet.GetState());
       if (
@@ -226,12 +306,16 @@ export async function sendTelegramWalletTransfer(
           "The Telegram wallet changed before submission. No transfer was submitted."
         );
     }
+    if (signingArgs.timeout <= Math.floor(Date.now() / 1000))
+      throw new Error("Telegram gift transaction has expired");
     const sender = await client.getSender(client.session.dcId);
     const pending: PendingTransfer = {
       wallet: state.address,
       messageHash: message.hash().toString("base64"),
-      recipient: recipient.toString(),
-      amount: params.amount,
+      recipient: prepared.messages
+        .map((message) => (message.info.type === "internal" ? message.info.dest.toString() : ""))
+        .join(","),
+      amount: fromNano(totalValue),
     };
     writeFileSync(PENDING_FILE, JSON.stringify(pending), { mode: 0o600, flag: "wx" });
     try {
@@ -258,6 +342,7 @@ export async function sendTelegramWalletTransfer(
       return {
         status: "submitted",
         ...pending,
+        estimatedNetworkFeeTon: estimatedFee,
         transactionId: receipt.transaction?.id ?? null,
         txHash: receipt.transaction?.txHash ?? null,
         warning:

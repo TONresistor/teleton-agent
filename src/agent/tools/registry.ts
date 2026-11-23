@@ -495,7 +495,10 @@ export class ToolRegistry {
 
   private getEffectiveLevel(toolName: string): ToolAccessLevel {
     if (
-      (toolName.startsWith("telegram_wallet_") || toolName === "telegram_get_wallet_address") &&
+      (toolName.startsWith("telegram_wallet_") ||
+        toolName === "telegram_get_wallet_address" ||
+        toolName === "telegram_buy_onchain_gift" ||
+        toolName.startsWith("telegram_manage_onchain_gift_")) &&
       !isTelegramWalletEnabled()
     )
       return "off";

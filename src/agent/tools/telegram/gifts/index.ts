@@ -1,3 +1,4 @@
+import { tools as onchainTools } from "./onchain-gifts.js";
 import {
   telegramGetAvailableGiftsTool,
   telegramGetAvailableGiftsExecutor,
@@ -29,6 +30,7 @@ import { getAvailableGiftsBotEntry } from "./get-available-gifts-bot.js";
 import type { ToolEntry } from "../../types.js";
 
 export const tools: ToolEntry[] = [
+  ...onchainTools,
   {
     tool: telegramGetAvailableGiftsTool,
     executor: telegramGetAvailableGiftsExecutor,

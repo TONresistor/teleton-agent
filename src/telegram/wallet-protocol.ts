@@ -205,6 +205,7 @@ export class NativeTelegramWallet {
     secretKey: Buffer;
     timeout?: number;
     sendMode?: SendMode;
+    sendModes?: SendMode[];
     messages: ReturnType<typeof internal>[];
   }): Cell {
     if (!args.messages.length || args.messages.length > 255)
@@ -212,6 +213,12 @@ export class NativeTelegramWallet {
     if (args.seqno === 0 && !args.secretKey.subarray(32).equals(this.publicKey))
       throw new Error("ROTATED_WALLET_REQUIRES_ACTIVE_ACCOUNT");
     const mode = (args.sendMode ?? SendMode.PAY_GAS_SEPARATELY) | SendMode.IGNORE_ERRORS;
+    const modes = args.sendModes ?? args.messages.map(() => mode);
+    if (
+      modes.length !== args.messages.length ||
+      modes.some((value) => !Number.isInteger(value) || value < 0 || value > 3)
+    )
+      throw new Error("WALLET_SEND_MODE_INVALID");
     const cells = args.messages.map((message) =>
       beginCell().store(storeMessageRelaxed(message)).endCell()
     );
@@ -220,7 +227,7 @@ export class NativeTelegramWallet {
       .storeUint(this.walletId, 32)
       .storeUint(args.timeout ?? Math.floor(Date.now() / 1000) + 120, 32)
       .storeUint(args.seqno, 32);
-    if (cells.length === 1) request.storeUint(mode, 8).storeRef(cells[0]);
+    if (cells.length === 1) request.storeUint(modes[0], 8).storeRef(cells[0]);
     else {
       let tail: Cell | undefined;
       let end = cells.length;
@@ -228,7 +235,7 @@ export class NativeTelegramWallet {
         const start = Math.max(0, end - (tail ? 3 : 4));
         const chunk = beginCell();
         chunk.storeMaybeRef(tail);
-        for (let i = start; i < end; i++) chunk.storeUint(mode, 8).storeRef(cells[i]);
+        for (let i = start; i < end; i++) chunk.storeUint(modes[i], 8).storeRef(cells[i]);
         tail = chunk.endCell();
         end = start;
       }

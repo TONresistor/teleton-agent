@@ -78,6 +78,31 @@ describe("official Telegram wallet protocol", () => {
     }
     expect(decoded).toBe(count);
   });
+  it("preserves the send mode of each contract message", () => {
+    const pair = keyPairFromSeed(Buffer.alloc(32, 1));
+    const wallet = new NativeTelegramWallet(pair.publicKey);
+    const request = wallet
+      .createTransfer({
+        seqno: 7,
+        secretKey: pair.secretKey,
+        messages: [
+          internal({ to: wallet.address, value: 1n }),
+          internal({ to: wallet.address, value: 2n }),
+        ],
+        sendModes: [0, 1],
+      })
+      .beginParse();
+    request.skip(64 * 8 + 32 * 4);
+    expect(request.loadUint(8)).toBe(2);
+    const chunk = request.loadRef().beginParse();
+    expect(chunk.loadMaybeRef()).toBe(null);
+    expect(chunk.loadUint(8)).toBe(0);
+    chunk.loadRef();
+    expect(chunk.loadUint(8)).toBe(1);
+    chunk.loadRef();
+    expect(chunk.remainingBits).toBe(0);
+  });
+
   it("uses TDLib's Ed25519-to-X25519 shared-secret derivation symmetrically", () => {
     const a = Buffer.alloc(32, 1),
       b = Buffer.alloc(32, 2);
