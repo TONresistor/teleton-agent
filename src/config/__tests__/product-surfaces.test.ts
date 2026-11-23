@@ -76,10 +76,10 @@ describe("current product surfaces", () => {
       workspace: workspaceTools.length,
       web: webTools.length,
     }).toEqual({
-      base: 131,
-      telegram: 85,
-      telegramUserMode: 82,
-      telegramBotMode: 17,
+      base: 132,
+      telegram: 86,
+      telegramUserMode: 83,
+      telegramBotMode: 18,
       ton: 15,
       dns: 8,
       stonfi: 5,
@@ -91,7 +91,7 @@ describe("current product surfaces", () => {
 
     const readme = readFileSync(join(ROOT, "README.md"), "utf8");
     expect(readme).toContain(`${baseToolCount} always-registered tools`);
-    expect(readme).toContain("| Telegram      | 85    |");
+    expect(readme).toContain(`| Telegram      | ${telegramTools.length}    |`);
     expect(readme).not.toContain("129+");
     expect(readme).toContain("TypeScript-5.9");
     expect(readFileSync(join(ROOT, "GETTING_STARTED.md"), "utf8")).toContain(

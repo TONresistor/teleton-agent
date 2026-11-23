@@ -15,7 +15,7 @@
 
 ---
 
-<p align="center">Teleton is an autonomous AI agent for Telegram (user account or bot). It loops with tools, keeps hybrid RAG memory, and talks to TON from chat. It ships with 131 always-registered tools plus 5 optional system tools, 16 LLM providers, and a Plugin SDK.</p>
+<p align="center">Teleton is an autonomous AI agent for Telegram (user account or bot). It loops with tools, keeps hybrid RAG memory, and talks to TON from chat. It ships with 132 always-registered tools plus 5 optional system tools, 16 LLM providers, and a Plugin SDK.</p>
 
 ### Key Highlights
 
@@ -28,7 +28,7 @@
 <tr>
 <td align="center"><br><b><ins>TON Blockchain</ins></b><br>Wallet, jettons, DEX swaps, DNS, NFTs<br><br></td>
 <td align="center"><br><b><ins>Persistent Memory</ins></b><br>Hybrid RAG, vector + keyword, auto-compaction<br><br></td>
-<td align="center"><br><b><ins>131 Built-in Tools</ins></b><br>Messaging, media, crypto, DEX, DNS, files<br><br></td>
+<td align="center"><br><b><ins>132 Built-in Tools</ins></b><br>Messaging, media, crypto, DEX, DNS, files<br><br></td>
 </tr>
 <tr>
 <td align="center"><br><b><ins>Plugin SDK</ins></b><br>Custom tools, isolated DBs, secrets, hooks<br><br></td>
@@ -45,7 +45,7 @@
 
 | Category      | Tools | Description                                                    |
 | ------------- | ----- | -------------------------------------------------------------- |
-| Telegram      | 85    | Messages, media, chats, polls, stickers, gifts, stars, stories |
+| Telegram      | 86    | Messages, media, chats, polls, stickers, gifts, stars, stories |
 | TON & Jettons | 15    | Wallet, send/receive, balances, prices, NFTs, DEX router       |
 | STON.fi DEX   | 5     | Swap, quote, search, trending, pools                           |
 | DeDust DEX    | 5     | Swap, quote, pools, prices, token analytics                    |
@@ -500,13 +500,13 @@ src/
 ├── agent/                  # Core agent runtime
 │   ├── runtime.ts          # Budgeted agentic loop, tool calling, masking, compaction
 │   ├── client.ts           # Multi-provider LLM client
-│   └── tools/              # 131 base tools plus 5 optional system tools
+│   └── tools/              # 132 base tools plus 5 optional system tools
 │       ├── register-all.ts # Central tool registration (9 categories)
 │       ├── registry.ts     # Tool registry, scope filtering, provider limits
 │       ├── module-loader.ts    # Built-in module loading (TON Proxy + exec)
 │       ├── plugin-loader.ts    # External plugin discovery, validation, hot-reload
 │       ├── mcp-loader.ts       # MCP client (stdio/SSE), tool discovery, lifecycle
-│       ├── telegram/       # Telegram operations (85 tools)
+│       ├── telegram/       # Telegram operations (86 tools)
 │       ├── ton/            # TON blockchain + jettons + DEX router (15 tools)
 │       ├── stonfi/         # STON.fi DEX (5 tools)
 │       ├── dedust/         # DeDust DEX (5 tools)
